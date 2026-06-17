@@ -27,7 +27,12 @@ const NavItem: React.FC<NavItemProps> = ({ label, icon, active, onClick }) => {
         active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300"
       )}
     >
-      {icon}
+      <div className={cn(
+        "transition-transform duration-300",
+        active && "drop-shadow-[0_0_8px_rgba(249,115,22,0.45)]"
+      )}>
+        {icon}
+      </div>
       <span className="text-[10px] font-mono uppercase tracking-widest">{label}</span>
       {active && (
         <motion.div

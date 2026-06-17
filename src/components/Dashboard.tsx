@@ -77,19 +77,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   }, [logs]);
 
   const stats = [
-    { label: 'Day Streak', val: streakCount.toString(), icon: <TrendingUp size={16} />, color: 'text-orange-500' },
-    { label: 'Sessions', val: Object.keys(logs).length.toString(), icon: <CalendarIcon size={16} />, color: 'text-blue-500' },
-    { label: 'Cycles', val: Math.floor(Object.keys(logs).length / 8).toString(), icon: <Repeat size={16} />, color: 'text-purple-500' },
-    { label: 'kg Lifted', val: totalWeight >= 1000 ? (totalWeight / 1000).toFixed(1) + 'k' : Math.round(totalWeight).toString(), icon: <Trophy size={16} />, color: 'text-emerald-500' },
+    { label: 'Day Streak', val: streakCount.toString(), icon: <TrendingUp size={16} />, color: 'text-orange-500', accentColor: 'border-t-orange-500/40' },
+    { label: 'Sessions', val: Object.keys(logs).length.toString(), icon: <CalendarIcon size={16} />, color: 'text-blue-500', accentColor: 'border-t-blue-500/40' },
+    { label: 'Cycles', val: Math.floor(Object.keys(logs).length / 8).toString(), icon: <Repeat size={16} />, color: 'text-purple-500', accentColor: 'border-t-purple-500/40' },
+    { label: 'kg Lifted', val: totalWeight >= 1000 ? (totalWeight / 1000).toFixed(1) + 'k' : Math.round(totalWeight).toString(), icon: <Trophy size={16} />, color: 'text-emerald-500', accentColor: 'border-t-emerald-500/40' },
   ];
 
   return (
     <div className="space-y-10 pt-4">
       {/* Hero Greeting */}
       <div className="space-y-2">
-        <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+          <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
         <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
           Stay<br />Aggressive
         </h1>
@@ -103,7 +106,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-start gap-1"
+            className={cn(
+              "bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-start gap-1 border-t-2",
+              stat.accentColor
+            )}
           >
             <div className={stat.color}>{stat.icon}</div>
             <span className="text-3xl font-black">{stat.val}</span>
@@ -188,7 +194,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             className="relative overflow-hidden group cursor-pointer"
           >
             <div
-              className="absolute inset-0 opacity-10 blur-3xl group-hover:opacity-20 transition-opacity"
+              className="absolute inset-0 opacity-10 blur-3xl group-hover:opacity-30 transition-opacity"
               style={{ background: WORKOUT_COLORS[todayWorkout.type] }}
             />
             <div className="relative bg-zinc-900/80 border border-zinc-800 p-6 rounded-3xl backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -274,7 +280,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   )}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[wo.type] }} />
+                    <div 
+                      className="w-1.5 h-8 rounded-full" 
+                      style={{ 
+                        backgroundColor: WORKOUT_COLORS[wo.type],
+                        boxShadow: `0 0 8px ${WORKOUT_COLORS[wo.type]}80`
+                      }} 
+                    />
                     <div>
                       <div className="font-bold text-sm uppercase tracking-tight">{wo.name}</div>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] leading-none mt-1.5">Day {wo.cycleDay} · {wo.badge}</div>

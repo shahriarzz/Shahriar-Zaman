@@ -319,19 +319,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl">
-            <div className="text-3xl font-black">{Math.floor(duration / 60)}m</div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Duration</div>
+          <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-blue-500/40 p-6 rounded-3xl text-center">
+            <div className="text-3xl font-black text-blue-500">{Math.floor(duration / 60)}m</div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Duration</div>
           </div>
-           <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl">
+           <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-orange-500/40 p-6 rounded-3xl text-center">
             <div className="text-3xl font-black text-orange-500">{(Object.values(sessionSets).flat() as SetLog[]).filter(s => s.done).length}</div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Sets Done</div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Sets Done</div>
           </div>
-          <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl col-span-2">
+          <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-emerald-500/40 p-6 rounded-3xl col-span-2 text-center">
             <div className="text-3xl font-black text-emerald-500">
               {calculateVolumeLocal().toLocaleString()}kg
             </div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Total Weight Lifted</div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Total Volume Lifted</div>
           </div>
 
           {/* Today's Personal Records Summary */}
@@ -419,7 +419,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               key={ex.id}
               className={cn(
                 "bg-zinc-900/50 border rounded-3xl overflow-hidden transition-all",
-                isDone ? "border-emerald-500/30" : "border-zinc-800"
+                isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
               )}
             >
               {/* Header */}

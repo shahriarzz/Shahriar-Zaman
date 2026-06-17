@@ -298,7 +298,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     "snap-center shrink-0 p-4 rounded-2xl border text-left min-w-[200px] transition-all relative overflow-hidden group cursor-pointer",
                     isSelected 
                       ? "bg-gradient-to-br from-orange-500/10 to-transparent border-orange-500 text-white shadow-[0_4px_20px_rgba(249,115,22,0.1)]"
-                      : "bg-zinc-950/40 border-zinc-900 hover:border-zinc-850 text-zinc-400 hover:text-white"
+                      : "bg-zinc-950/40 border-zinc-900 hover:border-zinc-850 hover:bg-zinc-900/60 text-zinc-400 hover:text-white"
                   )}
                 >
                   <div className="font-mono text-[8px] uppercase tracking-wider text-zinc-500 group-hover:text-amber-500/80 transition-colors">
