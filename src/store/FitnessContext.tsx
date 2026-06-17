@@ -263,200 +263,199 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Firebase Auth & Background Sync Controller
+  // Firebase Auth Controller
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsInitialized(true);
+      setLoading(false);
+    });
+    return unsubscribeAuth;
+  }, []);
+
+  // Background Sync & Cloud Subscriptions Manager
   useEffect(() => {
     let unsubLogs: (() => void) | null = null;
     let isMounted = true;
     let retryTimeoutId: any = null;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
+    if (!user) {
+      setSyncStatus('idle');
+      setSyncError(null);
+      return;
+    }
 
-      if (u) {
-        // App is already loaded instantly, so the UI is unblocked.
-        // We now execute the smart bidirectional cloud sync completely in the background.
-        setIsInitialized(true);
-        setLoading(false);
+    const syncDataBackground = async () => {
+      const u = user;
+      const userDocRef = doc(db, 'users', u.uid);
+      const workoutsColRef = collection(db, 'users', u.uid, 'workouts');
+      const logsColRef = collection(db, 'users', u.uid, 'logs');
 
-        const syncDataBackground = async () => {
-          const userDocRef = doc(db, 'users', u.uid);
-          const workoutsColRef = collection(db, 'users', u.uid, 'workouts');
-          const logsColRef = collection(db, 'users', u.uid, 'logs');
+      // Download completely in parallel
+      const [userDocSnap, workoutsSnap, logsSnap] = await Promise.all([
+        getDoc(userDocRef),
+        getDocs(workoutsColRef),
+        getDocs(logsColRef)
+      ]);
 
-          // Download everything in parallel
-          const [userDocSnap, workoutsSnap, logsSnap] = await Promise.all([
-            getDoc(userDocRef),
-            getDocs(workoutsColRef),
-            getDocs(logsColRef)
-          ]);
+      let mergedWorkouts = [...workoutsRef.current];
+      let mergedLogs = { ...logsRef.current };
+      let mergedState = { ...appStateRef.current };
 
-          let mergedWorkouts = [...workoutsRef.current];
-          let mergedLogs = { ...logsRef.current };
-          let mergedState = { ...appStateRef.current };
-
-          // 1. App State Sync
-          if (userDocSnap.exists()) {
-            const data = userDocSnap.data() as AppState;
-            if (data?.cycleStart) {
-              mergedState = data;
-            }
-          } else {
-            // Write initial local state config up to cloud
-            await setDoc(userDocRef, appStateRef.current);
-          }
-
-          // 2. Workouts Sync
-          const cloudWorkoutsMap = new Map<string, Workout>();
-          workoutsSnap.docs.forEach(doc => {
-            cloudWorkoutsMap.set(doc.id, doc.data() as Workout);
-          });
-
-          // Local edits not in cloud: Upload
-          const localToUpload = workoutsRef.current.filter(w => !cloudWorkoutsMap.has(w.id));
-          if (localToUpload.length > 0) {
-            const batch = writeBatch(db);
-            localToUpload.forEach(w => {
-              batch.set(doc(workoutsColRef, w.id), {
-                ...w,
-                exercises: w.exercises || []
-              });
-            });
-            await batch.commit();
-          }
-
-          // Cloud workouts not in local: Pull
-          workoutsSnap.docs.forEach(doc => {
-            const cloudW = doc.data() as Workout;
-            const hasIdx = mergedWorkouts.findIndex(w => w.id === cloudW.id);
-            if (hasIdx === -1) {
-              mergedWorkouts.push(cloudW);
-            }
-          });
-
-          // 3. Training Logs Sync
-          const cloudLogsMap = new Map<string, SessionLog>();
-          logsSnap.docs.forEach(doc => {
-            cloudLogsMap.set(doc.id, doc.data() as SessionLog);
-          });
-
-          // Local logs not in cloud: Upload in chunks
-          const logsToUpload = Object.entries(logsRef.current).filter(([id]) => !cloudLogsMap.has(id));
-          if (logsToUpload.length > 0) {
-            for (let i = 0; i < logsToUpload.length; i += 40) {
-              const chunk = logsToUpload.slice(i, i + 40);
-              const batch = writeBatch(db);
-              chunk.forEach(([id, l]) => {
-                batch.set(doc(logsColRef, id), l);
-              });
-              await batch.commit();
-            }
-          }
-
-          // Cloud logs not in local: Pull
-          cloudLogsMap.forEach((cloudLog, logId) => {
-            if (!mergedLogs[logId]) {
-              mergedLogs[logId] = cloudLog;
-            }
-          });
-
-          // Apply merged states
-          setWorkoutsState(mergedWorkouts);
-          setLogs(mergedLogs);
-          setAppState(mergedState);
-
-          localStorage.setItem('gl_workouts', JSON.stringify(mergedWorkouts));
-          localStorage.setItem('gl_logs', JSON.stringify(mergedLogs));
-          localStorage.setItem('gl_state', JSON.stringify(mergedState));
-
-          // Start reactive subscription for real-time multiplayer or cloud mutations
-          // Handle snapshot changes efficiently using docChanges()
-          unsubLogs = onSnapshot(logsColRef, (span) => {
-            let hasChanges = false;
-            setLogs(prev => {
-              let updated = null;
-              span.docChanges().forEach(change => {
-                const id = change.doc.id;
-                if (change.type === 'added' || change.type === 'modified') {
-                  const cloudVal = change.doc.data() as SessionLog;
-                  const localVal = prev[id];
-                  if (!localVal || JSON.stringify(localVal) !== JSON.stringify(cloudVal)) {
-                    if (!updated) updated = { ...prev };
-                    updated[id] = {
-                      ...cloudVal,
-                      sets: cloudVal.sets || {}
-                    };
-                    hasChanges = true;
-                  }
-                } else if (change.type === 'removed') {
-                  if (prev[id]) {
-                    if (!updated) updated = { ...prev };
-                    delete updated[id];
-                    hasChanges = true;
-                  }
-                }
-              });
-
-              if (hasChanges && updated) {
-                try {
-                  localStorage.setItem('gl_logs', JSON.stringify(updated));
-                } catch (e) {
-                  console.warn("localStorage write failed", e);
-                }
-                return updated;
-              }
-              return prev;
-            });
-          }, (error) => {
-            handleFirestoreError(error, OperationType.LIST, `users/${u.uid}/logs`);
-          });
-        };
-
-        const executeSyncWithRetry = async (retriesLeft = 3, delayMs = 2000) => {
-          if (!isMounted) return;
-          setSyncStatus('syncing');
-          setSyncError(null);
-          try {
-            await syncDataBackground();
-            if (isMounted) {
-              setSyncStatus('synced');
-            }
-          } catch (error: any) {
-            console.error(`Sync attempt failed (${4 - retriesLeft}/3):`, error);
-            if (retriesLeft > 1 && isMounted) {
-              retryTimeoutId = setTimeout(() => {
-                executeSyncWithRetry(retriesLeft - 1, delayMs * 2);
-              }, delayMs);
-            } else if (isMounted) {
-              setSyncStatus('failed');
-              setSyncError(error?.message || "Cloud background synchronization failed. Will retry on next activity.");
-            }
-          }
-        };
-
-        executeSyncWithRetry();
+      // 1. App State Sync
+      if (userDocSnap.exists()) {
+        const data = userDocSnap.data() as AppState;
+        if (data?.cycleStart) {
+          mergedState = data;
+        }
       } else {
-        // Logged out: clean subscription
-        if (unsubLogs) {
-          unsubLogs();
-          unsubLogs = null;
-        }
-        if (retryTimeoutId) {
-          clearTimeout(retryTimeoutId);
-        }
-        setIsInitialized(true);
-        setLoading(false);
-        setSyncStatus('idle');
-        setSyncError(null);
+        // Write initial local state config up to cloud
+        await setDoc(userDocRef, appStateRef.current);
       }
-    });
+
+      // 2. Workouts Sync
+      const cloudWorkoutsMap = new Map<string, Workout>();
+      workoutsSnap.docs.forEach(doc => {
+        cloudWorkoutsMap.set(doc.id, doc.data() as Workout);
+      });
+
+      // Local edits not in cloud: Upload
+      const localToUpload = workoutsRef.current.filter(w => !cloudWorkoutsMap.has(w.id));
+      if (localToUpload.length > 0) {
+        const batch = writeBatch(db);
+        localToUpload.forEach(w => {
+          batch.set(doc(workoutsColRef, w.id), {
+            ...w,
+            exercises: w.exercises || []
+          });
+        });
+        await batch.commit();
+      }
+
+      // Cloud workouts not in local: Pull
+      workoutsSnap.docs.forEach(doc => {
+        const cloudW = doc.data() as Workout;
+        const hasIdx = mergedWorkouts.findIndex(w => w.id === cloudW.id);
+        if (hasIdx === -1) {
+          mergedWorkouts.push(cloudW);
+        }
+      });
+
+      // 3. Training Logs Sync
+      const cloudLogsMap = new Map<string, SessionLog>();
+      logsSnap.docs.forEach(doc => {
+        cloudLogsMap.set(doc.id, doc.data() as SessionLog);
+      });
+
+      // Local logs not in cloud: Upload in chunks
+      const logsToUpload = Object.entries(logsRef.current).filter(([id]) => !cloudLogsMap.has(id));
+      if (logsToUpload.length > 0) {
+        for (let i = 0; i < logsToUpload.length; i += 40) {
+          const chunk = logsToUpload.slice(i, i + 40);
+          const batch = writeBatch(db);
+          chunk.forEach(([id, l]) => {
+            batch.set(doc(logsColRef, id), l);
+          });
+          await batch.commit();
+        }
+      }
+
+      // Cloud logs not in local: Pull
+      cloudLogsMap.forEach((cloudLog, logId) => {
+        if (!mergedLogs[logId]) {
+          mergedLogs[logId] = cloudLog;
+        }
+      });
+
+      // Apply merged states
+      setWorkoutsState(mergedWorkouts);
+      setLogs(mergedLogs);
+      setAppState(mergedState);
+
+      localStorage.setItem('gl_workouts', JSON.stringify(mergedWorkouts));
+      localStorage.setItem('gl_logs', JSON.stringify(mergedLogs));
+      localStorage.setItem('gl_state', JSON.stringify(mergedState));
+
+      // Start reactive subscription for real-time multiplayer or cloud mutations
+      unsubLogs = onSnapshot(logsColRef, (span) => {
+        let hasChanges = false;
+        setLogs(prev => {
+          let updated = null;
+          span.docChanges().forEach(change => {
+            const id = change.doc.id;
+            if (change.type === 'added' || change.type === 'modified') {
+              const cloudVal = change.doc.data() as SessionLog;
+              const localVal = prev[id];
+              if (!localVal || JSON.stringify(localVal) !== JSON.stringify(cloudVal)) {
+                if (!updated) updated = { ...prev };
+                updated[id] = {
+                  ...cloudVal,
+                  sets: cloudVal.sets || {}
+                };
+                hasChanges = true;
+              }
+            } else if (change.type === 'removed') {
+              if (prev[id]) {
+                if (!updated) updated = { ...prev };
+                delete updated[id];
+                hasChanges = true;
+              }
+            }
+          });
+
+          if (hasChanges && updated) {
+            try {
+              localStorage.setItem('gl_logs', JSON.stringify(updated));
+            } catch (e) {
+              console.warn("localStorage write failed", e);
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, `users/${u.uid}/logs`);
+      });
+    };
+
+    const executeSyncWithRetry = async (retriesLeft = 3, delayMs = 2000) => {
+      if (!isMounted) return;
+      setSyncStatus('syncing');
+      setSyncError(null);
+      try {
+        await syncDataBackground();
+        if (isMounted) {
+          setSyncStatus('synced');
+        }
+      } catch (error: any) {
+        console.error(`Sync attempt failed (${4 - retriesLeft}/3):`, error);
+        if (retriesLeft > 1 && isMounted) {
+          retryTimeoutId = setTimeout(() => {
+            executeSyncWithRetry(retriesLeft - 1, delayMs * 2);
+          }, delayMs);
+        } else if (isMounted) {
+          setSyncStatus('failed');
+          setSyncError(error?.message || "Cloud background synchronization failed. Will retry on next activity.");
+        }
+      }
+    };
+
+    executeSyncWithRetry();
+
+    // Trigger instant background sync when network status changes to online
+    const handleOnline = () => {
+      console.log('Network signal restored: Initiating background cloud synchronization.');
+      executeSyncWithRetry();
+    };
+    window.addEventListener('online', handleOnline);
 
     return () => {
       isMounted = false;
-      unsubscribeAuth();
+      window.removeEventListener('online', handleOnline);
       if (unsubLogs) unsubLogs();
       if (retryTimeoutId) clearTimeout(retryTimeoutId);
     };
-  }, []);
+  }, [user]);
 
   // Safe Debounced write-back for offline interactions
   useEffect(() => {

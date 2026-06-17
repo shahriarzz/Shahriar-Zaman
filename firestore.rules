@@ -53,6 +53,18 @@ service cloud.firestore {
              data.workoutId is string && data.workoutId.size() <= 64 &&
              data.date is string && data.date.size() <= 10 &&
              data.sets is map && data.sets.keys().size() <= 50 &&
+             data.sets.values().all(setList => 
+               setList is list && 
+               setList.size() <= 30 && 
+               setList.all(s => 
+                 s is map && 
+                 s.keys().hasAll(['weight', 'reps', 'done']) && 
+                 s.keys().size() == 3 && 
+                 s.weight is string && s.weight.size() <= 20 && 
+                 s.reps is string && s.reps.size() <= 20 && 
+                 s.done is bool
+               )
+             ) &&
              data.complete is bool &&
              data.duration is number && data.duration >= 0 &&
              // Restrict payload sizes to under 16KB to fully eliminate storage resource abuse vectors
