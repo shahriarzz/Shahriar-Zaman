@@ -3,8 +3,21 @@ import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, s
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
-export const db = (firebaseConfig as any).firestoreDatabaseId ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId) : getFirestore(app);
+// Fallback to environment variables if the config is not set or left as placeholder
+const actualConfig = {
+  apiKey: (import.meta as any).env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+  authDomain: (import.meta as any).env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+  projectId: (import.meta as any).env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+  storageBucket: (import.meta as any).env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+  messagingSenderId: (import.meta as any).env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+  appId: (import.meta as any).env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+  firestoreDatabaseId: (import.meta as any).env.VITE_FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId
+};
+
+const app = initializeApp(actualConfig);
+export const db = actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== "(default)"
+  ? getFirestore(app, actualConfig.firestoreDatabaseId) 
+  : getFirestore(app);
 export const auth = getAuth(app);
 
 // Configure local persistence to survive user app restarts

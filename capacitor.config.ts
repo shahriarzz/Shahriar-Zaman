@@ -5,7 +5,19 @@ const config: CapacitorConfig = {
   appName: 'GAINLOG: Protocol Tracker',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    hostname: 'gainlog.app'
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 1500,
+      backgroundColor: "#09090e",
+      showSpinner: false
+    },
+    Keyboard: {
+      resize: "body",
+      resizeOnFullScreen: true
+    }
   }
 };
 
