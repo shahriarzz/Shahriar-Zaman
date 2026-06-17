@@ -3,8 +3,9 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { ChevronLeft, ChevronRight, Clock, Dumbbell, Zap, TrendingUp, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../store/FitnessContext';
-import { getCycleDay, WORKOUT_COLORS } from '../utils/fitnessHelpers';
-import { SessionLog } from '../types/fitness';
+import { getCycleDay, WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
+import { SessionLog, SetLog } from '../types/fitness';
+import { haptics } from '../utils/haptics';
 
 interface CalendarProps {
   onNavigateToHistory?: (dateStr?: string) => void;
@@ -27,11 +28,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
   const getDayStatus = (date: Date) => {
     const key = format(date, 'yyyy-MM-dd');
-    const log = (Object.values(logs) as SessionLog[]).find(l => l.date === key);
+    const log = (Object.values(logs) as SessionLog[]).find(l => l.date === key || l.id === key || l.id?.startsWith(key));
     const isFuture = date > new Date();
 
-    const diff = differenceInCalendarDays(date, parseISO(appState?.cycleStart || format(new Date(), 'yyyy-MM-dd')));
-    const cycleDay = (((diff % 8) + 8) % 8) + 1;
+    const cycleDay = getCycleDay(appState?.cycleStart, date);
     const expectedWo = (workouts || []).find(w => w.cycleDay === cycleDay && w.isCore);
 
     if (log) {
@@ -48,19 +48,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     return null;
   };
 
-  const calculateVolume = (log: SessionLog) => {
-    let total = 0;
-    Object.values(log.sets || {}).forEach(sets => {
-      (sets || []).forEach(s => {
-        if (s.done && s.weight && s.reps) {
-          total += parseFloat(s.weight) * parseInt(s.reps);
-        }
-      });
-    });
-    return total;
-  };
-
-  const selectedLog = (selectedDate ? (Object.values(logs) as SessionLog[]).find(l => l.date === format(selectedDate, 'yyyy-MM-dd')) : null) as SessionLog | null;
+  const selectedLog = (selectedDate ? (Object.values(logs) as SessionLog[]).find(l => l.date === format(selectedDate, 'yyyy-MM-dd') || l.id === format(selectedDate, 'yyyy-MM-dd') || l.id?.startsWith(format(selectedDate, 'yyyy-MM-dd'))) : null) as SessionLog | null;
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
@@ -75,13 +63,13 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           </div>
           <div className="flex gap-2">
             <button 
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} 
+              onClick={() => { haptics.selection(); setCurrentMonth(subMonths(currentMonth, 1)); }} 
               className="w-10 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors"
             >
               <ChevronLeft size={18} />
             </button>
             <button 
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} 
+              onClick={() => { haptics.selection(); setCurrentMonth(addMonths(currentMonth, 1)); }} 
               className="w-10 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors"
             >
               <ChevronRight size={18} />
@@ -105,10 +93,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
+                  haptics.selection();
                   setSelectedDate(day);
                   const dateStr = format(day, 'yyyy-MM-dd');
-                  if (logs[dateStr] && onNavigateToHistory) {
-                    onNavigateToHistory(dateStr);
+                  const logOnDay = (Object.values(logs) as SessionLog[]).find(l => l.date === dateStr || l.id === dateStr || l.id?.startsWith(dateStr));
+                  if (logOnDay && onNavigateToHistory) {
+                    onNavigateToHistory(logOnDay.id || dateStr);
                   }
                 }}
                 className={`group relative min-h-[70px] p-2 border transition-all duration-200 rounded-2xl flex flex-col gap-1 overflow-hidden ${
@@ -180,7 +170,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <p className="font-mono text-xs text-white/40 mt-1">{format(selectedDate, 'MMMM do, yyyy')}</p>
                   </div>
                   <button 
-                    onClick={() => setSelectedDate(null)}
+                    onClick={() => { haptics.selection(); setSelectedDate(null); }}
                     className="text-zinc-500 hover:text-white transition-colors"
                   >
                     <ChevronRight size={24} />
@@ -225,7 +215,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     {Object.entries(selectedLog.sets || {}).map(([exId, sets]) => {
                       const workout = workouts.find(w => w.id === selectedLog.workoutId);
                       const exercise = workout?.exercises.find(e => e.id === exId);
-                      const doneSets = (sets as any[]).filter(s => s.done);
+                      const doneSets = (sets as SetLog[]).filter(s => s.done);
 
                       if (doneSets.length === 0) return null;
 

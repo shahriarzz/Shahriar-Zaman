@@ -31,7 +31,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   const currentCycleDay = getCycleDay(appState?.cycleStart || dk());
   const todayWorkout = (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
 
-  // Stats Logic
+   // Stats Logic
   const totalWeight = (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
     let logVol = 0;
     Object.values(log?.sets || {}).forEach((exSets) => {
@@ -44,10 +44,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return acc + logVol;
   }, 0);
 
+  const streakCount = React.useMemo(() => {
+    const datesSet = new Set((Object.values(logs || {}) as SessionLog[]).map(l => l.date));
+    if (datesSet.size === 0) return 0;
+    
+    let streak = 0;
+    let checkDate = new Date();
+    
+    const formatDate = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const r = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${r}`;
+    };
+
+    let checkStr = formatDate(checkDate);
+    
+    // If today is not in the set, check yesterday to sustain the current active streak
+    if (!datesSet.has(checkStr)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+      checkStr = formatDate(checkDate);
+      if (!datesSet.has(checkStr)) {
+        return 0;
+      }
+    }
+    
+    while (datesSet.has(formatDate(checkDate))) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    return streak;
+  }, [logs]);
+
   const stats = [
-    { label: 'Day Streak', val: '4', icon: <TrendingUp size={16} />, color: 'text-orange-500' },
+    { label: 'Day Streak', val: streakCount.toString(), icon: <TrendingUp size={16} />, color: 'text-orange-500' },
     { label: 'Sessions', val: Object.keys(logs).length.toString(), icon: <CalendarIcon size={16} />, color: 'text-blue-500' },
-    { label: 'Cycles', val: Math.floor(Object.keys(logs).length / 6).toString(), icon: <Repeat size={16} />, color: 'text-purple-500' },
+    { label: 'Cycles', val: Math.floor(Object.keys(logs).length / 8).toString(), icon: <Repeat size={16} />, color: 'text-purple-500' },
     { label: 'kg Lifted', val: totalWeight >= 1000 ? (totalWeight / 1000).toFixed(1) + 'k' : Math.round(totalWeight).toString(), icon: <Trophy size={16} />, color: 'text-emerald-500' },
   ];
 

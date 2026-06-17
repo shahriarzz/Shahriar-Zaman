@@ -1,11 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = (firebaseConfig as any).firestoreDatabaseId ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId) : getFirestore(app);
 export const auth = getAuth(app);
+
+// Configure local persistence to survive user app restarts
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Failed to enable browser local persistence on Firebase Auth:", err);
+});
+
 export const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = async () => {
@@ -17,8 +23,16 @@ export const signInWithGoogle = async () => {
       console.log("User closed the sign-in popup.");
       return null;
     }
-    console.error("Authentication Error:", error);
-    throw error;
+    
+    // Check if error is due to popup-blocked or unsupported environment/mobile WebView
+    console.warn("signInWithPopup failed, falling back to signInWithRedirect:", error);
+    try {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    } catch (redirectError) {
+      console.error("Firebase Redirect Sign-in also failed:", redirectError);
+      throw error;
+    }
   }
 };
 

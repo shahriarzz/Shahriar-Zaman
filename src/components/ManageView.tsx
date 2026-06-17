@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
   Trash2, 
-  GripVertical, 
   Repeat, 
   ChevronRight, 
   Download, 
@@ -28,6 +27,8 @@ export const ManageView: React.FC = () => {
     login, 
     logout, 
     user, 
+    syncStatus,
+    syncError,
     exportBackup, 
     importBackup,
     getAutoBackups,
@@ -47,6 +48,11 @@ export const ManageView: React.FC = () => {
 
   // Auto-backup refresh state (to force rerender when savepoint creates)
   const [autoBackupsTick, setAutoBackupsTick] = useState(0);
+
+  // Inline Add Exercise States
+  const [addingExWoId, setAddingExWoId] = useState<string | null>(null);
+  const [newExName, setNewExName] = useState('');
+  const [newExTarget, setNewExTarget] = useState('');
 
   const handleExport = () => {
     try {
@@ -104,6 +110,7 @@ export const ManageView: React.FC = () => {
       }
     };
     reader.readAsText(file);
+    event.target.value = '';
   };
 
   const handlePasteRestore = async () => {
@@ -154,16 +161,6 @@ export const ManageView: React.FC = () => {
     }
   };
 
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isDropdownOpen && !((event.target as Element).closest('.manage-dropdown-container'))) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDropdownOpen]);
-
   const handleResetWorkouts = async () => {
     if (window.confirm("Overwrite all training routines with default factory structures? This will keep history but replace routines.")) {
       await setWorkouts(INITIAL_WORKOUTS);
@@ -191,22 +188,20 @@ export const ManageView: React.FC = () => {
     }));
   };
 
-  const addExercise = (workoutId: string) => {
-    const name = window.prompt('Exercise Name:');
-    if (!name) return;
-    const target = window.prompt('Target Muscle (e.g. Upper Chest, Delts):');
+  const handleSaveNewExercise = (workoutId: string) => {
+    if (!newExName.trim()) return;
 
     setWorkouts(prev => prev.map(wo => {
       if (wo.id === workoutId) {
-        const generatedId = `ex-${Math.random().toString(36).substr(2, 9)}`;
+        const generatedId = `ex-${Math.random().toString(36).substring(2, 11)}`;
         return {
           ...wo,
           exercises: [
             ...wo.exercises,
             { 
               id: generatedId, 
-              name, 
-              target: target || 'Custom Isolation', 
+              name: newExName.trim(), 
+              target: newExTarget.trim() || 'Custom Isolation', 
               sets: 3, 
               reps: '10–12',
               tags: [],
@@ -217,9 +212,13 @@ export const ManageView: React.FC = () => {
       }
       return wo;
     }));
+
+    setNewExName('');
+    setNewExTarget('');
+    setAddingExWoId(null);
   };
 
-  const checkpointHistory = getAutoBackups();
+  const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
 
   return (
     <div className="space-y-8 pt-4 pb-12">
@@ -233,12 +232,33 @@ export const ManageView: React.FC = () => {
         <div className="space-y-1 relative z-10">
           <h3 className="font-bold flex items-center gap-2">
             Cloud Synchronization
-            {user && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />}
+            {user && (
+              <span className={cn(
+                "w-2 h-2 rounded-full",
+                syncStatus === 'synced' && 'bg-emerald-500 animate-pulse',
+                syncStatus === 'syncing' && 'bg-amber-500 animate-pulse',
+                syncStatus === 'failed' && 'bg-red-500 animate-pulse',
+                syncStatus === 'idle' && 'bg-zinc-500'
+              )} />
+            )}
           </h3>
           <p className="text-xs text-zinc-500">
-            {user 
-              ? `Signed in as ${user.email}. Continuous background sync active.` 
-              : "Synchronize routines, custom calendars, and safety benchmarks securely by signing in."}
+            {user ? (
+              <span className="flex flex-col gap-1">
+                <span>Signed in as {user.email}.</span>
+                {syncStatus === 'syncing' && <span className="text-amber-500 font-mono text-[10px] uppercase tracking-wider">⚡ Synchronizing with Firestore...</span>}
+                {syncStatus === 'synced' && <span className="text-emerald-400 font-mono text-[10px] uppercase tracking-wider">✓ Cloud synchronization complete. Data secure.</span>}
+                {syncStatus === 'failed' && (
+                  <span className="text-red-400 font-mono text-[10px] uppercase tracking-wider flex flex-col gap-0.5">
+                    <span>⚠ Sync mismatch / connection timeout.</span>
+                    {syncError && <span className="text-zinc-500 normal-case tracking-normal">{syncError}</span>}
+                  </span>
+                )}
+                {syncStatus === 'idle' && <span className="text-zinc-400 font-mono text-[10px] uppercase tracking-wider">Connection established. Idle.</span>}
+              </span>
+            ) : (
+              "Synchronize routines, custom calendars, and safety benchmarks securely by signing in."
+            )}
           </p>
         </div>
         
@@ -456,7 +476,7 @@ export const ManageView: React.FC = () => {
 
                   <button
                     onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
-                    className="opacity-100 md:opacity-0 group-hover:opacity-100 px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer"
+                    className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer"
                   >
                     Restore
                   </button>
@@ -542,7 +562,6 @@ export const ManageView: React.FC = () => {
                       {wo.exercises.map(ex => (
                         <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/40 border border-zinc-800/60 rounded-2xl group hover:border-zinc-700 transition-colors">
                           <div className="flex items-center gap-3">
-                            <GripVertical size={16} className="text-zinc-800" />
                             <div>
                                <div className="text-sm font-bold text-zinc-300">{ex.name}</div>
                                <div className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">{ex.target}</div>
@@ -559,12 +578,65 @@ export const ManageView: React.FC = () => {
                       ))}
                     </div>
 
-                    <button
-                      onClick={() => addExercise(wo.id)}
-                      className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-300 hover:border-zinc-750 transition-all cursor-pointer"
-                    >
-                      <Plus size={15} /> Append New Exercise to Protocol
-                    </button>
+                    {addingExWoId === wo.id ? (
+                      <div className="p-5 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-4">
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">New Exercise Details</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Exercise Name</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Incline Bench Press"
+                              value={newExName}
+                              onChange={(e) => setNewExName(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Target Muscle Group</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Upper Chest"
+                              value={newExTarget}
+                              onChange={(e) => setNewExTarget(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingExWoId(null);
+                              setNewExName('');
+                              setNewExTarget('');
+                            }}
+                            className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-500 hover:text-zinc-350 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveNewExercise(wo.id)}
+                            disabled={!newExName.trim()}
+                            className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
+                          >
+                            Append Exercise
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setAddingExWoId(wo.id);
+                          setNewExName('');
+                          setNewExTarget('');
+                        }}
+                        className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-300 hover:border-zinc-750 transition-all cursor-pointer"
+                      >
+                        <Plus size={15} /> Append New Exercise to Protocol
+                      </button>
+                    )}
                   </>
                 ) : (
                   <div className="bg-zinc-950/40 p-10 rounded-2xl text-center border border-dashed border-zinc-800">

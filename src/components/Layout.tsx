@@ -1,13 +1,9 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Play, History, Settings, Dumbbell } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { LayoutDashboard, History, Settings, Dumbbell } from 'lucide-react';
 import { haptics } from '../utils/haptics';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../lib/utils';
+import { useFitness } from '../store/FitnessContext';
 
 interface NavItemProps {
   id: string;
@@ -50,6 +46,8 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children }) => {
+  const { user } = useFitness();
+
   return (
     <div className="min-h-screen bg-[#09090e] text-zinc-200 font-sans selection:bg-orange-500/30">
       {/* Top Banner / Nav */}
@@ -65,14 +63,28 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
 
         <div className="hidden md:flex items-center gap-1">
           <NavItem id="dashboard" label="Dash" icon={<LayoutDashboard size={18} />} active={activeTab === 'dashboard'} onClick={() => onTabChange('dashboard')} />
-          <NavItem id="session" label="Session" icon={<Play size={18} />} active={activeTab === 'session'} onClick={() => onTabChange('session')} />
           <NavItem id="history" label="History" icon={<History size={18} />} active={activeTab === 'history'} onClick={() => onTabChange('history')} />
           <NavItem id="manage" label="Manage" icon={<Settings size={18} />} active={activeTab === 'manage'} onClick={() => onTabChange('manage')} />
         </div>
 
-        <div className="md:hidden flex items-center gap-2">
-          {/* Subtle status or user icon */}
-          <div className="w-8 h-8 rounded-full bg-zinc-800 animate-pulse" />
+        <div className="flex items-center gap-2">
+          {/* Subtle user status avatar */}
+          {user?.photoURL ? (
+            <img 
+              src={user.photoURL} 
+              alt={user.displayName || "User"} 
+              referrerPolicy="no-referrer" 
+              className="w-8 h-8 rounded-full object-cover border border-zinc-850" 
+            />
+          ) : user ? (
+            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono font-bold text-zinc-300">
+              {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+            </div>
+          )}
         </div>
       </nav>
 
@@ -93,7 +105,6 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       {/* Mobile Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#09090e]/95 backdrop-blur-2xl border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4">
         <NavItem id="dashboard" label="Dash" icon={<LayoutDashboard size={20} />} active={activeTab === 'dashboard'} onClick={() => onTabChange('dashboard')} />
-        <NavItem id="session" label="Session" icon={<Play size={20} />} active={activeTab === 'session'} onClick={() => onTabChange('session')} />
         <NavItem id="history" label="History" icon={<History size={20} />} active={activeTab === 'history'} onClick={() => onTabChange('history')} />
         <NavItem id="manage" label="Manage" icon={<Settings size={20} />} active={activeTab === 'manage'} onClick={() => onTabChange('manage')} />
       </div>

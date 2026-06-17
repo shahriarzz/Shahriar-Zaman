@@ -29,6 +29,10 @@ service cloud.firestore {
 
     // --- Entity Validations ---
 
+    function isValidLogId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-zA-Z0-9_\\-]+_[0-9]+$');
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(['cycleStart']) &&
              data.keys().size() == 1 &&
@@ -45,11 +49,14 @@ service cloud.firestore {
 
     function isValidLog(data) {
       return data.keys().hasAll(['workoutId', 'date', 'sets', 'complete', 'duration']) &&
+             data.keys().size() == 5 &&
              data.workoutId is string && data.workoutId.size() <= 64 &&
              data.date is string && data.date.size() <= 10 &&
              data.sets is map && data.sets.keys().size() <= 50 &&
              data.complete is bool &&
-             data.duration is number && data.duration >= 0;
+             data.duration is number && data.duration >= 0 &&
+             // Restrict payload sizes to under 16KB to fully eliminate storage resource abuse vectors
+             request.resource.size <= 16384;
     }
 
     // --- Resource Paths ---
@@ -72,12 +79,12 @@ service cloud.firestore {
       }
 
       // Logs Sub-collection
-      match /logs/{logDate} {
+      match /logs/{logId} {
         allow list: if isOwner(userId);
-        allow get: if isOwner(userId) && isValidId(logDate);
-        allow create: if isOwner(userId) && isValidId(logDate) && isValidLog(incoming());
-        allow update: if isOwner(userId) && isValidId(logDate) && isValidLog(incoming());
-        allow delete: if isOwner(userId) && isValidId(logDate);
+        allow get: if isOwner(userId) && isValidLogId(logId);
+        allow create: if isOwner(userId) && isValidLogId(logId) && isValidLog(incoming());
+        allow update: if isOwner(userId) && isValidLogId(logId) && isValidLog(incoming());
+        allow delete: if isOwner(userId) && isValidLogId(logId);
       }
     }
   }

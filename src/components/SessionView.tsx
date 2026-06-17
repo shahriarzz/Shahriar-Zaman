@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote } from 'lucide-react';
+import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { Workout, Exercise, SetLog, SessionLog } from '../types/fitness';
 import { WORKOUT_COLORS, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
@@ -188,6 +188,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     updateActiveSessionSets(nextSets);
   };
 
+  const deleteSet = (exId: string, setIndex: number) => {
+    if ((sessionSets[exId] || []).length <= 1) return;
+    const nextSets = {
+      ...sessionSets,
+      [exId]: sessionSets[exId].filter((_, i) => i !== setIndex)
+    };
+    setSessionSets(nextSets);
+    updateActiveSessionSets(nextSets);
+  };
+
   const getAiAdvice = async (ex: Exercise) => {
     setLoadingAdvice(ex.id);
     try {
@@ -204,25 +214,33 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           history
         })
       });
+      
+      if (!response.ok) {
+        throw new Error(`Server status: ${response.status}`);
+      }
+
       const data = await response.json();
-      setAiAdvice(prev => ({ ...prev, [ex.id]: data.suggestion }));
+      setAiAdvice(prev => ({ ...prev, [ex.id]: data.suggestion || "No advice provided. Stick to the program!" }));
     } catch (error) {
       console.error('Failed to get AI advice', error);
+      setAiAdvice(prev => ({ 
+        ...prev, 
+        [ex.id]: "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!" 
+      }));
     } finally {
       setLoadingAdvice(null);
     }
   };
 
-  const calculateVolume = () => {
-    let vol = 0;
-    Object.values(sessionSets).flat().forEach((s: SetLog) => {
-      const w = parseFloat(s.weight);
-      const r = parseInt(s.reps);
-      if (w > 0 && r > 0) {
-        vol += w * r;
+  const calculateVolumeLocal = () => {
+    return (Object.values(sessionSets).flat() as SetLog[]).reduce((total: number, s: SetLog) => {
+      if (s.done && s.weight && s.reps) {
+        const weightVal = parseFloat(s.weight) || 0;
+        const repsVal = parseInt(s.reps, 10) || 0;
+        return total + (weightVal * repsVal);
       }
-    });
-    return vol;
+      return total;
+    }, 0);
   };
 
   const finishSession = () => {
@@ -252,7 +270,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     }
 
     haptics.success();
-    const logId = `${dk()}_${activeWorkout.id}`;
+    const logId = `${dk()}_${activeWorkout.id}_${Date.now()}`;
     const finalLogs = {
       workoutId: activeWorkout.id,
       date: dk(),
@@ -311,14 +329,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </div>
           <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl col-span-2">
             <div className="text-3xl font-black text-emerald-500">
-              {(Object.values(sessionSets).flat() as SetLog[]).reduce((acc, s) => {
-                const w = parseFloat(s.weight);
-                const r = parseInt(s.reps);
-                if (w > 0 && r > 0) {
-                  return acc + (w * r);
-                }
-                return acc;
-              }, 0).toLocaleString()}kg
+              {calculateVolumeLocal().toLocaleString()}kg
             </div>
             <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Total Weight Lifted</div>
           </div>
@@ -400,7 +411,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       <div className="space-y-6">
         {activeWorkout.exercises.map((ex, i) => {
           const { lastSession, allTimePR } = ghostData[ex.id] || { lastSession: null, allTimePR: null };
-          const isDone = sessionSets[ex.id]?.every(s => s.done);
+          const isDone = sessionSets[ex.id]?.slice(0, ex.sets).every(s => s.done);
 
           return (
             <motion.div
@@ -467,11 +478,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
               {/* Sets Table */}
               <div className="p-6 pt-4 space-y-3">
-                <div className="grid grid-cols-[40px_1fr_1fr_60px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2">
-                  <span className="text-center">Set</span>
-                  <span className="text-center">KG</span>
-                  <span className="text-center">Reps</span>
-                  <span className="text-center">Done</span>
+                <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
+                  <span>Set</span>
+                  <span>KG</span>
+                  <span>Reps</span>
+                  <span>Done</span>
+                  <span>Del</span>
                 </div>
 
                 <div className="space-y-4">
@@ -482,7 +494,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
                     return (
                       <div key={si} className="space-y-1.5">
-                        <div className="grid grid-cols-[40px_1fr_1fr_60px] gap-3 items-center">
+                        <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
                           <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
                           <input
                             type="number"
@@ -524,6 +536,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
                               <CheckCircle2 size={24} />
                             </button>
                           </div>
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => {
+                                haptics.warning();
+                                deleteSet(ex.id, si);
+                              }}
+                              disabled={(sessionSets[ex.id] || []).length <= 1}
+                              className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
+                              title="Delete this set"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </div>
 
                         {isExtreme && (
@@ -560,6 +585,26 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             </motion.div>
           );
         })}
+
+        {activeWorkout.cardio && (
+          <div className="bg-gradient-to-br from-zinc-800/10 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500">Active Finish Protocol</span>
+              </div>
+              <h3 className="text-lg font-bold text-white uppercase tracking-wide">{activeWorkout.cardio.name}</h3>
+              <p className="text-xs text-zinc-500 font-mono tracking-tight">{activeWorkout.cardio.detail}</p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-2xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
+              <Clock size={16} className="text-orange-500" />
+              <div className="text-left leading-none">
+                <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Target Dur</span>
+                <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.dur}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

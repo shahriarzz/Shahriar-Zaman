@@ -1,4 +1,5 @@
 import { format, differenceInCalendarDays, parseISO, subDays } from 'date-fns';
+import { SessionLog, SetLog } from '../types/fitness';
 
 export function dk(d: Date = new Date()): string {
   return format(d, 'yyyy-MM-dd');
@@ -9,11 +10,29 @@ export function getAdjustedCycleStart(workoutCycleDay: number): string {
   return format(adjusted, 'yyyy-MM-dd');
 }
 
-export function getCycleDay(cycleStart: string | undefined | null): number {
+export function getCycleDay(cycleStart: string | undefined | null, targetDate: Date | string = new Date()): number {
   const start = parseISO(cycleStart || dk());
-  const now = new Date();
-  const diff = differenceInCalendarDays(now, start);
+  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
+  const diff = differenceInCalendarDays(target, start);
   return (((diff % 8) + 8) % 8) + 1;
+}
+
+export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[]> }): number {
+  let total = 0;
+  if (!log || !log.sets) return total;
+  Object.values(log.sets).forEach(sets => {
+    (sets || []).forEach(s => {
+      if (s.done && s.weight && s.reps) {
+        const weightVal = parseFloat(s.weight) || 0;
+        let repsVal = parseInt(s.reps, 10);
+        if (isNaN(repsVal)) {
+          repsVal = 1;
+        }
+        total += weightVal * repsVal;
+      }
+    });
+  });
+  return total;
 }
 
 export const WORKOUT_COLORS: Record<string, string> = {

@@ -1,4 +1,5 @@
 import express from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -29,8 +30,17 @@ async function startServer() {
     return ai;
   };
 
+  // API Rate Limiting for the AI Coach Advice route
+  const adviceLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 30, // Limit each IP to 30 requests per 15 minutes
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many advice requests. Please focus on your training sets and try again in 15 minutes.' }
+  });
+
   // API Routes
-  app.post('/api/fitness/advice', async (req, res) => {
+  app.post('/api/fitness/advice', adviceLimiter, async (req, res) => {
     const { exercise, history } = req.body;
 
     if (!exercise) {
@@ -51,13 +61,24 @@ async function startServer() {
 
     try {
       const aiClient = getAiClient();
-      const response = await aiClient.models.generateContent({
+      
+      const generatePromise = aiClient.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 12000); // 12-second security timeout
+      });
+
+      const response = await Promise.race([generatePromise, timeoutPromise]);
+
       res.json({ suggestion: response.text || "Keep up the intensity! Focus on perfect form." });
     } catch (error) {
+      if (error instanceof Error && error.message === 'TIMEOUT') {
+        console.error('Gemini Request Timed Out (12s limit)');
+        return res.status(504).json({ error: 'Coaching server request timed out. Please try again soon.' });
+      }
       console.error('Gemini Error or client init error:', error);
       res.status(500).json({ error: 'Failed to generate advice. Please ensure GEMINI_API_KEY is configured.' });
     }
@@ -78,8 +99,8 @@ async function startServer() {
     });
   }
 
-  const PORT = 3000;
-  app.listen(PORT, '0.0.0.0', () => {
+  const PORT = process.env.PORT || 3000;
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }

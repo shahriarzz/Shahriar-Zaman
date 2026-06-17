@@ -36,8 +36,9 @@ export interface SetLog {
 }
 
 export interface SessionLog {
+  id?: string;
   workoutId: string;
-  date: string; // ISO string or YYYY-MM-DD
+  date: string; // YYYY-MM-DD
   sets: Record<string, SetLog[]>; // exerciseId -> sets
   complete: boolean;
   duration: number; // minutes

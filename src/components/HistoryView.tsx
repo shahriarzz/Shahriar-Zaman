@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
-import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -20,7 +20,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   const [selectedExKey, setSelectedExKey] = useState<string | null>(null); // Format: "YYYY-MM-DD_exerciseId"
   
   // Custom states for Month-End reports and secure inline log editing
-  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editSessionState, setEditSessionState] = useState<SessionLog | null>(null);
   const [editVerified, setEditVerified] = useState(false);
   const [activeMonthTab, setActiveMonthTab] = useState<string | null>(null);
@@ -67,7 +67,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
   // Get chronological session list
   const sessionsList = React.useMemo(() => {
-    return (Object.values(logs) as SessionLog[]).sort((a, b) => b.date.localeCompare(a.date));
+    return Object.entries(logs).map(([id, log]) => ({
+      ...(log as any),
+      id
+    })).sort((a: any, b: any) => b.date.localeCompare(a.date));
   }, [logs]);
 
   // Filter day sessions based on search
@@ -79,6 +82,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       
       const matchesDate = session.date.includes(lowercaseSearch);
       const matchesWorkout = workoutName.toLowerCase().includes(lowercaseSearch);
+      const matchesId = session.id?.toLowerCase().includes(lowercaseSearch);
       
       // Also match if any of the completed exercises match the search
       const matchesExercises = Object.keys(session.sets).some(exId => {
@@ -86,21 +90,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         return meta?.name.toLowerCase().includes(lowercaseSearch);
       });
 
-      return matchesDate || matchesWorkout || matchesExercises;
+      return matchesDate || matchesWorkout || matchesExercises || matchesId;
     });
   }, [sessionsList, workouts, search, exMeta]);
-
-  const calculateVolume = (session: SessionLog) => {
-    let vol = 0;
-    Object.values(session.sets).forEach((exSets) => {
-      (exSets as SetLog[]).forEach((s) => {
-        if (s.done && s.weight && s.reps) {
-          vol += (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0);
-        }
-      });
-    });
-    return vol;
-  };
 
   const clearFilter = () => {
     setSearch('');
@@ -190,7 +182,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
-    if (!editSessionState || !editingDate) return;
+    if (!editSessionState || !editingLogId) return;
 
     if (!editVerified) {
       alert("Please verify that these edits are intentional first.");
@@ -219,13 +211,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
     haptics.success();
     
-    // Find the log key representing this completed session
-    const logId = Object.keys(logs).find(k => logs[k].date === editingDate);
-    if (logId) {
-      await addLog(logId, editSessionState);
-    }
+    await addLog(editingLogId, editSessionState);
     
-    setEditingDate(null);
+    setEditingLogId(null);
     setEditSessionState(null);
     setEditVerified(false);
   };
@@ -447,7 +435,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
             const totalSets = Object.values(session.sets).flat().filter((s: any) => s.done).length;
             const vol = calculateVolume(session);
             const color = WORKOUT_COLORS[workout?.type || 'push'];
-            const isExpanded = expandedDate === session.date;
+            const isExpanded = expandedDate === session.date || expandedDate === session.id;
 
             return (
               <motion.div
@@ -461,7 +449,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 <div
                   onClick={() => {
                     haptics.light();
-                    setExpandedDate(isExpanded ? null : session.date);
+                    setExpandedDate(isExpanded ? null : session.id);
                   }}
                   className="w-full text-left p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-800/20 transition-all duration-300"
                 >
@@ -498,14 +486,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingDate(session.date);
+                        setEditingLogId(session.id);
                         setEditSessionState(JSON.parse(JSON.stringify(session)));
                         setEditVerified(false);
                         setExpandedDate(session.date); // Auto-expand when editing
                       }}
                       className={cn(
                         "p-3 bg-zinc-950/40 border hover:bg-zinc-850 hover:text-orange-500 rounded-2xl text-zinc-500 transition-all cursor-pointer",
-                        editingDate === session.date ? "border-orange-500 text-orange-500 bg-orange-500/5 animate-pulse" : "border-zinc-850"
+                        editingLogId === session.id ? "border-orange-500 text-orange-555 bg-orange-500/5 animate-pulse" : "border-zinc-850"
                       )}
                       title="Edit session logs"
                     >
@@ -515,10 +503,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const id = Object.keys(logs).find(k => logs[k] === session);
-                        if (id && confirm('Are you sure you want to purge this workout log from history?')) {
+                        if (confirm('Are you sure you want to purge this workout log from history?')) {
                           haptics.warning();
-                          deleteLog(id);
+                          deleteLog(session.id);
                         }
                       }}
                       className="p-3 bg-zinc-950/40 border border-zinc-800/40 hover:bg-zinc-800 hover:border-zinc-700 hover:text-red-500 rounded-2xl text-zinc-500 transition-all cursor-pointer"
@@ -546,7 +533,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       transition={{ duration: 0.2 }}
                       className="border-t border-zinc-850 bg-zinc-950/30 p-6 space-y-4"
                     >
-                      {editingDate === session.date && editSessionState ? (
+                      {editingLogId === session.id && editSessionState ? (
                         <div className="space-y-6 text-zinc-300">
                           {/* Secure Editor Header */}
                           <div className="flex justify-between items-center bg-zinc-900/30 p-4 border border-zinc-850 rounded-2xl">
@@ -556,7 +543,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             </div>
                             <button
                               onClick={() => {
-                                setEditingDate(null);
+                                setEditingLogId(null);
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
@@ -726,7 +713,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             </button>
                             <button
                               onClick={() => {
-                                setEditingDate(null);
+                                setEditingLogId(null);
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
@@ -754,6 +741,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           // Dynamic PR calculation of all time for this exercise
                           const historyLogs = (exerciseHistory[exId] || []).sort((a, b) => b.date.localeCompare(a.date));
                           const prWeight = historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0;
+                          const oldestPrDate = prWeight > 0 
+                            ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date 
+                            : null;
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
 
                           return (
@@ -832,6 +822,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               tickFormatter={(val) => val.split('-').slice(1).join('/')}
                                             />
                                             <YAxis stroke="#4b5563" fontSize={7} tickLine={false} />
+                                            <Tooltip
+                                              contentStyle={{
+                                                backgroundColor: '#09090b',
+                                                borderColor: '#27272a',
+                                                borderRadius: '12px',
+                                                fontSize: '10px',
+                                                fontFamily: 'monospace',
+                                                color: '#fff'
+                                              }}
+                                              itemStyle={{ color: '#f97316' }}
+                                              labelStyle={{ color: '#a1a1aa' }}
+                                              formatter={(value) => [`${value}kg`, 'Peak Weight']}
+                                              labelFormatter={(label) => `Date: ${label}`}
+                                            />
                                             <Line
                                               type="monotone"
                                               dataKey="maxW"
@@ -850,7 +854,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-zinc-600">History Progression Logs (Latest First)</span>
                                       <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                         {historyLogs.map((h, hIdx) => {
-                                          const isPR = prWeight > 0 && h.maxW === prWeight;
+                                          const isPR = prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate;
 
                                           return (
                                             <div 
