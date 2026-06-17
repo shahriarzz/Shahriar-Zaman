@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Global settings for the user",
+      "type": "object",
+      "properties": {
+        "cycleStart": { "type": "string", "format": "date", "description": "The date the 8-day cycle started" }
+      },
+      "required": ["cycleStart"]
+    },
+    "Workout": {
+      "title": "Workout Template",
+      "description": "Defined workout routine",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "badge": { "type": "string" },
+        "type": { "type": "string" },
+        "exercises": { "type": "array" },
+        "cardio": { "type": "object" },
+        "cycleDay": { "type": "number" },
+        "isCore": { "type": "boolean" },
+        "isRest": { "type": "boolean" },
+        "restNotes": { "type": "array" }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "SessionLog": {
+      "title": "Session Log",
+      "description": "A completed or partial workout session recorded by the user",
+      "type": "object",
+      "properties": {
+        "workoutId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "sets": { "type": "object" },
+        "complete": { "type": "boolean" },
+        "duration": { "type": "number" }
+      },
+      "required": ["workoutId", "date", "sets"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User configuration and cycle state"
+    },
+    "/users/{userId}/workouts/{workoutId}": {
+      "schema": "Workout",
+      "description": "User's customized or default workout templates"
+    },
+    "/users/{userId}/logs/{logDate}": {
+      "schema": "SessionLog",
+      "description": "History of workout sessions"
+    }
+  }
+}

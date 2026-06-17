@@ -1,0 +1,8 @@
+{
+	"appId": "com.gainlog.app",
+	"appName": "GAINLOG: Protocol Tracker",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	}
+}

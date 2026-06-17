@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>GAINLOG — Professional Fitness Tracking</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Force unregister service workers and clear caches to prevent white screens caused by stale service workers
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              if (registration && typeof registration.unregister === 'function') {
+                registration.unregister().then(() => {
+                  console.log('Stale ServiceWorker unregistered');
+                }).catch(e => console.warn(e));
+              }
+            }
+          }).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.warn("ServiceWorker retrieval blocked:", err);
+      }
+
+      try {
+        if ('caches' in window) {
+          caches.keys().then((keys) => {
+            for (const key of keys) {
+              caches.delete(key).then(() => {
+                console.log('Stale Cache cleared:', key);
+              }).catch(e => console.warn(e));
+            }
+          }).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.warn("Cache storage blocked:", err);
+      }
+    </script>
+  </body>
+</html>
+

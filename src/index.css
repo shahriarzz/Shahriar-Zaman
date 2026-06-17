@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display: "Bebas Neue", sans-serif;
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
+  }
+
+  /* Safe Area paddings and margins for Android 15 & 16 */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .mt-safe {
+    margin-top: env(safe-area-inset-top, 0px);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+body {
+  @apply bg-[#09090e] text-zinc-200 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  
+  /* Subtle dot-matrix background pattern for tactical dark theme */
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1.2px, transparent 1.2px);
+  background-size: 18px 18px;
+  background-attachment: fixed;
+  
+  /* Native App Safe touch/selection styling */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Mobile Keypad Occlusion Optimization */
+@media (max-width: 768px) {
+  /* Scroll sticky top nav out of the way when keyboard is up */
+  body:has(input:focus) nav {
+    position: absolute !important;
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+
+  /* Compact header with static positioning so web-browser can focus scroll row correctly */
+  body:has(input:focus) .session-sticky-header {
+    position: relative !important;
+    top: 0 !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    margin-bottom: 16px !important;
+    gap: 8px !important;
+  }
+}
+

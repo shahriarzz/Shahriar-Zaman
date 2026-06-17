@@ -1,0 +1,17 @@
+{
+  "name": "GAINLOG: Protocol Tracker",
+  "short_name": "GAINLOG",
+  "description": "Professional fitness tracking and protocol management.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090e",
+  "theme_color": "#09090e",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2964/2964514.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

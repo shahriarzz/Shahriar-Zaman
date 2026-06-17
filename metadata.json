@@ -1,0 +1,8 @@
+{
+  "name": "GAINLOG: Protocol Tracker",
+  "description": "Professional 8-day split fitness tracker with PR detection, AI coaching, and comprehensive progress analytics. Optimized for high-performance training.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

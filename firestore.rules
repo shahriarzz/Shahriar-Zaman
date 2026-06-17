@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['cycleStart']) &&
+             data.keys().size() == 1 &&
+             data.cycleStart is string && data.cycleStart.size() <= 10;
+    }
+
+    function isValidWorkout(data) {
+      return data.keys().hasAll(['id', 'name', 'type', 'exercises']) &&
+             data.id is string && data.id.size() <= 64 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.type is string && data.type.size() <= 32 &&
+             data.exercises is list && data.exercises.size() <= 50;
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['workoutId', 'date', 'sets', 'complete', 'duration']) &&
+             data.workoutId is string && data.workoutId.size() <= 64 &&
+             data.date is string && data.date.size() <= 10 &&
+             data.sets is map && data.sets.keys().size() <= 50 &&
+             data.complete is bool &&
+             data.duration is number && data.duration >= 0;
+    }
+
+    // --- Resource Paths ---
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['cycleStart']);
+      allow delete: if false; // Profiles are not deleted via client
+
+      // Workouts Sub-collection
+      match /workouts/{workoutId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(workoutId);
+        allow create: if isOwner(userId) && isValidId(workoutId) && isValidWorkout(incoming());
+        allow update: if isOwner(userId) && isValidId(workoutId) && isValidWorkout(incoming());
+        allow delete: if isOwner(userId) && isValidId(workoutId);
+      }
+
+      // Logs Sub-collection
+      match /logs/{logDate} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(logDate);
+        allow create: if isOwner(userId) && isValidId(logDate) && isValidLog(incoming());
+        allow update: if isOwner(userId) && isValidId(logDate) && isValidLog(incoming());
+        allow delete: if isOwner(userId) && isValidId(logDate);
+      }
+    }
+  }
+}
