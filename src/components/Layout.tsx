@@ -54,7 +54,10 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
   const { user } = useFitness();
 
   return (
-    <div className="min-h-screen bg-[#09090e] text-zinc-200 font-sans selection:bg-orange-500/30">
+    <div className={cn(
+      "min-h-screen bg-[#09090e] text-zinc-200 font-sans selection:bg-orange-500/30",
+      activeTab === 'session' && "session-active"
+    )}>
       {/* Top Banner / Nav */}
       <nav className="sticky top-0 z-50 bg-[#09090e]/90 backdrop-blur-xl border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">

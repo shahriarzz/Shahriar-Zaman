@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, getRedirectResult } from 'firebase/auth';
 import { 
   doc, 
   setDoc, 
@@ -265,6 +265,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Firebase Auth Controller
   useEffect(() => {
+    getRedirectResult(auth).catch(console.error);
+
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsInitialized(true);

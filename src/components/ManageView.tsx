@@ -14,6 +14,7 @@ import {
   Save 
 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
+import { useConfirm } from '../store/ConfirmContext';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { cn } from '../lib/utils';
@@ -35,6 +36,7 @@ export const ManageView: React.FC = () => {
     restoreAutoBackup,
     createManualBackup
   } = useFitness();
+  const { confirm } = useConfirm();
   
   const [expandedWo, setExpandedWo] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -145,9 +147,11 @@ export const ManageView: React.FC = () => {
   };
 
   const handleRestoreCheckpoint = async (timestamp: string, desc: string) => {
-    const confirmRestore = window.confirm(
-      `🚨 RESTORE SAVEPOINT\n\nAre you sure you want to revert your routines and logs to:\n"${desc}"?\n\nThis will overwrite your active state parameters.`
-    );
+    const confirmRestore = await confirm({
+      title: 'Restore Savepoint',
+      message: `Are you sure you want to revert your routines and logs to:\n"${desc}"?\n\nThis will overwrite your active state parameters.`,
+      isDanger: true
+    });
     if (!confirmRestore) return;
 
     haptics.success();
@@ -162,7 +166,12 @@ export const ManageView: React.FC = () => {
   };
 
   const handleResetWorkouts = async () => {
-    if (window.confirm("Overwrite all training routines with default factory structures? This will keep history but replace routines.")) {
+    const proceed = await confirm({
+      title: 'Reset Training Routines',
+      message: 'Overwrite all training routines with default factory structures? This will keep history but replace routines.',
+      isDanger: true
+    });
+    if (proceed) {
       await setWorkouts(INITIAL_WORKOUTS);
       setExpandedWo(null);
     }
@@ -658,8 +667,15 @@ export const ManageView: React.FC = () => {
             Caution: Purging session history logs will permanently clear all historical weights and calendars. Split routines will remain preserved.
           </p>
           <button
-            onClick={() => {
-              if (window.confirm('🚨 DANGER: IRREVERSIBLE PURGE\n\nAre you absolutely positive you want to completely delete all training calendars and histories? This cannot be undone.')) resetLogs();
+            onClick={async () => {
+              const proceed = await confirm({
+                title: '🚨 DANGER: IRREVERSIBLE PURGE',
+                message: 'Are you absolutely positive you want to completely delete all training calendars and histories? This cannot be undone.',
+                isDanger: true
+              });
+              if (proceed) {
+                resetLogs();
+              }
             }}
             className="px-6 py-3 border border-red-500/30 text-red-500 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
           >

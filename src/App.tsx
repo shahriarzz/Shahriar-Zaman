@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { FitnessProvider } from './store/FitnessContext';
+import { ConfirmProvider, useConfirm } from './store/ConfirmContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { SessionView } from './components/SessionView';
@@ -11,6 +12,7 @@ import { useFitness } from './store/FitnessContext';
 
 function AppContent() {
   const { loading } = useFitness();
+  const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
@@ -21,9 +23,13 @@ function AppContent() {
 
     let sub: any;
     const initBackButton = async () => {
-      sub = await CapApp.addListener('backButton', () => {
+      sub = await CapApp.addListener('backButton', async () => {
         if (activeTab === 'session') {
-          const confirmExit = window.confirm('Exit current training session?');
+          const confirmExit = await confirm({
+            title: 'Exit Session',
+            message: 'Exit current training session?',
+            isDanger: true
+          });
           if (confirmExit) {
             setSelectedWorkoutId(null);
             setActiveTab('dashboard');
@@ -134,7 +140,9 @@ function AppContent() {
 export default function App() {
   return (
     <FitnessProvider>
-      <AppContent />
+      <ConfirmProvider>
+        <AppContent />
+      </ConfirmProvider>
     </FitnessProvider>
   );
 }

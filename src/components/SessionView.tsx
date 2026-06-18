@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
+import { useConfirm } from '../store/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog } from '../types/fitness';
 import { WORKOUT_COLORS, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
 import { cn } from '../lib/utils';
@@ -21,8 +22,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     activeSession,
     startActiveSession,
     updateActiveSessionSets,
-    clearActiveSession
+    clearActiveSession,
+    user
   } = useFitness();
+  const { confirm } = useConfirm();
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [sessionSets, setSessionSets] = useState<Record<string, SetLog[]>>({});
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -199,6 +202,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   };
 
   const getAiAdvice = async (ex: Exercise) => {
+    if (!user) {
+      setAiAdvice(prev => ({ 
+        ...prev, 
+        [ex.id]: "AI Coaching requires a secure verified session. Please sign in under the 'Terminal / Backups' settings tab." 
+      }));
+      return;
+    }
+
     setLoadingAdvice(ex.id);
     try {
       const history = (Object.values(logs) as SessionLog[])
@@ -206,9 +217,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         .filter(l => l.sets && (l.sets as SetLog[]).some(s => s.done))
         .slice(-3); // Last 3 sessions
 
+      const idToken = await user.getIdToken();
+
       const response = await fetch('/api/fitness/advice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({
           exercise: ex,
           history
@@ -243,7 +259,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     }, 0);
   };
 
-  const finishSession = () => {
+  const finishSession = async () => {
     if (!activeWorkout) return;
 
     // Safety checks for extreme or illogical inputs to secure tracking data
@@ -263,9 +279,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     if (extremeSets.length > 0) {
       const warningLines = extremeSets.map(e => `• ${e.exName}: ${e.weight}kg × ${e.reps} reps`).join('\n');
-      const proceed = window.confirm(
-        `🚨 WARNING: ILLOGICAL PROTOCOL DETECTED\n\nAbnormally high workout parameters detected:\n${warningLines}\n\nMost training routines don't exceed 500kg or 100 reps per set. Please make sure this is not a mistake to prevent data corruption in your logs.\n\nDo you want to secure these values anyway?`
-      );
+      const proceed = await confirm({
+        title: 'Illogical Protocol Warning',
+        message: `Abnormally high parameters detected:\n${warningLines}\n\nMost training routines don't exceed 500kg or 100 reps per set. Proceed only if these are genuine, intentional values and NOT typos.`,
+        isDanger: true
+      });
       if (!proceed) return;
     }
 

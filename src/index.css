@@ -65,8 +65,8 @@ input, textarea, [contenteditable="true"] {
 
 /* Mobile Keypad Occlusion Optimization */
 @media (max-width: 768px) {
-  /* Scroll sticky top nav out of the way when keyboard is up */
-  body:has(input:focus) nav {
+  /* Scroll sticky top nav out of the way when keyboard is up only during active session */
+  .session-active:has(input:focus) nav {
     position: absolute !important;
     transform: translateY(-100%);
     opacity: 0;

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
+import { useConfirm } from '../store/ConfirmContext';
 import { WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog } from '../types/fitness';
 import { cn } from '../lib/utils';
@@ -15,6 +16,7 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
   const { logs, workouts, deleteLog, addLog } = useFitness();
+  const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [selectedExKey, setSelectedExKey] = useState<string | null>(null); // Format: "YYYY-MM-DD_exerciseId"
@@ -203,9 +205,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
     if (extremeSets.length > 0) {
       const textLines = extremeSets.map(e => `• ${e}`).join('\n');
-      const proceed = window.confirm(
-        `🚨 WARNING: ABNORMAL TRACKING DETECTED\n\nYou entered extreme parameters:\n${textLines}\n\nLifts exceeding 500kg or 100 reps are unusual. Click OK only if these are genuine, intentional data edits and NOT typos.`
-      );
+      const proceed = await confirm({
+        title: 'Abnormal Tracking Warning',
+        message: `Abnormally high parameters detected:\n${textLines}\n\nLifts exceeding 500kg or 100 reps are unusual. Proceed only if these are genuine, intentional data edits and NOT typos.`,
+        isDanger: true
+      });
       if (!proceed) return;
     }
 
@@ -501,9 +505,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </button>
 
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        if (confirm('Are you sure you want to purge this workout log from history?')) {
+                        const proceed = await confirm({
+                          title: 'Purge Workout Log',
+                          message: 'Are you sure you want to purge this workout log from history?',
+                          isDanger: true
+                        });
+                        if (proceed) {
                           haptics.warning();
                           deleteLog(session.id);
                         }

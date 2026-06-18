@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -39,8 +40,59 @@ async function startServer() {
     message: { error: 'Too many advice requests. Please focus on your training sets and try again in 15 minutes.' }
   });
 
+  // Helper to verify Firebase ID Token in Express
+  const verifyFirebaseToken = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization header style.' });
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    if (!idToken) {
+      return res.status(401).json({ error: 'Unauthorized: Missing token.' });
+    }
+
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    let apiKey = '';
+    try {
+      const config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+      apiKey = config.apiKey;
+    } catch (e) {
+      console.error("Failed to read firebase config in middleware:", e);
+    }
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Server misconfiguration: Firebase API key not found.' });
+    }
+
+    try {
+      const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      });
+
+      if (!response.ok) {
+        const errDetail = await response.json().catch(() => ({}));
+        console.warn("Google identity toolkit validation failed:", errDetail);
+        return res.status(401).json({ error: 'Unauthorized: Invalid or expired credentials.' });
+      }
+
+      const decoded = await response.json() as any;
+      if (!decoded.users || decoded.users.length === 0) {
+        return res.status(401).json({ error: 'Unauthorized: User account not found.' });
+      }
+
+      (req as any).user = decoded.users[0];
+      next();
+    } catch (err) {
+      console.error("Token verification exception:", err);
+      res.status(500).json({ error: 'Internal system validation error.' });
+    }
+  };
+
   // API Routes
-  app.post('/api/fitness/advice', adviceLimiter, async (req, res) => {
+  app.post('/api/fitness/advice', verifyFirebaseToken, adviceLimiter, async (req, res) => {
     const { exercise, history } = req.body;
 
     if (!exercise) {

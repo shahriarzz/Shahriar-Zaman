@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Fallback to environment variables if the config is not set or left as placeholder
@@ -29,23 +30,16 @@ export const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = async () => {
   try {
+    if (Capacitor.isNativePlatform()) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
-    if (error?.code === 'auth/popup-closed-by-user') {
-      console.log("User closed the sign-in popup.");
-      return null;
-    }
-    
-    // Check if error is due to popup-blocked or unsupported environment/mobile WebView
-    console.warn("signInWithPopup failed, falling back to signInWithRedirect:", error);
-    try {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    } catch (redirectError) {
-      console.error("Firebase Redirect Sign-in also failed:", redirectError);
-      throw error;
-    }
+    if (error?.code === 'auth/popup-closed-by-user') return null;
+    console.error("Sign-in failed:", error);
+    throw error;
   }
 };
 
