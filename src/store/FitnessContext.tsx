@@ -208,7 +208,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const chunk = logEntries.slice(i, i + 40);
           const logsBatch = writeBatch(db);
           chunk.forEach(([id, val]) => {
-            logsBatch.set(doc(logsCol, id), val);
+            const { id: _, ...firebaseLog } = val as any;
+            logsBatch.set(doc(logsCol, id), firebaseLog);
           });
           await logsBatch.commit();
         }
@@ -356,7 +357,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const chunk = logsToUpload.slice(i, i + 40);
           const batch = writeBatch(db);
           chunk.forEach(([id, l]) => {
-            batch.set(doc(logsColRef, id), l);
+            const { id: _, ...firebaseLog } = l as any;
+            batch.set(doc(logsColRef, id), firebaseLog);
           });
           await batch.commit();
         }
@@ -471,7 +473,14 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [workouts, logs, appState, isInitialized]);
 
-  const addLog = async (logId: string, log: SessionLog) => {
+  const addLog = async (logId: string, logOriginal: SessionLog) => {
+    const log = {
+      workoutId: logOriginal.workoutId,
+      date: logOriginal.date,
+      sets: logOriginal.sets || {},
+      complete: !!logOriginal.complete,
+      duration: Number(logOriginal.duration) || 0
+    };
     try {
       const nextLogs = { ...logs, [logId]: log };
       setLogs(nextLogs);
@@ -656,7 +665,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const chunk = logEntries.slice(i, i + 40);
           const logsBatch = writeBatch(db);
           for (const [logId, logValue] of chunk) {
-            logsBatch.set(doc(logsColRef, logId), logValue as SessionLog);
+            const { id: _, ...firebaseLog } = logValue as any;
+            logsBatch.set(doc(logsColRef, logId), firebaseLog);
           }
           await logsBatch.commit();
         }

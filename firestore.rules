@@ -6,97 +6,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // --- Entity Validations ---
-
-    function isValidLogId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-zA-Z0-9_\\-]+_[0-9]+$');
-    }
-
-    function isValidUser(data) {
-      return data.keys().hasAll(['cycleStart']) &&
-             data.keys().size() == 1 &&
-             data.cycleStart is string && data.cycleStart.size() <= 10;
-    }
-
-    function isValidWorkout(data) {
-      return data.keys().hasAll(['id', 'name', 'type', 'exercises']) &&
-             data.id is string && data.id.size() <= 64 &&
-             data.name is string && data.name.size() <= 128 &&
-             data.type is string && data.type.size() <= 32 &&
-             data.exercises is list && data.exercises.size() <= 50;
-    }
-
-    function isValidLog(data) {
-      return data.keys().hasAll(['workoutId', 'date', 'sets', 'complete', 'duration']) &&
-             data.keys().size() == 5 &&
-             data.workoutId is string && data.workoutId.size() <= 64 &&
-             data.date is string && data.date.size() <= 10 &&
-             data.sets is map && data.sets.keys().size() <= 50 &&
-             data.sets.values().all(setList => 
-               setList is list && 
-               setList.size() <= 30 && 
-               setList.all(s => 
-                 s is map && 
-                 s.keys().hasAll(['weight', 'reps', 'done']) && 
-                 s.keys().size() == 3 && 
-                 s.weight is string && s.weight.size() <= 20 && 
-                 s.reps is string && s.reps.size() <= 20 && 
-                 s.done is bool
-               )
-             ) &&
-             data.complete is bool &&
-             data.duration is number && data.duration >= 0 &&
-             // Restrict payload sizes to under 16KB to fully eliminate storage resource abuse vectors
-             request.resource.size <= 16384;
-    }
-
-    // --- Resource Paths ---
-
     // User Profile
     match /users/{userId} {
-      allow get: if isOwner(userId) && isValidId(userId);
-      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['cycleStart']);
-      allow delete: if false; // Profiles are not deleted via client
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
 
       // Workouts Sub-collection
       match /workouts/{workoutId} {
-        allow list: if isOwner(userId);
-        allow get: if isOwner(userId) && isValidId(workoutId);
-        allow create: if isOwner(userId) && isValidId(workoutId) && isValidWorkout(incoming());
-        allow update: if isOwner(userId) && isValidId(workoutId) && isValidWorkout(incoming());
-        allow delete: if isOwner(userId) && isValidId(workoutId);
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
 
       // Logs Sub-collection
       match /logs/{logId} {
-        allow list: if isOwner(userId);
-        allow get: if isOwner(userId) && isValidLogId(logId);
-        allow create: if isOwner(userId) && isValidLogId(logId) && isValidLog(incoming());
-        allow update: if isOwner(userId) && isValidLogId(logId) && isValidLog(incoming());
-        allow delete: if isOwner(userId) && isValidLogId(logId);
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

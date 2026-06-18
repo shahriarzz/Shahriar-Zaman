@@ -11,7 +11,7 @@ import { ManageView } from './components/ManageView';
 import { useFitness } from './store/FitnessContext';
 
 function AppContent() {
-  const { loading } = useFitness();
+  const { loading, activeSession, clearActiveSession } = useFitness();
   const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -25,12 +25,18 @@ function AppContent() {
     const initBackButton = async () => {
       sub = await CapApp.addListener('backButton', async () => {
         if (activeTab === 'session') {
-          const confirmExit = await confirm({
-            title: 'Exit Session',
-            message: 'Exit current training session?',
-            isDanger: true
-          });
-          if (confirmExit) {
+          if (activeSession) {
+            const confirmExit = await confirm({
+              title: 'Abandon Active Session?',
+              message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
+              isDanger: true
+            });
+            if (confirmExit) {
+              clearActiveSession();
+              setSelectedWorkoutId(null);
+              setActiveTab('dashboard');
+            }
+          } else {
             setSelectedWorkoutId(null);
             setActiveTab('dashboard');
           }
@@ -49,7 +55,7 @@ function AppContent() {
         sub.remove();
       }
     };
-  }, [activeTab]);
+  }, [activeTab, activeSession, clearActiveSession]);
 
   if (loading) {
     return (
@@ -106,8 +112,25 @@ function AppContent() {
     setActiveTab('session');
   };
 
+  const handleTabChange = async (tab: string) => {
+    if (activeTab === 'session' && tab !== 'session' && activeSession) {
+      const confirmExit = await confirm({
+        title: 'Abandon Active Session?',
+        message: 'Your current training progress is in-flight. Navigating away will discard or clear this active protocol. Are you sure you want to abort?',
+        isDanger: true
+      });
+      if (confirmExit) {
+        clearActiveSession();
+        setSelectedWorkoutId(null);
+        setActiveTab(tab);
+      }
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+    <Layout activeTab={activeTab} onTabChange={handleTabChange}>
       {activeTab === 'dashboard' && (
         <Dashboard 
           onStartWorkout={handleStartSession} 

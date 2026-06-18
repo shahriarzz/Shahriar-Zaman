@@ -232,16 +232,45 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       });
       
       if (!response.ok) {
-        throw new Error(`Server status: ${response.status}`);
+        let serverErrorMsg = `Server status: ${response.status}`;
+        try {
+          const isJson = response.headers.get('content-type')?.includes('application/json');
+          if (isJson) {
+            const errData = await response.json().catch(() => null);
+            if (errData && errData.error) {
+              serverErrorMsg = errData.error;
+            }
+          }
+        } catch (_) {}
+        throw new Error(serverErrorMsg);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Non-JSON response received from coaching service.');
       }
 
       const data = await response.json();
       setAiAdvice(prev => ({ ...prev, [ex.id]: data.suggestion || "No advice provided. Stick to the program!" }));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to get AI advice', error);
+      
+      // Selectively present detailed server/Gemini errors or guide user if missing config
+      let humanMsg = "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!";
+      if (error instanceof Error) {
+        const msg = error.message;
+        if (msg.includes("GEMINI_API_KEY") || msg.includes("api key") || msg.includes("API key")) {
+          humanMsg = "Coaching engine requires a configured GEMINI_API_KEY environment variable. Please make sure it is added inside the project Settings.";
+        } else if (msg.includes("Too many advice requests") || msg.includes("rate-limit")) {
+          humanMsg = "Coaching engine is on a set cooldown: " + msg;
+        } else if (msg && !msg.includes("Server status") && !msg.includes("Non-JSON")) {
+          humanMsg = msg;
+        }
+      }
+
       setAiAdvice(prev => ({ 
         ...prev, 
-        [ex.id]: "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!" 
+        [ex.id]: humanMsg 
       }));
     } finally {
       setLoadingAdvice(null);
@@ -305,6 +334,18 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     clearActiveSession();
     setIsFinishing(true);
+  };
+
+  const handleExitAttempt = async () => {
+    const proceed = await confirm({
+      title: 'Abandon Active Session?',
+      message: 'Your current training progress is in-flight. Exiting now will suspend or clear this active protocol. Are you sure you want to abort?',
+      isDanger: true
+    });
+    if (proceed) {
+      clearActiveSession();
+      onExit();
+    }
   };
 
   if (!activeWorkout) return (
@@ -393,7 +434,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       {/* Session Top Bar */}
       <header className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-xl py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300">
         <div className="flex items-center gap-4">
-          <button onClick={onExit} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+          <button onClick={handleExitAttempt} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
             <ChevronLeft size={20} />
           </button>
           <div className="space-y-1">

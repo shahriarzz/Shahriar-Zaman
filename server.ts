@@ -10,7 +10,31 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
+  
+  // Enable trusting proxy headers to prevent express-rate-limit validation warnings/errors
+  app.set('trust proxy', 1);
+  
+  // Safe incoming requests logging for debugging API interactions (limited to api routes)
+  app.use((req, res, next) => {
+    if (req.url.startsWith('/api')) {
+      console.log(`[API REQUEST] ${req.method} ${req.url}`);
+    }
+    next();
+  });
+  
   app.use(express.json());
+
+  // Cache firebase config key at startup
+  let cachedFirebaseApiKey = '';
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      cachedFirebaseApiKey = config.apiKey || '';
+    }
+  } catch (err) {
+    console.error("Failed to perform initial firebase config load:", err);
+  }
 
   let ai: GoogleGenAI | null = null;
   const getAiClient = () => {
@@ -40,8 +64,14 @@ async function startServer() {
     message: { error: 'Too many advice requests. Please focus on your training sets and try again in 15 minutes.' }
   });
 
+  // Helper wrapper for async Express routes to prevent unhandled promise exceptions
+  const asyncHandler = (fn: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<any>) => 
+    (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      Promise.resolve(fn(req, res, next)).catch(next);
+    };
+
   // Helper to verify Firebase ID Token in Express
-  const verifyFirebaseToken = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const verifyFirebaseToken = asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization header style.' });
@@ -52,13 +82,18 @@ async function startServer() {
       return res.status(401).json({ error: 'Unauthorized: Missing token.' });
     }
 
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    let apiKey = '';
-    try {
-      const config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
-      apiKey = config.apiKey;
-    } catch (e) {
-      console.error("Failed to read firebase config in middleware:", e);
+    let apiKey = cachedFirebaseApiKey;
+    if (!apiKey) {
+      try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+          apiKey = config.apiKey || '';
+          cachedFirebaseApiKey = apiKey; // cache for next requests
+        }
+      } catch (e) {
+        console.error("Failed to read firebase config in middleware:", e);
+      }
     }
 
     if (!apiKey) {
@@ -89,10 +124,14 @@ async function startServer() {
       console.error("Token verification exception:", err);
       res.status(500).json({ error: 'Internal system validation error.' });
     }
-  };
+  });
 
   // API Routes
-  app.post('/api/fitness/advice', verifyFirebaseToken, adviceLimiter, async (req, res) => {
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.post('/api/fitness/advice', verifyFirebaseToken, adviceLimiter, asyncHandler(async (req, res) => {
     const { exercise, history } = req.body;
 
     if (!exercise) {
@@ -113,17 +152,38 @@ async function startServer() {
 
     try {
       const aiClient = getAiClient();
+      let response;
       
-      const generatePromise = aiClient.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-      });
+      try {
+        const generatePromise = aiClient.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+        });
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('TIMEOUT')), 12000); // 12-second security timeout
-      });
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT')), 12000); // 12-second security timeout
+        });
 
-      const response = await Promise.race([generatePromise, timeoutPromise]);
+        response = await Promise.race([generatePromise, timeoutPromise]);
+      } catch (firstErr) {
+        // If it's a timeout error, let the outer block handle it directly
+        if (firstErr instanceof Error && firstErr.message === 'TIMEOUT') {
+          throw firstErr;
+        }
+        
+        console.warn('Primary model (gemini-3.5-flash) failed or high demand. Attempting fallback model (gemini-3.1-flash-lite):', firstErr);
+        
+        const generatePromiseFallback = aiClient.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: prompt,
+        });
+
+        const timeoutPromiseFallback = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT')), 10000); // 10-second security timeout for fallback model
+        });
+
+        response = await Promise.race([generatePromiseFallback, timeoutPromiseFallback]);
+      }
 
       res.json({ suggestion: response.text || "Keep up the intensity! Focus on perfect form." });
     } catch (error) {
@@ -134,6 +194,12 @@ async function startServer() {
       console.error('Gemini Error or client init error:', error);
       res.status(500).json({ error: 'Failed to generate advice. Please ensure GEMINI_API_KEY is configured.' });
     }
+  }));
+
+  // Fallback for unmatched API routes so they never return HTML SPA shell
+  app.all('/api/*', (req, res) => {
+    console.warn(`[API 404 fallback] ${req.method} ${req.url} did not match any API routes.`);
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
   });
 
   // Vite middleware setup
@@ -150,6 +216,14 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Global Express Error-handling Middleware to guarantee JSON responses
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Express Error Handler caught:", err);
+    res.status(err.status || 500).json({ 
+      error: err.message || 'Internal server error occurred.' 
+    });
+  });
 
   const PORT = process.env.PORT || 3000;
   app.listen(Number(PORT), '0.0.0.0', () => {
