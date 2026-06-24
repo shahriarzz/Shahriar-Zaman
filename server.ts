@@ -82,7 +82,7 @@ async function startServer() {
       return res.status(401).json({ error: 'Unauthorized: Missing token.' });
     }
 
-    let apiKey = cachedFirebaseApiKey;
+    let apiKey = cachedFirebaseApiKey || process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
     if (!apiKey) {
       try {
         const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -96,8 +96,13 @@ async function startServer() {
       }
     }
 
+    // Secondary fallback to process env if config on disk doesn't have it
     if (!apiKey) {
-      return res.status(500).json({ error: 'Server misconfiguration: Firebase API key not found.' });
+      apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '';
+    }
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Server misconfiguration: Firebase API key not found. Please setup Firebase or provide VITE_FIREBASE_API_KEY in secrets.' });
     }
 
     try {

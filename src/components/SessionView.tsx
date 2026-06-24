@@ -8,6 +8,237 @@ import { WORKOUT_COLORS, dk, getAdjustedCycleStart } from '../utils/fitnessHelpe
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 
+interface ExerciseCardProps {
+  ex: Exercise;
+  ghostData: { lastSession: any; allTimePR: any };
+  aiAdvice: Record<string, string>;
+  loadingAdvice: string | null;
+  sessionSets: Record<string, SetLog[]>;
+  getAiAdvice: (ex: Exercise) => void;
+  updateSet: (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => void;
+  addSet: (exId: string) => void;
+  deleteSet: (exId: string, setIndex: number) => void;
+}
+
+const ExerciseCard: React.FC<ExerciseCardProps> = ({
+  ex,
+  ghostData,
+  aiAdvice,
+  loadingAdvice,
+  sessionSets,
+  getAiAdvice,
+  updateSet,
+  addSet,
+  deleteSet,
+}) => {
+  const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
+  const setsForEx = sessionSets[ex.id] || [];
+  const isDone = setsForEx.slice(0, ex.sets).every(s => s.done);
+
+  const prevIsDoneRef = useRef(false);
+  const [justCompleted, setJustCompleted] = useState(false);
+  const [flashingSets, setFlashingSets] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (isDone && !prevIsDoneRef.current) {
+      setJustCompleted(true);
+      const timer = setTimeout(() => setJustCompleted(false), 450);
+      return () => clearTimeout(timer);
+    }
+    prevIsDoneRef.current = isDone;
+  }, [isDone]);
+
+  const handleSetDone = (exId: string, si: number, currentDone: boolean) => {
+    if (!currentDone) {
+      haptics.success();
+      setFlashingSets(prev => new Set(prev).add(si));
+      setTimeout(() => {
+        setFlashingSets(prev => {
+          const next = new Set(prev);
+          next.delete(si);
+          return next;
+        });
+      }, 500);
+    } else {
+      haptics.light();
+    }
+    updateSet(exId, si, 'done', !currentDone);
+  };
+
+  return (
+    <motion.div
+      layout
+      key={ex.id}
+      animate={justCompleted ? { scale: [1, 1.015, 1] } : {}}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className={cn(
+        "bg-zinc-900/50 border rounded-3xl overflow-hidden transition-all",
+        isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
+      )}
+    >
+      {/* Header */}
+      <div className="p-6 pb-2 flex items-start justify-between">
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            {ex.name}
+            {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
+          </h3>
+          <p className="text-xs text-zinc-500 font-mono tracking-wider uppercase">
+            {ex.target} · {ex.sets} Sets · {ex.reps} Reps
+          </p>
+        </div>
+        <button
+          onClick={() => getAiAdvice(ex)}
+          disabled={loadingAdvice === ex.id}
+          className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-orange-500 transition-colors"
+        >
+          <Zap size={18} className={loadingAdvice === ex.id ? 'animate-pulse text-orange-500' : ''} />
+        </button>
+      </div>
+
+      {/* AI Advice Box */}
+      {aiAdvice[ex.id] && (
+        <div className="mx-6 mb-4 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex gap-3 text-xs text-orange-200/80">
+          <MessageSquareQuote size={18} className="shrink-0 text-orange-500" />
+          <p>{aiAdvice[ex.id]}</p>
+        </div>
+      )}
+
+      {/* Ghost Data Grid */}
+      <div className="grid grid-cols-2 bg-zinc-950/20 border-y border-zinc-800/50">
+          <div className="p-4 border-r border-zinc-800/50 space-y-1">
+            <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
+            {lastSession ? (
+              <div className="text-[10px] font-mono text-zinc-400">
+                {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
+                   <div key={idx}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[10px] font-mono text-zinc-600 italic">No history data</div>
+            )}
+          </div>
+          <div className="p-4 space-y-1">
+            <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
+            {allTimePR ? (
+              <div className="text-[10px] font-mono text-orange-500/80 flex items-center gap-1">
+                <Trophy size={10} /> {allTimePR.weight}kg × {allTimePR.reps}
+              </div>
+            ) : (
+              <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
+            )}
+          </div>
+      </div>
+
+      {/* Sets Table */}
+      <div className="p-6 pt-4 space-y-3">
+        <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
+          <span>Set</span>
+          <span>KG</span>
+          <span>Reps</span>
+          <span>Done</span>
+          <span>Del</span>
+        </div>
+
+        <div className="space-y-4">
+          {setsForEx.map((s: SetLog, si: number) => {
+            const isExtremeWeight = (parseFloat(s.weight) || 0) > 500;
+            const isExtremeReps = (parseInt(s.reps) || 0) > 100;
+            const isExtreme = isExtremeWeight || isExtremeReps;
+
+            return (
+              <div
+                key={si}
+                className={cn(
+                  "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
+                  flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
+                )}
+              >
+                <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
+                  <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
+                  <input
+                    type="number"
+                    placeholder="kg"
+                    value={s.weight}
+                    inputMode="decimal"
+                    onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
+                    className={cn(
+                      "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                      isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                    )}
+                  />
+                  <input
+                    type="number"
+                    placeholder="reps"
+                    value={s.reps}
+                    inputMode="numeric"
+                    onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
+                    className={cn(
+                      "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                      isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                    )}
+                  />
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => handleSetDone(ex.id, si, s.done)}
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl border transition-all",
+                        s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-zinc-950 border-zinc-800 text-zinc-850 hover:text-zinc-650"
+                      )}
+                    >
+                      <CheckCircle2 size={24} />
+                    </button>
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => {
+                        haptics.warning();
+                        deleteSet(ex.id, si);
+                      }}
+                      disabled={setsForEx.length <= 1}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
+                      title="Delete this set"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {isExtreme && (
+                  <div className="mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px] text-amber-400 font-mono animate-pulse">
+                    <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
+                    <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => {
+            haptics.medium();
+            addSet(ex.id);
+          }}
+          className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/50 hover:text-zinc-400 transition-colors"
+        >
+          <Plus size={14} /> Add Additional Set
+        </button>
+      </div>
+
+      {/* Coach Note (Collapsed) */}
+      {ex.note && (
+        <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
+          <div className="bg-zinc-950/40 p-4 rounded-2xl text-[11px] text-zinc-500 leading-relaxed border border-zinc-900">
+            <span className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest block mb-2">Coach's Field Notes</span>
+            {ex.note}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
 interface SessionViewProps {
   onExit: () => void;
   workoutId?: string | null;
@@ -429,10 +660,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     );
   }
 
+  const allExercisesDone = activeWorkout.exercises.every(ex =>
+    (sessionSets[ex.id] || []).slice(0, ex.sets).every(s => s.done)
+  );
+
   return (
     <div className="space-y-8 pb-32">
       {/* Session Top Bar */}
-      <header className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-xl py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300">
+      <header 
+        className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-xl py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300"
+        style={{
+          borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
+        }}
+      >
         <div className="flex items-center gap-4">
           <button onClick={handleExitAttempt} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
             <ChevronLeft size={20} />
@@ -453,13 +693,26 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 font-mono">
-            <Clock size={16} className="text-zinc-500" />
-            <span className="text-xl font-black tabular-nums">{formatTime(duration)}</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-2 font-mono">
+              <Clock size={16} className="text-zinc-500" />
+              <span className="text-xl font-black tabular-nums">{formatTime(duration)}</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5 font-mono text-zinc-600">
+              <span className="text-xs font-black tabular-nums text-zinc-400">
+                {calculateVolumeLocal().toLocaleString()}
+              </span>
+              <span className="text-[9px] uppercase tracking-widest">kg</span>
+            </div>
           </div>
           <button
             onClick={finishSession}
-            className="px-6 py-3 bg-white text-black rounded-xl text-xs font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+            className={cn(
+              "px-6 py-3 bg-white text-black rounded-xl text-xs font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all",
+              allExercisesDone 
+                ? "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold" 
+                : "shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+            )}
           >
             Finish
           </button>
@@ -468,182 +721,20 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
       {/* Exercises List */}
       <div className="space-y-6">
-        {activeWorkout.exercises.map((ex, i) => {
-          const { lastSession, allTimePR } = ghostData[ex.id] || { lastSession: null, allTimePR: null };
-          const isDone = sessionSets[ex.id]?.slice(0, ex.sets).every(s => s.done);
-
-          return (
-            <motion.div
-              layout
-              key={ex.id}
-              className={cn(
-                "bg-zinc-900/50 border rounded-3xl overflow-hidden transition-all",
-                isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
-              )}
-            >
-              {/* Header */}
-              <div className="p-6 pb-2 flex items-start justify-between">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-bold flex items-center gap-2">
-                    {ex.name}
-                    {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
-                  </h3>
-                  <p className="text-xs text-zinc-500 font-mono tracking-wider uppercase">
-                    {ex.target} · {ex.sets} Sets · {ex.reps} Reps
-                  </p>
-                </div>
-                <button
-                  onClick={() => getAiAdvice(ex)}
-                  disabled={loadingAdvice === ex.id}
-                  className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-orange-500 transition-colors"
-                >
-                  <Zap size={18} className={loadingAdvice === ex.id ? 'animate-pulse text-orange-500' : ''} />
-                </button>
-              </div>
-
-              {/* AI Advice Box */}
-              {aiAdvice[ex.id] && (
-                <div className="mx-6 mb-4 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex gap-3 text-xs text-orange-200/80">
-                  <MessageSquareQuote size={18} className="shrink-0 text-orange-500" />
-                  <p>{aiAdvice[ex.id]}</p>
-                </div>
-              )}
-
-              {/* Ghost Data Grid */}
-              <div className="grid grid-cols-2 bg-zinc-950/20 border-y border-zinc-800/50">
-                  <div className="p-4 border-r border-zinc-800/50 space-y-1">
-                    <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
-                    {lastSession ? (
-                      <div className="text-[10px] font-mono text-zinc-400">
-                        {lastSession.sets.slice(0, 3).map((s, idx) => (
-                           <div key={idx}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[10px] font-mono text-zinc-600 italic">No history data</div>
-                    )}
-                  </div>
-                  <div className="p-4 space-y-1">
-                    <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
-                    {allTimePR ? (
-                      <div className="text-[10px] font-mono text-orange-500/80 flex items-center gap-1">
-                        <Trophy size={10} /> {allTimePR.weight}kg × {allTimePR.reps}
-                      </div>
-                    ) : (
-                      <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
-                    )}
-                  </div>
-              </div>
-
-              {/* Sets Table */}
-              <div className="p-6 pt-4 space-y-3">
-                <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
-                  <span>Set</span>
-                  <span>KG</span>
-                  <span>Reps</span>
-                  <span>Done</span>
-                  <span>Del</span>
-                </div>
-
-                <div className="space-y-4">
-                  {sessionSets[ex.id]?.map((s: SetLog, si) => {
-                    const isExtremeWeight = (parseFloat(s.weight) || 0) > 500;
-                    const isExtremeReps = (parseInt(s.reps) || 0) > 100;
-                    const isExtreme = isExtremeWeight || isExtremeReps;
-
-                    return (
-                      <div key={si} className="space-y-1.5">
-                        <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
-                          <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
-                          <input
-                            type="number"
-                            placeholder="kg"
-                            value={s.weight}
-                            inputMode="decimal"
-                            onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
-                            className={cn(
-                              "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                              isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
-                            )}
-                          />
-                          <input
-                            type="number"
-                            placeholder="reps"
-                            value={s.reps}
-                            inputMode="numeric"
-                            onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
-                            className={cn(
-                              "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                              isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
-                            )}
-                          />
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => {
-                                if (!s.done) {
-                                  haptics.success();
-                                } else {
-                                  haptics.light();
-                                }
-                                updateSet(ex.id, si, 'done', !s.done);
-                              }}
-                              className={cn(
-                                "w-12 h-12 flex items-center justify-center rounded-xl border transition-all",
-                                s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-zinc-950 border-zinc-800 text-zinc-850 hover:text-zinc-650"
-                              )}
-                            >
-                              <CheckCircle2 size={24} />
-                            </button>
-                          </div>
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => {
-                                haptics.warning();
-                                deleteSet(ex.id, si);
-                              }}
-                              disabled={(sessionSets[ex.id] || []).length <= 1}
-                              className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
-                              title="Delete this set"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {isExtreme && (
-                          <div className="mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px] text-amber-400 font-mono animate-pulse">
-                            <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
-                            <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  onClick={() => {
-                    haptics.medium();
-                    addSet(ex.id);
-                  }}
-                  className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/50 hover:text-zinc-400 transition-colors"
-                >
-                  <Plus size={14} /> Add Additional Set
-                </button>
-              </div>
-
-              {/* Coach Note (Collapsed) */}
-              {ex.note && (
-                <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
-                  <div className="bg-zinc-950/40 p-4 rounded-2xl text-[11px] text-zinc-500 leading-relaxed border border-zinc-900">
-                    <span className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest block mb-2">Coach's Field Notes</span>
-                    {ex.note}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
+        {activeWorkout.exercises.map((ex) => (
+          <ExerciseCard
+            key={ex.id}
+            ex={ex}
+            ghostData={ghostData[ex.id]}
+            aiAdvice={aiAdvice}
+            loadingAdvice={loadingAdvice}
+            sessionSets={sessionSets}
+            getAiAdvice={getAiAdvice}
+            updateSet={updateSet}
+            addSet={addSet}
+            deleteSet={deleteSet}
+          />
+        ))}
 
         {activeWorkout.cardio && (
           <div className="bg-gradient-to-br from-zinc-800/10 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

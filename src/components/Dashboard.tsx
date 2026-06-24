@@ -31,7 +31,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   const currentCycleDay = getCycleDay(appState?.cycleStart || dk());
   const todayWorkout = (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
 
-   // Stats Logic
+  // Stats Logic
+  const useCountUp = (target: number, duration = 800) => {
+    const [value, setValue] = React.useState(0);
+    React.useEffect(() => {
+      if (target === 0) return;
+      let start = 0;
+      const step = target / (duration / 16);
+      const timer = setInterval(() => {
+        start += step;
+        if (start >= target) {
+          setValue(target);
+          clearInterval(timer);
+        } else {
+          setValue(Math.floor(start));
+        }
+      }, 16);
+      return () => clearInterval(timer);
+    }, [target, duration]);
+    return value;
+  };
+
   const totalWeight = (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
     let logVol = 0;
     Object.values(log?.sets || {}).forEach((exSets) => {
@@ -76,11 +96,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return streak;
   }, [logs]);
 
+  const animatedSessions = useCountUp(Object.keys(logs || {}).length);
+  const animatedCycles = useCountUp(Math.floor(Object.keys(logs || {}).length / 8));
+  const animatedWeight = useCountUp(Math.round(totalWeight));
+
   const stats = [
     { label: 'Day Streak', val: streakCount.toString(), icon: <TrendingUp size={16} />, color: 'text-orange-500', accentColor: 'border-t-orange-500/40' },
-    { label: 'Sessions', val: Object.keys(logs).length.toString(), icon: <CalendarIcon size={16} />, color: 'text-blue-500', accentColor: 'border-t-blue-500/40' },
-    { label: 'Cycles', val: Math.floor(Object.keys(logs).length / 8).toString(), icon: <Repeat size={16} />, color: 'text-purple-500', accentColor: 'border-t-purple-500/40' },
-    { label: 'kg Lifted', val: totalWeight >= 1000 ? (totalWeight / 1000).toFixed(1) + 'k' : Math.round(totalWeight).toString(), icon: <Trophy size={16} />, color: 'text-emerald-500', accentColor: 'border-t-emerald-500/40' },
+    { label: 'Sessions', val: animatedSessions.toString(), icon: <CalendarIcon size={16} />, color: 'text-blue-500', accentColor: 'border-t-blue-500/40' },
+    { label: 'Cycles', val: animatedCycles.toString(), icon: <Repeat size={16} />, color: 'text-purple-500', accentColor: 'border-t-purple-500/40' },
+    { label: 'kg Lifted', val: animatedWeight >= 1000 ? (animatedWeight / 1000).toFixed(1) + 'k' : animatedWeight.toString(), icon: <Trophy size={16} />, color: 'text-emerald-500', accentColor: 'border-t-emerald-500/40' },
   ];
 
   return (

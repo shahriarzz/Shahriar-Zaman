@@ -51,7 +51,25 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children }) => {
-  const { user } = useFitness();
+  const { user, syncStatus, syncError } = useFitness();
+
+  const getSyncColorClass = () => {
+    switch (syncStatus) {
+      case 'syncing': return 'bg-amber-500 animate-pulse';
+      case 'synced': return 'bg-emerald-500';
+      case 'failed': return 'bg-red-500';
+      default: return 'bg-zinc-650';
+    }
+  };
+
+  const getSyncTooltip = () => {
+    switch (syncStatus) {
+      case 'syncing': return 'Synchronizing database...';
+      case 'synced': return 'All training splits isomorphically synced';
+      case 'failed': return `Synchronization issue: ${syncError || 'Timeout'}`;
+      default: return 'Local storage active';
+    }
+  };
 
   return (
     <div className={cn(
@@ -76,23 +94,34 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Subtle user status avatar */}
-          {user?.photoURL ? (
-            <img 
-              src={user.photoURL} 
-              alt={user.displayName || "User"} 
-              referrerPolicy="no-referrer" 
-              className="w-8 h-8 rounded-full object-cover border border-zinc-850" 
-            />
-          ) : user ? (
-            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono font-bold text-zinc-300">
-              {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
-            </div>
-          )}
+          {/* Subtle user status avatar with integrated sync indicator */}
+          <div className="relative group/sync" title={user ? getSyncTooltip() : 'Offline database mode'}>
+            {user?.photoURL ? (
+              <img 
+                src={user.photoURL} 
+                alt={user.displayName || "User"} 
+                referrerPolicy="no-referrer" 
+                className="w-8 h-8 rounded-full object-cover border border-zinc-850" 
+              />
+            ) : user ? (
+              <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono font-bold text-zinc-300">
+                {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+              </div>
+            )}
+
+            {user && (
+              <span 
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border border-[#09090e]",
+                  getSyncColorClass()
+                )} 
+              />
+            )}
+          </div>
         </div>
       </nav>
 
