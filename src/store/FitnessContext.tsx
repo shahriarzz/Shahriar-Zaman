@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { onAuthStateChanged, User, getRedirectResult } from 'firebase/auth';
+import { Workout, SessionLog, AppState, SetLog } from '../types/fitness';
+import { INITIAL_WORKOUTS } from '../types/initialData';
+import { dk } from '../utils/fitnessHelpers';
 import { 
+  auth, 
+  db, 
+  signInWithGoogle,
+  onAuthStateChanged, 
+  getRedirectResult, 
   doc, 
   setDoc, 
   getDoc, 
@@ -9,11 +16,8 @@ import {
   deleteDoc, 
   onSnapshot,
   writeBatch
-} from 'firebase/firestore';
-import { Workout, SessionLog, AppState, SetLog } from '../types/fitness';
-import { INITIAL_WORKOUTS } from '../types/initialData';
-import { dk } from '../utils/fitnessHelpers';
-import { auth, db, signInWithGoogle } from '../lib/firebase';
+} from '../lib/firebase';
+import type { User } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
 export interface AutoBackupEntry {
@@ -54,6 +58,8 @@ export interface FitnessContextType {
   getAutoBackups: () => AutoBackupEntry[];
   restoreAutoBackup: (timestamp: string) => Promise<{ success: boolean; message: string }>;
   createManualBackup: () => Promise<{ success: boolean; message: string }>;
+  logBodyWeight: (date: string, weight: number) => Promise<void>;
+  deleteBodyWeight: (date: string) => Promise<void>;
 }
 
 const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
@@ -88,22 +94,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const savedLogs = localStorage.getItem('gl_logs');
       if (savedLogs) {
-        const parsed = JSON.parse(savedLogs);
-        const cleanLogs: Record<string, SessionLog> = {};
-        const mockIds = ['push-a', 'pull-a', 'push-b', 'pull-b', 'hybrid-a', 'hybrid-b'];
-        let hasMock = false;
-        Object.entries(parsed).forEach(([dateStr, log]: [string, any]) => {
-          if (mockIds.includes(log?.workoutId)) {
-            hasMock = true;
-          } else {
-            cleanLogs[dateStr] = log;
-          }
-        });
-        if (hasMock) {
-          localStorage.setItem('gl_logs', JSON.stringify(cleanLogs));
-          return cleanLogs;
-        }
-        return parsed;
+        return JSON.parse(savedLogs);
       }
     } catch { }
     return {};
@@ -558,6 +549,45 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const logBodyWeight = async (date: string, weight: number) => {
+    try {
+      const nextState = { 
+        ...appState, 
+        weightLog: { ...(appState.weightLog || {}), [date]: weight }
+      };
+      setAppState(nextState);
+
+      if (user) {
+        const path = `users/${user.uid}`;
+        await setDoc(doc(db, path), { weightLog: nextState.weightLog }, { merge: true });
+      }
+    } catch (error) {
+      console.error("Failed to log body weight", error);
+      if (user) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
+
+  const deleteBodyWeight = async (date: string) => {
+    try {
+      const nextLog = { ...(appState.weightLog || {}) };
+      delete nextLog[date];
+      const nextState = { ...appState, weightLog: nextLog };
+      setAppState(nextState);
+
+      if (user) {
+        const path = `users/${user.uid}`;
+        await setDoc(doc(db, path), { weightLog: nextLog }, { merge: true });
+      }
+    } catch (error) {
+      console.error("Failed to delete body weight", error);
+      if (user) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
+
   const resetLogs = async () => {
     try {
       pushAutoBackup(workouts, logs, appState, 'manual', 'Pre-Purge Auto Backup');
@@ -704,7 +734,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       importBackup,
       getAutoBackups,
       restoreAutoBackup,
-      createManualBackup
+      createManualBackup,
+      logBodyWeight,
+      deleteBodyWeight
     }}>
       {children}
     </FitnessContext.Provider>

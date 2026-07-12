@@ -18,6 +18,8 @@ interface ExerciseCardProps {
   updateSet: (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => void;
   addSet: (exId: string) => void;
   deleteSet: (exId: string, setIndex: number) => void;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }
 
 const ExerciseCard: React.FC<ExerciseCardProps> = ({
@@ -30,6 +32,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   updateSet,
   addSet,
   deleteSet,
+  isExpanded,
+  onToggleExpand,
 }) => {
   const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
   const setsForEx = sessionSets[ex.id] || [];
@@ -65,6 +69,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
     updateSet(exId, si, 'done', !currentDone);
   };
 
+  const doneCount = setsForEx.slice(0, ex.sets).filter(s => s.done).length;
+  const totalSets = ex.sets;
+
   return (
     <motion.div
       layout
@@ -77,164 +84,201 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       )}
     >
       {/* Header */}
-      <div className="p-6 pb-2 flex items-start justify-between">
+      <div 
+        onClick={onToggleExpand}
+        className="p-6 cursor-pointer hover:bg-zinc-800/10 transition-colors flex items-start justify-between gap-4"
+      >
         <div className="space-y-1">
           <h3 className="text-lg font-bold flex items-center gap-2">
             {ex.name}
             {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
           </h3>
-          <p className="text-xs text-zinc-500 font-mono tracking-wider uppercase">
-            {ex.target} · {ex.sets} Sets · {ex.reps} Reps
-          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 font-mono tracking-wider uppercase">
+            <span>{ex.target}</span>
+            <span>·</span>
+            <span>{ex.sets} Sets</span>
+            <span>·</span>
+            <span>{ex.reps} Reps</span>
+            <span>·</span>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded text-[10px]",
+              isDone ? "bg-emerald-500/20 text-emerald-400 font-bold" : "bg-zinc-800 text-zinc-400"
+            )}>
+              {doneCount}/{totalSets} Done
+            </span>
+          </div>
         </div>
-        <button
-          onClick={() => getAiAdvice(ex)}
-          disabled={loadingAdvice === ex.id}
-          className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-orange-500 transition-colors"
-        >
-          <Zap size={18} className={loadingAdvice === ex.id ? 'animate-pulse text-orange-500' : ''} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => getAiAdvice(ex)}
+            disabled={loadingAdvice === ex.id}
+            className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-orange-500 transition-colors"
+          >
+            <Zap size={18} className={loadingAdvice === ex.id ? 'animate-pulse text-orange-500' : ''} />
+          </button>
+          <motion.div
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+            className="text-zinc-500 p-2"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </motion.div>
+        </div>
       </div>
 
-      {/* AI Advice Box */}
-      {aiAdvice[ex.id] && (
-        <div className="mx-6 mb-4 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex gap-3 text-xs text-orange-200/80">
-          <MessageSquareQuote size={18} className="shrink-0 text-orange-500" />
-          <p>{aiAdvice[ex.id]}</p>
-        </div>
-      )}
-
-      {/* Ghost Data Grid */}
-      <div className="grid grid-cols-2 bg-zinc-950/20 border-y border-zinc-800/50">
-          <div className="p-4 border-r border-zinc-800/50 space-y-1">
-            <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
-            {lastSession ? (
-              <div className="text-[10px] font-mono text-zinc-400">
-                {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
-                   <div key={idx}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
-                ))}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            {/* AI Advice Box */}
+            {aiAdvice[ex.id] && (
+              <div className="mx-6 mb-4 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex gap-3 text-xs text-orange-200/80">
+                <MessageSquareQuote size={18} className="shrink-0 text-orange-500" />
+                <p>{aiAdvice[ex.id]}</p>
               </div>
-            ) : (
-              <div className="text-[10px] font-mono text-zinc-600 italic">No history data</div>
             )}
-          </div>
-          <div className="p-4 space-y-1">
-            <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
-            {allTimePR ? (
-              <div className="text-[10px] font-mono text-orange-500/80 flex items-center gap-1">
-                <Trophy size={10} /> {allTimePR.weight}kg × {allTimePR.reps}
-              </div>
-            ) : (
-              <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
-            )}
-          </div>
-      </div>
 
-      {/* Sets Table */}
-      <div className="p-6 pt-4 space-y-3">
-        <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
-          <span>Set</span>
-          <span>KG</span>
-          <span>Reps</span>
-          <span>Done</span>
-          <span>Del</span>
-        </div>
-
-        <div className="space-y-4">
-          {setsForEx.map((s: SetLog, si: number) => {
-            const isExtremeWeight = (parseFloat(s.weight) || 0) > 500;
-            const isExtremeReps = (parseInt(s.reps) || 0) > 100;
-            const isExtreme = isExtremeWeight || isExtremeReps;
-
-            return (
-              <div
-                key={si}
-                className={cn(
-                  "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
-                  flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
+            {/* Ghost Data Grid */}
+            <div className="grid grid-cols-2 bg-zinc-950/20 border-y border-zinc-800/50">
+              <div className="p-4 border-r border-zinc-800/50 space-y-1">
+                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
+                {lastSession ? (
+                  <div className="text-[10px] font-mono text-zinc-400">
+                    {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
+                      <div key={idx}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-mono text-zinc-600 italic">No history data</div>
                 )}
-              >
-                <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
-                  <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
-                  <input
-                    type="number"
-                    placeholder="kg"
-                    value={s.weight}
-                    inputMode="decimal"
-                    onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
-                    className={cn(
-                      "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                      isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
-                    )}
-                  />
-                  <input
-                    type="number"
-                    placeholder="reps"
-                    value={s.reps}
-                    inputMode="numeric"
-                    onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
-                    className={cn(
-                      "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                      isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
-                    )}
-                  />
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => handleSetDone(ex.id, si, s.done)}
+              </div>
+              <div className="p-4 space-y-1">
+                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
+                {allTimePR ? (
+                  <div className="text-[10px] font-mono text-orange-500/80 flex items-center gap-1">
+                    <Trophy size={10} /> {allTimePR.weight}kg × {allTimePR.reps}
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
+                )}
+              </div>
+            </div>
+
+            {/* Sets Table */}
+            <div className="p-6 pt-4 space-y-3">
+              <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
+                <span>Set</span>
+                <span>KG</span>
+                <span>Reps</span>
+                <span>Done</span>
+                <span>Del</span>
+              </div>
+
+              <div className="space-y-4">
+                {setsForEx.map((s: SetLog, si: number) => {
+                  const isExtremeWeight = (parseFloat(s.weight) || 0) > 500;
+                  const isExtremeReps = (parseInt(s.reps) || 0) > 100;
+                  const isExtreme = isExtremeWeight || isExtremeReps;
+
+                  return (
+                    <div
+                      key={si}
                       className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl border transition-all",
-                        s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-zinc-950 border-zinc-800 text-zinc-850 hover:text-zinc-650"
+                        "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
+                        flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
                       )}
                     >
-                      <CheckCircle2 size={24} />
-                    </button>
-                  </div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => {
-                        haptics.warning();
-                        deleteSet(ex.id, si);
-                      }}
-                      disabled={setsForEx.length <= 1}
-                      className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
-                      title="Delete this set"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
+                      <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
+                        <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
+                        <input
+                          type="number"
+                          placeholder="kg"
+                          value={s.weight}
+                          inputMode="decimal"
+                          onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
+                          className={cn(
+                            "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                          )}
+                        />
+                        <input
+                          type="number"
+                          placeholder="reps"
+                          value={s.reps}
+                          inputMode="numeric"
+                          onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
+                          className={cn(
+                            "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                          )}
+                        />
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => handleSetDone(ex.id, si, s.done)}
+                            className={cn(
+                              "w-12 h-12 flex items-center justify-center rounded-xl border transition-all",
+                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-zinc-950 border-zinc-800 text-zinc-850 hover:text-zinc-650"
+                            )}
+                          >
+                            <CheckCircle2 size={24} />
+                          </button>
+                        </div>
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => {
+                              haptics.warning();
+                              deleteSet(ex.id, si);
+                            }}
+                            disabled={setsForEx.length <= 1}
+                            className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
+                            title="Delete this set"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
 
-                {isExtreme && (
-                  <div className="mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px] text-amber-400 font-mono animate-pulse">
-                    <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
-                    <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
-                  </div>
-                )}
+                      {isExtreme && (
+                        <div className="mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px] text-amber-400 font-mono animate-pulse">
+                          <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
+                          <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
 
-        <button
-          onClick={() => {
-            haptics.medium();
-            addSet(ex.id);
-          }}
-          className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/50 hover:text-zinc-400 transition-colors"
-        >
-          <Plus size={14} /> Add Additional Set
-        </button>
-      </div>
+              <button
+                onClick={() => {
+                  haptics.medium();
+                  addSet(ex.id);
+                }}
+                className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/50 hover:text-zinc-400 transition-colors"
+              >
+                <Plus size={14} /> Add Additional Set
+              </button>
+            </div>
 
-      {/* Coach Note (Collapsed) */}
-      {ex.note && (
-        <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
-          <div className="bg-zinc-950/40 p-4 rounded-2xl text-[11px] text-zinc-500 leading-relaxed border border-zinc-900">
-            <span className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest block mb-2">Coach's Field Notes</span>
-            {ex.note}
-          </div>
-        </div>
-      )}
+            {/* Coach Note (Collapsed) */}
+            {ex.note && (
+              <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
+                <div className="bg-zinc-950/40 p-4 rounded-2xl text-[11px] text-zinc-500 leading-relaxed border border-zinc-900">
+                  <span className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest block mb-2">Coach's Field Notes</span>
+                  {ex.note}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
@@ -264,6 +308,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const [isFinishing, setIsFinishing] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
   const [loadingAdvice, setLoadingAdvice] = useState<string | null>(null);
+  const [expandedExId, setExpandedExId] = useState<string | null>(null);
+
+  // Auto-expand first incomplete exercise on load
+  useEffect(() => {
+    if (!activeWorkout || expandedExId) return;
+    const firstIncomplete = activeWorkout.exercises.find(ex => 
+      !sessionSets[ex.id]?.slice(0, ex.sets).every(s => s.done)
+    );
+    setExpandedExId(firstIncomplete?.id || activeWorkout.exercises[0]?.id || null);
+  }, [activeWorkout?.id, sessionSets]);
 
   useEffect(() => {
     const wo = activeWorkout || workouts.find(w => w.id === workoutId);
@@ -411,6 +465,23 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     };
     setSessionSets(nextSets);
     updateActiveSessionSets(nextSets);
+
+    // Auto-advance logic: if a set is marked done, check if the exercise is complete
+    if (field === 'done' && value === true && activeWorkout) {
+      const ex = activeWorkout.exercises.find(e => e.id === exId);
+      if (ex) {
+        const isNowDone = nextSets[exId]?.slice(0, ex.sets).every(s => s.done);
+        if (isNowDone) {
+          // Find the first incomplete exercise
+          const nextIncomplete = activeWorkout.exercises.find(e => 
+            !nextSets[e.id]?.slice(0, e.sets).every(s => s.done)
+          );
+          if (nextIncomplete) {
+            setExpandedExId(nextIncomplete.id);
+          }
+        }
+      }
+    }
   };
 
   const addSet = (exId: string) => {
@@ -733,6 +804,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             updateSet={updateSet}
             addSet={addSet}
             deleteSet={deleteSet}
+            isExpanded={expandedExId === ex.id}
+            onToggleExpand={() => {
+              setExpandedExId(prev => prev === ex.id ? null : ex.id);
+            }}
           />
         ))}
 

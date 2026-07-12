@@ -282,7 +282,7 @@ export const ManageView: React.FC = () => {
             Sign Out
           </button>
         ) : (
-          <div className="flex flex-col gap-2 items-end">
+          <div className="flex flex-col gap-2.5 items-end">
             <button 
               onClick={() => {
                 haptics.medium();
@@ -293,9 +293,17 @@ export const ManageView: React.FC = () => {
               Sync with Google
             </button>
             {authError && (
-              <span className="text-[9px] font-mono text-red-500 uppercase tracking-tighter">
+              <span className="text-[9px] font-mono text-red-500 uppercase tracking-tighter text-right max-w-xs">
                 {authError}
               </span>
+            )}
+            {typeof window !== 'undefined' && window.self !== window.top && (
+              <div className="max-w-[280px] p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800 text-right space-y-1">
+                <span className="text-[9px] font-mono text-orange-400 uppercase tracking-wider font-bold">💡 Web Preview Alert</span>
+                <p className="text-[9px] text-zinc-500 uppercase tracking-wide leading-normal">
+                  Google Sign-In popups are blocked inside the embedded preview. Please open this app in a <span className="text-zinc-300 font-bold">New Tab</span> using the button in the top-right corner to log in and restore your history seamlessly!
+                </p>
+              </div>
             )}
           </div>
         )}

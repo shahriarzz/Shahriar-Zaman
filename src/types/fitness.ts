@@ -46,4 +46,10 @@ export interface SessionLog {
 
 export interface AppState {
   cycleStart: string; // YYYY-MM-DD
+  weightLog?: Record<string, number>; // date -> kg
+}
+
+export interface WeightEntry {
+  date: string; // YYYY-MM-DD
+  weight: number; // kg
 }

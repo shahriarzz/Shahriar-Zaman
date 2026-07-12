@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight } from 'lucide-react';
+import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Scale } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { getCycleDay, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
 import { SetLog, SessionLog } from '../types/fitness';
@@ -9,14 +9,35 @@ import { haptics } from '../utils/haptics';
 
 import { cn } from '../lib/utils';
 
+const formatDateStr = (dateStr: string) => {
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+};
+
 interface DashboardProps {
   onStartWorkout: (id: string) => void;
   onNavigateToHistory: (dateStr?: string) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigateToHistory }) => {
-  const { logs, workouts, appState, updateCycleStart, activeSession, clearActiveSession } = useFitness();
+  const { 
+    logs, 
+    workouts, 
+    appState, 
+    updateCycleStart, 
+    activeSession, 
+    clearActiveSession,
+    logBodyWeight,
+    deleteBodyWeight
+  } = useFitness();
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const [weightInput, setWeightInput] = React.useState('');
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -266,6 +287,156 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             </button>
           </div>
         )}
+      </section>
+
+      {/* Body Weight Log */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Body Weight</span>
+          <div className="flex-1 h-px bg-zinc-800" />
+        </div>
+
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-5">
+          {/* Current + Input Row */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
+            <div className="space-y-1">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Current</span>
+              <div className="flex items-end gap-1.5">
+                <span className="text-4xl font-black text-white tabular-nums">
+                  {(() => {
+                    const entries = Object.entries(appState.weightLog || {}) as [string, number][];
+                    if (entries.length === 0) return '--';
+                    const latest = entries.sort((a, b) => b[0].localeCompare(a[0]))[0];
+                    return latest[1];
+                  })()}
+                </span>
+                <span className="text-zinc-500 font-mono text-xs mb-1.5">kg</span>
+              </div>
+            </div>
+
+            {/* Quick log input */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                placeholder="kg"
+                value={weightInput}
+                onChange={(e) => setWeightInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = parseFloat(weightInput);
+                    if (!val || val < 20 || val > 300) return;
+                    haptics.success();
+                    logBodyWeight(dk(), val);
+                    setWeightInput('');
+                  }
+                }}
+                className="flex-1 sm:flex-none w-full sm:w-24 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-3 text-sm text-center font-mono focus:border-zinc-500 outline-none transition-all"
+              />
+              <button
+                onClick={() => {
+                  const val = parseFloat(weightInput);
+                  if (!val || val < 20 || val > 300) return;
+                  haptics.success();
+                  logBodyWeight(dk(), val);
+                  setWeightInput('');
+                }}
+                className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-[10px] font-mono uppercase tracking-widest text-zinc-300 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+              >
+                Log
+              </button>
+            </div>
+          </div>
+
+          {/* Sparkline */}
+          {Object.keys(appState.weightLog || {}).length > 1 && (() => {
+            const entries = Object.entries(appState.weightLog || {}) as [string, number][];
+            const sorted = entries.sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
+            
+            const weights = sorted.map(e => e[1]);
+            const min = Math.min(...weights) - 0.5;
+            const max = Math.max(...weights) + 0.5;
+            const range = max - min || 1;
+            const w = 100 / (sorted.length - 1);
+
+            return (
+              <div className="space-y-2">
+                <div className="relative h-12 w-full">
+                  <svg viewBox="0 0 100 32" className="w-full h-full" preserveAspectRatio="none">
+                    <polyline
+                      points={sorted.map((e, i) => 
+                        `${i * w},${32 - ((e[1] - min) / range) * 28}`
+                      ).join(' ')}
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    {sorted.map((e, i) => (
+                      <circle
+                        key={i}
+                        cx={i * w}
+                        cy={32 - ((e[1] - min) / range) * 28}
+                        r="2"
+                        fill="#f97316"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ))}
+                  </svg>
+                </div>
+
+                {/* Min/Max labels */}
+                <div className="flex justify-between text-[8px] font-mono text-zinc-600 uppercase">
+                  <span>{sorted[0][0].slice(5)}</span>
+                  <span className="text-zinc-500">
+                    {Math.min(...weights)}kg → {Math.max(...weights)}kg
+                  </span>
+                  <span>{sorted[sorted.length - 1][0].slice(5)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Empty state */}
+          {Object.keys(appState.weightLog || {}).length === 0 && (
+            <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest text-center py-2">
+              Log your first weigh-in above
+            </p>
+          )}
+
+          {/* Recent Entries */}
+          {Object.keys(appState.weightLog || {}).length > 0 && (
+            <div className="border-t border-zinc-800/60 pt-4 space-y-2">
+              <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Recent Logs</div>
+              <div className="grid grid-cols-1 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1">
+                {(Object.entries(appState.weightLog || {}) as [string, number][])
+                  .sort((a, b) => b[0].localeCompare(a[0]))
+                  .slice(0, 5)
+                  .map(([date, weight]) => (
+                    <div key={date} className="flex items-center justify-between bg-zinc-950/40 border border-zinc-800/40 rounded-xl px-3 py-2 text-xs font-mono">
+                      <span className="text-zinc-400">{formatDateStr(date)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-white font-bold">{weight} <span className="text-[10px] text-zinc-500 font-normal">kg</span></span>
+                        <button
+                          onClick={() => {
+                            haptics.warning();
+                            deleteBodyWeight(date);
+                          }}
+                          className="text-zinc-600 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                          title="Delete Entry"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Quick All Workouts */}
