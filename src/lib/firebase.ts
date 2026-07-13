@@ -61,6 +61,40 @@ let deleteDocFunc: any = null;
 let onSnapshotFunc: any = null;
 let writeBatchFunc: any = null;
 
+// Reusable function to create and apply offline/fallback stubs to avoid code drift
+function applyOfflineStubs(alertMessage?: string) {
+  dbInstance = {} as any;
+  authInstance = {
+    signOut: async () => {},
+    currentUser: null
+  } as any;
+  googleProviderInstance = {} as any;
+
+  signInWithGoogleFunc = async () => {
+    alert(alertMessage || "Cloud synchronization is disabled. To enable logging in and cloud backups, please complete the Firebase Setup first.");
+    return null;
+  };
+
+  onAuthStateChangedFunc = ((_auth: any, callback: (user: any) => void) => {
+    setTimeout(() => callback(null), 0);
+    return () => {};
+  }) as any;
+
+  getRedirectResultFunc = (async () => null) as any;
+  docFunc = (() => ({} as any)) as any;
+  setDocFunc = (async () => {}) as any;
+  getDocFunc = (async () => ({} as any)) as any;
+  getDocsFunc = (async () => ({ docs: [] } as any)) as any;
+  collectionFunc = (() => ({} as any)) as any;
+  deleteDocFunc = (async () => {}) as any;
+  onSnapshotFunc = (() => () => {}) as any;
+  writeBatchFunc = (() => ({
+    set: () => {},
+    delete: () => {},
+    commit: async () => {}
+  } as any)) as any;
+}
+
 if (isFirebaseConfigured) {
   try {
     const app = initializeApp(actualConfig);
@@ -104,93 +138,14 @@ if (isFirebaseConfigured) {
 
   } catch (e) {
     console.error("Failed to initialize real Firebase despite config being present:", e);
-    dbInstance = {} as any;
-    authInstance = {
-      signOut: async () => {},
-      currentUser: null
-    } as any;
-    googleProviderInstance = {} as any;
-    signInWithGoogleFunc = async () => {
-      alert("Firebase failed to initialize. Check dev logs.");
-      return null;
-    };
-    onAuthStateChangedFunc = ((_auth: any, callback: (user: any) => void) => {
-      setTimeout(() => callback(null), 0);
-      return () => {};
-    }) as any;
-    getRedirectResultFunc = (async () => null) as any;
-    docFunc = (() => ({} as any)) as any;
-    setDocFunc = (async () => {}) as any;
-    getDocFunc = (async () => ({} as any)) as any;
-    getDocsFunc = (async () => ({ docs: [] } as any)) as any;
-    collectionFunc = (() => ({} as any)) as any;
-    deleteDocFunc = (async () => {}) as any;
-    onSnapshotFunc = (() => () => {}) as any;
-    writeBatchFunc = (() => ({
-      set: () => {},
-      delete: () => {},
-      commit: async () => {}
-    } as any)) as any;
+    applyOfflineStubs("Firebase failed to initialize. Please check developer console logs.");
   }
 } else {
-  // Graceful Offline-Only Stubs
-  dbInstance = {} as any;
-  authInstance = {
-    signOut: async () => {},
-    currentUser: null
-  } as any;
-  googleProviderInstance = {} as any;
-
-  signInWithGoogleFunc = async () => {
-    alert("Cloud synchronization is disabled. To enable logging in and cloud backups, please complete the Firebase Setup first.");
-    return null;
-  };
-
-  onAuthStateChangedFunc = ((_auth: any, callback: (user: any) => void) => {
-    setTimeout(() => callback(null), 0);
-    return () => {};
-  }) as any;
-
-  getRedirectResultFunc = (async () => null) as any;
-  docFunc = (() => ({} as any)) as any;
-  setDocFunc = (async () => {}) as any;
-  getDocFunc = (async () => ({} as any)) as any;
-  getDocsFunc = (async () => ({ docs: [] } as any)) as any;
-  collectionFunc = (() => ({} as any)) as any;
-  deleteDocFunc = (async () => {}) as any;
-  onSnapshotFunc = (() => () => {}) as any;
-  writeBatchFunc = (() => ({
-    set: () => {},
-    delete: () => {},
-    commit: async () => {}
-  } as any)) as any;
+  applyOfflineStubs();
 }
 
-// Resilient proxy wrapper to support dynamic dbInstance reassigned in fallback below
-// This forwards getPrototypeOf to the active dbInstance so that internal instanceof/brand checks in the Firebase SDK (e.g., inside doc()) succeed.
-const dbProxy = new Proxy({}, {
-  get(target, prop) {
-    if (prop === 'then') return undefined; // Promise check bypass
-    const current = dbInstance || target;
-    const value = (current as any)[prop];
-    if (typeof value === 'function') {
-      return value.bind(current);
-    }
-    return value;
-  },
-  set(target, prop, value) {
-    const current = dbInstance || target;
-    (current as any)[prop] = value;
-    return true;
-  },
-  getPrototypeOf(target) {
-    const current = dbInstance || target;
-    return Reflect.getPrototypeOf(current);
-  }
-});
-
 export {
-  dbProxy as db,
+  dbInstance as db,
   authInstance as auth,
   googleProviderInstance as googleProvider,
   signInWithGoogleFunc as signInWithGoogle,
@@ -206,7 +161,7 @@ export {
   writeBatchFunc as writeBatch
 };
 
-// CRITICAL: Connection test and database recovery fallback
+// CRITICAL: Connection test
 async function testConnection() {
   if (!isFirebaseConfigured) {
     console.log("Firebase is not configured. Running in offline-only mode.");
@@ -226,16 +181,11 @@ async function testConnection() {
       errCode === 'not-found' || 
       errCode === 'invalid-argument'
     ) {
-      console.warn("Custom firestore database not found. Falling back to default database (default). Error:", errMsg);
-      try {
-        const app = initializeApp(actualConfig);
-        dbInstance = getFirestore(app);
-        // Test default connection
-        await fbGetDocFromServer(fbDoc(dbInstance, 'test', 'connection'));
-        console.log("Firebase connection established with default database.");
-      } catch (fallbackError) {
-        console.error("Failed to connect to default database fallback:", fallbackError);
-      }
+      console.error(
+        `[CRITICAL] Custom Firestore database ID "${actualConfig.firestoreDatabaseId}" could not be reached. ` +
+        `Please ensure this database exists in your Firebase console or matches the active project ID. ` +
+        `Error: ${errMsg}`
+      );
     } else if (errMsg.includes('the client is offline')) {
       console.error("Please check your Firebase configuration. The client appears to be offline.");
     } else {
