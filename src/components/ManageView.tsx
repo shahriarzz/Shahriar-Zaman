@@ -42,6 +42,9 @@ export const ManageView: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // Loading state to prevent rapid double-taps on async operations
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
   // Backup & Restore states
   const [restoreMessage, setRestoreMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [showPasteBox, setShowPasteBox] = useState(false);
@@ -56,7 +59,12 @@ export const ManageView: React.FC = () => {
   const [newExName, setNewExName] = useState('');
   const [newExTarget, setNewExTarget] = useState('');
 
-  const handleExport = () => {
+  // Selected workout memo to prevent duplicate searches
+  const selectedWorkout = React.useMemo(() => workouts.find(w => w.id === expandedWo) || null, [workouts, expandedWo]);
+
+  const handleExport = async () => {
+    if (loadingAction) return;
+    setLoadingAction('export');
     try {
       haptics.success();
       const backupStr = exportBackup();
@@ -75,18 +83,24 @@ export const ManageView: React.FC = () => {
       setTimeout(() => setRestoreMessage(null), 4000);
     } catch (e: any) {
       alert("Failed to export backup: " + e.message);
+    } finally {
+      setLoadingAction(null);
     }
   };
 
-  const handleCopyClipboard = () => {
+  const handleCopyClipboard = async () => {
+    if (loadingAction) return;
+    setLoadingAction('copy');
     try {
       haptics.success();
       const backupStr = exportBackup();
-      navigator.clipboard.writeText(backupStr);
+      await navigator.clipboard.writeText(backupStr);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       alert("Failed to copy. Try downloading the file instead.");
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -94,59 +108,93 @@ export const ManageView: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Reject files over 5MB to avoid accidental huge files freezing the import
+    const MAX_SIZE = 5 * 1024 * 1024; 
+    if (file.size > MAX_SIZE) {
+      haptics.warning();
+      setRestoreMessage({ text: "Error: Selected file is too large. Please select a JSON backup smaller than 5MB.", isError: true });
+      event.target.value = '';
+      return;
+    }
+
+    setLoadingAction('upload');
     haptics.medium();
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const content = e.target?.result as string;
-      if (!content) return;
-      
-      const res = await importBackup(content);
-      if (res.success) {
-        haptics.success();
-        setRestoreMessage({ text: res.message, isError: false });
-        setAutoBackupsTick(prev => prev + 1);
-        setTimeout(() => setRestoreMessage(null), 5000);
-      } else {
+      try {
+        const content = e.target?.result as string;
+        if (!content) return;
+        
+        const res = await importBackup(content);
+        if (res.success) {
+          haptics.success();
+          setRestoreMessage({ text: res.message, isError: false });
+          setAutoBackupsTick(prev => prev + 1);
+          setTimeout(() => setRestoreMessage(null), 5000);
+        } else {
+          haptics.warning();
+          setRestoreMessage({ text: res.message, isError: true });
+        }
+      } catch {
         haptics.warning();
-        setRestoreMessage({ text: res.message, isError: true });
+        setRestoreMessage({ text: "Failed to import backup.", isError: true });
+      } finally {
+        setLoadingAction(null);
       }
+    };
+    reader.onerror = () => {
+      haptics.warning();
+      setRestoreMessage({ text: "Error reading file.", isError: true });
+      setLoadingAction(null);
     };
     reader.readAsText(file);
     event.target.value = '';
   };
 
   const handlePasteRestore = async () => {
-    if (!pastedJson.trim()) return;
+    if (!pastedJson.trim() || loadingAction) return;
+    setLoadingAction('paste');
     haptics.medium();
-    const res = await importBackup(pastedJson);
-    if (res.success) {
-      haptics.success();
-      setRestoreMessage({ text: res.message, isError: false });
-      setPastedJson('');
-      setShowPasteBox(false);
-      setAutoBackupsTick(prev => prev + 1);
-      setTimeout(() => setRestoreMessage(null), 5000);
-    } else {
-      haptics.warning();
-      setRestoreMessage({ text: res.message, isError: true });
+    try {
+      const res = await importBackup(pastedJson);
+      if (res.success) {
+        haptics.success();
+        setRestoreMessage({ text: res.message, isError: false });
+        setPastedJson('');
+        setShowPasteBox(false);
+        setAutoBackupsTick(prev => prev + 1);
+        setTimeout(() => setRestoreMessage(null), 5000);
+      } else {
+        haptics.warning();
+        setRestoreMessage({ text: res.message, isError: true });
+      }
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleCreateRestorePoint = async () => {
+    if (loadingAction) return;
+    setLoadingAction('savepoint');
     haptics.medium();
-    const res = await createManualBackup();
-    if (res.success) {
-      haptics.success();
-      setRestoreMessage({ text: res.message, isError: false });
-      setAutoBackupsTick(prev => prev + 1);
-      setTimeout(() => setRestoreMessage(null), 4000);
-    } else {
-      haptics.warning();
-      setRestoreMessage({ text: res.message, isError: true });
+    try {
+      const res = await createManualBackup();
+      if (res.success) {
+        haptics.success();
+        setRestoreMessage({ text: res.message, isError: false });
+        setAutoBackupsTick(prev => prev + 1);
+        setTimeout(() => setRestoreMessage(null), 4000);
+      } else {
+        haptics.warning();
+        setRestoreMessage({ text: res.message, isError: true });
+      }
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleRestoreCheckpoint = async (timestamp: string, desc: string) => {
+    if (loadingAction) return;
     const confirmRestore = await confirm({
       title: 'Restore Savepoint',
       message: `Are you sure you want to revert your routines and logs to:\n"${desc}"?\n\nThis will overwrite your active state parameters.`,
@@ -154,26 +202,37 @@ export const ManageView: React.FC = () => {
     });
     if (!confirmRestore) return;
 
+    setLoadingAction('restore');
     haptics.success();
-    const res = await restoreAutoBackup(timestamp);
-    if (res.success) {
-      setRestoreMessage({ text: res.message, isError: false });
-      setAutoBackupsTick(prev => prev + 1);
-      setTimeout(() => setRestoreMessage(null), 5000);
-    } else {
-      setRestoreMessage({ text: res.message, isError: true });
+    try {
+      const res = await restoreAutoBackup(timestamp);
+      if (res.success) {
+        setRestoreMessage({ text: res.message, isError: false });
+        setAutoBackupsTick(prev => prev + 1);
+        setTimeout(() => setRestoreMessage(null), 5000);
+      } else {
+        setRestoreMessage({ text: res.message, isError: true });
+      }
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleResetWorkouts = async () => {
+    if (loadingAction) return;
     const proceed = await confirm({
       title: 'Reset Training Routines',
       message: 'Overwrite all training routines with default factory structures? This will keep history but replace routines.',
       isDanger: true
     });
     if (proceed) {
-      await setWorkouts(INITIAL_WORKOUTS);
-      setExpandedWo(null);
+      setLoadingAction('reset_workouts');
+      try {
+        await setWorkouts(INITIAL_WORKOUTS);
+        setExpandedWo(null);
+      } finally {
+        setLoadingAction(null);
+      }
     }
   };
 
@@ -188,7 +247,14 @@ export const ManageView: React.FC = () => {
     }
   };
 
-  const deleteExercise = (workoutId: string, exId: string) => {
+  const deleteExercise = async (workoutId: string, exId: string) => {
+    const proceed = await confirm({
+      title: 'Remove Exercise',
+      message: 'Are you sure you want to remove this exercise from this routine?',
+      isDanger: true
+    });
+    if (!proceed) return;
+
     setWorkouts(prev => prev.map(wo => {
       if (wo.id === workoutId) {
         return { ...wo, exercises: wo.exercises.filter(ex => ex.id !== exId) };
@@ -202,7 +268,7 @@ export const ManageView: React.FC = () => {
 
     setWorkouts(prev => prev.map(wo => {
       if (wo.id === workoutId) {
-        const generatedId = `ex-${Math.random().toString(36).substring(2, 11)}`;
+        const generatedId = `ex-${crypto.randomUUID()}`;
         return {
           ...wo,
           exercises: [
@@ -227,9 +293,7 @@ export const ManageView: React.FC = () => {
     setAddingExWoId(null);
   };
 
-  const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
-
-  return (
+  const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);  return (
     <div className="space-y-8 pt-4 pb-12">
       <div className="space-y-2">
         <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Architecture</span>
@@ -273,24 +337,38 @@ export const ManageView: React.FC = () => {
         
         {user ? (
           <button 
-            onClick={() => {
+            onClick={async () => {
+              if (loadingAction === 'auth') return;
+              setLoadingAction('auth');
               haptics.warning();
-              logout();
+              try {
+                await logout();
+              } finally {
+                setLoadingAction(null);
+              }
             }}
-            className="px-6 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-zinc-700 transition-all z-10 cursor-pointer active:scale-95"
+            disabled={loadingAction === 'auth'}
+            className="px-6 py-3 bg-zinc-800 border border-zinc-700 disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-zinc-700 transition-all z-10 cursor-pointer active:scale-95"
           >
-            Sign Out
+            {loadingAction === 'auth' ? 'Signing Out...' : 'Sign Out'}
           </button>
         ) : (
           <div className="flex flex-col gap-2.5 items-end">
             <button 
-              onClick={() => {
+              onClick={async () => {
+                if (loadingAction === 'auth') return;
+                setLoadingAction('auth');
                 haptics.medium();
-                handleLogin();
+                try {
+                  await handleLogin();
+                } finally {
+                  setLoadingAction(null);
+                }
               }}
-              className="px-6 py-3 bg-white text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:scale-105 transition-all z-10 cursor-pointer active:scale-95"
+              disabled={loadingAction === 'auth'}
+              className="px-6 py-3 bg-white text-black disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:scale-105 transition-all z-10 cursor-pointer active:scale-95"
             >
-              Sync with Google
+              {loadingAction === 'auth' ? 'Signing In...' : 'Sync with Google'}
             </button>
             {authError && (
               <span className="text-[9px] font-mono text-red-500 uppercase tracking-tighter text-right max-w-xs">
@@ -328,10 +406,11 @@ export const ManageView: React.FC = () => {
 
           <button
             onClick={handleCreateRestorePoint}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-[10px] font-mono uppercase tracking-widest flex items-center shadow-lg gap-2 cursor-pointer active:scale-95"
+            disabled={loadingAction === 'savepoint'}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 rounded-xl text-[10px] font-mono uppercase tracking-widest flex items-center shadow-lg gap-2 cursor-pointer active:scale-95"
           >
             <Save size={13} className="text-orange-400" />
-            Create Savepoint
+            {loadingAction === 'savepoint' ? 'Saving...' : 'Create Savepoint'}
           </button>
         </div>
 
@@ -367,15 +446,17 @@ export const ManageView: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-2 w-full">
               <button
                 onClick={handleExport}
-                className="flex-1 px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 hover:bg-zinc-700 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-350 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                disabled={loadingAction === 'export'}
+                className="flex-1 px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-350 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
                 <Download size={13} className="text-orange-500" />
-                Download JSON
+                {loadingAction === 'export' ? 'Exporting...' : 'Download JSON'}
               </button>
 
               <button
                 onClick={handleCopyClipboard}
-                className="px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                disabled={loadingAction === 'copy'}
+                className="px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
               >
                 {copied ? <Check size={13} className="text-green-500 animate-pulse" /> : <ClipboardCopy size={13} />}
                 <span>{copied ? "Copied!" : "Extract String"}</span>
@@ -394,13 +475,17 @@ export const ManageView: React.FC = () => {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <label className="flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all text-center cursor-pointer flex items-center justify-center gap-2 active:scale-95">
+              <label className={cn(
+                "flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all text-center cursor-pointer flex items-center justify-center gap-2 active:scale-95",
+                loadingAction === 'upload' && "opacity-50 pointer-events-none"
+              )}>
                 <Upload size={13} />
-                <span>Upload Keyfile</span>
+                <span>{loadingAction === 'upload' ? 'Uploading...' : 'Upload Keyfile'}</span>
                 <input
                   type="file"
                   accept=".json"
                   onChange={handleFileUpload}
+                  disabled={loadingAction === 'upload'}
                   className="hidden"
                 />
               </label>
@@ -440,10 +525,10 @@ export const ManageView: React.FC = () => {
                 </button>
                 <button
                   onClick={handlePasteRestore}
-                  disabled={!pastedJson.trim()}
+                  disabled={!pastedJson.trim() || loadingAction === 'paste'}
                   className="px-4 py-1.5 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg transition-all cursor-pointer active:scale-95"
                 >
-                  Inject Backup String
+                  {loadingAction === 'paste' ? 'Injecting...' : 'Inject Backup String'}
                 </button>
               </div>
             </motion.div>
@@ -493,7 +578,8 @@ export const ManageView: React.FC = () => {
 
                   <button
                     onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
-                    className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer"
+                    disabled={loadingAction === 'restore'}
+                    className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 border border-zinc-850 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer"
                   >
                     Restore
                   </button>
@@ -512,7 +598,7 @@ export const ManageView: React.FC = () => {
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 font-mono text-[10px] uppercase tracking-widest text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600 outline-none cursor-pointer"
           >
-            {workouts.find(w => w.id === expandedWo)?.name || "Select Protocol to Edit"}
+            {selectedWorkout?.name || "Select Protocol to Edit"}
             <ChevronRight size={16} className={cn("text-zinc-600 transition-transform", isDropdownOpen && "rotate-90")} />
           </button>
           
@@ -548,123 +634,121 @@ export const ManageView: React.FC = () => {
           <label className="hidden md:block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 invisible">Actions</label>
           <button 
             onClick={handleResetWorkouts}
-            className="h-[52px] px-6 bg-zinc-900 border border-zinc-800 rounded-2xl text-[10px] font-mono text-zinc-500 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 hover:border-zinc-600 cursor-pointer active:scale-95"
+            disabled={loadingAction === 'reset_workouts'}
+            className="h-[52px] px-6 bg-zinc-900 border border-zinc-800 disabled:opacity-50 rounded-2xl text-[10px] font-mono text-zinc-500 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 hover:border-zinc-600 cursor-pointer active:scale-95"
           >
             <Repeat size={14} />
-            Reset Routines Library
+            {loadingAction === 'reset_workouts' ? 'Resetting...' : 'Reset Routines Library'}
           </button>
         </div>
       </div>
 
       <div className="space-y-4">
-        {workouts.find(w => w.id === expandedWo) && (() => {
-          const wo = workouts.find(w => w.id === expandedWo)!;
-          return (
-            <div key={wo.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
-              <div className="p-6 flex items-center justify-between border-b border-zinc-850 bg-zinc-950/20">
-                <div className="flex items-center gap-4">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[wo.type] }} />
-                  <div>
-                    <div className="font-bold text-xl uppercase tracking-tighter">{wo.name}</div>
-                    <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest leading-none mt-1.5">{wo.badge}</div>
-                  </div>
+        {selectedWorkout && (
+          <div key={selectedWorkout.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+            <div className="p-6 flex items-center justify-between border-b border-zinc-850 bg-zinc-950/20">
+              <div className="flex items-center gap-4">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[selectedWorkout.type] }} />
+                <div>
+                  <div className="font-bold text-xl uppercase tracking-tighter">{selectedWorkout.name}</div>
+                  <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest leading-none mt-1.5">{selectedWorkout.badge}</div>
                 </div>
-                <div className="text-[10px] font-mono text-zinc-700">Split Configurator</div>
               </div>
+              <div className="text-[10px] font-mono text-zinc-700">Split Configurator</div>
+            </div>
 
-              <div className="p-6 space-y-4">
-                {!wo.isRest ? (
-                  <>
-                    <div className="space-y-2">
-                      {wo.exercises.map(ex => (
-                        <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/40 border border-zinc-800/60 rounded-2xl group hover:border-zinc-700 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div>
-                               <div className="text-sm font-bold text-zinc-300">{ex.name}</div>
-                               <div className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">{ex.target}</div>
-                            </div>
-                          </div>
-                          
-                          <button
-                            onClick={() => deleteExercise(wo.id, ex.id)}
-                            className="p-2 text-zinc-750 hover:text-red-500 transition-colors cursor-pointer"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {addingExWoId === wo.id ? (
-                      <div className="p-5 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-4">
-                        <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">New Exercise Details</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Exercise Name</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Incline Bench Press"
-                              value={newExName}
-                              onChange={(e) => setNewExName(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Target Muscle Group</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Upper Chest"
-                              value={newExTarget}
-                              onChange={(e) => setNewExTarget(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
-                            />
+            <div className="p-6 space-y-4">
+              {!selectedWorkout.isRest ? (
+                <>
+                  <div className="space-y-2">
+                    {selectedWorkout.exercises.map(ex => (
+                      <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/40 border border-zinc-800/60 rounded-2xl group hover:border-zinc-700 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div>
+                             <div className="text-sm font-bold text-zinc-300">{ex.name}</div>
+                             <div className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">{ex.target}</div>
                           </div>
                         </div>
-                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddingExWoId(null);
-                              setNewExName('');
-                              setNewExTarget('');
-                            }}
-                            className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-500 hover:text-zinc-350 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveNewExercise(wo.id)}
-                            disabled={!newExName.trim()}
-                            className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
-                          >
-                            Append Exercise
-                          </button>
+                        
+                        <button
+                          onClick={() => deleteExercise(selectedWorkout.id, ex.id)}
+                          className="p-2 text-zinc-750 hover:text-red-500 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {addingExWoId === selectedWorkout.id ? (
+                    <div className="p-5 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-4">
+                      <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">New Exercise Details</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Exercise Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Incline Bench Press"
+                            value={newExName}
+                            onChange={(e) => setNewExName(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Target Muscle Group</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Upper Chest"
+                            value={newExTarget}
+                            onChange={(e) => setNewExTarget(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
+                          />
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setAddingExWoId(wo.id);
-                          setNewExName('');
-                          setNewExTarget('');
-                        }}
-                        className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-300 hover:border-zinc-750 transition-all cursor-pointer"
-                      >
-                        <Plus size={15} /> Append New Exercise to Protocol
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <div className="bg-zinc-950/40 p-10 rounded-2xl text-center border border-dashed border-zinc-800">
-                    <div className="text-xs text-zinc-600 font-mono uppercase tracking-widest">Rest Phase</div>
-                    <p className="text-[10px] text-zinc-750 mt-1.5 uppercase tracking-wider">This recovery phase is structurally immutable (0 exercises).</p>
-                  </div>
-                )}
-              </div>
+                      <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddingExWoId(null);
+                            setNewExName('');
+                            setNewExTarget('');
+                          }}
+                          className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-500 hover:text-zinc-350 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveNewExercise(selectedWorkout.id)}
+                          disabled={!newExName.trim()}
+                          className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
+                        >
+                          Append Exercise
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setAddingExWoId(selectedWorkout.id);
+                        setNewExName('');
+                        setNewExTarget('');
+                      }}
+                      className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-300 hover:border-zinc-750 transition-all cursor-pointer"
+                    >
+                      <Plus size={15} /> Append New Exercise to Protocol
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="bg-zinc-950/40 p-10 rounded-2xl text-center border border-dashed border-zinc-800">
+                  <div className="text-xs text-zinc-600 font-mono uppercase tracking-widest">Rest Phase</div>
+                  <p className="text-[10px] text-zinc-750 mt-1.5 uppercase tracking-wider">This recovery phase is structurally immutable (0 exercises).</p>
+                </div>
+              )}
             </div>
-          );
-        })()}
+          </div>
+        )}
       </div>
 
       {/* Danger Zone */}
@@ -682,12 +766,18 @@ export const ManageView: React.FC = () => {
                 isDanger: true
               });
               if (proceed) {
-                resetLogs();
+                setLoadingAction('purge_logs');
+                try {
+                  await resetLogs();
+                } finally {
+                  setLoadingAction(null);
+                }
               }
             }}
-            className="px-6 py-3 border border-red-500/30 text-red-500 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
+            disabled={loadingAction === 'purge_logs'}
+            className="px-6 py-3 border border-red-500/30 text-red-500 disabled:opacity-50 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
           >
-            Purge All Session Logs
+            {loadingAction === 'purge_logs' ? 'Purging...' : 'Purge All Session Logs'}
           </button>
         </div>
       </div>

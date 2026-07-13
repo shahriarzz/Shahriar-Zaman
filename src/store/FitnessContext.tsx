@@ -103,6 +103,32 @@ const syncCloudDataWithRestored = async (
   }
 };
 
+const areLogsEqual = (a: SessionLog, b: SessionLog): boolean => {
+  if (!a || !b) return false;
+  if (a.workoutId !== b.workoutId) return false;
+  if (a.date !== b.date) return false;
+  if (a.complete !== b.complete) return false;
+  if (a.durationMinutes !== b.durationMinutes) return false;
+
+  const aSets = a.sets || {};
+  const bSets = b.sets || {};
+  const aKeys = Object.keys(aSets);
+  const bKeys = Object.keys(bSets);
+  if (aKeys.length !== bKeys.length) return false;
+
+  for (const k of aKeys) {
+    const aSetList = aSets[k] || [];
+    const bSetList = bSets[k] || [];
+    if (aSetList.length !== bSetList.length) return false;
+    for (let i = 0; i < aSetList.length; i++) {
+      const sA = aSetList[i];
+      const sB = bSetList[i];
+      if (sA.reps !== sB.reps || sA.weight !== sB.weight || !!sA.done !== !!sB.done) return false;
+    }
+  }
+  return true;
+};
+
 export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -241,28 +267,36 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // Save to cloud in background if user exists
       if (user) {
-        await setDoc(doc(db, 'users', user.uid), match.appState, { merge: true });
+        try {
+          await setDoc(doc(db, 'users', user.uid), match.appState, { merge: true });
 
-        // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
-        await syncCloudDataWithRestored(user.uid, match.workouts, sanitizedLogs);
+          // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
+          await syncCloudDataWithRestored(user.uid, match.workouts, sanitizedLogs);
 
-        const workoutsCol = collection(db, 'users', user.uid, 'workouts');
-        const workoutsBatch = writeBatch(db);
-        match.workouts.forEach(wo => {
-          workoutsBatch.set(doc(workoutsCol, wo.id), wo);
-        });
-        await workoutsBatch.commit();
-
-        const logsCol = collection(db, 'users', user.uid, 'logs');
-        const logEntries = Object.entries(sanitizedLogs);
-        for (let i = 0; i < logEntries.length; i += 40) {
-          const chunk = logEntries.slice(i, i + 40);
-          const logsBatch = writeBatch(db);
-          chunk.forEach(([id, val]) => {
-            const { id: _, ...firebaseLog } = val as any;
-            logsBatch.set(doc(logsCol, id), firebaseLog);
+          const workoutsCol = collection(db, 'users', user.uid, 'workouts');
+          const workoutsBatch = writeBatch(db);
+          match.workouts.forEach(wo => {
+            workoutsBatch.set(doc(workoutsCol, wo.id), wo);
           });
-          await logsBatch.commit();
+          await workoutsBatch.commit();
+
+          const logsCol = collection(db, 'users', user.uid, 'logs');
+          const logEntries = Object.entries(sanitizedLogs);
+          for (let i = 0; i < logEntries.length; i += 40) {
+            const chunk = logEntries.slice(i, i + 40);
+            const logsBatch = writeBatch(db);
+            chunk.forEach(([id, val]) => {
+              const { id: _, ...firebaseLog } = val as any;
+              logsBatch.set(doc(logsCol, id), firebaseLog);
+            });
+            await logsBatch.commit();
+          }
+        } catch (cloudError: any) {
+          console.error("Cloud synchronization failed during restore - cloud may be in partial state:", cloudError);
+          return {
+            success: true,
+            message: `Restored locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. The cloud may be in a partially-migrated state. Please try restoring again to retry cloud sync.`
+          };
         }
       }
 
@@ -275,7 +309,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const createManualBackup = async (): Promise<{ success: boolean; message: string }> => {
     try {
-      pushAutoBackup(workouts, logs, appState, 'manual', 'Manual Vault Savepoint');
+      pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Manual Vault Savepoint');
       return { success: true, message: 'Manual restore savepoint created successfully.' };
     } catch (e: any) {
       return { success: false, message: `Savepoint failed: ${e.message || String(e)}` };
@@ -330,6 +364,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Background Sync & Cloud Subscriptions Manager
   useEffect(() => {
     let unsubLogs: (() => void) | null = null;
+    let unsubWorkouts: (() => void) | null = null;
+    let unsubAppState: (() => void) | null = null;
     let isMounted = true;
     let retryTimeoutId: any = null;
 
@@ -456,7 +492,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 durationMinutes: Number(cloudValRaw.durationMinutes !== undefined ? cloudValRaw.durationMinutes : cloudValRaw.duration) || 0
               };
               const localVal = prev[id];
-              if (!localVal || JSON.stringify(localVal) !== JSON.stringify(cloudVal)) {
+              if (!localVal || !areLogsEqual(localVal, cloudVal)) {
                 if (!updated) updated = { ...prev };
                 updated[id] = cloudVal;
                 hasChanges = true;
@@ -482,6 +518,69 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, `users/${u.uid}/logs`);
+      });
+
+      unsubWorkouts = onSnapshot(workoutsColRef, (span) => {
+        let hasChanges = false;
+        setWorkoutsState(prev => {
+          let updated = [...prev];
+          span.docChanges().forEach(change => {
+            const id = change.doc.id;
+            if (change.type === 'added' || change.type === 'modified') {
+              const cloudW = change.doc.data() as Workout;
+              const idx = updated.findIndex(w => w.id === id);
+              if (idx === -1) {
+                updated.push(cloudW);
+                hasChanges = true;
+              } else {
+                const localW = updated[idx];
+                if (JSON.stringify(localW) !== JSON.stringify(cloudW)) {
+                  updated[idx] = cloudW;
+                  hasChanges = true;
+                }
+              }
+            } else if (change.type === 'removed') {
+              const idx = updated.findIndex(w => w.id === id);
+              if (idx !== -1) {
+                updated.splice(idx, 1);
+                hasChanges = true;
+              }
+            }
+          });
+
+          if (hasChanges) {
+            try {
+              localStorage.setItem('gl_workouts', JSON.stringify(updated));
+            } catch (e) {
+              console.warn("localStorage write failed", e);
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, `users/${u.uid}/workouts`);
+      });
+
+      unsubAppState = onSnapshot(userDocRef, (snap) => {
+        if (snap.exists()) {
+          const cloudState = snap.data() as AppState;
+          if (cloudState) {
+            setAppState(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(cloudState)) {
+                try {
+                  localStorage.setItem('gl_state', JSON.stringify(cloudState));
+                } catch (e) {
+                  console.warn("localStorage write failed", e);
+                }
+                return cloudState;
+              }
+              return prev;
+            });
+          }
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `users/${u.uid}`);
       });
     };
 
@@ -520,6 +619,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isMounted = false;
       window.removeEventListener('online', handleOnline);
       if (unsubLogs) unsubLogs();
+      if (unsubWorkouts) unsubWorkouts();
+      if (unsubAppState) unsubAppState();
       if (retryTimeoutId) clearTimeout(retryTimeoutId);
     };
   }, [user]);
@@ -542,12 +643,12 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       date: logOriginal.date,
       sets: logOriginal.sets || {},
       complete: !!logOriginal.complete,
-      durationMinutes: Number(logOriginal.durationMinutes !== undefined ? logOriginal.durationMinutes : (logOriginal as any).duration) || 0
+      durationMinutes: Number(logOriginal.durationMinutes) || 0
     };
     try {
-      const nextLogs = { ...logs, [logId]: log };
+      const nextLogs = { ...logsRef.current, [logId]: log };
       setLogs(nextLogs);
-      pushAutoBackup(workouts, nextLogs, appState, 'auto-session', `Logged routine: ${logId}`);
+      pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-session', `Logged routine: ${logId}`);
 
       if (user) {
         const path = `users/${user.uid}/logs/${logId}`;
@@ -564,10 +665,10 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteLog = async (logId: string) => {
     try {
-      const nextLogs = { ...logs };
+      const nextLogs = { ...logsRef.current };
       delete nextLogs[logId];
       setLogs(nextLogs);
-      pushAutoBackup(workouts, nextLogs, appState, 'auto-edit', `Deleted log: ${logId}`);
+      pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-edit', `Deleted log: ${logId}`);
 
       if (user) {
         const path = `users/${user.uid}/logs/${logId}`;
@@ -584,9 +685,10 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const setWorkouts = async (w: Workout[] | ((prev: Workout[]) => Workout[])) => {
     try {
-      const nextWorkouts = typeof w === 'function' ? w(workouts) : w;
+      const currentWorkouts = workoutsRef.current;
+      const nextWorkouts = typeof w === 'function' ? w(currentWorkouts) : w;
       setWorkoutsState(nextWorkouts);
-      pushAutoBackup(nextWorkouts, logs, appState, 'auto-edit', 'Modified Routine Architecture');
+      pushAutoBackup(nextWorkouts, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
 
       if (user) {
         const colRef = collection(db, 'users', user.uid, 'workouts');
@@ -606,7 +708,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateCycleStart = async (date: string) => {
     try {
-      const nextState = { ...appState, cycleStart: date };
+      const nextState = { ...appStateRef.current, cycleStart: date };
       setAppState(nextState);
 
       if (user) {
@@ -623,9 +725,10 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logBodyWeight = async (date: string, weight: number) => {
     try {
+      const currentAppState = appStateRef.current;
       const nextState = { 
-        ...appState, 
-        weightLog: { ...(appState.weightLog || {}), [date]: weight }
+        ...currentAppState, 
+        weightLog: { ...(currentAppState.weightLog || {}), [date]: weight }
       };
       setAppState(nextState);
 
@@ -643,9 +746,10 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteBodyWeight = async (date: string) => {
     try {
-      const nextLog = { ...(appState.weightLog || {}) };
+      const currentAppState = appStateRef.current;
+      const nextLog = { ...(currentAppState.weightLog || {}) };
       delete nextLog[date];
-      const nextState = { ...appState, weightLog: nextLog };
+      const nextState = { ...currentAppState, weightLog: nextLog };
       setAppState(nextState);
 
       if (user) {
@@ -662,17 +766,21 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const resetLogs = async () => {
     try {
-      pushAutoBackup(workouts, logs, appState, 'manual', 'Pre-Purge Auto Backup');
+      pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Purge Auto Backup');
       setLogs({});
 
       if (user) {
         const colRef = collection(db, 'users', user.uid, 'logs');
         const snap = await getDocs(colRef);
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => {
-          batch.delete(d.ref);
-        });
-        await batch.commit();
+        // Chunk deletions 40 at a time to prevent exceeding Firestore's 500 operation limit
+        for (let i = 0; i < snap.docs.length; i += 40) {
+          const chunk = snap.docs.slice(i, i + 40);
+          const batch = writeBatch(db);
+          chunk.forEach(d => {
+            batch.delete(d.ref);
+          });
+          await batch.commit();
+        }
       }
     } catch (error) {
       console.error("Failed to flush logs", error);
@@ -718,18 +826,27 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       const importedWorkouts = parsed.workouts;
-      const importedLogs = parsed.logs;
+      const rawLogs = parsed.logs;
       const importedAppState = parsed.appState;
 
       if (!Array.isArray(importedWorkouts)) {
         return { success: false, message: 'Invalid backup: Missing or invalid workouts structure.' };
       }
-      if (!importedLogs || typeof importedLogs !== 'object') {
+      if (!rawLogs || typeof rawLogs !== 'object') {
         return { success: false, message: 'Invalid backup: Missing or invalid training logs.' };
       }
 
+      // Sanitize durationMinutes on imported logs
+      const importedLogs: Record<string, SessionLog> = {};
+      Object.entries(rawLogs).forEach(([id, logVal]: [string, any]) => {
+        importedLogs[id] = {
+          ...logVal,
+          durationMinutes: Number(logVal.durationMinutes !== undefined ? logVal.durationMinutes : logVal.duration) || 0
+        };
+      });
+
       // 1. Create automatic backup of current state BEFORE applying import, so users can undo imports instantly!
-      pushAutoBackup(workouts, logs, appState, 'auto-edit', 'Injected data replacement backup');
+      pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'auto-edit', 'Injected data replacement backup');
 
       // 2. Write to local storage immediately
       localStorage.setItem('gl_workouts', JSON.stringify(importedWorkouts));
@@ -745,35 +862,43 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setAppState(importedAppState);
       }
 
-      // 4. Overwrite cloud in background chunks if logged in
+      // 4. Overwrite cloud in background chunks if logged in with atomic/partial failure warnings
       if (user) {
-        if (importedAppState && typeof importedAppState.cycleStart === 'string') {
-          await setDoc(doc(db, 'users', user.uid), importedAppState, { merge: true });
-        }
-
-        // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
-        await syncCloudDataWithRestored(user.uid, importedWorkouts, importedLogs);
-
-        const workoutsColRef = collection(db, 'users', user.uid, 'workouts');
-        const workoutsBatch = writeBatch(db);
-        for (const wo of importedWorkouts) {
-          workoutsBatch.set(doc(workoutsColRef, wo.id), {
-            ...wo,
-            exercises: wo.exercises || []
-          });
-        }
-        await workoutsBatch.commit();
-
-        const logsColRef = collection(db, 'users', user.uid, 'logs');
-        const logEntries = Object.entries(importedLogs);
-        for (let i = 0; i < logEntries.length; i += 40) {
-          const chunk = logEntries.slice(i, i + 40);
-          const logsBatch = writeBatch(db);
-          for (const [logId, logValue] of chunk) {
-            const { id: _, ...firebaseLog } = logValue as any;
-            logsBatch.set(doc(logsColRef, logId), firebaseLog);
+        try {
+          if (importedAppState && typeof importedAppState.cycleStart === 'string') {
+            await setDoc(doc(db, 'users', user.uid), importedAppState, { merge: true });
           }
-          await logsBatch.commit();
+
+          // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
+          await syncCloudDataWithRestored(user.uid, importedWorkouts, importedLogs);
+
+          const workoutsColRef = collection(db, 'users', user.uid, 'workouts');
+          const workoutsBatch = writeBatch(db);
+          for (const wo of importedWorkouts) {
+            workoutsBatch.set(doc(workoutsColRef, wo.id), {
+              ...wo,
+              exercises: wo.exercises || []
+            });
+          }
+          await workoutsBatch.commit();
+
+          const logsColRef = collection(db, 'users', user.uid, 'logs');
+          const logEntries = Object.entries(importedLogs);
+          for (let i = 0; i < logEntries.length; i += 40) {
+            const chunk = logEntries.slice(i, i + 40);
+            const logsBatch = writeBatch(db);
+            for (const [logId, logValue] of chunk) {
+              const { id: _, ...firebaseLog } = logValue as any;
+              logsBatch.set(doc(logsColRef, logId), firebaseLog);
+            }
+            await logsBatch.commit();
+          }
+        } catch (cloudError: any) {
+          console.error("Cloud synchronization failed during import - cloud may be in partial state:", cloudError);
+          return {
+            success: true,
+            message: `Injected backup locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. The cloud may be in a partially-migrated state. Please try importing again to retry cloud sync.`
+          };
         }
       }
 

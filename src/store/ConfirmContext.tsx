@@ -29,6 +29,43 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Keep resolve fn in a ref to persist across renders
   const resolveRef = useRef<((value: boolean) => void) | null>(null);
 
+  // Unmount safety: resolve pending promise on unmount
+  React.useEffect(() => {
+    return () => {
+      if (resolveRef.current) {
+        resolveRef.current(false);
+        resolveRef.current = null;
+      }
+    };
+  }, []);
+
+  // Lock background scroll when the confirm dialog is active
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Escape key support to dismiss the dialog safely
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose(false);
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
   const confirm = (opts: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
       setOptions(opts);
@@ -48,7 +85,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={() => { if (!isOpen) setOptions(null); }}>
         {isOpen && options && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
             {/* Backdrop */}
@@ -66,6 +103,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-dialog-title"
+              aria-describedby="confirm-dialog-description"
               className="relative w-full max-w-md bg-[#0e0e15] border border-zinc-800/80 rounded-3xl p-6 text-zinc-200 shadow-2xl focus:outline-none"
             >
               <div className="flex items-start gap-4">
@@ -79,10 +120,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   <h3 className="text-sm font-mono text-[11px] uppercase tracking-[0.2em] font-bold text-zinc-400">
                     System Protocol
                   </h3>
-                  <h2 className={`text-base font-sans font-semibold tracking-tight ${options.isDanger ? 'text-red-400' : 'text-zinc-100'}`}>
+                  <h2 id="confirm-dialog-title" className={`text-base font-sans font-semibold tracking-tight ${options.isDanger ? 'text-red-400' : 'text-zinc-100'}`}>
                     {options.title}
                   </h2>
-                  <div className="text-xs text-zinc-400 font-mono leading-relaxed uppercase tracking-wider whitespace-pre-wrap">
+                  <div id="confirm-dialog-description" className="text-xs text-zinc-400 font-mono leading-relaxed uppercase tracking-wider whitespace-pre-wrap">
                     {options.message}
                   </div>
                 </div>
@@ -93,7 +134,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 <button
                   type="button"
                   onClick={() => handleClose(false)}
-                  className="px-5 py-3 border border-zinc-850 hover:bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
+                  className="px-5 py-3 border border-zinc-800 hover:bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
                 >
                   ABORT
                 </button>

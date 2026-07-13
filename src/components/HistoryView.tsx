@@ -31,9 +31,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   useEffect(() => {
     if (initialDate) {
       setSearch(initialDate);
-      setExpandedDate(initialDate);
+      const matched = Object.entries(logs).find(([_, log]) => (log as SessionLog).date === initialDate);
+      if (matched) {
+        setExpandedDate(matched[0]);
+      } else {
+        setExpandedDate(initialDate);
+      }
     }
-  }, [initialDate]);
+  }, [initialDate, logs]);
 
   // Find workout metadata for each exercise mapping exercise ID to details
   const exMeta = React.useMemo(() => {
@@ -143,7 +148,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
       const summary = summaries[monthKey];
       summary.sessionsCount += 1;
-      summary.totalDuration += (log.durationMinutes !== undefined ? log.durationMinutes : (log as any).duration) || 0;
+      summary.totalDuration += log.durationMinutes || 0;
+      summary.totalVolume += calculateVolume(log);
 
       const workout = workouts.find(w => w.id === log.workoutId);
       if (workout) {
@@ -158,12 +164,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         const exerciseName = exMeta[exId]?.name || 'Exercise';
         const weights = doneSets.map(s => parseFloat(s.weight) || 0);
         const logMaxWeight = weights.length > 0 ? Math.max(...weights) : 0;
-
-        doneSets.forEach(s => {
-          const w = parseFloat(s.weight) || 0;
-          const r = parseInt(s.reps) || 0;
-          summary.totalVolume += w * r;
-        });
 
         if (logMaxWeight > 0) {
           if (!summary.peakLifts[exId] || logMaxWeight > summary.peakLifts[exId].weight) {
@@ -187,7 +187,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     if (!editSessionState || !editingLogId) return;
 
     if (!editVerified) {
-      alert("Please verify that these edits are intentional first.");
+      await confirm({
+        title: 'Verification Required',
+        message: 'Please click the checkbox below to verify these alterations before confirming modifications.'
+      });
       return;
     }
 
@@ -439,7 +442,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
             const totalSets = Object.values(session.sets).flat().filter((s: any) => s.done).length;
             const vol = calculateVolume(session);
             const color = WORKOUT_COLORS[workout?.type || 'push'];
-            const isExpanded = expandedDate === session.date || expandedDate === session.id;
+            const isExpanded = expandedDate === session.id;
 
             return (
               <motion.div
@@ -469,7 +472,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </h3>
                     <div className="flex flex-wrap gap-3 text-[10px] font-mono text-zinc-550 uppercase tracking-wider">
                       <div className="flex items-center gap-1">
-                        <Clock size={12} className="text-zinc-650 shrink-0" /> {session.durationMinutes !== undefined ? session.durationMinutes : (session as any).duration} min
+                        <Clock size={12} className="text-zinc-650 shrink-0" /> {session.durationMinutes} min
                       </div>
                       <div>·</div>
                       <div className="flex items-center gap-1">
@@ -493,7 +496,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         setEditingLogId(session.id);
                         setEditSessionState(JSON.parse(JSON.stringify(session)));
                         setEditVerified(false);
-                        setExpandedDate(session.date); // Auto-expand when editing
+                        setExpandedDate(session.id); // Auto-expand when editing
                       }}
                       className={cn(
                         "p-3 bg-zinc-950/40 border hover:bg-zinc-850 hover:text-orange-500 rounded-2xl text-zinc-500 transition-all cursor-pointer",
@@ -514,7 +517,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         });
                         if (proceed) {
                           haptics.warning();
-                          deleteLog(session.id);
+                          await deleteLog(session.id);
                         }
                       }}
                       className="p-3 bg-zinc-950/40 border border-zinc-800/40 hover:bg-zinc-800 hover:border-zinc-700 hover:text-red-500 rounded-2xl text-zinc-500 transition-all cursor-pointer"
@@ -567,9 +570,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             <label className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Session Duration (Minutes)</label>
                             <input
                               type="number"
-                              value={editSessionState.durationMinutes !== undefined ? editSessionState.durationMinutes : (editSessionState as any).duration || 0}
+                              value={editSessionState.durationMinutes}
                               onChange={(e) => {
-                                const val = parseInt(e.target.value) || 0;
+                                const rawVal = e.target.value;
+                                if (rawVal === '') {
+                                  setEditSessionState(prev => prev ? { ...prev, durationMinutes: 0 } : null);
+                                  return;
+                                }
+                                let val = parseInt(rawVal) || 0;
+                                if (val < 0) val = 0;
+                                if (val > 600) val = 600;
                                 setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
                               }}
                               className="bg-zinc-950 border border-zinc-850 rounded-xl px-4 py-3 text-sm text-left max-w-[120px] focus:border-zinc-500 outline-none font-mono text-white"
