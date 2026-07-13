@@ -194,7 +194,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         <span className="font-mono text-[9px] uppercase text-zinc-500">Duration</span>
                       </div>
                       <p className="text-xl font-display uppercase tracking-tight">
-                        {selectedLog.duration} <span className="text-[10px] font-mono text-zinc-500">min</span>
+                        {selectedLog.durationMinutes !== undefined ? selectedLog.durationMinutes : (selectedLog as any).duration} <span className="text-[10px] font-mono text-zinc-500">min</span>
                       </p>
                     </div>
                   </div>

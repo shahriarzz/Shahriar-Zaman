@@ -1,4 +1,4 @@
-import { format, differenceInCalendarDays, parseISO, subDays } from 'date-fns';
+import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
 import { SessionLog, SetLog } from '../types/fitness';
 
 export function dk(d: Date = new Date()): string {
@@ -11,8 +11,12 @@ export function getAdjustedCycleStart(workoutCycleDay: number): string {
 }
 
 export function getCycleDay(cycleStart: string | undefined | null, targetDate: Date | string = new Date()): number {
-  const start = parseISO(cycleStart || dk());
-  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
+  let start = parseISO(cycleStart || dk());
+  if (!isValid(start)) {
+    start = parseISO(dk());
+  }
+  const targetParsed = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
+  const target = isValid(targetParsed) ? targetParsed : new Date();
   const diff = differenceInCalendarDays(target, start);
   return (((diff % 8) + 8) % 8) + 1;
 }
@@ -26,7 +30,7 @@ export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[
         const weightVal = parseFloat(s.weight) || 0;
         let repsVal = parseInt(s.reps, 10);
         if (isNaN(repsVal)) {
-          repsVal = 1;
+          repsVal = 0;
         }
         total += weightVal * repsVal;
       }

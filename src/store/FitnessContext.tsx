@@ -133,7 +133,17 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const savedLogs = localStorage.getItem('gl_logs');
       if (savedLogs) {
-        return JSON.parse(savedLogs);
+        const parsed = JSON.parse(savedLogs);
+        if (parsed && typeof parsed === 'object') {
+          const sanitized: Record<string, SessionLog> = {};
+          Object.entries(parsed).forEach(([id, logVal]: [string, any]) => {
+            sanitized[id] = {
+              ...logVal,
+              durationMinutes: Number(logVal.durationMinutes !== undefined ? logVal.durationMinutes : logVal.duration) || 0
+            };
+          });
+          return sanitized;
+        }
       }
     } catch { }
     return {};
@@ -213,12 +223,20 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // Checkpoint overwrite
+      const sanitizedLogs: Record<string, SessionLog> = {};
+      Object.entries(match.logs).forEach(([id, logVal]: [string, any]) => {
+        sanitizedLogs[id] = {
+          ...logVal,
+          durationMinutes: Number(logVal.durationMinutes !== undefined ? logVal.durationMinutes : logVal.duration) || 0
+        };
+      });
+
       localStorage.setItem('gl_workouts', JSON.stringify(match.workouts));
-      localStorage.setItem('gl_logs', JSON.stringify(match.logs));
+      localStorage.setItem('gl_logs', JSON.stringify(sanitizedLogs));
       localStorage.setItem('gl_state', JSON.stringify(match.appState));
 
       setWorkoutsState(match.workouts);
-      setLogs(match.logs);
+      setLogs(sanitizedLogs);
       setAppState(match.appState);
 
       // Save to cloud in background if user exists
@@ -226,7 +244,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await setDoc(doc(db, 'users', user.uid), match.appState, { merge: true });
 
         // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
-        await syncCloudDataWithRestored(user.uid, match.workouts, match.logs);
+        await syncCloudDataWithRestored(user.uid, match.workouts, sanitizedLogs);
 
         const workoutsCol = collection(db, 'users', user.uid, 'workouts');
         const workoutsBatch = writeBatch(db);
@@ -236,7 +254,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await workoutsBatch.commit();
 
         const logsCol = collection(db, 'users', user.uid, 'logs');
-        const logEntries = Object.entries(match.logs);
+        const logEntries = Object.entries(sanitizedLogs);
         for (let i = 0; i < logEntries.length; i += 40) {
           const chunk = logEntries.slice(i, i + 40);
           const logsBatch = writeBatch(db);
@@ -380,7 +398,15 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // 3. Training Logs Sync
       const cloudLogsMap = new Map<string, SessionLog>();
       logsSnap.docs.forEach(doc => {
-        cloudLogsMap.set(doc.id, doc.data() as SessionLog);
+        const raw = doc.data() as any;
+        const mappedLog: SessionLog = {
+          workoutId: raw.workoutId,
+          date: raw.date,
+          sets: raw.sets || {},
+          complete: !!raw.complete,
+          durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0
+        };
+        cloudLogsMap.set(doc.id, mappedLog);
       });
 
       // Local logs not in cloud: Upload in chunks
@@ -421,14 +447,18 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
           span.docChanges().forEach(change => {
             const id = change.doc.id;
             if (change.type === 'added' || change.type === 'modified') {
-              const cloudVal = change.doc.data() as SessionLog;
+              const cloudValRaw = change.doc.data() as any;
+              const cloudVal: SessionLog = {
+                workoutId: cloudValRaw.workoutId,
+                date: cloudValRaw.date,
+                sets: cloudValRaw.sets || {},
+                complete: !!cloudValRaw.complete,
+                durationMinutes: Number(cloudValRaw.durationMinutes !== undefined ? cloudValRaw.durationMinutes : cloudValRaw.duration) || 0
+              };
               const localVal = prev[id];
               if (!localVal || JSON.stringify(localVal) !== JSON.stringify(cloudVal)) {
                 if (!updated) updated = { ...prev };
-                updated[id] = {
-                  ...cloudVal,
-                  sets: cloudVal.sets || {}
-                };
+                updated[id] = cloudVal;
                 hasChanges = true;
               }
             } else if (change.type === 'removed') {
@@ -507,12 +537,12 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [workouts, logs, appState, isInitialized]);
 
   const addLog = async (logId: string, logOriginal: SessionLog) => {
-    const log = {
+    const log: SessionLog = {
       workoutId: logOriginal.workoutId,
       date: logOriginal.date,
       sets: logOriginal.sets || {},
       complete: !!logOriginal.complete,
-      duration: Number(logOriginal.duration) || 0
+      durationMinutes: Number(logOriginal.durationMinutes !== undefined ? logOriginal.durationMinutes : (logOriginal as any).duration) || 0
     };
     try {
       const nextLogs = { ...logs, [logId]: log };

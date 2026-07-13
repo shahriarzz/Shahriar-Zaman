@@ -143,7 +143,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
       const summary = summaries[monthKey];
       summary.sessionsCount += 1;
-      summary.totalDuration += log.duration || 0;
+      summary.totalDuration += (log.durationMinutes !== undefined ? log.durationMinutes : (log as any).duration) || 0;
 
       const workout = workouts.find(w => w.id === log.workoutId);
       if (workout) {
@@ -469,7 +469,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </h3>
                     <div className="flex flex-wrap gap-3 text-[10px] font-mono text-zinc-550 uppercase tracking-wider">
                       <div className="flex items-center gap-1">
-                        <Clock size={12} className="text-zinc-650 shrink-0" /> {session.duration} min
+                        <Clock size={12} className="text-zinc-650 shrink-0" /> {session.durationMinutes !== undefined ? session.durationMinutes : (session as any).duration} min
                       </div>
                       <div>·</div>
                       <div className="flex items-center gap-1">
@@ -567,10 +567,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             <label className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Session Duration (Minutes)</label>
                             <input
                               type="number"
-                              value={editSessionState.duration}
+                              value={editSessionState.durationMinutes !== undefined ? editSessionState.durationMinutes : (editSessionState as any).duration || 0}
                               onChange={(e) => {
                                 const val = parseInt(e.target.value) || 0;
-                                setEditSessionState(prev => prev ? { ...prev, duration: val } : null);
+                                setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
                               }}
                               className="bg-zinc-950 border border-zinc-850 rounded-xl px-4 py-3 text-sm text-left max-w-[120px] focus:border-zinc-500 outline-none font-mono text-white"
                             />

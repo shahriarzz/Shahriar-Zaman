@@ -42,15 +42,10 @@ export interface SessionLog {
   date: string; // YYYY-MM-DD
   sets: Record<string, SetLog[]>; // exerciseId -> sets
   complete: boolean;
-  duration: number; // minutes
+  durationMinutes: number; // minutes
 }
 
 export interface AppState {
   cycleStart: string; // YYYY-MM-DD
   weightLog?: Record<string, number>; // date -> kg
-}
-
-export interface WeightEntry {
-  date: string; // YYYY-MM-DD
-  weight: number; // kg
 }

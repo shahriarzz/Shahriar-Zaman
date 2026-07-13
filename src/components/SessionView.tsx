@@ -708,7 +708,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       date: dk(),
       sets: sessionSets,
       complete: true,
-      duration: Math.floor(duration / 60)
+      durationMinutes: Math.floor(duration / 60)
     };
     addLog(logId, finalLogs);
 
