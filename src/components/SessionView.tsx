@@ -42,27 +42,44 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const prevIsDoneRef = useRef(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [flashingSets, setFlashingSets] = useState<Set<number>>(new Set());
+  const timeoutsRef = useRef<any[]>([]);
 
   useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      timeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
     if (isDone && !prevIsDoneRef.current) {
       setJustCompleted(true);
-      const timer = setTimeout(() => setJustCompleted(false), 450);
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => setJustCompleted(false), 450);
+      timeoutsRef.current.push(timer);
     }
     prevIsDoneRef.current = isDone;
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+        timeoutsRef.current = timeoutsRef.current.filter(t => t !== timer);
+      }
+    };
   }, [isDone]);
 
   const handleSetDone = (exId: string, si: number, currentDone: boolean) => {
     if (!currentDone) {
       haptics.success();
       setFlashingSets(prev => new Set(prev).add(si));
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setFlashingSets(prev => {
           const next = new Set(prev);
           next.delete(si);
           return next;
         });
+        timeoutsRef.current = timeoutsRef.current.filter(t => t !== timer);
       }, 500);
+      timeoutsRef.current.push(timer);
     } else {
       haptics.light();
     }
@@ -189,7 +206,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
                   return (
                     <div
-                      key={si}
+                      key={s.id || `set-${si}`}
                       className={cn(
                         "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
@@ -283,6 +300,13 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   );
 };
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+};
+
 interface SessionViewProps {
   onExit: () => void;
   workoutId?: string | null;
@@ -306,9 +330,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const [startTime, setStartTime] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
   const [loadingAdvice, setLoadingAdvice] = useState<string | null>(null);
   const [expandedExId, setExpandedExId] = useState<string | null>(null);
+
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const initializedWorkoutIdRef = useRef<string | null>(null);
 
   // Auto-expand first incomplete exercise on load
   useEffect(() => {
@@ -317,7 +345,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       !sessionSets[ex.id]?.slice(0, ex.sets).every(s => s.done)
     );
     setExpandedExId(firstIncomplete?.id || activeWorkout.exercises[0]?.id || null);
-  }, [activeWorkout?.id, sessionSets]);
+  }, [activeWorkout?.id, sessionSets, expandedExId]);
+
+  // Clean up AbortControllers on unmount
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      abortControllersRef.current.forEach(controller => controller.abort());
+    };
+  }, []);
 
   useEffect(() => {
     const wo = activeWorkout || workouts.find(w => w.id === workoutId);
@@ -328,14 +364,28 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       return;
     }
 
-    // Only initialize if we don't have sets for THIS workout yet
+    // Only initialize if we don't have sets for THIS workout yet, and have not yet initialized it
+    if (initializedWorkoutIdRef.current === wo.id) {
+      return;
+    }
+
     const hasSetsForThisWo = Object.keys(sessionSets).length > 0 && wo.exercises.every(ex => sessionSets[ex.id]);
 
     if (!hasSetsForThisWo) {
+      initializedWorkoutIdRef.current = wo.id;
       if (activeSession && activeSession.workoutId === wo.id) {
         setStartTime(activeSession.startTime);
         setDuration(Math.floor((Date.now() - activeSession.startTime) / 1000));
-        setSessionSets(activeSession.sessionSets);
+        
+        // Ensure all loaded sets have a stable unique id
+        const restoredSets: Record<string, SetLog[]> = {};
+        Object.entries(activeSession.sessionSets).forEach(([exId, sets]) => {
+          restoredSets[exId] = (sets as SetLog[]).map(s => ({
+            ...s,
+            id: s.id || generateId()
+          }));
+        });
+        setSessionSets(restoredSets);
       } else {
         setStartTime(Date.now());
         setDuration(0);
@@ -351,6 +401,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           initialSets[ex.id] = Array.from({ length: Math.max(ex.sets, lastExLog?.length || 0) }, (_, idx) => {
             const prevSet = lastExLog?.[idx];
             return {
+              id: prevSet?.id || generateId(),
               weight: prevSet?.weight || '',
               reps: prevSet?.reps || '',
               done: false
@@ -361,7 +412,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         startActiveSession(wo.id, initialSets, Date.now());
       }
     }
-  }, [activeWorkout?.id, workoutId, activeSession]); // Run when identity of the workout changes or restored session is loaded
+  }, [activeWorkout?.id, workoutId, activeSession, workouts, logs, startActiveSession, sessionSets]); // Run when identity of the workout changes or restored session is loaded
 
   useEffect(() => {
     let interval: any;
@@ -427,16 +478,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       let hasHistory = false;
       
       historicLogs.forEach(l => {
-        const sets = l.sets?.[ex.id] || [];
-        sets.forEach(s => {
-          if (s.done && s.weight) {
-            hasHistory = true;
-            const w = parseFloat(s.weight) || 0;
-            if (w > prevPRWeight) {
-              prevPRWeight = w;
-            }
-          }
-        });
+         const sets = l.sets?.[ex.id] || [];
+         sets.forEach(s => {
+           if (s.done && s.weight) {
+             hasHistory = true;
+             const w = parseFloat(s.weight) || 0;
+             if (w > prevPRWeight) {
+               prevPRWeight = w;
+             }
+           }
+         });
       });
       
       if (!hasHistory || todayMax > prevPRWeight) {
@@ -487,17 +538,29 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const addSet = (exId: string) => {
     const nextSets = {
       ...sessionSets,
-      [exId]: [...(sessionSets[exId] || []), { weight: '', reps: '', done: false }]
+      [exId]: [...(sessionSets[exId] || []), { id: generateId(), weight: '', reps: '', done: false }]
     };
     setSessionSets(nextSets);
     updateActiveSessionSets(nextSets);
   };
 
-  const deleteSet = (exId: string, setIndex: number) => {
-    if ((sessionSets[exId] || []).length <= 1) return;
+  const deleteSet = async (exId: string, setIndex: number) => {
+    const sets = sessionSets[exId] || [];
+    if (sets.length <= 1) return;
+    
+    const setToDelete = sets[setIndex];
+    if (setToDelete?.done) {
+      const proceed = await confirm({
+        title: 'Delete Completed Set',
+        message: `Are you sure you want to delete Set ${setIndex + 1}? This set is marked as completed and will be lost.`,
+        isDanger: true
+      });
+      if (!proceed) return;
+    }
+
     const nextSets = {
       ...sessionSets,
-      [exId]: sessionSets[exId].filter((_, i) => i !== setIndex)
+      [exId]: sets.filter((_, i) => i !== setIndex)
     };
     setSessionSets(nextSets);
     updateActiveSessionSets(nextSets);
@@ -511,6 +574,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       }));
       return;
     }
+
+    // Abort previous advice request for this exercise if one is active
+    if (abortControllersRef.current.has(ex.id)) {
+      abortControllersRef.current.get(ex.id)?.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllersRef.current.set(ex.id, controller);
 
     setLoadingAdvice(ex.id);
     try {
@@ -530,7 +601,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         body: JSON.stringify({
           exercise: ex,
           history
-        })
+        }),
+        signal: controller.signal
       });
       
       if (!response.ok) {
@@ -555,6 +627,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const data = await response.json();
       setAiAdvice(prev => ({ ...prev, [ex.id]: data.suggestion || "No advice provided. Stick to the program!" }));
     } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        // Ignored, request was aborted
+        return;
+      }
       console.error('Failed to get AI advice', error);
       
       // Selectively present detailed server/Gemini errors or guide user if missing config
@@ -575,7 +651,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         [ex.id]: humanMsg 
       }));
     } finally {
-      setLoadingAdvice(null);
+      if (abortControllersRef.current.get(ex.id) === controller) {
+        abortControllersRef.current.delete(ex.id);
+        setLoadingAdvice(null);
+      }
     }
   };
 
@@ -591,7 +670,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   };
 
   const finishSession = async () => {
-    if (!activeWorkout) return;
+    if (!activeWorkout || isSubmitting || isFinishing) return;
+    setIsSubmitting(true);
 
     // Safety checks for extreme or illogical inputs to secure tracking data
     const extremeSets: { exName: string; weight: number; reps: number }[] = [];
@@ -615,7 +695,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         message: `Abnormally high parameters detected:\n${warningLines}\n\nMost training routines don't exceed 500kg or 100 reps per set. Proceed only if these are genuine, intentional values and NOT typos.`,
         isDanger: true
       });
-      if (!proceed) return;
+      if (!proceed) {
+        setIsSubmitting(false);
+        return;
+      }
     }
 
     haptics.success();
@@ -636,6 +719,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     clearActiveSession();
     setIsFinishing(true);
+    setIsSubmitting(false);
   };
 
   const handleExitAttempt = async () => {
@@ -778,14 +862,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </div>
           <button
             onClick={finishSession}
+            disabled={isSubmitting || isFinishing}
             className={cn(
-              "px-6 py-3 bg-white text-black rounded-xl text-xs font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all",
+              "px-6 py-3 bg-white text-black rounded-xl text-xs font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none",
               allExercisesDone 
                 ? "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold" 
                 : "shadow-[0_0_20px_rgba(255,255,255,0.1)]"
             )}
           >
-            Finish
+            {isSubmitting ? 'Syncing...' : 'Finish'}
           </button>
         </div>
       </header>

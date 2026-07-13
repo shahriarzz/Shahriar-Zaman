@@ -6,6 +6,9 @@ import { getCycleDay, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
 import { SetLog, SessionLog } from '../types/fitness';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
+import { useConfirm } from '../store/ConfirmContext';
+import { useCountUp } from '../hooks/useCountUp';
+import { INITIAL_WORKOUTS } from '../types/initialData';
 
 import { cn } from '../lib/utils';
 
@@ -34,8 +37,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     activeSession, 
     clearActiveSession,
     logBodyWeight,
-    deleteBodyWeight
+    deleteBodyWeight,
+    setWorkouts
   } = useFitness();
+  const { confirm } = useConfirm();
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const [weightInput, setWeightInput] = React.useState('');
 
@@ -52,25 +57,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   const currentCycleDay = getCycleDay(appState?.cycleStart || dk());
   const todayWorkout = (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
 
-  // Stats Logic
-  const useCountUp = (target: number, duration = 800) => {
-    const [value, setValue] = React.useState(0);
-    React.useEffect(() => {
-      if (target === 0) return;
-      let start = 0;
-      const step = target / (duration / 16);
-      const timer = setInterval(() => {
-        start += step;
-        if (start >= target) {
-          setValue(target);
-          clearInterval(timer);
-        } else {
-          setValue(Math.floor(start));
-        }
-      }, 16);
-      return () => clearInterval(timer);
-    }, [target, duration]);
-    return value;
+  const handleLogWeight = () => {
+    const val = parseFloat(weightInput);
+    if (!val || val < 20 || val > 300) return;
+    haptics.success();
+    logBodyWeight(dk(), val);
+    setWeightInput('');
   };
 
   const totalWeight = (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
@@ -227,8 +219,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           <div className="bg-zinc-900 border border-dashed border-zinc-800 p-12 rounded-3xl text-center space-y-4">
             <p className="text-zinc-500 font-mono text-sm">Routines library is empty.</p>
             <button 
-              onClick={() => window.location.reload()} 
-              className="px-6 py-2 bg-white text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest"
+              onClick={() => {
+                haptics.medium();
+                setWorkouts(INITIAL_WORKOUTS);
+              }} 
+              className="px-6 py-2 bg-white text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-200 transition-colors"
             >
               Reload Engine
             </button>
@@ -325,23 +320,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 onChange={(e) => setWeightInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    const val = parseFloat(weightInput);
-                    if (!val || val < 20 || val > 300) return;
-                    haptics.success();
-                    logBodyWeight(dk(), val);
-                    setWeightInput('');
+                    handleLogWeight();
                   }
                 }}
                 className="flex-1 sm:flex-none w-full sm:w-24 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-3 text-sm text-center font-mono focus:border-zinc-500 outline-none transition-all"
               />
               <button
-                onClick={() => {
-                  const val = parseFloat(weightInput);
-                  if (!val || val < 20 || val > 300) return;
-                  haptics.success();
-                  logBodyWeight(dk(), val);
-                  setWeightInput('');
-                }}
+                onClick={handleLogWeight}
                 className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-[10px] font-mono uppercase tracking-widest text-zinc-300 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
               >
                 Log
@@ -421,9 +406,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold">{weight} <span className="text-[10px] text-zinc-500 font-normal">kg</span></span>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             haptics.warning();
-                            deleteBodyWeight(date);
+                            const proceed = await confirm({
+                              title: 'Delete Weight Log',
+                              message: `Are you sure you want to delete your weight log for ${formatDateStr(date)}?`,
+                              isDanger: true,
+                            });
+                            if (proceed) {
+                              deleteBodyWeight(date);
+                            }
                           }}
                           className="text-zinc-600 hover:text-red-400 p-1 transition-colors cursor-pointer"
                           title="Delete Entry"

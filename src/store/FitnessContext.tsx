@@ -64,6 +64,45 @@ export interface FitnessContextType {
 
 const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 
+const syncCloudDataWithRestored = async (
+  uid: string,
+  restoredWorkouts: Workout[],
+  restoredLogs: Record<string, SessionLog>
+) => {
+  // 1. Query all current cloud workouts
+  const workoutsColRef = collection(db, 'users', uid, 'workouts');
+  const cloudWorkoutsSnap = await getDocs(workoutsColRef);
+  const restoredWorkoutIds = new Set(restoredWorkouts.map(w => w.id));
+  
+  // Find orphans
+  const orphanedWorkoutDocs = cloudWorkoutsSnap.docs.filter(d => !restoredWorkoutIds.has(d.id));
+  if (orphanedWorkoutDocs.length > 0) {
+    const batch = writeBatch(db);
+    orphanedWorkoutDocs.forEach(d => {
+      batch.delete(d.ref);
+    });
+    await batch.commit();
+  }
+
+  // 2. Query all current cloud logs
+  const logsColRef = collection(db, 'users', uid, 'logs');
+  const cloudLogsSnap = await getDocs(logsColRef);
+  const restoredLogIds = new Set(Object.keys(restoredLogs));
+  
+  // Find orphans
+  const orphanedLogDocs = cloudLogsSnap.docs.filter(d => !restoredLogIds.has(d.id));
+  if (orphanedLogDocs.length > 0) {
+    for (let i = 0; i < orphanedLogDocs.length; i += 40) {
+      const chunk = orphanedLogDocs.slice(i, i + 40);
+      const batch = writeBatch(db);
+      chunk.forEach(d => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+    }
+  }
+};
+
 export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -185,6 +224,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Save to cloud in background if user exists
       if (user) {
         await setDoc(doc(db, 'users', user.uid), match.appState, { merge: true });
+
+        // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
+        await syncCloudDataWithRestored(user.uid, match.workouts, match.logs);
 
         const workoutsCol = collection(db, 'users', user.uid, 'workouts');
         const workoutsBatch = writeBatch(db);
@@ -678,6 +720,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (importedAppState && typeof importedAppState.cycleStart === 'string') {
           await setDoc(doc(db, 'users', user.uid), importedAppState, { merge: true });
         }
+
+        // Delete any cloud entries (workouts or logs) that are NOT present in the restored backup
+        await syncCloudDataWithRestored(user.uid, importedWorkouts, importedLogs);
 
         const workoutsColRef = collection(db, 'users', user.uid, 'workouts');
         const workoutsBatch = writeBatch(db);
