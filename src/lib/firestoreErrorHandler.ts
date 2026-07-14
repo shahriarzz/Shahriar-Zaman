@@ -1,5 +1,3 @@
-import { auth } from './firebase';
-
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -11,21 +9,23 @@ export enum OperationType {
 
 interface FirestoreErrorInfo {
   error: string;
+  code?: string;
   operationType: OperationType;
   path: string | null;
-  authInfo: {
-    userId?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-    }[];
-  }
 }
 
-function showSyncErrorToast(msg: string) {
+let toastTimeoutId: any = null;
+let lastToastTime = 0;
+
+function showCloudSyncToast(msg: string) {
   if (typeof document === 'undefined') return;
+  
+  // Throttle / deduplicate if multiple writes fail in quick succession (3 seconds)
+  const now = Date.now();
+  if (now - lastToastTime < 3000) {
+    return;
+  }
+  lastToastTime = now;
   
   let container = document.getElementById('gl-sync-error-toast');
   if (!container) {
@@ -35,23 +35,30 @@ function showSyncErrorToast(msg: string) {
     document.body.appendChild(container);
   }
   
-  container.innerHTML = `
-    <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
-    <span>Cloud Sync Alert: ${msg}</span>
-  `;
+  // Clear the container
+  container.innerHTML = '';
+  
+  // Build safe visual components
+  const pingDot = document.createElement('span');
+  pingDot.className = 'w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0';
+  
+  const textSpan = document.createElement('span');
+  textSpan.textContent = `Cloud Sync Alert: ${msg}`;
+  
+  container.appendChild(pingDot);
+  container.appendChild(textSpan);
 
-  // Trigger transition
+  // Trigger entering transition
   setTimeout(() => {
     container?.classList.remove('translate-y-2', 'opacity-0');
   }, 10);
 
-  // Auto-hide after 5 seconds
-  const currentContainer = container as any;
-  if (currentContainer._timeout) {
-    clearTimeout(currentContainer._timeout);
+  // Clear existing timeout and auto-hide
+  if (toastTimeoutId) {
+    clearTimeout(toastTimeoutId);
   }
   
-  currentContainer._timeout = setTimeout(() => {
+  toastTimeoutId = setTimeout(() => {
     container?.classList.add('translate-y-2', 'opacity-0');
     setTimeout(() => {
       if (container?.parentNode) {
@@ -63,33 +70,41 @@ function showSyncErrorToast(msg: string) {
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errMessage = error instanceof Error ? error.message : String(error);
+  const errCode = (error as any)?.code;
   
   const errInfo: FirestoreErrorInfo = {
     error: errMessage,
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId
-      })) || []
-    },
+    code: errCode,
     operationType,
     path
   };
   
-  // Log stripped diagnostic error for privacy
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  // Clean logging to production console (excluding noisy or sensitive auth credentials)
+  console.error('Firestore Error:', JSON.stringify(errInfo));
 
-  // Visual user-facing notification for writing operations to provide clear UX
+  // Visual user-facing notification for write operations to provide clean UX
   if (operationType === OperationType.CREATE || 
       operationType === OperationType.UPDATE || 
       operationType === OperationType.DELETE || 
       operationType === OperationType.WRITE) {
-    const briefError = errMessage.includes('insufficient permissions') 
-      ? 'Permission Denied' 
-      : 'Network Interrupted (Working Offline)';
-    showSyncErrorToast(briefError);
+    
+    let briefError = 'Working Offline';
+    
+    if (errCode === 'permission-denied') {
+      briefError = 'Permission Denied';
+    } else if (errCode === 'unauthenticated') {
+      briefError = 'Unauthenticated';
+    } else if (errCode === 'deadline-exceeded') {
+      briefError = 'Timeout';
+    } else if (errCode === 'unavailable') {
+      briefError = 'Working Offline';
+    } else {
+      // Robust fallback check in case code is not provided by the SDK error instance
+      if (errMessage.includes('insufficient permissions') || errMessage.includes('permission-denied')) {
+        briefError = 'Permission Denied';
+      }
+    }
+    
+    showCloudSyncToast(briefError);
   }
 }

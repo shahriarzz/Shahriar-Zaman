@@ -5,6 +5,13 @@ export function dk(d: Date = new Date()): string {
   return format(d, 'yyyy-MM-dd');
 }
 
+export function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+}
+
 export function getAdjustedCycleStart(workoutCycleDay: number): string {
   const adjusted = subDays(new Date(), workoutCycleDay - 1);
   return format(adjusted, 'yyyy-MM-dd');

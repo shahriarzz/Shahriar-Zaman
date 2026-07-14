@@ -251,7 +251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
                 <h2 className="text-4xl font-black uppercase tracking-tight">{todayWorkout.name}</h2>
                 <p className="text-zinc-500 text-sm">
-                  {todayWorkout.isRest ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
+                  {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
                 </p>
               </div>
 
@@ -266,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   color: 'black'
                 }}
               >
-                {todayWorkout.isRest ? 'Rest Day' : 'Start Session'}
+                {todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
               </button>
             </div>
           </motion.div>
@@ -457,13 +457,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   key={wo.id}
                   onClick={() => {
                     haptics.selection();
-                    if (!wo.isRest) onStartWorkout(wo.id);
+                    if (wo.type !== 'rest') onStartWorkout(wo.id);
                     setIsDropdownOpen(false);
                   }}
-                  disabled={wo.isRest}
+                  disabled={wo.type === 'rest'}
                   className={cn(
                     "w-full p-4 rounded-2xl flex items-center justify-between text-left transition-all border border-transparent",
-                    wo.isRest ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-white/5 hover:border-white/5 cursor-pointer active:scale-[0.98]"
+                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-white/5 hover:border-white/5 cursor-pointer active:scale-[0.98]"
                   )}
                 >
                   <div className="flex items-center gap-4">
@@ -479,7 +479,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] leading-none mt-1.5">Day {wo.cycleDay} · {wo.badge}</div>
                     </div>
                   </div>
-                  {!wo.isRest && (
+                  {wo.type !== 'rest' && (
                     <div className="flex flex-col items-end gap-1">
                        <ChevronRight size={14} className="text-zinc-700" />
                        <span className="text-[7px] font-mono text-zinc-800 uppercase">{wo.exercises.length} Exercises</span>

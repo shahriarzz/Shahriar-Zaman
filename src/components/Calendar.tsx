@@ -92,7 +92,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
     if (isFuture) {
       if (expectedWo) {
-        if (expectedWo.isRest) {
+        if (expectedWo.type === 'rest') {
           return { color: '#34d399', label: 'rest', isFuture: true };
         }
         return { color: WORKOUT_COLORS[expectedWo.type] || '#6366f1', label: expectedWo.name, isFuture: true };
@@ -101,7 +101,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     }
 
     if (expectedWo) {
-      if (expectedWo.isRest) return { color: '#34d399', label: 'rest' };
+      if (expectedWo.type === 'rest') return { color: '#34d399', label: 'rest' };
       if (!isSameDay(date, today)) return { color: '#ef4444', label: 'missed' };
     }
 
@@ -301,11 +301,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           border: `1px solid ${WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1'}55`
                         }}
                       >
-                        {expectedWoForSelected.badge || (expectedWoForSelected.isRest ? 'REST' : expectedWoForSelected.type)}
+                        {expectedWoForSelected.badge || (expectedWoForSelected.type === 'rest' ? 'REST' : expectedWoForSelected.type)}
                       </div>
                       <h4 className="text-xl font-display uppercase tracking-tight text-white leading-none">{expectedWoForSelected.name}</h4>
                       <p className="text-zinc-500 font-mono text-[9px] uppercase leading-relaxed">
-                        {expectedWoForSelected.isRest ? 'Rest & Recovery Protocol' : `${expectedWoForSelected.exercises?.length || 0} Exercises · Approx 60 min`}
+                        {expectedWoForSelected.type === 'rest' ? 'Rest & Recovery Protocol' : `${expectedWoForSelected.exercises?.length || 0} Exercises · Approx 60 min`}
                       </p>
                     </div>
                   </div>

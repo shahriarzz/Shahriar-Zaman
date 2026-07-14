@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, 
   setPersistence, 
@@ -8,7 +8,8 @@ import {
   signInWithRedirect,
   onAuthStateChanged as fbOnAuthStateChanged,
   getRedirectResult as fbGetRedirectResult,
-  User as FirebaseUser
+  User as FirebaseUser,
+  Auth
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -20,7 +21,8 @@ import {
   collection as fbCollection,
   deleteDoc as fbDeleteDoc,
   onSnapshot as fbOnSnapshot,
-  writeBatch as fbWriteBatch
+  writeBatch as fbWriteBatch,
+  Firestore
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 // @ts-ignore
@@ -44,25 +46,25 @@ const isFirebaseConfigured = !!actualConfig.apiKey &&
   !actualConfig.apiKey.includes("YOUR_") && 
   actualConfig.apiKey !== "undefined";
 
-// Real implementation
-let dbInstance: any = null;
-let authInstance: any = null;
-let googleProviderInstance: any = null;
-let signInWithGoogleFunc: any = null;
+// Real implementation variables typed fully
+let dbInstance: Firestore;
+let authInstance: Auth;
+let googleProviderInstance: GoogleAuthProvider;
+let signInWithGoogleFunc: () => Promise<User | null>;
 
-let onAuthStateChangedFunc: any = null;
-let getRedirectResultFunc: any = null;
-let docFunc: any = null;
-let setDocFunc: any = null;
-let getDocFunc: any = null;
-let getDocsFunc: any = null;
-let collectionFunc: any = null;
-let deleteDocFunc: any = null;
-let onSnapshotFunc: any = null;
-let writeBatchFunc: any = null;
+let onAuthStateChangedFunc: typeof fbOnAuthStateChanged;
+let getRedirectResultFunc: typeof fbGetRedirectResult;
+let docFunc: typeof fbDoc;
+let setDocFunc: typeof fbSetDoc;
+let getDocFunc: typeof fbGetDoc;
+let getDocsFunc: typeof fbGetDocs;
+let collectionFunc: typeof fbCollection;
+let deleteDocFunc: typeof fbDeleteDoc;
+let onSnapshotFunc: typeof fbOnSnapshot;
+let writeBatchFunc: typeof fbWriteBatch;
 
 // Reusable function to create and apply offline/fallback stubs to avoid code drift
-function applyOfflineStubs(alertMessage?: string) {
+function applyOfflineStubs() {
   dbInstance = {} as any;
   authInstance = {
     signOut: async () => {},
@@ -71,8 +73,9 @@ function applyOfflineStubs(alertMessage?: string) {
   googleProviderInstance = {} as any;
 
   signInWithGoogleFunc = async () => {
-    alert(alertMessage || "Cloud synchronization is disabled. To enable logging in and cloud backups, please complete the Firebase Setup first.");
-    return null;
+    const error = new Error("Cloud synchronization is disabled. To enable logging in and cloud backups, please complete the Firebase Setup first.");
+    (error as any).code = 'auth/not-configured';
+    throw error;
   };
 
   onAuthStateChangedFunc = ((_auth: any, callback: (user: any) => void) => {
@@ -97,7 +100,9 @@ function applyOfflineStubs(alertMessage?: string) {
 
 if (isFirebaseConfigured) {
   try {
-    const app = initializeApp(actualConfig);
+    // Guard initializeApp against double-initialization
+    const app = getApps().length > 0 ? getApp() : initializeApp(actualConfig);
+    
     dbInstance = actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== "(default)"
       ? getFirestore(app, actualConfig.firestoreDatabaseId) 
       : getFirestore(app);
@@ -120,6 +125,24 @@ if (isFirebaseConfigured) {
         return result.user;
       } catch (error: any) {
         if (error?.code === 'auth/popup-closed-by-user') return null;
+        
+        // Handle common Google Sign-In error codes gracefully
+        if (error?.code === 'auth/popup-blocked') {
+          const friendlyErr = new Error("The Google Sign-In popup was blocked by your browser. Please allow popups or open the app in a New Tab to login.");
+          (friendlyErr as any).code = error.code;
+          throw friendlyErr;
+        }
+        if (error?.code === 'auth/network-request-failed') {
+          const friendlyErr = new Error("Network request failed. Please check your internet connection and try again.");
+          (friendlyErr as any).code = error.code;
+          throw friendlyErr;
+        }
+        if (error?.code === 'auth/operation-not-allowed') {
+          const friendlyErr = new Error("Google Sign-In is not enabled in your Firebase Console. Please enable Google provider under Authentication -> Sign-in method.");
+          (friendlyErr as any).code = error.code;
+          throw friendlyErr;
+        }
+        
         console.error("Sign-in failed:", error);
         throw error;
       }
@@ -138,7 +161,7 @@ if (isFirebaseConfigured) {
 
   } catch (e) {
     console.error("Failed to initialize real Firebase despite config being present:", e);
-    applyOfflineStubs("Firebase failed to initialize. Please check developer console logs.");
+    applyOfflineStubs();
   }
 } else {
   applyOfflineStubs();
@@ -158,10 +181,11 @@ export {
   collectionFunc as collection,
   deleteDocFunc as deleteDoc,
   onSnapshotFunc as onSnapshot,
-  writeBatchFunc as writeBatch
+  writeBatchFunc as writeBatch,
+  isFirebaseConfigured
 };
 
-// CRITICAL: Connection test
+// Connection test - dev only to prevent unnecessary network calls in production
 async function testConnection() {
   if (!isFirebaseConfigured) {
     console.log("Firebase is not configured. Running in offline-only mode.");
@@ -193,4 +217,7 @@ async function testConnection() {
     }
   }
 }
-testConnection();
+
+if ((import.meta as any).env.DEV) {
+  testConnection();
+}

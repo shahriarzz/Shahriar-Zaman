@@ -243,6 +243,14 @@ export const ManageView: React.FC = () => {
       setAutoBackupsTick(prev => prev + 1);
     } catch (e: any) {
       if (e?.code === 'auth/popup-closed-by-user') return;
+      if (e?.code === 'auth/not-configured') {
+        await confirm({
+          title: 'Cloud Sync Disabled',
+          message: e.message || 'To enable signing in and secure cloud backups, please complete the Firebase integration setup.',
+          isDanger: false
+        });
+        return;
+      }
       setAuthError(e?.message || "Authentication failed");
     }
   };
@@ -658,7 +666,7 @@ export const ManageView: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              {!selectedWorkout.isRest ? (
+              {selectedWorkout.type !== 'rest' ? (
                 <>
                   <div className="space-y-2">
                     {selectedWorkout.exercises.map(ex => (

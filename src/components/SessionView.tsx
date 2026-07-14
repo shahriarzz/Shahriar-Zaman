@@ -4,7 +4,7 @@ import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog } from '../types/fitness';
-import { WORKOUT_COLORS, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, dk, getAdjustedCycleStart, generateId } from '../utils/fitnessHelpers';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 
@@ -298,13 +298,6 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       </AnimatePresence>
     </motion.div>
   );
-};
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 };
 
 interface SessionViewProps {
@@ -910,7 +903,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               <Clock size={16} className="text-orange-500" />
               <div className="text-left leading-none">
                 <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Target Dur</span>
-                <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.dur}</span>
+                <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.duration}</span>
               </div>
             </div>
           </div>

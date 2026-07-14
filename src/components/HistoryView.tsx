@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
-import { WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, calculateVolume, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -689,7 +689,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       setEditSessionState(prev => {
                                         if (!prev) return null;
                                         const newSets = { ...prev.sets };
-                                        newSets[exId] = [...(newSets[exId] as SetLog[] || []), { weight: '', reps: '', done: true }];
+                                        newSets[exId] = [...(newSets[exId] as SetLog[] || []), { id: generateId(), weight: '', reps: '', done: true }];
                                         return { ...prev, sets: newSets };
                                       });
                                     }}

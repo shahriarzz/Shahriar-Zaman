@@ -1,45 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { FitnessProvider } from './store/FitnessContext';
 import { ConfirmProvider, useConfirm } from './store/ConfirmContext';
-import { Layout } from './components/Layout';
+import { Layout, ActiveTab } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { SessionView } from './components/SessionView';
 import { HistoryView } from './components/HistoryView';
 import { ManageView } from './components/ManageView';
 import { useFitness } from './store/FitnessContext';
+import { isFirebaseConfigured } from './lib/firebase';
 
 function AppContent() {
-  const { loading, activeSession, clearActiveSession } = useFitness();
+  const { loading, activeSession, clearActiveSession, syncStatus } = useFitness();
   const { confirm } = useConfirm();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
+
+  // Unify and deduplicate session exit/abandon flow
+  const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {
+    if (activeSession) {
+      const confirmExit = await confirm({
+        title: 'Abandon Active Session?',
+        message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
+        isDanger: true
+      });
+      if (confirmExit) {
+        clearActiveSession();
+        setSelectedWorkoutId(null);
+        setActiveTab(destination);
+        return true;
+      }
+      return false;
+    } else {
+      setSelectedWorkoutId(null);
+      setActiveTab(destination);
+      return true;
+    }
+  }, [activeSession, confirm, clearActiveSession]);
 
   // Set up safe native hardware back button support on Android
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    let sub: any;
+    let sub: PluginListenerHandle | null = null;
     const initBackButton = async () => {
       sub = await CapApp.addListener('backButton', async () => {
         if (activeTab === 'session') {
-          if (activeSession) {
-            const confirmExit = await confirm({
-              title: 'Abandon Active Session?',
-              message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
-              isDanger: true
-            });
-            if (confirmExit) {
-              clearActiveSession();
-              setSelectedWorkoutId(null);
-              setActiveTab('dashboard');
-            }
-          } else {
-            setSelectedWorkoutId(null);
-            setActiveTab('dashboard');
-          }
+          await leaveSession('dashboard');
         } else if (activeTab !== 'dashboard') {
           setActiveTab('dashboard');
         } else {
@@ -55,9 +64,48 @@ function AppContent() {
         sub.remove();
       }
     };
-  }, [activeTab, activeSession, clearActiveSession]);
+  }, [activeTab, leaveSession]);
 
   if (loading) {
+    // Determine dynamic network and connection details for highly accurate loader logging
+    const getStatusDetails = () => {
+      if (!isFirebaseConfigured) {
+        return {
+          dotColor: 'bg-zinc-600',
+          statusText: 'Local Offline Protocol',
+          connectionText: 'DISABLED',
+          connectionColor: 'text-zinc-500'
+        };
+      }
+      switch (syncStatus) {
+        case 'syncing':
+          return {
+            dotColor: 'bg-amber-500 animate-pulse',
+            statusText: 'Syncing Cloud Protocol',
+            connectionText: 'SYNCING...',
+            connectionColor: 'text-amber-400'
+          };
+        case 'failed':
+          return {
+            dotColor: 'bg-red-500 animate-pulse',
+            statusText: 'Sync Interrupted',
+            connectionText: 'FAILED',
+            connectionColor: 'text-red-400'
+          };
+        case 'synced':
+        case 'idle':
+        default:
+          return {
+            dotColor: 'bg-green-500 animate-pulse',
+            statusText: 'Secure Link Active',
+            connectionText: 'SUCCESS',
+            connectionColor: 'text-green-400'
+          };
+      }
+    };
+
+    const status = getStatusDetails();
+
     return (
       <div className="fixed inset-0 bg-[#06060a] flex flex-col items-center justify-center p-6 z-50">
         {/* Subtle glowing ambient background spheres */}
@@ -89,13 +137,13 @@ function AppContent() {
 
           {/* Secure status checks log row */}
           <div className="border border-zinc-900 bg-zinc-950/40 rounded-2xl p-4 w-full text-left space-y-2">
-            <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Secure Link Active
+            <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-zinc-300">
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
+              {status.statusText}
             </div>
             <div className="flex justify-between text-[8px] font-mono uppercase text-zinc-500">
               <span>Cloud DB Connection</span>
-              <span className="text-zinc-400">SUCCESS</span>
+              <span className={status.connectionColor}>{status.connectionText}</span>
             </div>
             <div className="flex justify-between text-[8px] font-mono uppercase text-zinc-500">
               <span>Encryption Status</span>
@@ -113,19 +161,10 @@ function AppContent() {
   };
 
   const handleTabChange = async (tab: string) => {
-    if (activeTab === 'session' && tab !== 'session' && activeSession) {
-      const confirmExit = await confirm({
-        title: 'Abandon Active Session?',
-        message: 'Your current training progress is in-flight. Navigating away will discard or clear this active protocol. Are you sure you want to abort?',
-        isDanger: true
-      });
-      if (confirmExit) {
-        clearActiveSession();
-        setSelectedWorkoutId(null);
-        setActiveTab(tab);
-      }
+    if (activeTab === 'session' && tab !== 'session') {
+      await leaveSession(tab as ActiveTab);
     } else {
-      setActiveTab(tab);
+      setActiveTab(tab as ActiveTab);
     }
   };
 
@@ -153,7 +192,7 @@ function AppContent() {
         <HistoryView 
           initialDate={historySearchDate} 
           onClearInitialDate={() => setHistorySearchDate(null)} 
-        />
+          />
       )}
       {activeTab === 'manage' && <ManageView />}
     </Layout>

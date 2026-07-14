@@ -436,6 +436,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       logsSnap.docs.forEach(doc => {
         const raw = doc.data() as any;
         const mappedLog: SessionLog = {
+          id: doc.id,
           workoutId: raw.workoutId,
           date: raw.date,
           sets: raw.sets || {},
@@ -485,6 +486,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
             if (change.type === 'added' || change.type === 'modified') {
               const cloudValRaw = change.doc.data() as any;
               const cloudVal: SessionLog = {
+                id,
                 workoutId: cloudValRaw.workoutId,
                 date: cloudValRaw.date,
                 sets: cloudValRaw.sets || {},
@@ -639,6 +641,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addLog = async (logId: string, logOriginal: SessionLog) => {
     const log: SessionLog = {
+      id: logId,
       workoutId: logOriginal.workoutId,
       date: logOriginal.date,
       sets: logOriginal.sets || {},

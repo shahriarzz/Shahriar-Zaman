@@ -13,7 +13,7 @@ export interface Exercise {
 export interface CardioFinisher {
   name: string;
   detail: string;
-  dur: string;
+  duration: string;
 }
 
 export interface Workout {
@@ -25,19 +25,18 @@ export interface Workout {
   cardio?: CardioFinisher | null;
   cycleDay?: number | null;
   isCore?: boolean;
-  isRest?: boolean;
   restNotes?: string[];
 }
 
 export interface SetLog {
-  id?: string;
+  id: string;
   weight: string;
   reps: string;
   done: boolean;
 }
 
 export interface SessionLog {
-  id?: string;
+  id: string;
   workoutId: string;
   date: string; // YYYY-MM-DD
   sets: Record<string, SetLog[]>; // exerciseId -> sets
