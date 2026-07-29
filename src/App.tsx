@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { FitnessProvider } from './store/FitnessContext';
 import { ConfirmProvider, useConfirm } from './store/ConfirmContext';
 import { Layout, ActiveTab } from './components/Layout';
@@ -17,6 +19,31 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
+
+  // Set up native status bar style and background color on launch
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setStyle({ style: Style.Dark }).catch(err => {
+        console.warn('Error setting StatusBar style:', err);
+      });
+      StatusBar.setBackgroundColor({ color: '#09090e' }).catch(err => {
+        console.warn('Error setting StatusBar background color:', err);
+      });
+    }
+  }, []);
+
+  // Dynamically hide the native splash screen only when loading is fully complete
+  useEffect(() => {
+    if (!loading && Capacitor.isNativePlatform()) {
+      // Small timeout to allow the browser to paint the ready state before hiding the splash screen
+      const timer = setTimeout(() => {
+        SplashScreen.hide().catch(err => {
+          console.warn('Error hiding splash screen:', err);
+        });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   // Unify and deduplicate session exit/abandon flow
   const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {

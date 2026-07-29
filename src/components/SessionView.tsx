@@ -3,13 +3,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
-import { Workout, Exercise, SetLog, SessionLog } from '../types/fitness';
-import { WORKOUT_COLORS, dk, getAdjustedCycleStart, generateId } from '../utils/fitnessHelpers';
+import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
+import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId } from '../utils/fitnessHelpers';
+import { StatusChip } from './StatusChip';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 
 interface ExerciseCardProps {
   ex: Exercise;
+  workoutType: WorkoutType;
   ghostData: { lastSession: any; allTimePR: any };
   aiAdvice: Record<string, string>;
   loadingAdvice: string | null;
@@ -24,6 +26,7 @@ interface ExerciseCardProps {
 
 const ExerciseCard: React.FC<ExerciseCardProps> = ({
   ex,
+  workoutType,
   ghostData,
   aiAdvice,
   loadingAdvice,
@@ -91,12 +94,11 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
   return (
     <motion.div
-      layout
       key={ex.id}
       animate={justCompleted ? { scale: [1, 1.015, 1] } : {}}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       className={cn(
-        "bg-zinc-900/50 border rounded-3xl overflow-hidden transition-all",
+        "bg-zinc-900/80 border rounded-3xl overflow-hidden transition-all",
         isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
       )}
     >
@@ -129,9 +131,13 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           <button
             onClick={() => getAiAdvice(ex)}
             disabled={loadingAdvice === ex.id}
-            className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-orange-500 transition-colors"
+            className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 transition-colors"
           >
-            <Zap size={18} className={loadingAdvice === ex.id ? 'animate-pulse text-orange-500' : ''} />
+            <Zap 
+              size={18} 
+              className={loadingAdvice === ex.id ? 'animate-pulse' : ''} 
+              style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
+            />
           </button>
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -156,8 +162,15 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           >
             {/* AI Advice Box */}
             {aiAdvice[ex.id] && (
-              <div className="mx-6 mb-4 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex gap-3 text-xs text-orange-200/80">
-                <MessageSquareQuote size={18} className="shrink-0 text-orange-500" />
+              <div 
+                className="mx-6 mb-4 p-4 rounded-2xl flex gap-3 text-xs border"
+                style={{
+                  backgroundColor: `${WORKOUT_COLORS[workoutType]}0D`,
+                  borderColor: `${WORKOUT_COLORS[workoutType]}1A`,
+                  color: `${WORKOUT_COLORS[workoutType]}CC`,
+                }}
+              >
+                <MessageSquareQuote size={18} className="shrink-0" style={{ color: WORKOUT_COLORS[workoutType] }} />
                 <p>{aiAdvice[ex.id]}</p>
               </div>
             )}
@@ -179,8 +192,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <div className="p-4 space-y-1">
                 <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
                 {allTimePR ? (
-                  <div className="text-[10px] font-mono text-orange-500/80 flex items-center gap-1">
-                    <Trophy size={10} /> {allTimePR.weight}kg × {allTimePR.reps}
+                  <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
+                    <Trophy size={10} style={{ color: WORKOUT_COLORS[workoutType] }} /> {allTimePR.weight}kg × {allTimePR.reps}
                   </div>
                 ) : (
                   <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
@@ -816,7 +829,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     <div className="space-y-8 pb-32">
       {/* Session Top Bar */}
       <header 
-        className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-xl py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300"
+        className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300"
         style={{
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
@@ -826,17 +839,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             <ChevronLeft size={20} />
           </button>
           <div className="space-y-1">
-            <div
-               className="inline-flex px-2 py-0.5 rounded-full text-[8px] font-mono font-bold tracking-widest uppercase"
-               style={{
-                 backgroundColor: `${WORKOUT_COLORS[activeWorkout.type]}22`,
-                 color: WORKOUT_COLORS[activeWorkout.type],
-                 border: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}55`
-               }}
-            >
-              {activeWorkout.badge}
-            </div>
-            <h2 className="text-2xl font-black uppercase leading-none">{activeWorkout.name}</h2>
+            <StatusChip
+              label={activeWorkout.badge}
+              color={WORKOUT_COLORS[activeWorkout.type]}
+              variant="subtle"
+            />
+            <h2 className="text-2xl font-black uppercase leading-none font-display">{activeWorkout.name}</h2>
           </div>
         </div>
 
@@ -874,6 +882,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <ExerciseCard
             key={ex.id}
             ex={ex}
+            workoutType={activeWorkout.type}
             ghostData={ghostData[ex.id]}
             aiAdvice={aiAdvice}
             loadingAdvice={loadingAdvice}
@@ -893,14 +902,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <div className="bg-gradient-to-br from-zinc-800/10 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
                 <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500">Active Finish Protocol</span>
               </div>
               <h3 className="text-lg font-bold text-white uppercase tracking-wide">{activeWorkout.cardio.name}</h3>
               <p className="text-xs text-zinc-500 font-mono tracking-tight">{activeWorkout.cardio.detail}</p>
             </div>
             <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-2xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
-              <Clock size={16} className="text-orange-500" />
+              <Clock size={16} style={{ color: WORKOUT_COLORS[activeWorkout.type] }} />
               <div className="text-left leading-none">
                 <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Target Dur</span>
                 <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.duration}</span>

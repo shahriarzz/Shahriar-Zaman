@@ -3,8 +3,9 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { ChevronLeft, ChevronRight, Clock, Dumbbell, TrendingUp, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../store/FitnessContext';
-import { getCycleDay, WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
+import { getCycleDay, getWorkoutBadgeStyle, WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog } from '../types/fitness';
+import { StatusChip } from './StatusChip';
 import { haptics } from '../utils/haptics';
 
 interface CalendarProps {
@@ -93,7 +94,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     if (isFuture) {
       if (expectedWo) {
         if (expectedWo.type === 'rest') {
-          return { color: '#34d399', label: 'rest', isFuture: true };
+          return { color: '#22c55e', label: 'rest', isFuture: true };
         }
         return { color: WORKOUT_COLORS[expectedWo.type] || '#6366f1', label: expectedWo.name, isFuture: true };
       }
@@ -101,7 +102,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     }
 
     if (expectedWo) {
-      if (expectedWo.type === 'rest') return { color: '#34d399', label: 'rest' };
+      if (expectedWo.type === 'rest') return { color: '#22c55e', label: 'rest' };
       if (!isSameDay(date, today)) return { color: '#ef4444', label: 'missed' };
     }
 
@@ -191,21 +192,20 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   }`}
               >
                 <div className="flex justify-between items-start">
-                  <span className={`text-[11px] font-mono leading-none ${isToday || isSelected ? 'text-white' : 'text-zinc-600'}`}>
+                  <span 
+                    className={`text-[11px] font-mono leading-none w-6 h-6 flex items-center justify-center rounded-full transition-all ${
+                      isToday || isSelected 
+                        ? 'text-white' 
+                        : status 
+                          ? 'text-zinc-200' 
+                          : 'text-zinc-600'
+                    } ${status && !isSelected ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : ''}`}
+                    style={status && !isSelected ? { borderColor: status.color } : undefined}
+                  >
                     {format(day, 'd')}
                   </span>
                   {isToday && !isSelected && <div className="w-1 h-1 rounded-full bg-white animate-pulse" />}
                 </div>
-
-                {status && (
-                  <div className="mt-auto flex justify-center w-full pb-1">
-                    {status.isFuture ? (
-                      <div className="w-1.5 h-1.5 rounded-full border border-dashed" style={{ borderColor: status.color, backgroundColor: 'transparent' }} />
-                    ) : (
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: status.color }} />
-                    )}
-                  </div>
-                )}
               </motion.button>
             );
           })}
@@ -217,7 +217,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             { label: 'Push', color: WORKOUT_COLORS.push },
             { label: 'Pull', color: WORKOUT_COLORS.pull },
             { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-            { label: 'Rest', color: '#34d399' },
+            { label: 'Rest', color: '#22c55e' },
             { label: 'Missed', color: '#ef4444' },
             { label: 'Incomplete', color: '#6366f1' },
           ].map(l => (
@@ -293,16 +293,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Upcoming Session</span>
                     </div>
                     <div className="space-y-2">
-                      <div
-                        className="inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold tracking-widest uppercase"
-                        style={{
-                          backgroundColor: `${WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1'}22`,
-                          color: WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1',
-                          border: `1px solid ${WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1'}55`
-                        }}
-                      >
-                        {expectedWoForSelected.badge || (expectedWoForSelected.type === 'rest' ? 'REST' : expectedWoForSelected.type)}
-                      </div>
+                      <StatusChip
+                        label={expectedWoForSelected.badge || (expectedWoForSelected.type === 'rest' ? 'REST' : expectedWoForSelected.type)}
+                        color={WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1'}
+                        variant="subtle"
+                      />
                       <h4 className="text-xl font-display uppercase tracking-tight text-white leading-none">{expectedWoForSelected.name}</h4>
                       <p className="text-zinc-500 font-mono text-[9px] uppercase leading-relaxed">
                         {expectedWoForSelected.type === 'rest' ? 'Rest & Recovery Protocol' : `${expectedWoForSelected.exercises?.length || 0} Exercises · Approx 60 min`}

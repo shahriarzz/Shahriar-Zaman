@@ -764,6 +764,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date 
                             : null;
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
+                          const exColor = WORKOUT_COLORS[meta.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
 
                           return (
                             <div key={exId} className="border border-zinc-850/65 rounded-2xl bg-zinc-900/10 overflow-hidden">
@@ -781,7 +782,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   <div className="flex items-center gap-2">
                                     <span 
                                       className="w-1.5 h-1.5 rounded-full shrink-0" 
-                                      style={{ backgroundColor: WORKOUT_COLORS[meta.type] || '#a78bfa' }} 
+                                      style={{ backgroundColor: exColor }} 
                                     />
                                     <h4 className="font-bold text-zinc-300 text-sm tracking-wide">
                                       {meta.name}
@@ -800,7 +801,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   )}
                                   <ChevronRight 
                                     size={14} 
-                                    className={cn("text-zinc-600 transition-transform absolute right-4 top-1/2 -translate-y-1/2 duration-300", isSelected && "rotate-90 text-orange-500")} 
+                                    className={cn("text-zinc-600 transition-transform absolute right-4 top-1/2 -translate-y-1/2 duration-300", isSelected && "rotate-90")} 
+                                    style={isSelected ? { color: exColor } : undefined}
                                   />
                                 </div>
                               </button>
@@ -817,11 +819,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <Trophy size={12} className="text-orange-500 shrink-0" />
+                                        <Trophy size={12} className="shrink-0" style={{ color: exColor }} />
                                         <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400">Progressive Benchmark</span>
                                       </div>
                                       {prWeight > 0 && (
-                                        <div className="text-[9px] font-mono uppercase bg-orange-500/10 border border-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full font-bold">
+                                        <div 
+                                          className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full font-bold border"
+                                          style={{
+                                            backgroundColor: `${exColor}1F`,
+                                            color: exColor,
+                                            borderColor: `${exColor}40`
+                                          }}
+                                        >
                                           Lifetime PR: {prWeight}kg
                                         </div>
                                       )}
@@ -850,7 +859,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 fontFamily: 'monospace',
                                                 color: '#fff'
                                               }}
-                                              itemStyle={{ color: '#f97316' }}
+                                              itemStyle={{ color: exColor }}
                                               labelStyle={{ color: '#a1a1aa' }}
                                               formatter={(value) => [`${value}kg`, 'Peak Weight']}
                                               labelFormatter={(label) => `Date: ${label}`}
@@ -858,9 +867,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             <Line
                                               type="monotone"
                                               dataKey="maxW"
-                                              stroke="#f97316"
+                                              stroke={exColor}
                                               strokeWidth={2}
-                                              dot={{ r: 2.5, fill: '#f97316', strokeWidth: 0 }}
+                                              dot={{ r: 2.5, fill: exColor, strokeWidth: 0 }}
                                               activeDot={{ r: 4 }}
                                             />
                                           </LineChart>

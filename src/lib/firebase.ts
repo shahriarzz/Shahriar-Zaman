@@ -198,6 +198,11 @@ async function testConnection() {
   } catch (error: any) {
     const errMsg = error?.message || String(error);
     const errCode = error?.code || '';
+    const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || 
+                      errCode === 'unavailable' || 
+                      errMsg.toLowerCase().includes('offline') || 
+                      errMsg.includes('Failed to get document');
+
     if (
       errMsg.includes('not found') || 
       errMsg.includes('database') || 
@@ -210,8 +215,8 @@ async function testConnection() {
         `Please ensure this database exists in your Firebase console or matches the active project ID. ` +
         `Error: ${errMsg}`
       );
-    } else if (errMsg.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client appears to be offline.");
+    } else if (isOffline) {
+      console.log("Firebase is offline. Operating in offline cache mode.");
     } else {
       console.log("Firebase connection established.");
     }

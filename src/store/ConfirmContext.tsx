@@ -51,11 +51,14 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [isOpen]);
 
-  // Escape key support to dismiss the dialog safely
+  // Escape and Enter key support to dismiss/confirm the dialog safely
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleClose(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleClose(true);
       }
     };
     if (isOpen) {
@@ -66,13 +69,28 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [isOpen]);
 
-  const confirm = (opts: ConfirmOptions): Promise<boolean> => {
+  const abortButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Focus the default ABORT option on mount for accessibility
+  React.useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        abortButtonRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  const confirm = React.useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    if (resolveRef.current) {
+      return Promise.resolve(false);
+    }
     return new Promise((resolve) => {
       setOptions(opts);
       setIsOpen(true);
       resolveRef.current = resolve;
     });
-  };
+  }, []);
 
   const handleClose = (value: boolean) => {
     if (resolveRef.current) {
@@ -82,8 +100,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsOpen(false);
   };
 
+  const contextValue = React.useMemo(() => ({ confirm }), [confirm]);
+
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={contextValue}>
       {children}
       <AnimatePresence onExitComplete={() => { if (!isOpen) setOptions(null); }}>
         {isOpen && options && (
@@ -132,9 +152,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
               {/* Action Buttons */}
               <div className="mt-8 flex items-center justify-end gap-3 font-mono text-[10px] tracking-widest uppercase">
                 <button
+                  ref={abortButtonRef}
                   type="button"
                   onClick={() => handleClose(false)}
-                  className="px-5 py-3 border border-zinc-800 hover:bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
+                  className="px-5 py-3 border border-zinc-800 hover:bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-zinc-700"
                 >
                   ABORT
                 </button>

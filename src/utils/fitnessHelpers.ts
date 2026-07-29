@@ -1,5 +1,7 @@
 import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
-import { SessionLog, SetLog } from '../types/fitness';
+import { SessionLog, SetLog, Workout, WorkoutType } from '../types/fitness';
+
+export const CYCLE_LENGTH = 8;
 
 export function dk(d: Date = new Date()): string {
   return format(d, 'yyyy-MM-dd');
@@ -18,14 +20,53 @@ export function getAdjustedCycleStart(workoutCycleDay: number): string {
 }
 
 export function getCycleDay(cycleStart: string | undefined | null, targetDate: Date | string = new Date()): number {
-  let start = parseISO(cycleStart || dk());
+  const todayStr = dk();
+  let start = parseISO(cycleStart || todayStr);
   if (!isValid(start)) {
-    start = parseISO(dk());
+    start = parseISO(todayStr);
   }
   const targetParsed = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
   const target = isValid(targetParsed) ? targetParsed : new Date();
   const diff = differenceInCalendarDays(target, start);
-  return (((diff % 8) + 8) % 8) + 1;
+  return (((diff % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
+}
+
+export function getNextCycleDayFromLogs(
+  logs: Record<string, SessionLog> | undefined | null,
+  workouts: Workout[] | undefined | null,
+  cycleStart?: string | null
+): number {
+  if (!logs || !workouts || workouts.length === 0) {
+    return getCycleDay(cycleStart || dk());
+  }
+
+  const workoutMap = new Map<string, Workout>();
+  workouts.forEach(w => workoutMap.set(w.id, w));
+
+  const completedCoreLogs = Object.values(logs).filter(log => {
+    if (!log || !log.complete) return false;
+    const wo = workoutMap.get(log.workoutId);
+    return wo && wo.isCore && typeof wo.cycleDay === 'number';
+  });
+
+  if (completedCoreLogs.length === 0) {
+    return getCycleDay(cycleStart || dk());
+  }
+
+  // Find the most recent completed log where workout.isCore === true, using the log with the latest date
+  completedCoreLogs.sort((a, b) => {
+    if (a.date !== b.date) {
+      return b.date.localeCompare(a.date);
+    }
+    return (b.id || '').localeCompare(a.id || '');
+  });
+
+  const latestLog = completedCoreLogs[0];
+  const lastWorkout = workoutMap.get(latestLog.workoutId);
+  const lastCycleDay = lastWorkout?.cycleDay || 1;
+
+  // Next cycle day is one position after the last completed core workout (wrapping 8 -> 1)
+  return ((lastCycleDay % CYCLE_LENGTH) + 1);
 }
 
 export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[]> }): number {
@@ -36,7 +77,7 @@ export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[
       if (s.done && s.weight && s.reps) {
         const weightVal = parseFloat(s.weight) || 0;
         let repsVal = parseInt(s.reps, 10);
-        if (isNaN(repsVal)) {
+        if (Number.isNaN(repsVal)) {
           repsVal = 0;
         }
         total += weightVal * repsVal;
@@ -46,18 +87,18 @@ export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[
   return total;
 }
 
-export const WORKOUT_COLORS: Record<string, string> = {
-  push: '#f97316',
+export const WORKOUT_COLORS: Record<WorkoutType, string> = {
+  push: '#f59e0b',
   pull: '#38bdf8',
-  hybrid: '#a78bfa',
-  rest: '#34d399',
+  hybrid: '#c026d3',
+  rest: '#22c55e',
   date: '#f43f8e',
   upper: '#fb923c',
   lower: '#4ade80',
   custom: '#a78bfa'
 };
 
-export const WORKOUT_LABELS: Record<string, string> = {
+export const WORKOUT_LABELS: Record<WorkoutType, string> = {
   push: 'Push',
   pull: 'Pull',
   hybrid: 'Hybrid',
@@ -67,3 +108,12 @@ export const WORKOUT_LABELS: Record<string, string> = {
   lower: 'Lower Body',
   custom: 'Custom'
 };
+
+export function getWorkoutBadgeStyle(type: WorkoutType | string) {
+  const color = WORKOUT_COLORS[type as WorkoutType] || '#f59e0b';
+  return {
+    backgroundColor: `${color}22`,
+    color: color,
+    border: `1px solid ${color}55`
+  };
+}

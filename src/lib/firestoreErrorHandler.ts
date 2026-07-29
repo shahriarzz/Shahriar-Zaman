@@ -79,8 +79,17 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   
+  const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || 
+                    errCode === 'unavailable' || 
+                    errMessage.toLowerCase().includes('offline') || 
+                    errMessage.includes('Failed to get document');
+
   // Clean logging to production console (excluding noisy or sensitive auth credentials)
-  console.error('Firestore Error:', JSON.stringify(errInfo));
+  if (isOffline) {
+    console.log('Firestore (offline):', JSON.stringify(errInfo));
+  } else {
+    console.error('Firestore Error:', JSON.stringify(errInfo));
+  }
 
   // Visual user-facing notification for write operations to provide clean UX
   if (operationType === OperationType.CREATE || 

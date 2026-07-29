@@ -6,6 +6,19 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        localId: string;
+        email: string;
+        displayName?: string;
+        [key: string]: any;
+      };
+    }
+  }
+}
+
 dotenv.config();
 
 async function startServer() {
@@ -22,7 +35,7 @@ async function startServer() {
     next();
   });
   
-  app.use(express.json());
+  app.use(express.json({ limit: '100kb' }));
 
   // Cache firebase config key at startup
   let cachedFirebaseApiKey = '';
@@ -123,7 +136,7 @@ async function startServer() {
         return res.status(401).json({ error: 'Unauthorized: User account not found.' });
       }
 
-      (req as any).user = decoded.users[0];
+      req.user = decoded.users[0];
       next();
     } catch (err) {
       console.error("Token verification exception:", err);
@@ -136,19 +149,69 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  app.post('/api/fitness/advice', verifyFirebaseToken, adviceLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/fitness/advice', adviceLimiter, verifyFirebaseToken, asyncHandler(async (req, res) => {
     const { exercise, history } = req.body;
 
-    if (!exercise) {
-      return res.status(400).json({ error: 'Exercise info required' });
+    if (!exercise || typeof exercise !== 'object') {
+      return res.status(400).json({ error: 'Invalid or missing exercise object' });
+    }
+
+    const rawName = exercise.name;
+    const rawReps = exercise.reps;
+
+    if (typeof rawName !== 'string' || rawName.trim().length === 0 || rawName.length > 100) {
+      return res.status(400).json({ error: 'Exercise name must be a non-empty string under 100 characters' });
+    }
+
+    // Sanitize exercise name to block prompt injections (allow only alphanumeric, spaces, parentheses, slashes, hyphens)
+    const cleanName = rawName.replace(/[^a-zA-Z0-9\s()/\-+]/g, '').trim();
+    if (!cleanName) {
+      return res.status(400).json({ error: 'Exercise name contains invalid characters' });
+    }
+
+    // Sanitize and limit reps representation
+    const cleanReps = String(rawReps).replace(/[^a-zA-Z0-9\s()/\-+]/g, '').trim().substring(0, 50);
+
+    // Validate history payload safely to avoid massive deep nesting or huge text
+    if (history !== undefined && !Array.isArray(history)) {
+      return res.status(400).json({ error: 'History must be an array' });
+    }
+
+    const cleanHistory: any[] = [];
+    if (Array.isArray(history)) {
+      if (history.length > 5) {
+        return res.status(400).json({ error: 'History exceeds safe depth limits' });
+      }
+
+      for (const h of history) {
+        if (h && typeof h === 'object') {
+          const cleanSets: any[] = [];
+          if (Array.isArray(h.sets)) {
+            for (const s of h.sets) {
+              if (s && typeof s === 'object') {
+                cleanSets.push({
+                  weight: String(s.weight || '').replace(/[^0-9.]/g, '').substring(0, 10),
+                  reps: String(s.reps || '').replace(/[^0-9]/g, '').substring(0, 10),
+                  done: !!s.done
+                });
+              }
+            }
+          }
+          cleanHistory.push({
+            date: String(h.date || '').substring(0, 20),
+            workoutType: String(h.workoutType || '').substring(0, 20),
+            sets: cleanSets
+          });
+        }
+      }
     }
 
     const prompt = `
-      You are a professional fitness coach. Analyze the following progress for the exercise: "${exercise.name}".
-      Target Reps: ${exercise.reps}
+      You are a professional fitness coach. Analyze the following progress for the exercise: "${cleanName}".
+      Target Reps: ${cleanReps}
 
       Historical Data (last 3 sessions):
-      ${JSON.stringify(history, null, 2)}
+      ${JSON.stringify(cleanHistory, null, 2)}
 
       provide a short (1-2 sentence) specific coaching advice.
       Should the user increase the weight, focus on slowing down the negative, or stay at the same weight to hit rep targets?
@@ -160,40 +223,49 @@ async function startServer() {
       let response;
       
       try {
-        const generatePromise = aiClient.models.generateContent({
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 12000);
+
+        response = await aiClient.models.generateContent({
           model: "gemini-3.5-flash",
           contents: prompt,
+          config: {
+            abortSignal: controller.signal
+          } as any
         });
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('TIMEOUT')), 12000); // 12-second security timeout
-        });
-
-        response = await Promise.race([generatePromise, timeoutPromise]);
-      } catch (firstErr) {
-        // If it's a timeout error, let the outer block handle it directly
-        if (firstErr instanceof Error && firstErr.message === 'TIMEOUT') {
-          throw firstErr;
+        
+        clearTimeout(timeoutId);
+      } catch (firstErr: any) {
+        const isAbort = firstErr?.name === 'AbortError' || firstErr?.message?.includes('aborted');
+        if (isAbort) {
+          throw new Error('TIMEOUT');
         }
         
         console.warn('Primary model (gemini-3.5-flash) failed or high demand. Attempting fallback model (gemini-3.1-flash-lite):', firstErr);
         
-        const generatePromiseFallback = aiClient.models.generateContent({
+        const fallbackController = new AbortController();
+        const fallbackTimeoutId = setTimeout(() => {
+          fallbackController.abort();
+        }, 10000);
+
+        response = await aiClient.models.generateContent({
           model: "gemini-3.1-flash-lite",
           contents: prompt,
+          config: {
+            abortSignal: fallbackController.signal
+          } as any
         });
 
-        const timeoutPromiseFallback = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('TIMEOUT')), 10000); // 10-second security timeout for fallback model
-        });
-
-        response = await Promise.race([generatePromiseFallback, timeoutPromiseFallback]);
+        clearTimeout(fallbackTimeoutId);
       }
 
       res.json({ suggestion: response.text || "Keep up the intensity! Focus on perfect form." });
-    } catch (error) {
-      if (error instanceof Error && error.message === 'TIMEOUT') {
-        console.error('Gemini Request Timed Out (12s limit)');
+    } catch (error: any) {
+      const isAbort = error?.name === 'AbortError' || error?.message === 'TIMEOUT' || error?.message?.includes('aborted');
+      if (isAbort) {
+        console.error('Gemini Request Timed Out (limit exceeded)');
         return res.status(504).json({ error: 'Coaching server request timed out. Please try again soon.' });
       }
       console.error('Gemini Error or client init error:', error);

@@ -596,6 +596,21 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setSyncStatus('synced');
         }
       } catch (error: any) {
+        const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || 
+                          error?.code === 'unavailable' || 
+                          (error?.message || '').toLowerCase().includes('offline') ||
+                          (error?.message || '').includes('Failed to get document') ||
+                          (error?.message || '').includes('Could not reach Cloud Firestore backend');
+
+        if (isOffline) {
+          console.log(`Cloud sync paused (working offline): ${error?.message || error}`);
+          if (isMounted) {
+            setSyncStatus('failed');
+            setSyncError("Working offline. Synchronization will resume when connection is restored.");
+          }
+          return;
+        }
+
         console.error(`Sync attempt failed (${4 - retriesLeft}/3):`, error);
         if (retriesLeft > 1 && isMounted) {
           retryTimeoutId = setTimeout(() => {
@@ -639,7 +654,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [workouts, logs, appState, isInitialized]);
 
-  const addLog = async (logId: string, logOriginal: SessionLog) => {
+  const addLog = useCallback(async (logId: string, logOriginal: SessionLog) => {
     const log: SessionLog = {
       id: logId,
       workoutId: logOriginal.workoutId,
@@ -664,9 +679,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.WRITE, path);
       }
     }
-  };
+  }, [user]);
 
-  const deleteLog = async (logId: string) => {
+  const deleteLog = useCallback(async (logId: string) => {
     try {
       const nextLogs = { ...logsRef.current };
       delete nextLogs[logId];
@@ -684,9 +699,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.DELETE, path);
       }
     }
-  };
+  }, [user]);
 
-  const setWorkouts = async (w: Workout[] | ((prev: Workout[]) => Workout[])) => {
+  const setWorkouts = useCallback(async (w: Workout[] | ((prev: Workout[]) => Workout[])) => {
     try {
       const currentWorkouts = workoutsRef.current;
       const nextWorkouts = typeof w === 'function' ? w(currentWorkouts) : w;
@@ -707,9 +722,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts`);
       }
     }
-  };
+  }, [user]);
 
-  const updateCycleStart = async (date: string) => {
+  const updateCycleStart = useCallback(async (date: string) => {
     try {
       const nextState = { ...appStateRef.current, cycleStart: date };
       setAppState(nextState);
@@ -724,9 +739,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
       }
     }
-  };
+  }, [user]);
 
-  const logBodyWeight = async (date: string, weight: number) => {
+  const logBodyWeight = useCallback(async (date: string, weight: number) => {
     try {
       const currentAppState = appStateRef.current;
       const nextState = { 
@@ -745,9 +760,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
       }
     }
-  };
+  }, [user]);
 
-  const deleteBodyWeight = async (date: string) => {
+  const deleteBodyWeight = useCallback(async (date: string) => {
     try {
       const currentAppState = appStateRef.current;
       const nextLog = { ...(currentAppState.weightLog || {}) };
@@ -765,9 +780,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
       }
     }
-  };
+  }, [user]);
 
-  const resetLogs = async () => {
+  const resetLogs = useCallback(async () => {
     try {
       pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Purge Auto Backup');
       setLogs({});
@@ -791,26 +806,26 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/logs`);
       }
     }
-  };
+  }, [user]);
 
-  const login = async () => {
+  const login = useCallback(async () => {
     try {
       await signInWithGoogle();
     } catch (e) {
       console.error("Identity provider error:", e);
       throw e;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await auth.signOut();
     } catch (e) {
       console.error("Sign out error:", e);
     }
-  };
+  }, []);
 
-  const exportBackup = (): string => {
+  const exportBackup = useCallback((): string => {
     const backupObj = {
       version: 1,
       exportDate: new Date().toISOString(),
@@ -819,9 +834,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       appState
     };
     return JSON.stringify(backupObj, null, 2);
-  };
+  }, [workouts, logs, appState]);
 
-  const importBackup = async (backupJson: string): Promise<{ success: boolean; message: string }> => {
+  const importBackup = useCallback(async (backupJson: string): Promise<{ success: boolean; message: string }> => {
     try {
       const parsed = JSON.parse(backupJson);
       if (!parsed || typeof parsed !== 'object') {
@@ -910,37 +925,66 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error('Failed to import backup file', e);
       return { success: false, message: `Failed to restore: ${e.message || String(e)}` };
     }
-  };
+  }, [user]);
+
+  const contextValue = React.useMemo(() => ({
+    workouts,
+    logs,
+    appState,
+    user,
+    loading,
+    isInitialized,
+    syncStatus,
+    syncError,
+    addLog,
+    deleteLog,
+    setWorkouts,
+    updateCycleStart,
+    resetLogs,
+    login,
+    logout,
+    activeSession,
+    startActiveSession,
+    updateActiveSessionSets,
+    clearActiveSession,
+    exportBackup,
+    importBackup,
+    getAutoBackups,
+    restoreAutoBackup,
+    createManualBackup,
+    logBodyWeight,
+    deleteBodyWeight
+  }), [
+    workouts,
+    logs,
+    appState,
+    user,
+    loading,
+    isInitialized,
+    syncStatus,
+    syncError,
+    addLog,
+    deleteLog,
+    setWorkouts,
+    updateCycleStart,
+    resetLogs,
+    login,
+    logout,
+    activeSession,
+    startActiveSession,
+    updateActiveSessionSets,
+    clearActiveSession,
+    exportBackup,
+    importBackup,
+    getAutoBackups,
+    restoreAutoBackup,
+    createManualBackup,
+    logBodyWeight,
+    deleteBodyWeight
+  ]);
 
   return (
-    <FitnessContext.Provider value={{
-      workouts,
-      logs,
-      appState,
-      user,
-      loading,
-      isInitialized,
-      syncStatus,
-      syncError,
-      addLog,
-      deleteLog,
-      setWorkouts,
-      updateCycleStart,
-      resetLogs,
-      login,
-      logout,
-      activeSession,
-      startActiveSession,
-      updateActiveSessionSets,
-      clearActiveSession,
-      exportBackup,
-      importBackup,
-      getAutoBackups,
-      restoreAutoBackup,
-      createManualBackup,
-      logBodyWeight,
-      deleteBodyWeight
-    }}>
+    <FitnessContext.Provider value={contextValue}>
       {children}
     </FitnessContext.Provider>
   );

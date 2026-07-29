@@ -46,16 +46,24 @@ body {
   @apply bg-[#09090e] text-zinc-200 antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   
-  /* Subtle dot-matrix background pattern for tactical dark theme */
-  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1.2px, transparent 1.2px);
-  background-size: 18px 18px;
-  background-attachment: fixed;
-  
   /* Native App Safe touch/selection styling */
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior: none;
+  overscroll-behavior-y: contain;
+}
+
+/* Hardware-accelerated fixed background pattern layer (prevents repaint during scroll) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1.2px, transparent 1.2px);
+  background-size: 18px 18px;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
 }
 
 input, textarea, [contenteditable="true"] {

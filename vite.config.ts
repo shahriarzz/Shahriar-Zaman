@@ -2,13 +2,14 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
-import {defineConfig, loadEnv} from 'vite';
+import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 
-function firebaseConfigFallbackPlugin() {
+function firebaseConfigFallbackPlugin(): Plugin {
   return {
     name: 'firebase-config-fallback',
     resolveId(id: string) {
-      if (id.includes('firebase-applet-config.json')) {
+      if (id.endsWith('firebase-applet-config.json')) {
         return '\0firebase-applet-config.json';
       }
     },
@@ -36,8 +37,7 @@ function firebaseConfigFallbackPlugin() {
   };
 }
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), firebaseConfigFallbackPlugin()],
     resolve: {

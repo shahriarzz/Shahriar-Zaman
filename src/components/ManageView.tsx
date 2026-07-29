@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
-import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, getWorkoutBadgeStyle } from '../utils/fitnessHelpers';
+import { StatusChip } from './StatusChip';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -657,9 +658,13 @@ export const ManageView: React.FC = () => {
             <div className="p-6 flex items-center justify-between border-b border-zinc-850 bg-zinc-950/20">
               <div className="flex items-center gap-4">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[selectedWorkout.type] }} />
-                <div>
-                  <div className="font-bold text-xl uppercase tracking-tighter">{selectedWorkout.name}</div>
-                  <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest leading-none mt-1.5">{selectedWorkout.badge}</div>
+                <div className="space-y-1">
+                  <div className="font-bold text-xl uppercase tracking-tighter font-display text-white">{selectedWorkout.name}</div>
+                  <StatusChip
+                    label={selectedWorkout.badge}
+                    color={WORKOUT_COLORS[selectedWorkout.type]}
+                    variant="subtle"
+                  />
                 </div>
               </div>
               <div className="text-[10px] font-mono text-zinc-700">Split Configurator</div>

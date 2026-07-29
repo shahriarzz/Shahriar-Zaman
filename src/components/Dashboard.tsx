@@ -2,9 +2,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Scale } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
-import { getCycleDay, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
+import { getCycleDay, getNextCycleDayFromLogs, getWorkoutBadgeStyle, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
 import { SetLog, SessionLog } from '../types/fitness';
 import { Calendar } from './Calendar';
+import { StatusChip } from './StatusChip';
 import { haptics } from '../utils/haptics';
 import { useConfirm } from '../store/ConfirmContext';
 import { useCountUp } from '../hooks/useCountUp';
@@ -54,8 +55,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isDropdownOpen]);
 
-  const currentCycleDay = getCycleDay(appState?.cycleStart || dk());
-  const todayWorkout = (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
+  const currentCycleDay = React.useMemo(() => {
+    return getNextCycleDayFromLogs(logs, workouts, appState?.cycleStart);
+  }, [logs, workouts, appState?.cycleStart]);
+
+  const todayWorkout = React.useMemo(() => {
+    return (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
+  }, [workouts, currentCycleDay]);
 
   const handleLogWeight = () => {
     const val = parseFloat(weightInput);
@@ -65,17 +71,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     setWeightInput('');
   };
 
-  const totalWeight = (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
-    let logVol = 0;
-    Object.values(log?.sets || {}).forEach((exSets) => {
-      (exSets as SetLog[] || []).forEach((s: SetLog) => {
-        if (s && s.done && s.weight && s.reps) {
-          logVol += (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0);
-        }
+  const totalWeight = React.useMemo(() => {
+    return (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
+      let logVol = 0;
+      Object.values(log?.sets || {}).forEach((exSets) => {
+        (exSets as SetLog[] || []).forEach((s: SetLog) => {
+          if (s && s.done && s.weight && s.reps) {
+            logVol += (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0);
+          }
+        });
       });
-    });
-    return acc + logVol;
-  }, 0);
+      return acc + logVol;
+    }, 0);
+  }, [logs]);
 
   const streakCount = React.useMemo(() => {
     const datesSet = new Set((Object.values(logs || {}) as SessionLog[]).map(l => l.date));
@@ -130,7 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </span>
         </div>
-        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter font-display bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
           Stay<br />Aggressive
         </h1>
       </div>
@@ -234,22 +242,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             className="relative overflow-hidden group cursor-pointer"
           >
             <div
-              className="absolute inset-0 opacity-10 blur-3xl group-hover:opacity-30 transition-opacity"
-              style={{ background: WORKOUT_COLORS[todayWorkout.type] }}
+              className="absolute inset-0 opacity-15 transition-opacity"
+              style={{
+                background: `radial-gradient(circle at top right, ${WORKOUT_COLORS[todayWorkout.type]}33, transparent 70%)`
+              }}
             />
-            <div className="relative bg-zinc-900/80 border border-zinc-800 p-6 rounded-3xl backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="relative bg-zinc-900/90 border border-zinc-800 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl">
               <div className="space-y-2">
-                <div
-                  className="inline-flex px-3 py-1 rounded-full text-[10px] font-mono font-bold tracking-widest"
-                  style={{
-                    backgroundColor: `${WORKOUT_COLORS[todayWorkout.type]}22`,
-                    color: WORKOUT_COLORS[todayWorkout.type],
-                    border: `1px solid ${WORKOUT_COLORS[todayWorkout.type]}55`
-                  }}
-                >
-                  {todayWorkout.badge}
-                </div>
-                <h2 className="text-4xl font-black uppercase tracking-tight">{todayWorkout.name}</h2>
+                <StatusChip
+                  label={todayWorkout.badge}
+                  color={WORKOUT_COLORS[todayWorkout.type]}
+                  variant="subtle"
+                />
+                <h2 className="text-4xl font-black uppercase tracking-tight font-display text-white">{todayWorkout.name}</h2>
                 <p className="text-zinc-500 text-sm">
                   {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
                 </p>

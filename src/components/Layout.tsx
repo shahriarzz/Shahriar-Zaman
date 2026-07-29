@@ -89,7 +89,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className="sticky top-0 z-50 bg-[#09090e]/90 backdrop-blur-xl border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]">
+      <nav className="sticky top-0 z-50 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
             <Dumbbell size={18} className="text-black stroke-[3px]" />
@@ -197,7 +197,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </main>
 
       {/* Mobile Bottom Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#09090e]/95 backdrop-blur-2xl border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4">
         {navConfig.map(item => (
           <NavItem
             key={item.id}
