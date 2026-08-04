@@ -26,8 +26,12 @@ import {
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 // Safely check for firebase-applet-config.json without triggering static module resolution errors if file is deleted
-const configModules = (import.meta as any).glob('../../firebase-applet-config.json', { eager: true }) as Record<string, any>;
-const firebaseConfig = configModules['../../firebase-applet-config.json']?.default || {};
+const configModules = (import.meta as any).glob(['/firebase-applet-config.json', '../../firebase-applet-config.json'], { eager: true }) as Record<string, any>;
+const rawConfig = configModules['/firebase-applet-config.json']?.default 
+  || configModules['../../firebase-applet-config.json']?.default 
+  || Object.values(configModules)[0]?.default 
+  || {};
+const firebaseConfig = rawConfig;
 
 export type User = FirebaseUser;
 
