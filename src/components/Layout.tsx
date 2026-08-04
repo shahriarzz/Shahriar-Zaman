@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, History, Settings, Dumbbell } from 'lucide-react';
+import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../store/FitnessContext';
 
-export type ActiveTab = 'dashboard' | 'session' | 'history' | 'manage';
+export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
 interface NavItemProps {
   id: ActiveTab;
@@ -80,6 +80,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
   const navConfig = [
     { id: 'dashboard' as ActiveTab, label: 'Dash', icon: (size: number) => <LayoutDashboard size={size} /> },
     { id: 'history' as ActiveTab, label: 'History', icon: (size: number) => <History size={size} /> },
+    { id: 'analytics' as ActiveTab, label: 'Analytics', icon: (size: number) => <BarChart3 size={size} /> },
     { id: 'manage' as ActiveTab, label: 'Manage', icon: (size: number) => <Settings size={size} /> },
   ];
 

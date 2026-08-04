@@ -25,8 +25,9 @@ import {
   Firestore
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
-// @ts-ignore
-import firebaseConfig from '../../firebase-applet-config.json';
+// Safely check for firebase-applet-config.json without triggering static module resolution errors if file is deleted
+const configModules = (import.meta as any).glob('../../firebase-applet-config.json', { eager: true }) as Record<string, any>;
+const firebaseConfig = configModules['../../firebase-applet-config.json']?.default || {};
 
 export type User = FirebaseUser;
 

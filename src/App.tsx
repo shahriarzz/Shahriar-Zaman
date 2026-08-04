@@ -9,6 +9,7 @@ import { Layout, ActiveTab } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { SessionView } from './components/SessionView';
 import { HistoryView } from './components/HistoryView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { ManageView } from './components/ManageView';
 import { useFitness } from './store/FitnessContext';
 import { isFirebaseConfigured } from './lib/firebase';
@@ -221,6 +222,7 @@ function AppContent() {
           onClearInitialDate={() => setHistorySearchDate(null)} 
           />
       )}
+      {activeTab === 'analytics' && <AnalyticsView />}
       {activeTab === 'manage' && <ManageView />}
     </Layout>
   );

@@ -225,6 +225,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     setEditVerified(false);
   };
 
+  const [historySubTab, setHistorySubTab] = useState<'log'>('log');
+
   return (
     <div className="space-y-8 pt-4">
       {/* Upper header */}
@@ -232,6 +234,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         <div className="space-y-2">
           <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Growth Protocol</span>
           <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter">History</h1>
+        </div>
+
+        {/* Sub-tab navigation bar */}
+        <div className="flex items-center bg-zinc-900 border border-zinc-800/80 p-1 rounded-2xl w-fit">
+          <button
+            type="button"
+            onClick={() => {
+              haptics.selection();
+              setHistorySubTab('log');
+            }}
+            className={cn(
+              "px-5 py-2 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer flex items-center gap-2",
+              historySubTab === 'log'
+                ? "bg-orange-500 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)]"
+                : "text-zinc-400 hover:text-white"
+            )}
+          >
+            <Calendar size={14} />
+            Log
+          </button>
         </div>
       </div>
 

@@ -573,14 +573,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   };
 
   const getAiAdvice = async (ex: Exercise) => {
-    if (!user) {
-      setAiAdvice(prev => ({ 
-        ...prev, 
-        [ex.id]: "AI Coaching requires a secure verified session. Please sign in under the 'Terminal / Backups' settings tab." 
-      }));
-      return;
-    }
-
     // Abort previous advice request for this exercise if one is active
     if (abortControllersRef.current.has(ex.id)) {
       abortControllersRef.current.get(ex.id)?.abort();
@@ -596,14 +588,25 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         .filter(l => l.sets && (l.sets as SetLog[]).some(s => s.done))
         .slice(-3); // Last 3 sessions
 
-      const idToken = await user.getIdToken();
+      let idToken = '';
+      if (user && typeof user.getIdToken === 'function') {
+        try {
+          idToken = await user.getIdToken();
+        } catch (tokenErr) {
+          console.warn("Could not retrieve Firebase ID token:", tokenErr);
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
 
       const response = await fetch('/api/fitness/advice', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
+        headers,
         body: JSON.stringify({
           exercise: ex,
           history
@@ -611,23 +614,27 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         signal: controller.signal
       });
       
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       if (!response.ok) {
-        let serverErrorMsg = `Server status: ${response.status}`;
-        try {
-          const isJson = response.headers.get('content-type')?.includes('application/json');
-          if (isJson) {
-            const errData = await response.json().catch(() => null);
-            if (errData && errData.error) {
-              serverErrorMsg = errData.error;
-            }
+        let serverErrorMsg = `Server error (${response.status})`;
+        if (isJson) {
+          const errData = await response.json().catch(() => null);
+          if (errData && errData.error) {
+            serverErrorMsg = errData.error;
           }
-        } catch (_) {}
+        } else {
+          const textData = await response.text().catch(() => '');
+          if (textData) {
+            serverErrorMsg = textData.substring(0, 150);
+          }
+        }
         throw new Error(serverErrorMsg);
       }
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Non-JSON response received from coaching service.');
+      if (!isJson) {
+        throw new Error('Server returned an invalid response format.');
       }
 
       const data = await response.json();
@@ -637,7 +644,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         // Ignored, request was aborted
         return;
       }
-      console.error('Failed to get AI advice', error);
+      console.error('AI Coaching advice service notice:', error?.message || error);
       
       // Selectively present detailed server/Gemini errors or guide user if missing config
       let humanMsg = "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!";
@@ -645,9 +652,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         const msg = error.message;
         if (msg.includes("GEMINI_API_KEY") || msg.includes("api key") || msg.includes("API key")) {
           humanMsg = "Coaching engine requires a configured GEMINI_API_KEY environment variable. Please make sure it is added inside the project Settings.";
-        } else if (msg.includes("Too many advice requests") || msg.includes("rate-limit")) {
-          humanMsg = "Coaching engine is on a set cooldown: " + msg;
-        } else if (msg && !msg.includes("Server status") && !msg.includes("Non-JSON")) {
+        } else if (msg.includes("Too many advice requests") || msg.includes("rate-limit") || msg.includes("cooldown")) {
+          humanMsg = "Coaching engine cooldown: " + msg;
+        } else if (msg && !msg.includes("Server error") && !msg.includes("invalid response")) {
           humanMsg = msg;
         }
       }

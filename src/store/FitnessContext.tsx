@@ -351,7 +351,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Firebase Auth Controller
   useEffect(() => {
-    getRedirectResult(auth).catch(console.error);
+    getRedirectResult(auth).catch((err) => {
+      console.warn("Auth redirect notice:", err?.message || err);
+    });
 
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -811,8 +813,10 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const login = useCallback(async () => {
     try {
       await signInWithGoogle();
-    } catch (e) {
-      console.error("Identity provider error:", e);
+    } catch (e: any) {
+      if (e?.code !== 'auth/popup-closed-by-user' && e?.code !== 'auth/not-configured') {
+        console.warn("Identity provider sign-in notice:", e?.message || e);
+      }
       throw e;
     }
   }, []);

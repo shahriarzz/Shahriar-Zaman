@@ -83,16 +83,18 @@ async function startServer() {
       Promise.resolve(fn(req, res, next)).catch(next);
     };
 
-  // Helper to verify Firebase ID Token in Express
+  // Helper to verify Firebase ID Token in Express (resilient to missing config / guest mode)
   const verifyFirebaseToken = asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization header style.' });
+      req.user = undefined;
+      return next();
     }
 
-    const idToken = authHeader.split('Bearer ')[1];
+    const idToken = authHeader.split('Bearer ')[1]?.trim();
     if (!idToken) {
-      return res.status(401).json({ error: 'Unauthorized: Missing token.' });
+      req.user = undefined;
+      return next();
     }
 
     let apiKey = cachedFirebaseApiKey || process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
@@ -102,20 +104,16 @@ async function startServer() {
         if (fs.existsSync(configPath)) {
           const config = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
           apiKey = config.apiKey || '';
-          cachedFirebaseApiKey = apiKey; // cache for next requests
+          cachedFirebaseApiKey = apiKey;
         }
       } catch (e) {
         console.error("Failed to read firebase config in middleware:", e);
       }
     }
 
-    // Secondary fallback to process env if config on disk doesn't have it
     if (!apiKey) {
-      apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '';
-    }
-
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server misconfiguration: Firebase API key not found. Please setup Firebase or provide VITE_FIREBASE_API_KEY in secrets.' });
+      req.user = undefined;
+      return next();
     }
 
     try {
@@ -126,21 +124,22 @@ async function startServer() {
       });
 
       if (!response.ok) {
-        const errDetail = await response.json().catch(() => ({}));
-        console.warn("Google identity toolkit validation failed:", errDetail);
-        return res.status(401).json({ error: 'Unauthorized: Invalid or expired credentials.' });
+        console.warn("Google identity toolkit token validation returned non-ok status");
+        req.user = undefined;
+        return next();
       }
 
       const decoded = await response.json() as any;
-      if (!decoded.users || decoded.users.length === 0) {
-        return res.status(401).json({ error: 'Unauthorized: User account not found.' });
+      if (decoded.users && decoded.users.length > 0) {
+        req.user = decoded.users[0];
+      } else {
+        req.user = undefined;
       }
-
-      req.user = decoded.users[0];
       next();
     } catch (err) {
       console.error("Token verification exception:", err);
-      res.status(500).json({ error: 'Internal system validation error.' });
+      req.user = undefined;
+      next();
     }
   });
 
@@ -229,7 +228,7 @@ async function startServer() {
         }, 12000);
 
         response = await aiClient.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-3.6-flash",
           contents: prompt,
           config: {
             abortSignal: controller.signal
@@ -243,7 +242,7 @@ async function startServer() {
           throw new Error('TIMEOUT');
         }
         
-        console.warn('Primary model (gemini-3.5-flash) failed or high demand. Attempting fallback model (gemini-3.1-flash-lite):', firstErr);
+        console.warn('Primary model (gemini-3.6-flash) failed or high demand. Attempting fallback model (gemini-3.1-flash-lite):', firstErr);
         
         const fallbackController = new AbortController();
         const fallbackTimeoutId = setTimeout(() => {
