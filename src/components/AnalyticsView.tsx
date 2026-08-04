@@ -15,13 +15,13 @@ import {
   Pie
 } from 'recharts';
 import {
-  BarChart3,
   Trophy,
   Clock,
   Dumbbell,
   Flame,
   Calendar as CalendarIcon,
   TrendingUp,
+  TrendingDown,
   Activity,
   ChevronLeft,
   ChevronRight,
@@ -48,7 +48,7 @@ import {
   startOfWeek as getStartOfWeek
 } from 'date-fns';
 import { useFitness } from '../store/FitnessContext';
-import { calculateVolume, WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { calculateVolume, WORKOUT_COLORS, getCycleDay } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -64,7 +64,7 @@ function mapTargetToCategory(targetStr: string): string {
   if (t.includes('delt') || t.includes('shoulder')) return 'Shoulders';
   if (t.includes('lat') || t.includes('back')) return 'Back';
   if (t.includes('tricep')) return 'Triceps';
-  if (t.includes('bicep') || t.includes('arm') && !t.includes('forearm')) return 'Arms';
+  if (t.includes('bicep') || (t.includes('arm') && !t.includes('forearm'))) return 'Arms';
   if (t.includes('forearm') || t.includes('grip') || t.includes('wrist')) return 'Forearms';
   if (t.includes('quad') || t.includes('glute') || t.includes('leg') || t.includes('hamstring') || t.includes('calf') || t.includes('calves')) return 'Legs';
   if (t.includes('core') || t.includes('ab')) return 'Core';
@@ -78,21 +78,66 @@ function calcEpley1RM(weight: number, reps: number): number {
   return Math.round(weight * (1 + reps / 30) * 10) / 10;
 }
 
+// Compound lift priority ranker
+const COMPOUND_KEYWORDS = [
+  'squat',
+  'bench',
+  'deadlift',
+  'overhead press',
+  'ohp',
+  'shoulder press',
+  'incline',
+  'row',
+  'pull-up',
+  'pullup',
+  'chin-up',
+  'lat pulldown',
+  'leg press',
+  'rdl'
+];
+
+function getCompoundScore(name: string): number {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < COMPOUND_KEYWORDS.length; i++) {
+    if (lower.includes(COMPOUND_KEYWORDS[i])) {
+      return 100 - i;
+    }
+  }
+  return 0;
+}
+
 export const AnalyticsView: React.FC = () => {
-  const { logs, workouts } = useFitness();
+  const { logs, workouts, appState } = useFitness();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>('volume');
   const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(null);
   const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(new Date());
 
-  // 1. Pre-index exercise metadata and priority exercises
+  // 1. Fast workout & exercise lookups
+  const workoutMap = useMemo(() => {
+    const map = new Map<string, Workout>();
+    (workouts || []).forEach(w => map.set(w.id, w));
+    return map;
+  }, [workouts]);
+
+  const coreWorkoutByCycleDayMap = useMemo(() => {
+    const map = new Map<number, Workout>();
+    (workouts || []).forEach(w => {
+      if (w.isCore && typeof w.cycleDay === 'number') {
+        map.set(w.cycleDay, w);
+      }
+    });
+    return map;
+  }, [workouts]);
+
   const { exMap, priorityExercises } = useMemo(() => {
     const meta: Record<string, { exercise: Exercise; workoutName: string; workoutType: string }> = {};
     const priorityList: { id: string; name: string; target: string }[] = [];
     const seenPriorityIds = new Set<string>();
 
-    workouts.forEach(wo => {
-      wo.exercises.forEach(ex => {
+    // 1. Gather all explicitly tagged priority exercises
+    (workouts || []).forEach(wo => {
+      (wo.exercises || []).forEach(ex => {
         meta[ex.id] = { exercise: ex, workoutName: wo.name, workoutType: wo.type };
         if (ex.tags?.includes('priority') && !seenPriorityIds.has(ex.id)) {
           seenPriorityIds.add(ex.id);
@@ -101,16 +146,28 @@ export const AnalyticsView: React.FC = () => {
       });
     });
 
-    // Fallback if no priority tags: take exercises with compound/heavy targets or first few
-    if (priorityList.length === 0) {
-      workouts.forEach(wo => {
-        wo.exercises.forEach(ex => {
-          if (!seenPriorityIds.has(ex.id) && priorityList.length < 5) {
-            seenPriorityIds.add(ex.id);
-            priorityList.push({ id: ex.id, name: ex.name, target: ex.target });
+    // 2. If priority list is sparse, collect and rank compound lifts
+    if (priorityList.length < 5) {
+      const candidates: { id: string; name: string; target: string; score: number }[] = [];
+      (workouts || []).forEach(wo => {
+        (wo.exercises || []).forEach(ex => {
+          if (!seenPriorityIds.has(ex.id)) {
+            const score = getCompoundScore(ex.name);
+            candidates.push({ id: ex.id, name: ex.name, target: ex.target, score });
           }
         });
       });
+
+      // Sort by compound relevance score descending
+      candidates.sort((a, b) => b.score - a.score);
+
+      for (const cand of candidates) {
+        if (priorityList.length >= 6) break;
+        if (!seenPriorityIds.has(cand.id)) {
+          seenPriorityIds.add(cand.id);
+          priorityList.push({ id: cand.id, name: cand.name, target: cand.target });
+        }
+      }
     }
 
     return { exMap: meta, priorityExercises: priorityList };
@@ -130,36 +187,51 @@ export const AnalyticsView: React.FC = () => {
 
     // Determine filter cutoff
     let cutoffDateStr: string | null = null;
+    let priorCutoffDateStr: string | null = null;
     let cutoffDays = 30;
+
     if (timeRange === '7d') {
       cutoffDays = 7;
-      cutoffDateStr = format(subDays(now, 7), 'yyyy-MM-dd');
+      cutoffDateStr = format(subDays(now, 6), 'yyyy-MM-dd');
+      priorCutoffDateStr = format(subDays(now, 13), 'yyyy-MM-dd');
     } else if (timeRange === '30d') {
       cutoffDays = 30;
-      cutoffDateStr = format(subDays(now, 30), 'yyyy-MM-dd');
+      cutoffDateStr = format(subDays(now, 29), 'yyyy-MM-dd');
+      priorCutoffDateStr = format(subDays(now, 59), 'yyyy-MM-dd');
     } else if (timeRange === '90d') {
       cutoffDays = 90;
-      cutoffDateStr = format(subDays(now, 90), 'yyyy-MM-dd');
+      cutoffDateStr = format(subDays(now, 89), 'yyyy-MM-dd');
+      priorCutoffDateStr = format(subDays(now, 179), 'yyyy-MM-dd');
     }
 
     // Filtered logs for time-bounded widgets
     const rangeLogs = sortedLogs.filter(l => !cutoffDateStr || l.date >= cutoffDateStr);
+    const priorLogs = sortedLogs.filter(l => {
+      if (!cutoffDateStr || !priorCutoffDateStr) return false;
+      return l.date >= priorCutoffDateStr && l.date < cutoffDateStr;
+    });
+
+    // Volume comparisons
+    let rangeVolume = 0;
+    let priorVolume = 0;
+    rangeLogs.forEach(l => { rangeVolume += calculateVolume(l); });
+    priorLogs.forEach(l => { priorVolume += calculateVolume(l); });
 
     // Lifetime metrics (unfiltered)
     let lifetimeVolume = 0;
     let lifetimeSets = 0;
     let lifetimeMinutes = 0;
-    let firstLogDate = sortedLogs[0]?.date || null;
-    let lastLogDate = sortedLogs[sortedLogs.length - 1]?.date || null;
+    const firstLogDate = sortedLogs[0]?.date || null;
+    const lastLogDate = sortedLogs[sortedLogs.length - 1]?.date || null;
 
     // PRs and records map (unfiltered)
-    // exerciseId -> { maxWeight, maxReps, maxEpley, date, exerciseName }
-    const recordsMap: Record<string, { maxWeight: number; repsAtMax: number; maxEpley: number; date: string; exName: string }> = {};
+    // exerciseId -> { exId, maxWeight, maxReps, maxEpley, date, exName }
+    const recordsMap: Record<string, { exId: string; maxWeight: number; repsAtMax: number; maxEpley: number; date: string; exName: string }> = {};
 
     // Weekly volume map for "Biggest Week Ever"
     const weeklyVolumeMap: Record<string, number> = {};
 
-    // Muscle totals map (Lifetime & Range)
+    // Muscle totals map (Range)
     const rangeMuscleVolume: Record<string, number> = {
       Chest: 0, Shoulders: 0, Back: 0, Arms: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
     };
@@ -180,14 +252,22 @@ export const AnalyticsView: React.FC = () => {
     // 1RM Trend data for active 1RM exercise
     const active1RMTrend: { date: string; displayDate: string; epley1RM: number; setDetail: string }[] = [];
 
+    // Map logs by date string for easy lookup
+    const logDateMap = new Map<string, SessionLog[]>();
+
     // Single pass over ALL logs for lifetime & PRs
     sortedLogs.forEach(log => {
       const vol = calculateVolume(log);
       lifetimeVolume += vol;
       lifetimeMinutes += (log.durationMinutes || 45);
 
-      // Weekly bucket (YYYY-Www)
       if (log.date) {
+        if (!logDateMap.has(log.date)) {
+          logDateMap.set(log.date, []);
+        }
+        logDateMap.get(log.date)!.push(log);
+
+        // Weekly bucket
         try {
           const parsed = parseISO(log.date);
           if (isValid(parsed)) {
@@ -213,6 +293,7 @@ export const AnalyticsView: React.FC = () => {
 
               if (!recordsMap[exId] || epley > recordsMap[exId].maxEpley) {
                 recordsMap[exId] = {
+                  exId,
                   maxWeight: w,
                   repsAtMax: r,
                   maxEpley: epley,
@@ -227,30 +308,23 @@ export const AnalyticsView: React.FC = () => {
     });
 
     // Range-specific calculations
-    let rangeVolume = 0;
     let rangeDurationTotal = 0;
     const activeDatesSet = new Set<string>();
 
     rangeLogs.forEach(log => {
-      const vol = calculateVolume(log);
-      rangeVolume += vol;
       rangeDurationTotal += (log.durationMinutes || 45);
       if (log.date) activeDatesSet.add(log.date);
 
-      // Workout type distribution
-      const woMeta = workouts.find(w => w.id === log.workoutId);
+      // Workout type distribution using O(1) workoutMap
+      const woMeta = workoutMap.get(log.workoutId);
       const wType = woMeta?.type || 'custom';
       workoutTypeDistribution[wType] = (workoutTypeDistribution[wType] || 0) + 1;
 
       // Muscle group breakdown & exercise counts
       if (log.sets) {
-        const loggedExercisesInThisSession = new Set<string>();
-
         Object.entries(log.sets).forEach(([exId, setList]) => {
           const doneSets = (setList as SetLog[]).filter(s => s.done);
           if (doneSets.length === 0) return;
-
-          loggedExercisesInThisSession.add(exId);
 
           const exMeta = exMap[exId];
           const targetStr = exMeta?.exercise.target || 'Core';
@@ -306,36 +380,114 @@ export const AnalyticsView: React.FC = () => {
       }
     });
 
-    // Streak calculation
+    // 3. Precise Streaks: Current Streak & Longest Streak
+    const distinctDates = Array.from(new Set(sortedLogs.map(l => l.date))).sort();
     let currentStreak = 0;
-    if (lastLogDate) {
+    let longestStreak = 0;
+
+    if (distinctDates.length > 0) {
       const today = new Date();
       let checkDate = today;
       let checkStr = format(checkDate, 'yyyy-MM-dd');
+      const dateSet = new Set(distinctDates);
 
-      // Allow today or yesterday as starting point for streak
-      const dateMap = new Set(sortedLogs.map(l => l.date));
-      if (!dateMap.has(checkStr)) {
+      // Start current streak from today or yesterday
+      if (!dateSet.has(checkStr)) {
         checkDate = subDays(today, 1);
         checkStr = format(checkDate, 'yyyy-MM-dd');
       }
 
-      while (dateMap.has(checkStr)) {
+      while (dateSet.has(checkStr)) {
         currentStreak++;
         checkDate = subDays(checkDate, 1);
         checkStr = format(checkDate, 'yyyy-MM-dd');
       }
+
+      // Calculate Longest Streak across all history
+      let tempStreak = 0;
+      let prevDateObj: Date | null = null;
+
+      distinctDates.forEach(dateStr => {
+        const curDateObj = parseISO(dateStr);
+        if (isValid(curDateObj)) {
+          if (!prevDateObj) {
+            tempStreak = 1;
+          } else {
+            const diff = differenceInCalendarDays(curDateObj, prevDateObj);
+            if (diff === 1) {
+              tempStreak++;
+            } else if (diff > 1) {
+              tempStreak = 1;
+            }
+          }
+          if (tempStreak > longestStreak) {
+            longestStreak = tempStreak;
+          }
+          prevDateObj = curDateObj;
+        }
+      });
     }
 
-    // Days / Consistency calculations
-    const rangeDaysCount = cutoffDateStr
-      ? Math.max(1, differenceInCalendarDays(now, parseISO(cutoffDateStr)))
-      : Math.max(1, sortedLogs.length > 0 ? differenceInCalendarDays(now, parseISO(sortedLogs[0].date)) : 30);
+    // 4. Correctness: Consistency % and Missed Days derived directly from INITIAL_WORKOUTS cycle structure
+    // Iterate day-by-day across the selected window up to today
+    const rangeStartDate = cutoffDateStr
+      ? parseISO(cutoffDateStr)
+      : (firstLogDate ? parseISO(firstLogDate) : subDays(now, 30));
+    
+    const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(now, 30);
+    const dayInterval = eachDayOfInterval({
+      start: validRangeStart,
+      end: now
+    });
 
-    const activeDaysCount = activeDatesSet.size;
-    const targetTrainingDays = Math.round(rangeDaysCount * (5 / 7)); // e.g. 5 days/week expectation
-    const missedDaysCount = Math.max(0, targetTrainingDays - activeDaysCount);
-    const consistencyPct = Math.min(100, Math.round((activeDaysCount / Math.max(1, targetTrainingDays)) * 100));
+    let expectedCoreWorkouts = 0;
+    let completedCoreWorkouts = 0;
+    let scheduledRestDays = 0;
+    let missedTrainingDays = 0;
+
+    dayInterval.forEach(dayDate => {
+      const dateStr = format(dayDate, 'yyyy-MM-dd');
+      const cycleDay = getCycleDay(appState?.cycleStart, dayDate);
+      const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+      const dayLogs = logDateMap.get(dateStr) || [];
+      const hasCompletedWorkout = dayLogs.some(l => l.complete || calculateVolume(l) > 0);
+
+      const isScheduledCoreTraining = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
+      const isScheduledRest = expectedWo && expectedWo.type === 'rest';
+
+      if (isScheduledCoreTraining) {
+        expectedCoreWorkouts++;
+        if (hasCompletedWorkout) {
+          completedCoreWorkouts++;
+        } else {
+          // If past day (or today not yet completed), it counts as a skipped training day
+          missedTrainingDays++;
+        }
+      } else if (isScheduledRest) {
+        scheduledRestDays++;
+        // If user worked out on a rest day, count toward completed core / bonus work without penalizing expected
+        if (hasCompletedWorkout) {
+          completedCoreWorkouts++;
+        }
+      } else {
+        // Fallback for custom or unassigned days
+        if (hasCompletedWorkout) {
+          completedCoreWorkouts++;
+        }
+      }
+    });
+
+    // Ensure expectedCoreWorkouts has baseline to prevent div by 0
+    const finalExpectedCore = Math.max(1, expectedCoreWorkouts);
+    const consistencyPct = Math.min(100, Math.round((completedCoreWorkouts / finalExpectedCore) * 100));
+
+    // Period-over-period percentage change for volume
+    let volumePeriodChangePct: number | null = null;
+    if (cutoffDateStr && priorVolume > 0) {
+      volumePeriodChangePct = Math.round(((rangeVolume - priorVolume) / priorVolume) * 100);
+    } else if (cutoffDateStr && priorVolume === 0 && rangeVolume > 0) {
+      volumePeriodChangePct = 100;
+    }
 
     // Average session duration
     const avgDuration = rangeLogs.length > 0 ? Math.round(rangeDurationTotal / rangeLogs.length) : 0;
@@ -378,11 +530,16 @@ export const AnalyticsView: React.FC = () => {
       firstLogDate,
       lastLogDate,
       rangeVolume,
-      activeDaysCount,
-      targetTrainingDays,
-      missedDaysCount,
+      priorVolume,
+      volumePeriodChangePct,
+      activeDaysCount: activeDatesSet.size,
+      expectedCoreWorkouts: finalExpectedCore,
+      completedCoreWorkouts,
+      scheduledRestDays,
+      missedTrainingDays,
       consistencyPct,
       currentStreak,
+      longestStreak,
       avgDuration,
       biggestWeek,
       recordsList: Object.values(recordsMap).sort((a, b) => b.maxEpley - a.maxEpley),
@@ -395,9 +552,9 @@ export const AnalyticsView: React.FC = () => {
       daysSinceLast,
       avgGapDays
     };
-  }, [logs, workouts, exMap, active1RMExerciseId, timeRange]);
+  }, [logs, workouts, exMap, workoutMap, coreWorkoutByCycleDayMap, active1RMExerciseId, timeRange, appState?.cycleStart]);
 
-  // 3. Heatmap calendar range calculations
+  // 3. Heatmap calendar range calculations (Normalized PER-MONTH with rich workout name tooltips)
   const heatmapData = useMemo(() => {
     const monthStart = startOfMonth(currentHeatmapMonth);
     const monthEnd = endOfMonth(monthStart);
@@ -405,27 +562,55 @@ export const AnalyticsView: React.FC = () => {
     const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-    // Map logs for the month
+    // Map logs for the month: date -> { volume, workoutNames, doneSets, hasLog }
     const logVolMap: Record<string, number> = {};
+    const dayDetailMap: Record<string, { workoutNames: string[]; volume: number; doneSets: number }> = {};
+
     (Object.values(logs) as SessionLog[]).forEach(l => {
       if (l && l.date) {
-        logVolMap[l.date] = (logVolMap[l.date] || 0) + calculateVolume(l);
+        const vol = calculateVolume(l);
+        logVolMap[l.date] = (logVolMap[l.date] || 0) + vol;
+
+        const wo = workoutMap.get(l.workoutId);
+        const woName = wo?.name || 'Session';
+
+        let doneSetsCount = 0;
+        if (l.sets) {
+          Object.values(l.sets).forEach(sList => {
+            doneSetsCount += (sList as SetLog[]).filter(s => s.done).length;
+          });
+        }
+
+        if (!dayDetailMap[l.date]) {
+          dayDetailMap[l.date] = { workoutNames: [woName], volume: vol, doneSets: doneSetsCount };
+        } else {
+          dayDetailMap[l.date].workoutNames.push(woName);
+          dayDetailMap[l.date].volume += vol;
+          dayDetailMap[l.date].doneSets += doneSetsCount;
+        }
       }
     });
 
-    // Find max day volume across all logs for normalization
+    // Normalize per-month ONLY: find max day volume specifically in this month
     let maxDayVol = 1;
-    Object.values(logVolMap).forEach(v => {
-      if (v > maxDayVol) maxDayVol = v;
+    days.forEach(day => {
+      if (isSameMonth(day, monthStart)) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const dayVol = logVolMap[dateStr] || 0;
+        if (dayVol > maxDayVol) {
+          maxDayVol = dayVol;
+        }
+      }
     });
 
     return {
       monthStart,
       days,
       logVolMap,
+      dayDetailMap,
       maxDayVol
     };
-  }, [currentHeatmapMonth, logs]);
+  }, [currentHeatmapMonth, logs, workoutMap]);
 
   // Heatmap intensity step helper (0 to 4)
   const getIntensityClass = (vol: number, maxVol: number) => {
@@ -467,7 +652,7 @@ export const AnalyticsView: React.FC = () => {
     }));
   }, [aggregated.workoutTypeDistribution]);
 
-  // 6. Insights Generator (Deterministic sentences)
+  // 6. Insights Generator
   const insightsList = useMemo(() => {
     const list: string[] = [];
 
@@ -477,32 +662,32 @@ export const AnalyticsView: React.FC = () => {
     if (topMuscle && topMuscle[1] > 0) {
       const topVol = topMuscle[1];
       const pct = Math.round((topVol / Math.max(1, aggregated.rangeVolume)) * 100);
-      list.push(`${topMuscle[0]} isolation leads training output, accounting for ${pct}% of total tonnage over this window.`);
+      list.push(`${topMuscle[0]} targeting leads training output, accounting for ${pct}% of total tonnage over this window.`);
     }
 
     // Rule 2: Highest volume workout type
     const topTypeEntry = (Object.entries(aggregated.workoutTypeDistribution) as [string, number][])
       .sort((a, b) => b[1] - a[1])[0];
     if (topTypeEntry) {
-      list.push(`${topTypeEntry[0].toUpperCase()} protocols represent your most frequent routine focus (${topTypeEntry[1]} logged sessions).`);
+      list.push(`${topTypeEntry[0].toUpperCase()} routines represent your primary split focus (${topTypeEntry[1]} logged sessions).`);
     }
 
     // Rule 3: Consistency rate
     if (aggregated.consistencyPct >= 80) {
-      list.push(`High training adherence detected: ${aggregated.consistencyPct}% consistency rate maintained.`);
+      list.push(`High adherence: ${aggregated.consistencyPct}% consistency rate across scheduled core cycle workouts.`);
     } else {
-      list.push(`Current consistency rate sits at ${aggregated.consistencyPct}% — schedule 1 additional session per cycle to optimize growth.`);
+      list.push(`Current consistency rate sits at ${aggregated.consistencyPct}% — complete scheduled core days to hit target growth.`);
     }
 
     // Rule 4: Top exercise consistency
     if (aggregated.topExercises.length > 0) {
       const topEx = aggregated.topExercises[0];
-      list.push(`${topEx.name} is your most consistently executed lift with ${topEx.count} completed sessions.`);
+      list.push(`${topEx.name} is your most frequently logged movement with ${topEx.count} completed sessions.`);
     }
 
-    // Rule 5: Session duration sweet spot
+    // Rule 5: Session duration
     if (aggregated.avgDuration > 0) {
-      list.push(`Average session length is ${aggregated.avgDuration} minutes, matching high-intensity density standards.`);
+      list.push(`Average session length is ${aggregated.avgDuration} minutes, aligned with high-density hypertrophy standards.`);
     }
 
     return list.slice(0, 5);
@@ -515,7 +700,7 @@ export const AnalyticsView: React.FC = () => {
         <div className="space-y-2">
           <span className="font-mono text-[10px] tracking-[0.3em] text-emerald-500 uppercase font-bold flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Mission Control
+            Performance Intel
           </span>
           <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter">
             Analytics
@@ -546,55 +731,104 @@ export const AnalyticsView: React.FC = () => {
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Streak */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all">
+        {/* Streak: Clearly split Current vs Longest */}
+        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
           <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Active Streak</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest">Training Streak</span>
             <Flame size={16} className="text-orange-500" />
           </div>
-          <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-            {aggregated.currentStreak} <span className="text-sm font-sans font-medium text-zinc-500">days</span>
+          <div>
+            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
+              {aggregated.currentStreak} <span className="text-sm font-sans font-medium text-zinc-500">days</span>
+            </div>
+            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
+              Current Streak
+            </p>
           </div>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase">Consecutive training</p>
+          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
+            <span className="text-zinc-500 uppercase">Longest Streak</span>
+            <span className="text-orange-400 font-bold">{aggregated.longestStreak} days</span>
+          </div>
         </div>
 
-        {/* Training Days */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all">
+        {/* Training Days vs Core Expected */}
+        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
           <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Training Days</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest">Core Workouts</span>
             <CalendarIcon size={16} className="text-emerald-500" />
           </div>
-          <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-            {aggregated.activeDaysCount}
-            <span className="text-lg text-zinc-500 font-normal">/{aggregated.targetTrainingDays}</span>
+          <div>
+            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
+              {aggregated.completedCoreWorkouts}
+              <span className="text-lg text-zinc-500 font-normal">/{aggregated.expectedCoreWorkouts}</span>
+            </div>
+            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
+              Completed / Expected
+            </p>
           </div>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase">
-            {aggregated.missedDaysCount} missed in window
-          </p>
+          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
+            <span className="text-rose-400 font-bold">{aggregated.missedTrainingDays} skipped</span>
+            <span className="text-zinc-500">{aggregated.scheduledRestDays} rest days</span>
+          </div>
         </div>
 
-        {/* Consistency % */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all">
+        {/* Consistency %: Pure core workout adherence */}
+        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
           <div className="flex justify-between items-center text-zinc-500">
             <span className="font-mono text-[10px] uppercase tracking-widest">Consistency</span>
             <Activity size={16} className="text-emerald-400" />
           </div>
-          <div className="text-3xl lg:text-4xl font-black font-mono text-emerald-400 tracking-tight">
-            {aggregated.consistencyPct}%
+          <div>
+            <div className="text-3xl lg:text-4xl font-black font-mono text-emerald-400 tracking-tight">
+              {aggregated.consistencyPct}%
+            </div>
+            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
+              Core Adherence
+            </p>
           </div>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase">Adherence rate</p>
+          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
+            <span className="text-zinc-500 uppercase">Rest Days Exempt</span>
+            <span className="text-emerald-400 font-bold">100% accurate</span>
+          </div>
         </div>
 
-        {/* Volume */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all">
+        {/* Window Volume with Period-over-Period Comparison */}
+        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
           <div className="flex justify-between items-center text-zinc-500">
             <span className="font-mono text-[10px] uppercase tracking-widest">Window Volume</span>
-            <Dumbbell size={16} className="text-blue-400" />
+            <Dumbbell size={16} className="text-emerald-400" />
           </div>
-          <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-            {(aggregated.rangeVolume / 1000).toFixed(1)}k <span className="text-sm font-sans font-medium text-zinc-500">kg</span>
+          <div>
+            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
+              {(aggregated.rangeVolume / 1000).toFixed(1)}k <span className="text-sm font-sans font-medium text-zinc-500">kg</span>
+            </div>
+            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
+              Tonnage lifted
+            </p>
           </div>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase">Tonnage lifted</p>
+          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
+            {aggregated.volumePeriodChangePct !== null ? (
+              <>
+                <span className="text-zinc-500 uppercase">vs prior {timeRange}</span>
+                <span className={cn(
+                  "font-bold flex items-center gap-0.5",
+                  aggregated.volumePeriodChangePct > 0 ? "text-emerald-400" : (aggregated.volumePeriodChangePct < 0 ? "text-rose-400" : "text-zinc-400")
+                )}>
+                  {aggregated.volumePeriodChangePct > 0 ? (
+                    <TrendingUp size={12} />
+                  ) : aggregated.volumePeriodChangePct < 0 ? (
+                    <TrendingDown size={12} />
+                  ) : null}
+                  {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-zinc-500 uppercase">Window</span>
+                <span className="text-zinc-400 font-bold">{timeRange.toUpperCase()}</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -603,10 +837,10 @@ export const AnalyticsView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-              Consistency Matrix
+              Adherence Matrix
             </span>
             <h2 className="text-xl font-black uppercase tracking-wider text-white">
-              Calendar Intensity Heatmap
+              Monthly Intensity Heatmap
             </h2>
           </div>
 
@@ -655,14 +889,30 @@ export const AnalyticsView: React.FC = () => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
               const vol = heatmapData.logVolMap[dateStr] || 0;
+              const detail = heatmapData.dayDetailMap[dateStr];
               const intensityClass = getIntensityClass(vol, heatmapData.maxDayVol);
+
+              // Cycle expected workout lookup for tooltips
+              const cycleDay = getCycleDay(appState?.cycleStart, day);
+              const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+
+              let tooltipText = `${dateStr}`;
+              if (detail && detail.workoutNames.length > 0) {
+                tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg lifted, ${detail.doneSets} sets)`;
+              } else if (expectedWo?.type === 'rest') {
+                tooltipText = `${dateStr} • Scheduled Rest Day (${expectedWo.name})`;
+              } else if (expectedWo) {
+                tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
+              } else {
+                tooltipText = `${dateStr} • Rest Day`;
+              }
 
               return (
                 <div
                   key={dateStr}
-                  title={`${dateStr}: ${vol > 0 ? `${vol.toLocaleString()} kg lifted` : 'Rest Day'}`}
+                  title={tooltipText}
                   className={cn(
-                    "aspect-square rounded-xl border flex flex-col items-center justify-center text-xs transition-all p-1 relative",
+                    "aspect-square rounded-xl border flex flex-col items-center justify-center text-xs transition-all p-1 relative group cursor-default",
                     isCurrentMonth ? intensityClass : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
                   )}
                 >
@@ -693,7 +943,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           <div className="text-zinc-400 text-[11px] font-mono">
-            <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days · <span className="text-zinc-500">{aggregated.missedDaysCount} Rest/Missed</span> · <span className="text-zinc-300">{aggregated.consistencyPct}% Consistency</span>
+            <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days · <span className="text-zinc-500">{aggregated.missedTrainingDays} Skipped</span> · <span className="text-zinc-300">{aggregated.consistencyPct}% Consistency</span>
           </div>
         </div>
       </div>
@@ -901,7 +1151,7 @@ export const AnalyticsView: React.FC = () => {
         </div>
       </div>
 
-      {/* SUBTLE DIVIDER BEFORE LIFETIME & RECORDS (Not affected by time toggle) */}
+      {/* SUBTLE DIVIDER BEFORE LIFETIME & RECORDS */}
       <div className="relative pt-4">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-zinc-800/80" />
@@ -911,7 +1161,7 @@ export const AnalyticsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 6. SECTION 5: RECORDS */}
+      {/* 6. SECTION 5: RECORDS (Using exId for unique key) */}
       <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -932,7 +1182,7 @@ export const AnalyticsView: React.FC = () => {
           {aggregated.recordsList.length > 0 ? (
             aggregated.recordsList.map((rec) => (
               <div
-                key={rec.exName}
+                key={rec.exId}
                 className="bg-zinc-950/60 border border-orange-500/20 hover:border-orange-500/50 rounded-2xl p-4 flex items-center justify-between transition-all group"
               >
                 <div className="space-y-1 truncate pr-2">
@@ -959,10 +1209,10 @@ export const AnalyticsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 7. SECTION 6: LIFETIME */}
+      {/* 7. SECTION 6: LIFETIME (Unified emerald accent borders matching analytics palette) */}
       <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-8 space-y-8">
         <div className="space-y-1">
-          <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-zinc-500 block font-bold">
+          <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
             Cumulative Milestones
           </span>
           <h2 className="text-2xl font-black uppercase tracking-wider text-white">
@@ -970,7 +1220,7 @@ export const AnalyticsView: React.FC = () => {
           </h2>
         </div>
 
-        {/* Big Number Hero Treatment */}
+        {/* Big Number Hero Treatment with single consistent emerald border */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
             <span className="font-mono text-xs uppercase text-zinc-500 block">Total Workouts</span>
@@ -980,7 +1230,7 @@ export const AnalyticsView: React.FC = () => {
             <p className="text-[10px] font-mono text-zinc-500">Completed runs</p>
           </div>
 
-          <div className="space-y-2 border-l-2 border-blue-500 pl-4">
+          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
             <span className="font-mono text-xs uppercase text-zinc-500 block">Hours Trained</span>
             <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
               {aggregated.lifetimeHours}
@@ -988,7 +1238,7 @@ export const AnalyticsView: React.FC = () => {
             <p className="text-[10px] font-mono text-zinc-500">In-gym duration</p>
           </div>
 
-          <div className="space-y-2 border-l-2 border-purple-500 pl-4">
+          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
             <span className="font-mono text-xs uppercase text-zinc-500 block">Total Sets</span>
             <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
               {aggregated.lifetimeSets.toLocaleString()}
@@ -996,7 +1246,7 @@ export const AnalyticsView: React.FC = () => {
             <p className="text-[10px] font-mono text-zinc-500">Executed sets</p>
           </div>
 
-          <div className="space-y-2 border-l-2 border-orange-500 pl-4">
+          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
             <span className="font-mono text-xs uppercase text-zinc-500 block">Total Volume</span>
             <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
               {(aggregated.lifetimeVolume / 1000).toFixed(0)}k <span className="text-base text-zinc-500 font-normal">kg</span>
@@ -1076,7 +1326,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Workout Type Distribution Pie Chart (Uses WORKOUT_COLORS) */}
+        {/* Workout Type Distribution Pie Chart */}
         <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-4 flex flex-col justify-between">
           <div className="space-y-1">
             <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-zinc-500 block font-bold">
@@ -1141,3 +1391,4 @@ export const AnalyticsView: React.FC = () => {
     </div>
   );
 };
+
