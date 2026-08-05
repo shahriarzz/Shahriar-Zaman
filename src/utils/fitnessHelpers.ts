@@ -69,6 +69,23 @@ export function getNextCycleDayFromLogs(
   return ((lastCycleDay % CYCLE_LENGTH) + 1);
 }
 
+export function getCycleDayForDate(
+  targetDate: Date | string,
+  logs: Record<string, SessionLog> | undefined | null,
+  workouts: Workout[] | undefined | null,
+  cycleStart?: string | null
+): number {
+  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
+  const validTarget = isValid(target) ? target : new Date();
+  
+  // Base today's cycle day on the completed workout progression (matching Dashboard)
+  const todayCycleDay = getNextCycleDayFromLogs(logs, workouts, cycleStart);
+  
+  // Calculate day difference relative to today
+  const diffDays = differenceInCalendarDays(validTarget, new Date());
+  return ((((todayCycleDay - 1 + diffDays) % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
+}
+
 export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[]> }): number {
   let total = 0;
   if (!log || !log.sets) return total;

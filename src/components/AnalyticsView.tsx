@@ -48,10 +48,21 @@ import {
   startOfWeek as getStartOfWeek
 } from 'date-fns';
 import { useFitness } from '../store/FitnessContext';
-import { calculateVolume, WORKOUT_COLORS, getCycleDay } from '../utils/fitnessHelpers';
+import { calculateVolume, WORKOUT_COLORS, getCycleDay, getCycleDayForDate } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
+import { useCalendarGrid } from '../hooks/useCalendarGrid';
+import {
+  Section,
+  SectionHeader,
+  StatCard,
+  HighlightCard,
+  EmptyState,
+  SegmentedControl,
+  Badge,
+  Card
+} from './ui';
 
 type TimeRange = '7d' | '30d' | '90d' | 'all';
 type MuscleMetric = 'volume' | 'sets' | 'frequency';
@@ -554,63 +565,13 @@ export const AnalyticsView: React.FC = () => {
     };
   }, [logs, workouts, exMap, workoutMap, coreWorkoutByCycleDayMap, active1RMExerciseId, timeRange, appState?.cycleStart]);
 
-  // 3. Heatmap calendar range calculations (Normalized PER-MONTH with rich workout name tooltips)
-  const heatmapData = useMemo(() => {
-    const monthStart = startOfMonth(currentHeatmapMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
-    const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
-    const days = eachDayOfInterval({ start: startDate, end: endDate });
-
-    // Map logs for the month: date -> { volume, workoutNames, doneSets, hasLog }
-    const logVolMap: Record<string, number> = {};
-    const dayDetailMap: Record<string, { workoutNames: string[]; volume: number; doneSets: number }> = {};
-
-    (Object.values(logs) as SessionLog[]).forEach(l => {
-      if (l && l.date) {
-        const vol = calculateVolume(l);
-        logVolMap[l.date] = (logVolMap[l.date] || 0) + vol;
-
-        const wo = workoutMap.get(l.workoutId);
-        const woName = wo?.name || 'Session';
-
-        let doneSetsCount = 0;
-        if (l.sets) {
-          Object.values(l.sets).forEach(sList => {
-            doneSetsCount += (sList as SetLog[]).filter(s => s.done).length;
-          });
-        }
-
-        if (!dayDetailMap[l.date]) {
-          dayDetailMap[l.date] = { workoutNames: [woName], volume: vol, doneSets: doneSetsCount };
-        } else {
-          dayDetailMap[l.date].workoutNames.push(woName);
-          dayDetailMap[l.date].volume += vol;
-          dayDetailMap[l.date].doneSets += doneSetsCount;
-        }
-      }
-    });
-
-    // Normalize per-month ONLY: find max day volume specifically in this month
-    let maxDayVol = 1;
-    days.forEach(day => {
-      if (isSameMonth(day, monthStart)) {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayVol = logVolMap[dateStr] || 0;
-        if (dayVol > maxDayVol) {
-          maxDayVol = dayVol;
-        }
-      }
-    });
-
-    return {
-      monthStart,
-      days,
-      logVolMap,
-      dayDetailMap,
-      maxDayVol
-    };
-  }, [currentHeatmapMonth, logs, workoutMap]);
+  // 3. Shared Heatmap calendar grid calculations (Normalized PER-MONTH with rich workout name tooltips)
+  const heatmapData = useCalendarGrid({
+    monthDate: currentHeatmapMonth,
+    logs,
+    workouts,
+    weekStartsOn: 1
+  });
 
   // Heatmap intensity step helper (0 to 4)
   const getIntensityClass = (vol: number, maxVol: number) => {
@@ -694,157 +655,100 @@ export const AnalyticsView: React.FC = () => {
   }, [aggregated]);
 
   return (
-    <div className="space-y-12 pt-4 pb-16">
+    <div className="space-y-10 pt-4 pb-16">
       {/* 1. HEADER & TIME TOGGLE */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <span className="font-mono text-[10px] tracking-[0.3em] text-emerald-500 uppercase font-bold flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Performance Intel
-          </span>
-          <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter">
-            Analytics
-          </h1>
-        </div>
+        <SectionHeader
+          eyebrow="Performance Intel"
+          eyebrowColor="emerald"
+          title="Analytics"
+          size="lg"
+        />
 
         {/* Time range segmented control */}
-        <div className="bg-zinc-900/90 border border-zinc-800 p-1 rounded-2xl flex items-center gap-1 w-full md:w-auto overflow-x-auto">
-          {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => {
-                haptics.selection();
-                setTimeRange(r);
-              }}
-              className={cn(
-                "flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer",
-                timeRange === r
-                  ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.35)]"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
-              )}
-            >
-              {r === 'all' ? 'ALL' : r.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl<TimeRange>
+          options={[
+            { value: '7d', label: '7D' },
+            { value: '30d', label: '30D' },
+            { value: '90d', label: '90D' },
+            { value: 'all', label: 'ALL' }
+          ]}
+          value={timeRange}
+          onChange={(r) => {
+            haptics.selection();
+            setTimeRange(r);
+          }}
+          accent="emerald"
+          size="md"
+        />
       </div>
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Streak: Clearly split Current vs Longest */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
-          <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Training Streak</span>
-            <Flame size={16} className="text-orange-500" />
-          </div>
-          <div>
-            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-              {aggregated.currentStreak} <span className="text-sm font-sans font-medium text-zinc-500">days</span>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
-              Current Streak
-            </p>
-          </div>
-          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
-            <span className="text-zinc-500 uppercase">Longest Streak</span>
-            <span className="text-orange-400 font-bold">{aggregated.longestStreak} days</span>
-          </div>
-        </div>
+        <StatCard
+          label="Training Streak"
+          value={aggregated.currentStreak}
+          unit="days"
+          icon={<Flame size={16} />}
+          accent="orange"
+          sublabel="Current Streak"
+          trend={<span className="text-[10px] font-mono text-orange-400 font-bold">Best: {aggregated.longestStreak}d</span>}
+        />
 
         {/* Training Days vs Core Expected */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
-          <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Core Workouts</span>
-            <CalendarIcon size={16} className="text-emerald-500" />
-          </div>
-          <div>
-            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-              {aggregated.completedCoreWorkouts}
-              <span className="text-lg text-zinc-500 font-normal">/{aggregated.expectedCoreWorkouts}</span>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
-              Completed / Expected
-            </p>
-          </div>
-          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
-            <span className="text-rose-400 font-bold">{aggregated.missedTrainingDays} skipped</span>
-            <span className="text-zinc-500">{aggregated.scheduledRestDays} rest days</span>
-          </div>
-        </div>
+        <StatCard
+          label="Core Workouts"
+          value={`${aggregated.completedCoreWorkouts}/${aggregated.expectedCoreWorkouts}`}
+          icon={<CalendarIcon size={16} />}
+          accent="emerald"
+          sublabel={`${aggregated.missedTrainingDays} skipped · ${aggregated.scheduledRestDays} rest`}
+        />
 
         {/* Consistency %: Pure core workout adherence */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
-          <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Consistency</span>
-            <Activity size={16} className="text-emerald-400" />
-          </div>
-          <div>
-            <div className="text-3xl lg:text-4xl font-black font-mono text-emerald-400 tracking-tight">
-              {aggregated.consistencyPct}%
-            </div>
-            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
-              Core Adherence
-            </p>
-          </div>
-          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
-            <span className="text-zinc-500 uppercase">Rest Days Exempt</span>
-            <span className="text-emerald-400 font-bold">100% accurate</span>
-          </div>
-        </div>
+        <StatCard
+          label="Consistency"
+          value={`${aggregated.consistencyPct}%`}
+          icon={<Activity size={16} />}
+          accent="emerald"
+          sublabel="Core adherence"
+        />
 
         {/* Window Volume with Period-over-Period Comparison */}
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden group hover:border-zinc-700 transition-all flex flex-col justify-between">
-          <div className="flex justify-between items-center text-zinc-500">
-            <span className="font-mono text-[10px] uppercase tracking-widest">Window Volume</span>
-            <Dumbbell size={16} className="text-emerald-400" />
-          </div>
-          <div>
-            <div className="text-3xl lg:text-4xl font-black font-mono text-white tracking-tight">
-              {(aggregated.rangeVolume / 1000).toFixed(1)}k <span className="text-sm font-sans font-medium text-zinc-500">kg</span>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-400 uppercase mt-0.5">
-              Tonnage lifted
-            </p>
-          </div>
-          <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
-            {aggregated.volumePeriodChangePct !== null ? (
-              <>
-                <span className="text-zinc-500 uppercase">vs prior {timeRange}</span>
-                <span className={cn(
+        <StatCard
+          label="Window Volume"
+          value={(aggregated.rangeVolume / 1000).toFixed(1)}
+          unit="k kg"
+          icon={<Dumbbell size={16} />}
+          accent="emerald"
+          sublabel={`Window: ${timeRange.toUpperCase()}`}
+          trend={
+            aggregated.volumePeriodChangePct !== null ? (
+              <span
+                className={cn(
                   "font-bold flex items-center gap-0.5",
                   aggregated.volumePeriodChangePct > 0 ? "text-emerald-400" : (aggregated.volumePeriodChangePct < 0 ? "text-rose-400" : "text-zinc-400")
-                )}>
-                  {aggregated.volumePeriodChangePct > 0 ? (
-                    <TrendingUp size={12} />
-                  ) : aggregated.volumePeriodChangePct < 0 ? (
-                    <TrendingDown size={12} />
-                  ) : null}
-                  {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="text-zinc-500 uppercase">Window</span>
-                <span className="text-zinc-400 font-bold">{timeRange.toUpperCase()}</span>
-              </>
-            )}
-          </div>
-        </div>
+                )}
+              >
+                {aggregated.volumePeriodChangePct > 0 ? (
+                  <TrendingUp size={12} />
+                ) : aggregated.volumePeriodChangePct < 0 ? (
+                  <TrendingDown size={12} />
+                ) : null}
+                {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
+              </span>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* 3. SECTION 2: CONSISTENCY (HEATMAP) */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-              Adherence Matrix
-            </span>
-            <h2 className="text-xl font-black uppercase tracking-wider text-white">
-              Monthly Intensity Heatmap
-            </h2>
-          </div>
-
-          {/* Month selector */}
+      <Section
+        eyebrow="Adherence Matrix"
+        eyebrowColor="emerald"
+        title="Monthly Intensity Heatmap"
+        padding="relaxed"
+        action={
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs uppercase font-bold text-zinc-300 mr-2">
               {format(heatmapData.monthStart, 'MMMM yyyy')}
@@ -868,100 +772,96 @@ export const AnalyticsView: React.FC = () => {
               <ChevronRight size={16} />
             </button>
           </div>
-        </div>
-
-        {/* Heatmap Grid */}
-        <div className="space-y-2">
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1.5 text-center font-mono text-[10px] text-zinc-500 uppercase font-bold">
-            <span>Mon</span>
-            <span>Tue</span>
-            <span>Wed</span>
-            <span>Thu</span>
-            <span>Fri</span>
-            <span>Sat</span>
-            <span>Sun</span>
-          </div>
-
-          {/* Days grid */}
-          <div className="grid grid-cols-7 gap-1.5">
-            {heatmapData.days.map((day) => {
-              const dateStr = format(day, 'yyyy-MM-dd');
-              const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
-              const vol = heatmapData.logVolMap[dateStr] || 0;
-              const detail = heatmapData.dayDetailMap[dateStr];
-              const intensityClass = getIntensityClass(vol, heatmapData.maxDayVol);
-
-              // Cycle expected workout lookup for tooltips
-              const cycleDay = getCycleDay(appState?.cycleStart, day);
-              const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
-
-              let tooltipText = `${dateStr}`;
-              if (detail && detail.workoutNames.length > 0) {
-                tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg lifted, ${detail.doneSets} sets)`;
-              } else if (expectedWo?.type === 'rest') {
-                tooltipText = `${dateStr} • Scheduled Rest Day (${expectedWo.name})`;
-              } else if (expectedWo) {
-                tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
-              } else {
-                tooltipText = `${dateStr} • Rest Day`;
-              }
-
-              return (
-                <div
-                  key={dateStr}
-                  title={tooltipText}
-                  className={cn(
-                    "aspect-square rounded-xl border flex flex-col items-center justify-center text-xs transition-all p-1 relative group cursor-default",
-                    isCurrentMonth ? intensityClass : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
-                  )}
-                >
-                  <span className="font-mono text-[10px] leading-none">{format(day, 'd')}</span>
-                  {vol > 0 && isCurrentMonth && (
-                    <span className="text-[7px] font-mono leading-none mt-1 opacity-80">
-                      {(vol / 1000).toFixed(1)}k
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Legend + Summary line */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-zinc-800/60 text-xs font-mono text-zinc-400">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-500 uppercase">Less</span>
-            <div className="flex gap-1">
-              <span className="w-3.5 h-3.5 rounded bg-zinc-900 border border-zinc-800" />
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500/20 border border-emerald-500/30" />
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500/45 border border-emerald-500/50" />
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500/75 border border-emerald-500/70" />
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-400" />
+        }
+      >
+        <div className="space-y-6">
+          {/* Heatmap Grid */}
+          <div className="space-y-2">
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 gap-1.5 text-center font-mono text-[10px] text-zinc-500 uppercase font-bold">
+              <span>Mon</span>
+              <span>Tue</span>
+              <span>Wed</span>
+              <span>Thu</span>
+              <span>Fri</span>
+              <span>Sat</span>
+              <span>Sun</span>
             </div>
-            <span className="text-[10px] text-zinc-500 uppercase">More</span>
+
+            {/* Days grid */}
+            <div className="grid grid-cols-7 gap-1.5">
+              {heatmapData.days.map((day) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
+                const vol = heatmapData.logVolMap[dateStr] || 0;
+                const detail = heatmapData.dayDetailMap[dateStr];
+                const intensityClass = getIntensityClass(vol, heatmapData.maxDayVol);
+
+                // Cycle expected workout lookup for tooltips (matching active workout progression)
+                const cycleDay = getCycleDayForDate(day, logs, workouts, appState?.cycleStart);
+                const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+
+                let tooltipText = `${dateStr}`;
+                if (detail && detail.workoutNames.length > 0) {
+                  tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg lifted, ${detail.doneSets} sets)`;
+                } else if (expectedWo?.type === 'rest') {
+                  tooltipText = `${dateStr} • Scheduled Rest Day (${expectedWo.name})`;
+                } else if (expectedWo) {
+                  tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
+                } else {
+                  tooltipText = `${dateStr} • Rest Day`;
+                }
+
+                return (
+                  <div
+                    key={dateStr}
+                    title={tooltipText}
+                    className={cn(
+                      "aspect-square rounded-xl border flex flex-col items-center justify-center text-xs transition-all p-1 relative group cursor-default",
+                      isCurrentMonth ? intensityClass : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
+                    )}
+                  >
+                    <span className="font-mono text-[10px] leading-none">{format(day, 'd')}</span>
+                    {vol > 0 && isCurrentMonth && (
+                      <span className="text-[7px] font-mono leading-none mt-1 opacity-80">
+                        {(vol / 1000).toFixed(1)}k
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="text-zinc-400 text-[11px] font-mono">
-            <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days · <span className="text-zinc-500">{aggregated.missedTrainingDays} Skipped</span> · <span className="text-zinc-300">{aggregated.consistencyPct}% Consistency</span>
+          {/* Legend + Summary line */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-zinc-800/60 text-xs font-mono text-zinc-400">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-zinc-500 uppercase">Less</span>
+              <div className="flex gap-1">
+                <span className="w-3.5 h-3.5 rounded bg-zinc-900 border border-zinc-800" />
+                <span className="w-3.5 h-3.5 rounded bg-emerald-500/20 border border-emerald-500/30" />
+                <span className="w-3.5 h-3.5 rounded bg-emerald-500/45 border border-emerald-500/50" />
+                <span className="w-3.5 h-3.5 rounded bg-emerald-500/75 border border-emerald-500/70" />
+                <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-400" />
+              </div>
+              <span className="text-[10px] text-zinc-500 uppercase">More</span>
+            </div>
+
+            <div className="text-zinc-400 text-[11px] font-mono">
+              <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days · <span className="text-zinc-500">{aggregated.missedTrainingDays} Skipped</span> · <span className="text-zinc-300">{aggregated.consistencyPct}% Consistency</span>
+            </div>
           </div>
         </div>
-      </div>
+      </Section>
 
       {/* 4. SECTION 3: PERFORMANCE (1RM TREND CHART) */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-              Strength Progression
-            </span>
-            <h2 className="text-xl font-black uppercase tracking-wider text-white">
-              Estimated 1RM Trend
-            </h2>
-          </div>
-
-          {/* Exercise selector for priority compound lifts */}
-          {priorityExercises.length > 0 && (
+      <Section
+        eyebrow="Strength Progression"
+        eyebrowColor="emerald"
+        title="Estimated 1RM Trend"
+        padding="relaxed"
+        action={
+          priorityExercises.length > 0 ? (
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               <span className="text-[10px] font-mono text-zinc-500 uppercase shrink-0">Lift:</span>
               <div className="flex gap-1">
@@ -984,175 +884,159 @@ export const AnalyticsView: React.FC = () => {
                 ))}
               </div>
             </div>
+          ) : undefined
+        }
+      >
+        <div className="space-y-6">
+          {/* Line chart container */}
+          {aggregated.active1RMTrend.length > 0 ? (
+            <div className="h-64 w-full pt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={aggregated.active1RMTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="displayDate" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-2xl font-mono text-xs space-y-1">
+                            <p className="text-zinc-400 font-bold">{data.date}</p>
+                            <p className="text-emerald-400 font-black text-sm">
+                              Est. 1RM: {data.epley1RM} kg
+                            </p>
+                            <p className="text-zinc-500 text-[10px]">Best Set: {data.setDetail}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="epley1RM"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={{ fill: '#10b981', r: 4, stroke: '#09090e', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#34d399', stroke: '#ffffff', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState
+              icon={<TrendingUp size={24} />}
+              title="No exercise data recorded"
+              description="No completed logs found for this movement in the selected range."
+            />
           )}
-        </div>
 
-        {/* Line chart container */}
-        {aggregated.active1RMTrend.length > 0 ? (
-          <div className="h-64 w-full pt-4">
+          {/* Summary beneath chart */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            {/* Average Session Duration */}
+            <StatCard
+              label="Average Session Length"
+              value={aggregated.avgDuration}
+              unit="minutes"
+              icon={<Clock size={20} />}
+              accent="emerald"
+              sublabel="In-gym density"
+            />
+
+            {/* Biggest Training Week Ever */}
+            <HighlightCard
+              title="Biggest Week Ever"
+              value={`${(aggregated.biggestWeek.volume / 1000).toFixed(1)}k kg`}
+              subtitle={aggregated.biggestWeek.weekStr}
+              icon={<Trophy size={18} />}
+            />
+          </div>
+        </div>
+      </Section>
+
+      {/* 5. SECTION 4: MUSCLES (HORIZONTAL BAR CHART) */}
+      <Section
+        eyebrow="Anatomical Load Distribution"
+        eyebrowColor="emerald"
+        title="Muscle Group Targeting"
+        padding="relaxed"
+        action={
+          <SegmentedControl<MuscleMetric>
+            options={[
+              { value: 'volume', label: 'Volume' },
+              { value: 'sets', label: 'Sets' },
+              { value: 'frequency', label: 'Freq' }
+            ]}
+            value={muscleMetric}
+            onChange={(m) => {
+              haptics.selection();
+              setMuscleMetric(m);
+            }}
+            accent="emerald"
+            size="sm"
+          />
+        }
+      >
+        <div className="space-y-6">
+          {/* Horizontal Bar Chart */}
+          <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={aggregated.active1RMTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="displayDate" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+              <BarChart layout="vertical" data={muscleChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                <XAxis type="number" stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis dataKey="category" type="category" stroke="#a1a1aa" fontSize={11} axisLine={false} tickLine={false} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
-                      const data = payload[0].payload;
+                      const d = payload[0].payload;
                       return (
-                        <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-2xl font-mono text-xs space-y-1">
-                          <p className="text-zinc-400 font-bold">{data.date}</p>
-                          <p className="text-emerald-400 font-black text-sm">
-                            Est. 1RM: {data.epley1RM} kg
-                          </p>
-                          <p className="text-zinc-500 text-[10px]">Best Set: {data.setDetail}</p>
+                        <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-xs">
+                          <span className="text-zinc-400 uppercase">{d.category}: </span>
+                          <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="epley1RM"
-                  stroke="#10b981"
-                  strokeWidth={3}
-                  dot={{ fill: '#10b981', r: 4, stroke: '#09090e', strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: '#34d399', stroke: '#ffffff', strokeWidth: 2 }}
-                />
-              </LineChart>
+                <Bar dataKey="value" fill="#10b981" radius={[0, 8, 8, 0]}>
+                  {muscleChartData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill="#10b981" />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
-        ) : (
-          <div className="h-48 flex flex-col items-center justify-center bg-zinc-950/40 rounded-2xl border border-dashed border-zinc-800 text-center p-6 space-y-2">
-            <TrendingUp size={24} className="text-zinc-600" />
-            <p className="text-xs font-mono text-zinc-400">
-              No completed logs recorded for this exercise in the selected time range.
-            </p>
-          </div>
-        )}
 
-        {/* Summary beneath chart */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* Average Session Duration */}
-          <div className="bg-zinc-950/40 border border-zinc-800/60 rounded-2xl p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="font-mono text-[9px] uppercase text-zinc-500">Average Session Length</span>
-              <div className="text-2xl font-black font-mono text-white">
-                {aggregated.avgDuration} <span className="text-sm text-zinc-500 font-normal">minutes</span>
-              </div>
-            </div>
-            <Clock size={24} className="text-emerald-500 opacity-80" />
-          </div>
-
-          {/* Biggest Training Week Ever */}
-          <div className="bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4 flex items-center justify-between relative overflow-hidden">
-            <div className="space-y-1 z-10">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-orange-400 font-bold flex items-center gap-1.5">
-                <Trophy size={12} className="text-orange-400" />
-                Biggest Week Ever
-              </span>
-              <div className="text-2xl font-black font-mono text-white">
-                {(aggregated.biggestWeek.volume / 1000).toFixed(1)}k <span className="text-sm font-normal text-orange-200">kg</span>
-              </div>
-              <p className="text-[10px] font-mono text-orange-300/80">{aggregated.biggestWeek.weekStr}</p>
-            </div>
-            <Trophy size={40} className="text-orange-500/20 absolute -right-2 -bottom-2 pointer-events-none" />
-          </div>
-        </div>
-      </div>
-
-      {/* 5. SECTION 4: MUSCLES (HORIZONTAL BAR CHART) */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-              Anatomical Load Distribution
+          {/* Summary beneath: Exercise Rankings */}
+          <div className="pt-2 border-t border-zinc-800/60 space-y-3">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 font-bold block">
+              Top Trained Exercises in Window
             </span>
-            <h2 className="text-xl font-black uppercase tracking-wider text-white">
-              Muscle Group Targeting
-            </h2>
-          </div>
-
-          {/* Metric toggle */}
-          <div className="bg-zinc-900 border border-zinc-800 p-1 rounded-2xl flex items-center gap-1">
-            {(['volume', 'sets', 'frequency'] as MuscleMetric[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => {
-                  haptics.selection();
-                  setMuscleMetric(m);
-                }}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer",
-                  muscleMetric === m
-                    ? "bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                    : "text-zinc-400 hover:text-white"
-                )}
-              >
-                {m}
-              </button>
-            ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {aggregated.topExercises.length > 0 ? (
+                aggregated.topExercises.map((ex, idx) => (
+                  <Card key={ex.name} variant="elevated" padding="compact" className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <div className="truncate space-y-0.5">
+                      <p className="text-xs font-bold text-white truncate">{ex.name}</p>
+                      <p className="text-[10px] font-mono text-zinc-500">{ex.count} sessions</p>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <p className="text-xs font-mono text-zinc-500 col-span-full">No exercise logs recorded in this period.</p>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* Horizontal Bar Chart */}
-        <div className="h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart layout="vertical" data={muscleChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-              <XAxis type="number" stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
-              <YAxis dataKey="category" type="category" stroke="#a1a1aa" fontSize={11} axisLine={false} tickLine={false} />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const d = payload[0].payload;
-                    return (
-                      <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-xs">
-                        <span className="text-zinc-400 uppercase">{d.category}: </span>
-                        <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Bar dataKey="value" fill="#10b981" radius={[0, 8, 8, 0]}>
-                {muscleChartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill="#10b981" />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Summary beneath: Exercise Rankings */}
-        <div className="pt-2 border-t border-zinc-800/60 space-y-3">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 font-bold block">
-            Top Trained Exercises in Window
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {aggregated.topExercises.length > 0 ? (
-              aggregated.topExercises.map((ex, idx) => (
-                <div key={ex.name} className="bg-zinc-950/50 border border-zinc-800/60 rounded-2xl p-3 flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                    #{idx + 1}
-                  </span>
-                  <div className="truncate space-y-0.5">
-                    <p className="text-xs font-bold text-white truncate">{ex.name}</p>
-                    <p className="text-[10px] font-mono text-zinc-500">{ex.count} sessions</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs font-mono text-zinc-500 col-span-full">No exercise logs recorded in this period.</p>
-            )}
-          </div>
-        </div>
-      </div>
+      </Section>
 
       {/* SUBTLE DIVIDER BEFORE LIFETIME & RECORDS */}
-      <div className="relative pt-4">
+      <div className="relative pt-2">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-zinc-800/80" />
         </div>
@@ -1162,28 +1046,23 @@ export const AnalyticsView: React.FC = () => {
       </div>
 
       {/* 6. SECTION 5: RECORDS (Using exId for unique key) */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-orange-500 block font-bold">
-              Personal Bests
-            </span>
-            <h2 className="text-xl font-black uppercase tracking-wider text-white flex items-center gap-2">
-              <Trophy size={18} className="text-orange-500" />
-              Records
-            </h2>
-          </div>
-          <span className="text-[10px] font-mono text-zinc-500 uppercase">
-            All-Time Highs
-          </span>
-        </div>
-
+      <Section
+        eyebrow="Personal Bests"
+        eyebrowColor="orange"
+        title="Records"
+        padding="relaxed"
+        action={
+          <Badge label="All-Time Highs" color="orange" variant="outline" dot={false} />
+        }
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {aggregated.recordsList.length > 0 ? (
             aggregated.recordsList.map((rec) => (
-              <div
+              <Card
                 key={rec.exId}
-                className="bg-zinc-950/60 border border-orange-500/20 hover:border-orange-500/50 rounded-2xl p-4 flex items-center justify-between transition-all group"
+                variant="interactive"
+                padding="default"
+                className="flex items-center justify-between group border-orange-500/20 hover:border-orange-500/50"
               >
                 <div className="space-y-1 truncate pr-2">
                   <p className="text-xs font-bold text-white group-hover:text-orange-400 transition-colors truncate">
@@ -1201,120 +1080,107 @@ export const AnalyticsView: React.FC = () => {
                     1RM ~{rec.maxEpley}kg
                   </div>
                 </div>
-              </div>
+              </Card>
             ))
           ) : (
-            <p className="text-xs font-mono text-zinc-500 col-span-full">No weight records logged yet.</p>
+            <EmptyState
+              icon={<Trophy size={20} className="text-orange-500" />}
+              title="No records logged"
+              description="Record sets during sessions to track your all-time heaviest weights."
+              className="col-span-full"
+            />
           )}
         </div>
-      </div>
+      </Section>
 
-      {/* 7. SECTION 6: LIFETIME (Unified emerald accent borders matching analytics palette) */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-8 space-y-8">
-        <div className="space-y-1">
-          <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-            Cumulative Milestones
-          </span>
-          <h2 className="text-2xl font-black uppercase tracking-wider text-white">
-            Lifetime Summary
-          </h2>
+      {/* 7. SECTION 6: LIFETIME */}
+      <Section
+        eyebrow="Cumulative Milestones"
+        eyebrowColor="emerald"
+        title="Lifetime Summary"
+        padding="relaxed"
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Total Workouts"
+              value={aggregated.totalLogsCount}
+              accent="emerald"
+              sublabel="Completed runs"
+            />
+            <StatCard
+              label="Hours Trained"
+              value={aggregated.lifetimeHours}
+              unit="hrs"
+              accent="emerald"
+              sublabel="In-gym duration"
+            />
+            <StatCard
+              label="Total Sets"
+              value={aggregated.lifetimeSets.toLocaleString()}
+              accent="emerald"
+              sublabel="Executed sets"
+            />
+            <StatCard
+              label="Total Volume"
+              value={(aggregated.lifetimeVolume / 1000).toFixed(0)}
+              unit="k kg"
+              accent="emerald"
+              sublabel="Cumulative tonnage"
+            />
+          </div>
+
+          {aggregated.firstLogDate && (
+            <div className="pt-4 border-t border-zinc-800/60 font-mono text-xs text-zinc-400 flex items-center gap-2">
+              <Sparkles size={14} className="text-emerald-400" />
+              Training active since <strong className="text-white">{aggregated.firstLogDate}</strong>
+            </div>
+          )}
         </div>
-
-        {/* Big Number Hero Treatment with single consistent emerald border */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
-            <span className="font-mono text-xs uppercase text-zinc-500 block">Total Workouts</span>
-            <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
-              {aggregated.totalLogsCount}
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Completed runs</p>
-          </div>
-
-          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
-            <span className="font-mono text-xs uppercase text-zinc-500 block">Hours Trained</span>
-            <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
-              {aggregated.lifetimeHours}
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">In-gym duration</p>
-          </div>
-
-          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
-            <span className="font-mono text-xs uppercase text-zinc-500 block">Total Sets</span>
-            <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
-              {aggregated.lifetimeSets.toLocaleString()}
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Executed sets</p>
-          </div>
-
-          <div className="space-y-2 border-l-2 border-emerald-500 pl-4">
-            <span className="font-mono text-xs uppercase text-zinc-500 block">Total Volume</span>
-            <div className="text-4xl lg:text-5xl font-black font-mono text-white tracking-tight">
-              {(aggregated.lifetimeVolume / 1000).toFixed(0)}k <span className="text-base text-zinc-500 font-normal">kg</span>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Cumulative tonnage</p>
-          </div>
-        </div>
-
-        {aggregated.firstLogDate && (
-          <div className="pt-4 border-t border-zinc-800/60 font-mono text-xs text-zinc-400 flex items-center gap-2">
-            <Sparkles size={14} className="text-emerald-400" />
-            Training active since <strong className="text-white">{aggregated.firstLogDate}</strong>
-          </div>
-        )}
-      </div>
+      </Section>
 
       {/* 8. SECTION 7: RECOVERY */}
-      <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-4">
-        <div className="space-y-1">
-          <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-            Rest & Adaptation
-          </span>
-          <h2 className="text-xl font-black uppercase tracking-wider text-white">
-            Recovery Metrics
-          </h2>
-        </div>
-
+      <Section
+        eyebrow="Rest & Adaptation"
+        eyebrowColor="emerald"
+        title="Recovery Metrics"
+        padding="relaxed"
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-2xl p-4 space-y-1">
-            <span className="font-mono text-[10px] uppercase text-zinc-500 block">Days Since Last Session</span>
-            <div className="text-2xl font-black font-mono text-white">
-              {aggregated.daysSinceLast === 0 ? 'Today' : `${aggregated.daysSinceLast} day${aggregated.daysSinceLast > 1 ? 's' : ''} ago`}
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Muscle recovery status</p>
-          </div>
-
-          <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-2xl p-4 space-y-1">
-            <span className="font-mono text-[10px] uppercase text-zinc-500 block">Average Gap Between Runs</span>
-            <div className="text-2xl font-black font-mono text-white">
-              {aggregated.avgGapDays} <span className="text-sm font-normal text-zinc-500">days</span>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Historical rest spacing</p>
-          </div>
-
-          <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-2xl p-4 space-y-1">
-            <span className="font-mono text-[10px] uppercase text-zinc-500 block">Current Rest Phase</span>
-            <div className="text-2xl font-black font-mono text-emerald-400">
-              {aggregated.daysSinceLast === 0 ? 'Active Training' : `${aggregated.daysSinceLast} Rest Day${aggregated.daysSinceLast > 1 ? 's' : ''}`}
-            </div>
-            <p className="text-[10px] font-mono text-zinc-500">Adaptation window</p>
-          </div>
+          <StatCard
+            label="Days Since Last Session"
+            value={aggregated.daysSinceLast === 0 ? 'Today' : `${aggregated.daysSinceLast}`}
+            unit={aggregated.daysSinceLast === 0 ? '' : 'd ago'}
+            accent="zinc"
+            sublabel="Muscle recovery status"
+          />
+          <StatCard
+            label="Average Gap Between Runs"
+            value={aggregated.avgGapDays}
+            unit="days"
+            accent="zinc"
+            sublabel="Historical rest spacing"
+          />
+          <StatCard
+            label="Current Rest Phase"
+            value={aggregated.daysSinceLast === 0 ? 'Active' : `${aggregated.daysSinceLast}d`}
+            accent="emerald"
+            sublabel={aggregated.daysSinceLast === 0 ? 'In training window' : 'Adaptation period'}
+          />
         </div>
-      </div>
+      </Section>
 
       {/* 9. SECTION 8: INSIGHTS & WORKOUT TYPE SPLIT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Deterministic Sentences List */}
-        <div className="lg:col-span-2 bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-4">
-          <div className="space-y-1">
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-emerald-500 block font-bold">
-              Automated Synthesis
-            </span>
-            <h2 className="text-xl font-black uppercase tracking-wider text-white">
-              Data Insights
-            </h2>
-          </div>
-
-          <div className="space-y-3 pt-2">
+        <Section
+          eyebrow="Automated Synthesis"
+          eyebrowColor="emerald"
+          title="Data Insights"
+          padding="relaxed"
+          className="lg:col-span-2"
+        >
+          <div className="space-y-3">
             {insightsList.map((sentence, idx) => (
               <div key={idx} className="flex items-start gap-3 bg-zinc-950/40 border border-zinc-800/50 p-3.5 rounded-2xl">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
@@ -1324,19 +1190,16 @@ export const AnalyticsView: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
+        </Section>
 
         {/* Workout Type Distribution Pie Chart */}
-        <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-3xl p-6 space-y-4 flex flex-col justify-between">
-          <div className="space-y-1">
-            <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-zinc-500 block font-bold">
-              Split Breakdown
-            </span>
-            <h2 className="text-lg font-black uppercase tracking-wider text-white">
-              Routine Distribution
-            </h2>
-          </div>
-
+        <Section
+          eyebrow="Split Breakdown"
+          eyebrowColor="zinc"
+          title="Routine Distribution"
+          padding="relaxed"
+          className="flex flex-col justify-between"
+        >
           {workoutPieData.length > 0 ? (
             <div className="h-48 w-full relative my-auto">
               <ResponsiveContainer width="100%" height="100%">
@@ -1380,13 +1243,16 @@ export const AnalyticsView: React.FC = () => {
           {/* Legend */}
           <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-800/60">
             {workoutPieData.map((p) => (
-              <div key={p.type} className="flex items-center gap-1.5 font-mono text-[10px] text-zinc-400">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
-                <span>{p.name}</span>
-              </div>
+              <Badge
+                key={p.type}
+                label={p.name}
+                color={p.color}
+                variant="subtle"
+                size="sm"
+              />
             ))}
           </div>
-        </div>
+        </Section>
       </div>
     </div>
   );

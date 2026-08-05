@@ -4,6 +4,9 @@
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-display: "Bebas Neue", sans-serif;
+  --color-zinc-650: #45454e;
+  --color-zinc-750: #232328;
+  --color-zinc-850: #151518;
 }
 
 @layer utilities {

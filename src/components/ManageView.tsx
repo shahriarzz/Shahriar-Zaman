@@ -11,7 +11,8 @@ import {
   History, 
   ClipboardCopy, 
   Check, 
-  Save 
+  Save,
+  Cloud
 } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
@@ -20,6 +21,16 @@ import { StatusChip } from './StatusChip';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
+import {
+  Section,
+  SectionHeader,
+  Card,
+  StatCard,
+  Badge,
+  EmptyState,
+  SEMANTIC_COLORS,
+  RADIUS
+} from './ui';
 
 export const ManageView: React.FC = () => {
   const { 
@@ -302,46 +313,56 @@ export const ManageView: React.FC = () => {
     setAddingExWoId(null);
   };
 
-  const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);  return (
+  const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
+
+  return (
     <div className="space-y-8 pt-4 pb-12">
       <div className="space-y-2">
-        <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Architecture</span>
-        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter text-zinc-400">Manage</h1>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
+          <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Architecture</span>
+        </div>
+        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter font-display bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+          Manage
+        </h1>
       </div>
 
       {/* Cloud Sync Section */}
-      <section className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative group">
+      <Card variant="elevated" padding="relaxed" className="flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative group">
         <div className="space-y-1 relative z-10">
-          <h3 className="font-bold flex items-center gap-2">
-            Cloud Synchronization
-            {user && (
-              <span className={cn(
-                "w-2 h-2 rounded-full",
-                syncStatus === 'synced' && 'bg-emerald-500 animate-pulse',
-                syncStatus === 'syncing' && 'bg-amber-500 animate-pulse',
-                syncStatus === 'failed' && 'bg-red-500 animate-pulse',
-                syncStatus === 'idle' && 'bg-zinc-500'
-              )} />
-            )}
-          </h3>
-          <p className="text-xs text-zinc-500">
+          <div className="flex items-center gap-2">
+            <Cloud className="text-orange-500 w-4 h-4" />
+            <h3 className="font-bold flex items-center gap-2 text-white">
+              Cloud Synchronization
+              {user && (
+                <span className={cn(
+                  "w-2 h-2 rounded-full",
+                  syncStatus === 'synced' && 'bg-emerald-500 animate-pulse',
+                  syncStatus === 'syncing' && 'bg-amber-500 animate-pulse',
+                  syncStatus === 'failed' && 'bg-red-500 animate-pulse',
+                  syncStatus === 'idle' && 'bg-zinc-500'
+                )} />
+              )}
+            </h3>
+          </div>
+          <div className="text-xs text-zinc-400">
             {user ? (
-              <span className="flex flex-col gap-1">
-                <span>Signed in as {user.email}.</span>
-                {syncStatus === 'syncing' && <span className="text-amber-500 font-mono text-[10px] uppercase tracking-wider">⚡ Synchronizing with Firestore...</span>}
+              <div className="flex flex-col gap-1">
+                <span>Signed in as <strong className="text-white font-mono">{user.email}</strong>.</span>
+                {syncStatus === 'syncing' && <span className="text-amber-400 font-mono text-[10px] uppercase tracking-wider">⚡ Synchronizing with Firestore...</span>}
                 {syncStatus === 'synced' && <span className="text-emerald-400 font-mono text-[10px] uppercase tracking-wider">✓ Cloud synchronization complete. Data secure.</span>}
                 {syncStatus === 'failed' && (
                   <span className="text-red-400 font-mono text-[10px] uppercase tracking-wider flex flex-col gap-0.5">
                     <span>⚠ Sync mismatch / connection timeout.</span>
-                    {syncError && <span className="text-zinc-500 normal-case tracking-normal">{syncError}</span>}
+                    {syncError && <span className="text-zinc-400 normal-case tracking-normal">{syncError}</span>}
                   </span>
                 )}
                 {syncStatus === 'idle' && <span className="text-zinc-400 font-mono text-[10px] uppercase tracking-wider">Connection established. Idle.</span>}
-              </span>
+              </div>
             ) : (
               "Synchronize routines, custom calendars, and safety benchmarks securely by signing in."
             )}
-          </p>
+          </div>
         </div>
         
         {user ? (
@@ -357,7 +378,7 @@ export const ManageView: React.FC = () => {
               }
             }}
             disabled={loadingAction === 'auth'}
-            className="px-6 py-3 bg-zinc-800 border border-zinc-700 disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-zinc-700 transition-all z-10 cursor-pointer active:scale-95"
+            className="px-6 py-3 bg-zinc-800 border border-zinc-700 disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-zinc-700 text-white transition-all z-10 cursor-pointer active:scale-95"
           >
             {loadingAction === 'auth' ? 'Signing Out...' : 'Sign Out'}
           </button>
@@ -375,20 +396,20 @@ export const ManageView: React.FC = () => {
                 }
               }}
               disabled={loadingAction === 'auth'}
-              className="px-6 py-3 bg-white text-black disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:scale-105 transition-all z-10 cursor-pointer active:scale-95"
+              className="px-6 py-3 bg-white text-black disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:scale-105 transition-all z-10 cursor-pointer active:scale-95 shadow-md"
             >
               {loadingAction === 'auth' ? 'Signing In...' : 'Sync with Google'}
             </button>
             {authError && (
-              <span className="text-[9px] font-mono text-red-500 uppercase tracking-tighter text-right max-w-xs">
+              <span className="text-[9px] font-mono text-red-400 uppercase tracking-tighter text-right max-w-xs">
                 {authError}
               </span>
             )}
             {typeof window !== 'undefined' && window.self !== window.top && (
-              <div className="max-w-[280px] p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800 text-right space-y-1">
+              <div className="max-w-[280px] p-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-right space-y-1">
                 <span className="text-[9px] font-mono text-orange-400 uppercase tracking-wider font-bold">💡 Web Preview Alert</span>
-                <p className="text-[9px] text-zinc-500 uppercase tracking-wide leading-normal">
-                  Google Sign-In popups are blocked inside the embedded preview. Please open this app in a <span className="text-zinc-300 font-bold">New Tab</span> using the button in the top-right corner to log in and restore your history seamlessly!
+                <p className="text-[9px] text-zinc-400 uppercase tracking-wide leading-normal">
+                  Google Sign-In popups are blocked inside the embedded preview. Please open this app in a <span className="text-zinc-200 font-bold">New Tab</span> using the button in the top-right corner to log in and restore your history seamlessly!
                 </p>
               </div>
             )}
@@ -398,377 +419,384 @@ export const ManageView: React.FC = () => {
         <div className="absolute -right-10 -bottom-10 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
           <Repeat size={120} className="text-white" />
         </div>
-      </section>
+      </Card>
 
       {/* Rock Solid Backup & Restore Vault */}
-      <section className="bg-zinc-900 border border-orange-500/10 rounded-3xl p-6 space-y-6 relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Shield className="text-orange-500 w-4 h-4" />
-              <h3 className="font-bold uppercase tracking-wider text-sm">Resilient Backup Vault</h3>
-            </div>
-            <p className="text-xs text-zinc-500 max-w-2xl">
-              Physical export files, instant clipboard extraction, and manual database restore-point checkpoints prevent and secure against data loss during splits modification or cloud sync mismatches.
-            </p>
-          </div>
-
+      <Section
+        eyebrow="Resilience & Integrity"
+        eyebrowColor="orange"
+        title="Backup & Restore Vault"
+        action={
           <button
             onClick={handleCreateRestorePoint}
             disabled={loadingAction === 'savepoint'}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 rounded-xl text-[10px] font-mono uppercase tracking-widest flex items-center shadow-lg gap-2 cursor-pointer active:scale-95"
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest flex items-center shadow-lg gap-2 cursor-pointer active:scale-95"
           >
             <Save size={13} className="text-orange-400" />
             {loadingAction === 'savepoint' ? 'Saving...' : 'Create Savepoint'}
           </button>
-        </div>
-
-        {/* Restore messages indicator */}
-        <AnimatePresence>
-          {restoreMessage && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className={cn(
-                "p-3 rounded-xl border font-mono text-[10px] uppercase tracking-wide flex items-center justify-between",
-                restoreMessage.isError ? "bg-red-500/10 border-red-500/30 text-red-500" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-              )}
-            >
-              <span>{restoreMessage.text}</span>
-              <button onClick={() => setRestoreMessage(null)} className="text-zinc-650 hover:text-white font-bold ml-2">×</button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Action 1: Export Keys */}
-          <div className="bg-zinc-950/40 border border-zinc-800 p-5 rounded-2xl flex flex-col justify-between items-start gap-4 hover:border-zinc-800/80 transition-all">
-            <div className="space-y-1">
-              <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest block">Export Protocols</span>
-              <h4 className="text-xs font-bold text-zinc-350">Standalone Data Keyfile</h4>
-              <p className="text-[10px] text-zinc-500 leading-normal">
-                Compiles all training cycles, logged weights, rep sets, and cycle configs into a structured database file.
-              </p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <button
-                onClick={handleExport}
-                disabled={loadingAction === 'export'}
-                className="flex-1 px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-350 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-              >
-                <Download size={13} className="text-orange-500" />
-                {loadingAction === 'export' ? 'Exporting...' : 'Download JSON'}
-              </button>
-
-              <button
-                onClick={handleCopyClipboard}
-                disabled={loadingAction === 'copy'}
-                className="px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                {copied ? <Check size={13} className="text-green-500 animate-pulse" /> : <ClipboardCopy size={13} />}
-                <span>{copied ? "Copied!" : "Extract String"}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Action 2: Import Keys */}
-          <div className="bg-zinc-950/40 border border-zinc-800 p-5 rounded-2xl flex flex-col justify-between items-start gap-4 hover:border-zinc-800/80 transition-all">
-            <div className="space-y-1 w-full">
-              <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest block">Restore Protocol</span>
-              <h4 className="text-xs font-bold text-zinc-350">Inward Protocol Overload</h4>
-              <p className="text-[10px] text-zinc-500 leading-normal">
-                Import routines by specifying a digital JSON file or copying string structures directly below.
-              </p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <label className={cn(
-                "flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all text-center cursor-pointer flex items-center justify-center gap-2 active:scale-95",
-                loadingAction === 'upload' && "opacity-50 pointer-events-none"
-              )}>
-                <Upload size={13} />
-                <span>{loadingAction === 'upload' ? 'Uploading...' : 'Upload Keyfile'}</span>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileUpload}
-                  disabled={loadingAction === 'upload'}
-                  className="hidden"
-                />
-              </label>
-
-              <button
-                onClick={() => setShowPasteBox(!showPasteBox)}
-                className="px-4 py-2.5 bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors cursor-pointer active:scale-95"
-              >
-                {showPasteBox ? "Close Area" : "Paste Text Data"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Dynamic Paste Area */}
-        <AnimatePresence>
-          {showPasteBox && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="space-y-2 bg-zinc-950 p-4 border border-zinc-800/60 rounded-2xl"
-            >
-              <label className="block font-mono text-[9px] uppercase tracking-widest text-zinc-600">Raw Keyfile JSON Structure</label>
-              <textarea
-                value={pastedJson}
-                onChange={(e) => setPastedJson(e.target.value)}
-                placeholder='Paste your backup string block here... (e.g., {"version": 1, ...})'
-                className="w-full h-32 bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl p-3 font-mono text-[10px] text-zinc-400 outline-none resize-none"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setPastedJson('')}
-                  className="px-3 py-1.5 text-[9px] font-mono uppercase text-zinc-600 hover:text-zinc-400"
-                >
-                  Clear Fields
-                </button>
-                <button
-                  onClick={handlePasteRestore}
-                  disabled={!pastedJson.trim() || loadingAction === 'paste'}
-                  className="px-4 py-1.5 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg transition-all cursor-pointer active:scale-95"
-                >
-                  {loadingAction === 'paste' ? 'Injecting...' : 'Inject Backup String'}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Automatic Rolling Checkpoints */}
-        <div className="space-y-3 bg-zinc-950/30 p-4 border border-zinc-850 rounded-2xl">
-          <div className="flex items-center gap-1.5 justify-between">
-            <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-              <History size={13} className="text-zinc-500" />
-              Automated Checkpoints History
-            </h4>
-            <span className="text-[8px] font-mono text-zinc-600 uppercase">Up to 8 autosaves</span>
-          </div>
-
-          <p className="text-[10px] text-zinc-500 leading-normal">
-            GainLog caches complete savepoint snapshots during sessions, custom modifications, or imports. Click Restore to roll back.
+        }
+        padding="relaxed"
+      >
+        <div className="space-y-6">
+          <p className="text-xs text-zinc-400 max-w-2xl">
+            Physical export files, instant clipboard extraction, and manual database restore-point checkpoints prevent and secure against data loss during splits modification or cloud sync mismatches.
           </p>
 
-          <div className="space-y-1 max-h-44 overflow-y-auto custom-scrollbar pt-1 pr-1">
-            {checkpointHistory.length === 0 ? (
-              <div className="p-4 text-center border border-dashed border-zinc-800 text-[9px] font-mono text-zinc-600 uppercase rounded-xl">
-                No local checkpoints available.
-              </div>
-            ) : (
-              checkpointHistory.map((b) => (
-                <div 
-                  key={b.timestamp}
-                  className="p-3 bg-zinc-950/70 border border-zinc-900/40 rounded-xl flex items-center justify-between gap-3 text-left hover:border-zinc-800 hover:bg-zinc-950 transition-all group"
-                >
-                  <div className="space-y-0.5">
-                    <span className="text-[8px] font-mono text-orange-400/90 font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-500/5 border border-orange-500/10 mr-1.5">
-                      {b.changeType}
-                    </span>
-                    <span className="text-[10px] text-zinc-300 font-bold">{b.desc}</span>
-                    <div className="text-[8px] font-mono text-zinc-600 uppercase">
-                      {new Date(b.timestamp).toLocaleString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        second: '2-digit'
-                      })}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
-                    disabled={loadingAction === 'restore'}
-                    className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 border border-zinc-850 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer"
-                  >
-                    Restore
-                  </button>
-                </div>
-              ))
+          {/* Restore messages indicator */}
+          <AnimatePresence>
+            {restoreMessage && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={cn(
+                  "p-3 rounded-xl border font-mono text-[10px] uppercase tracking-wide flex items-center justify-between",
+                  restoreMessage.isError ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                )}
+              >
+                <span>{restoreMessage.text}</span>
+                <button onClick={() => setRestoreMessage(null)} className="text-zinc-400 hover:text-white font-bold ml-2">×</button>
+              </motion.div>
             )}
-          </div>
-        </div>
-      </section>
+          </AnimatePresence>
 
-      {/* Routine Splits Manager & Layout Editor */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
-        <div className="relative flex-1 manage-dropdown-container">
-          <label className="block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 ml-2">Training Split Selection</label>
-          <button 
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 font-mono text-[10px] uppercase tracking-widest text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600 outline-none cursor-pointer"
-          >
-            {selectedWorkout?.name || "Select Protocol to Edit"}
-            <ChevronRight size={16} className={cn("text-zinc-600 transition-transform", isDropdownOpen && "rotate-90")} />
-          </button>
-          
-          {isDropdownOpen && (
-            <>
-              <div 
-                className="fixed inset-0 z-10" 
-                onClick={() => setIsDropdownOpen(false)} 
-              />
-              <div className="absolute z-20 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
-                {workouts.map(wo => (
-                  <button 
-                    key={wo.id}
-                    onClick={() => {
-                      setExpandedWo(wo.id);
-                      setIsDropdownOpen(false);
-                    }}
-                    className={cn(
-                      "w-full p-4 rounded-xl text-left transition-all flex items-center gap-3",
-                      expandedWo === wo.id ? "bg-white/5 border border-white/10" : "hover:bg-white/5 border border-transparent"
-                    )}
-                  >
-                    <div className="w-1.5 h-3.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[wo.type] }} />
-                    <span className="text-[10px] font-mono uppercase tracking-widest">{wo.name}</span>
-                  </button>
-                ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Action 1: Export Keys */}
+            <Card variant="default" padding="default" className="flex flex-col justify-between items-start gap-4">
+              <div className="space-y-1">
+                <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Export Protocols</span>
+                <h4 className="text-xs font-bold text-zinc-200">Standalone Data Keyfile</h4>
+                <p className="text-[10px] text-zinc-400 leading-normal">
+                  Compiles all training cycles, logged weights, rep sets, and cycle configs into a structured database file.
+                </p>
               </div>
-            </>
-          )}
-        </div>
-        
-        <div className="flex flex-col gap-2">
-          <label className="hidden md:block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 invisible">Actions</label>
-          <button 
-            onClick={handleResetWorkouts}
-            disabled={loadingAction === 'reset_workouts'}
-            className="h-[52px] px-6 bg-zinc-900 border border-zinc-800 disabled:opacity-50 rounded-2xl text-[10px] font-mono text-zinc-500 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 hover:border-zinc-600 cursor-pointer active:scale-95"
-          >
-            <Repeat size={14} />
-            {loadingAction === 'reset_workouts' ? 'Resetting...' : 'Reset Routines Library'}
-          </button>
-        </div>
-      </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <button
+                  onClick={handleExport}
+                  disabled={loadingAction === 'export'}
+                  className="flex-1 px-4 py-2.5 bg-zinc-800 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-200 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Download size={13} className="text-orange-500" />
+                  {loadingAction === 'export' ? 'Exporting...' : 'Download JSON'}
+                </button>
 
-      <div className="space-y-4">
-        {selectedWorkout && (
-          <div key={selectedWorkout.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
-            <div className="p-6 flex items-center justify-between border-b border-zinc-850 bg-zinc-950/20">
-              <div className="flex items-center gap-4">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[selectedWorkout.type] }} />
-                <div className="space-y-1">
-                  <div className="font-bold text-xl uppercase tracking-tighter font-display text-white">{selectedWorkout.name}</div>
-                  <StatusChip
-                    label={selectedWorkout.badge}
-                    color={WORKOUT_COLORS[selectedWorkout.type]}
-                    variant="subtle"
+                <button
+                  onClick={handleCopyClipboard}
+                  disabled={loadingAction === 'copy'}
+                  className="px-4 py-2.5 bg-zinc-800 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  {copied ? <Check size={13} className="text-emerald-400 animate-pulse" /> : <ClipboardCopy size={13} />}
+                  <span>{copied ? "Copied!" : "Extract String"}</span>
+                </button>
+              </div>
+            </Card>
+
+            {/* Action 2: Import Keys */}
+            <Card variant="default" padding="default" className="flex flex-col justify-between items-start gap-4">
+              <div className="space-y-1 w-full">
+                <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Restore Protocol</span>
+                <h4 className="text-xs font-bold text-zinc-200">Inward Protocol Overload</h4>
+                <p className="text-[10px] text-zinc-400 leading-normal">
+                  Import routines by specifying a digital JSON file or copying string structures directly below.
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <label className={cn(
+                  "flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all text-center cursor-pointer flex items-center justify-center gap-2 active:scale-95",
+                  loadingAction === 'upload' && "opacity-50 pointer-events-none"
+                )}>
+                  <Upload size={13} />
+                  <span>{loadingAction === 'upload' ? 'Uploading...' : 'Upload Keyfile'}</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileUpload}
+                    disabled={loadingAction === 'upload'}
+                    className="hidden"
                   />
-                </div>
+                </label>
+
+                <button
+                  onClick={() => setShowPasteBox(!showPasteBox)}
+                  className="px-4 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors cursor-pointer active:scale-95"
+                >
+                  {showPasteBox ? "Close Area" : "Paste Text Data"}
+                </button>
               </div>
-              <div className="text-[10px] font-mono text-zinc-700">Split Configurator</div>
+            </Card>
+          </div>
+
+          {/* Dynamic Paste Area */}
+          <AnimatePresence>
+            {showPasteBox && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="space-y-2 bg-zinc-950 p-4 border border-zinc-800 rounded-2xl"
+              >
+                <label className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">Raw Keyfile JSON Structure</label>
+                <textarea
+                  value={pastedJson}
+                  onChange={(e) => setPastedJson(e.target.value)}
+                  placeholder='Paste your backup string block here... (e.g., {"version": 1, ...})'
+                  className="w-full h-32 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl p-3 font-mono text-[10px] text-zinc-300 outline-none resize-none"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setPastedJson('')}
+                    className="px-3 py-1.5 text-[9px] font-mono uppercase text-zinc-500 hover:text-zinc-300"
+                  >
+                    Clear Fields
+                  </button>
+                  <button
+                    onClick={handlePasteRestore}
+                    disabled={!pastedJson.trim() || loadingAction === 'paste'}
+                    className="px-4 py-1.5 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg transition-all cursor-pointer active:scale-95"
+                  >
+                    {loadingAction === 'paste' ? 'Injecting...' : 'Inject Backup String'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Automatic Rolling Checkpoints */}
+          <div className="space-y-3 bg-zinc-950/50 p-4 border border-zinc-800 rounded-2xl">
+            <div className="flex items-center gap-1.5 justify-between">
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                <History size={13} className="text-zinc-500" />
+                Automated Checkpoints History
+              </h4>
+              <span className="text-[8px] font-mono text-zinc-500 uppercase">Up to 8 autosaves</span>
             </div>
 
-            <div className="p-6 space-y-4">
-              {selectedWorkout.type !== 'rest' ? (
-                <>
-                  <div className="space-y-2">
-                    {selectedWorkout.exercises.map(ex => (
-                      <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/40 border border-zinc-800/60 rounded-2xl group hover:border-zinc-700 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div>
-                             <div className="text-sm font-bold text-zinc-300">{ex.name}</div>
-                             <div className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">{ex.target}</div>
-                          </div>
-                        </div>
-                        
-                        <button
-                          onClick={() => deleteExercise(selectedWorkout.id, ex.id)}
-                          className="p-2 text-zinc-750 hover:text-red-500 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+            <p className="text-[10px] text-zinc-400 leading-normal">
+              GainLog caches complete savepoint snapshots during sessions, custom modifications, or imports. Click Restore to roll back.
+            </p>
 
-                  {addingExWoId === selectedWorkout.id ? (
-                    <div className="p-5 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-4">
-                      <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">New Exercise Details</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Exercise Name</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Incline Bench Press"
-                            value={newExName}
-                            onChange={(e) => setNewExName(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] font-mono uppercase text-zinc-650 ml-1">Target Muscle Group</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Upper Chest"
-                            value={newExTarget}
-                            onChange={(e) => setNewExTarget(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-850 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-zinc-300 outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddingExWoId(null);
-                            setNewExName('');
-                            setNewExTarget('');
-                          }}
-                          className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-500 hover:text-zinc-350 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveNewExercise(selectedWorkout.id)}
-                          disabled={!newExName.trim()}
-                          className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
-                        >
-                          Append Exercise
-                        </button>
+            <div className="space-y-1 max-h-44 overflow-y-auto custom-scrollbar pt-1 pr-1">
+              {checkpointHistory.length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-zinc-800 text-[9px] font-mono text-zinc-500 uppercase rounded-xl">
+                  No local checkpoints available.
+                </div>
+              ) : (
+                checkpointHistory.map((b) => (
+                  <div 
+                    key={b.timestamp}
+                    className="p-3 bg-zinc-950 border border-zinc-800/80 rounded-xl flex items-center justify-between gap-3 text-left hover:border-zinc-700 hover:bg-zinc-900/50 transition-all group"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="text-[8px] font-mono text-orange-400 font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 mr-1.5">
+                        {b.changeType}
+                      </span>
+                      <span className="text-[10px] text-zinc-200 font-bold">{b.desc}</span>
+                      <div className="text-[8px] font-mono text-zinc-500 uppercase">
+                        {new Date(b.timestamp).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
                       </div>
                     </div>
-                  ) : (
+
                     <button
-                      onClick={() => {
-                        setAddingExWoId(selectedWorkout.id);
-                        setNewExName('');
-                        setNewExTarget('');
-                      }}
-                      className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-300 hover:border-zinc-750 transition-all cursor-pointer"
+                      onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
+                      disabled={loadingAction === 'restore'}
+                      className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 border border-zinc-800 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer text-zinc-300"
                     >
-                      <Plus size={15} /> Append New Exercise to Protocol
+                      Restore
                     </button>
-                  )}
-                </>
-              ) : (
-                <div className="bg-zinc-950/40 p-10 rounded-2xl text-center border border-dashed border-zinc-800">
-                  <div className="text-xs text-zinc-600 font-mono uppercase tracking-widest">Rest Phase</div>
-                  <p className="text-[10px] text-zinc-750 mt-1.5 uppercase tracking-wider">This recovery phase is structurally immutable (0 exercises).</p>
-                </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      </Section>
+
+      {/* Routine Splits Manager & Layout Editor */}
+      <Section
+        eyebrow="Protocols & Exercises"
+        eyebrowColor="zinc"
+        title="Training Split Editor"
+        padding="none"
+      >
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
+            <div className="relative flex-1 manage-dropdown-container">
+              <label className="block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 ml-2">Training Split Selection</label>
+              <button 
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 font-mono text-[10px] uppercase tracking-widest text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600 outline-none cursor-pointer text-white"
+              >
+                {selectedWorkout?.name || "Select Protocol to Edit"}
+                <ChevronRight size={16} className={cn("text-zinc-500 transition-transform", isDropdownOpen && "rotate-90")} />
+              </button>
+              
+              {isDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setIsDropdownOpen(false)} 
+                  />
+                  <div className="absolute z-20 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                    {workouts.map(wo => (
+                      <button 
+                        key={wo.id}
+                        onClick={() => {
+                          setExpandedWo(wo.id);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={cn(
+                          "w-full p-4 rounded-xl text-left transition-all flex items-center gap-3",
+                          expandedWo === wo.id ? "bg-white/10 border border-white/10 text-white" : "hover:bg-white/5 border border-transparent text-zinc-400 hover:text-white"
+                        )}
+                      >
+                        <div className="w-1.5 h-3.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[wo.type] }} />
+                        <span className="text-[10px] font-mono uppercase tracking-widest">{wo.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="hidden md:block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 invisible">Actions</label>
+              <button 
+                onClick={handleResetWorkouts}
+                disabled={loadingAction === 'reset_workouts'}
+                className="h-[52px] px-6 bg-zinc-900 border border-zinc-800 disabled:opacity-50 rounded-2xl text-[10px] font-mono text-zinc-400 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 hover:border-zinc-600 cursor-pointer active:scale-95"
+              >
+                <Repeat size={14} />
+                {loadingAction === 'reset_workouts' ? 'Resetting...' : 'Reset Routines Library'}
+              </button>
+            </div>
+          </div>
+
+          {selectedWorkout && (
+            <Card variant="elevated" padding="none" className="overflow-hidden">
+              <div className="p-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/40">
+                <div className="flex items-center gap-4">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[selectedWorkout.type] }} />
+                  <div className="space-y-1">
+                    <div className="font-bold text-xl uppercase tracking-tighter font-display text-white">{selectedWorkout.name}</div>
+                    <Badge
+                      label={selectedWorkout.badge}
+                      color={selectedWorkout.type === 'push' || selectedWorkout.type === 'pull' || selectedWorkout.type === 'legs' ? 'orange' : 'zinc'}
+                      variant="subtle"
+                    />
+                  </div>
+                </div>
+                <div className="text-[10px] font-mono text-zinc-500">Split Configurator</div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {selectedWorkout.type !== 'rest' ? (
+                  <>
+                    <div className="space-y-2">
+                      {selectedWorkout.exercises.map(ex => (
+                        <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl group hover:border-zinc-700 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div>
+                               <div className="text-sm font-bold text-zinc-200">{ex.name}</div>
+                               <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">{ex.target}</div>
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={() => deleteExercise(selectedWorkout.id, ex.id)}
+                            className="p-2 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {addingExWoId === selectedWorkout.id ? (
+                      <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-4">
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-400 font-bold">New Exercise Details</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-mono uppercase text-zinc-400 ml-1">Exercise Name</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Incline Bench Press"
+                              value={newExName}
+                              onChange={(e) => setNewExName(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-white outline-none transition-colors"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-mono uppercase text-zinc-400 ml-1">Target Muscle Group</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Upper Chest"
+                              value={newExTarget}
+                              onChange={(e) => setNewExTarget(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-white outline-none transition-colors"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingExWoId(null);
+                              setNewExName('');
+                              setNewExTarget('');
+                            }}
+                            className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveNewExercise(selectedWorkout.id)}
+                            disabled={!newExName.trim()}
+                            className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
+                          >
+                            Append Exercise
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setAddingExWoId(selectedWorkout.id);
+                          setNewExName('');
+                          setNewExTarget('');
+                        }}
+                        className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-400 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-200 hover:border-zinc-700 transition-all cursor-pointer"
+                      >
+                        <Plus size={15} /> Append New Exercise to Protocol
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="bg-zinc-950/60 p-10 rounded-2xl text-center border border-dashed border-zinc-800">
+                    <div className="text-xs text-zinc-500 font-mono uppercase tracking-widest">Rest Phase</div>
+                    <p className="text-[10px] text-zinc-500 mt-1.5 uppercase tracking-wider">This recovery phase is structurally immutable (0 exercises).</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+        </div>
+      </Section>
 
       {/* Danger Zone */}
-      <div className="pt-6 border-t border-zinc-800/50">
-        <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl space-y-4">
-          <h3 className="text-red-500 font-mono text-[10px] uppercase tracking-[0.3em] font-bold animate-pulse">Terminal Commands</h3>
-          <p className="text-xs text-red-500/60 leading-relaxed uppercase tracking-wider font-mono">
+      <div className="pt-6 border-t border-zinc-900">
+        <div className="p-6 bg-red-500/5 border border-red-500/15 rounded-3xl space-y-4">
+          <h3 className="text-red-400 font-mono text-[10px] uppercase tracking-[0.3em] font-bold">Terminal Commands</h3>
+          <p className="text-xs text-red-400/70 leading-relaxed uppercase tracking-wider font-mono">
             Caution: Purging session history logs will permanently clear all historical weights and calendars. Split routines will remain preserved.
           </p>
           <button
@@ -788,7 +816,7 @@ export const ManageView: React.FC = () => {
               }
             }}
             disabled={loadingAction === 'purge_logs'}
-            className="px-6 py-3 border border-red-500/30 text-red-500 disabled:opacity-50 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
+            className="px-6 py-3 border border-red-500/30 text-red-400 disabled:opacity-50 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
           >
             {loadingAction === 'purge_logs' ? 'Purging...' : 'Purge All Session Logs'}
           </button>

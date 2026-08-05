@@ -1,16 +1,25 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Scale } from 'lucide-react';
+import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Scale, Dumbbell, Flame, Sparkles } from 'lucide-react';
 import { useFitness } from '../store/FitnessContext';
 import { getCycleDay, getNextCycleDayFromLogs, getWorkoutBadgeStyle, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
 import { SetLog, SessionLog } from '../types/fitness';
 import { Calendar } from './Calendar';
-import { StatusChip } from './StatusChip';
 import { haptics } from '../utils/haptics';
 import { useConfirm } from '../store/ConfirmContext';
 import { useCountUp } from '../hooks/useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
-
+import {
+  Section,
+  SectionHeader,
+  StatCard,
+  HighlightCard,
+  Card,
+  Badge,
+  EmptyState,
+  SEMANTIC_COLORS,
+  RADIUS
+} from './ui';
 import { cn } from '../lib/utils';
 
 const formatDateStr = (dateStr: string) => {
@@ -145,22 +154,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats.map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.1 }}
-            className={cn(
-              "bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-start gap-1 border-t-2",
-              stat.accentColor
-            )}
-          >
-            <div className={stat.color}>{stat.icon}</div>
-            <span className="text-3xl font-black">{stat.val}</span>
-            <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">{stat.label}</span>
-          </motion.div>
-        ))}
+        <StatCard
+          label="Day Streak"
+          value={streakCount.toString()}
+          color="orange"
+          icon={TrendingUp}
+          variant="default"
+        />
+        <StatCard
+          label="Sessions"
+          value={animatedSessions.toString()}
+          color="emerald"
+          icon={CalendarIcon}
+          variant="default"
+        />
+        <StatCard
+          label="Cycles"
+          value={animatedCycles.toString()}
+          color="amber"
+          icon={Repeat}
+          variant="default"
+        />
+        <StatCard
+          label="kg Lifted"
+          value={animatedWeight >= 1000 ? (animatedWeight / 1000).toFixed(1) + 'k' : animatedWeight.toString()}
+          color="emerald"
+          icon={Trophy}
+          variant="default"
+        />
       </div>
 
       {/* Unfinished Session Alert */}
@@ -177,126 +198,128 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="border-2 border-amber-500/20 bg-gradient-to-r from-amber-500/10 to-transparent rounded-3xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative overflow-hidden"
           >
-            <div className="absolute right-0 top-0 bottom-0 w-24 bg-amber-500/5 blur-xl rounded-full" />
-            <div className="space-y-2 relative z-10 font-sans">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber-500 font-bold">Unfinished Session Restored</span>
+            <Card variant="elevated" padding="relaxed" className="border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-zinc-900/40 to-transparent relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    <Badge label="UNFINISHED SESSION RESTORED" color="amber" variant="subtle" />
+                  </div>
+                  <h3 className="text-2xl font-black uppercase text-white tracking-tight leading-none font-display">
+                    {unfinishedWo.name}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-mono">
+                    Started {relativeTime}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    onClick={() => {
+                      haptics.warning();
+                      clearActiveSession();
+                    }}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 border border-zinc-800 rounded-xl font-mono text-xs uppercase font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptics.medium();
+                      onStartWorkout(activeSession.workoutId);
+                    }}
+                    className="flex-1 sm:flex-initial px-6 py-2.5 bg-amber-500 text-black hover:bg-amber-400 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-transform hover:scale-105 cursor-pointer"
+                  >
+                    Resume Session
+                  </button>
+                </div>
               </div>
-              <h3 className="text-2xl font-black uppercase text-white tracking-tight leading-none font-display">
-                {unfinishedWo.name}
-              </h3>
-              <p className="text-sm text-zinc-400 font-mono">
-                Started {relativeTime}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto relative z-10">
-              <button
-                onClick={() => {
-                  haptics.warning();
-                  clearActiveSession();
-                }}
-                className="flex-1 sm:flex-initial px-5 py-3 border border-zinc-800 rounded-xl font-mono text-[10px] uppercase font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                Discard
-              </button>
-              <button
-                onClick={() => {
-                  haptics.medium();
-                  onStartWorkout(activeSession.workoutId);
-                }}
-                className="flex-1 sm:flex-initial px-6 py-3 bg-amber-500 text-black hover:bg-amber-400 rounded-xl font-mono text-[10px] font-bold uppercase tracking-widest transition-transform hover:scale-105 cursor-pointer"
-              >
-                Resume Session
-              </button>
-            </div>
+            </Card>
           </motion.div>
         );
       })()}
 
       {/* Today's Workout */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Today's Protocol</span>
-          <div className="flex-1 h-px bg-zinc-800" />
-        </div>
-
+      <Section
+        eyebrow="Today's Protocol"
+        eyebrowColor="emerald"
+        title="Active Target"
+        padding="none"
+      >
         {workouts.length === 0 ? (
-          <div className="bg-zinc-900 border border-dashed border-zinc-800 p-12 rounded-3xl text-center space-y-4">
-            <p className="text-zinc-500 font-mono text-sm">Routines library is empty.</p>
-            <button 
-              onClick={() => {
+          <EmptyState
+            icon={Dumbbell}
+            title="Routines Library Is Empty"
+            description="Reload standard protocols to populate your workout engine."
+            action={{
+              label: 'Reload Engine',
+              onClick: () => {
                 haptics.medium();
                 setWorkouts(INITIAL_WORKOUTS);
-              }} 
-              className="px-6 py-2 bg-white text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-200 transition-colors"
-            >
-              Reload Engine
-            </button>
-          </div>
+              }
+            }}
+          />
         ) : todayWorkout ? (
-          <motion.div
-            whileHover={{ y: -4 }}
-            className="relative overflow-hidden group cursor-pointer"
+          <Card
+            variant="interactive"
+            padding="relaxed"
+            onClick={() => {
+              haptics.medium();
+              onStartWorkout(todayWorkout.id);
+            }}
+            className="group relative overflow-hidden"
           >
-            <div
-              className="absolute inset-0 opacity-15 transition-opacity"
-              style={{
-                background: `radial-gradient(circle at top right, ${WORKOUT_COLORS[todayWorkout.type]}33, transparent 70%)`
-              }}
-            />
-            <div className="relative bg-zinc-900/90 border border-zinc-800 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="space-y-2">
-                <StatusChip
+                <Badge
                   label={todayWorkout.badge}
-                  color={WORKOUT_COLORS[todayWorkout.type]}
+                  color={todayWorkout.type === 'push' || todayWorkout.type === 'pull' || todayWorkout.type === 'hybrid' ? 'orange' : 'emerald'}
                   variant="subtle"
                 />
-                <h2 className="text-4xl font-black uppercase tracking-tight font-display text-white">{todayWorkout.name}</h2>
+                <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight font-display text-white">{todayWorkout.name}</h2>
                 <p className="text-zinc-500 text-sm">
                   {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
                 </p>
               </div>
 
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   haptics.medium();
                   onStartWorkout(todayWorkout.id);
                 }}
-                className="w-full md:w-auto px-8 py-4 rounded-2xl font-mono text-xs font-bold tracking-widest transition-all hover:scale-105 active:scale-95"
-                style={{
-                  backgroundColor: WORKOUT_COLORS[todayWorkout.type],
-                  color: 'black'
-                }}
+                className={cn(
+                  "w-full md:w-auto px-8 py-3.5 rounded-xl font-mono text-xs font-bold tracking-wider uppercase transition-all hover:scale-105 active:scale-95 cursor-pointer",
+                  todayWorkout.type === 'rest'
+                    ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                    : "bg-emerald-500 text-black hover:bg-emerald-400"
+                )}
               >
                 {todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
               </button>
             </div>
-          </motion.div>
+          </Card>
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl text-center space-y-4">
-             <div className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Protocol Out of Sync</div>
-             <p className="text-sm text-zinc-400">No core workout found for Day {currentCycleDay}.</p>
-             <button 
-              onClick={() => updateCycleStart(dk())}
-              className="px-6 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-[10px] font-mono uppercase tracking-widest"
-            >
-              Reset to Cycle Day 1
-            </button>
-          </div>
+          <EmptyState
+            icon={Repeat}
+            title="Protocol Out of Sync"
+            description={`No core workout found for Day ${currentCycleDay}.`}
+            action={{
+              label: 'Reset to Cycle Day 1',
+              onClick: () => updateCycleStart(dk())
+            }}
+          />
         )}
-      </section>
+      </Section>
 
       {/* Body Weight Log */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Body Weight</span>
-          <div className="flex-1 h-px bg-zinc-800" />
-        </div>
-
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-5">
+      <Section
+        eyebrow="Biometrics"
+        eyebrowColor="orange"
+        title="Body Weight Tracker"
+        padding="relaxed"
+      >
+        <div className="space-y-5">
           {/* Current + Input Row */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
             <div className="space-y-1">
@@ -328,11 +351,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     handleLogWeight();
                   }
                 }}
-                className="flex-1 sm:flex-none w-full sm:w-24 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-3 text-sm text-center font-mono focus:border-zinc-500 outline-none transition-all"
+                className="flex-1 sm:flex-none w-full sm:w-28 bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-sm text-center font-mono focus:border-orange-500 outline-none transition-all text-white placeholder-zinc-600"
               />
               <button
                 onClick={handleLogWeight}
-                className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-[10px] font-mono uppercase tracking-widest text-zinc-300 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                className="px-5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-xl text-xs font-mono uppercase tracking-wider transition-all cursor-pointer active:scale-95 whitespace-nowrap"
               >
                 Log
               </button>
@@ -406,7 +429,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   .sort((a, b) => b[0].localeCompare(a[0]))
                   .slice(0, 5)
                   .map(([date, weight]) => (
-                    <div key={date} className="flex items-center justify-between bg-zinc-950/40 border border-zinc-800/40 rounded-xl px-3 py-2 text-xs font-mono">
+                    <Card key={date} variant="default" padding="compact" className="flex items-center justify-between text-xs font-mono">
                       <span className="text-zinc-400">{formatDateStr(date)}</span>
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold">{weight} <span className="text-[10px] text-zinc-500 font-normal">kg</span></span>
@@ -428,35 +451,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                           <Trash2 size={13} />
                         </button>
                       </div>
-                    </div>
+                    </Card>
                   ))}
               </div>
             </div>
           )}
         </div>
-      </section>
+      </Section>
 
       {/* Quick All Workouts */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">All Routines</span>
-          <div className="flex-1 h-px bg-zinc-800" />
-        </div>
-
-         <div className="relative dropdown-container">
+      <Section
+        eyebrow="Protocols"
+        eyebrowColor="zinc"
+        title="Routine Library"
+        padding="none"
+      >
+        <div className="relative dropdown-container">
           <button 
             onClick={() => {
               haptics.light();
               setIsDropdownOpen(!isDropdownOpen);
             }}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 pr-10 font-mono text-[10px] uppercase tracking-widest outline-none text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 pr-10 font-mono text-xs uppercase tracking-wider outline-none text-left flex justify-between items-center hover:border-zinc-700 transition-all cursor-pointer"
           >
-            All Routines Architecture
+            <span className="text-zinc-300">Browse All Routines</span>
             <ChevronRight size={16} className={cn("text-zinc-500 transition-transform", isDropdownOpen && "rotate-90")} />
           </button>
           
           {isDropdownOpen && (
-            <div className="absolute z-40 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-3xl p-2 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div className="absolute z-40 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
               {workouts.map((wo) => (
                 <button
                   key={wo.id}
@@ -467,27 +490,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   }}
                   disabled={wo.type === 'rest'}
                   className={cn(
-                    "w-full p-4 rounded-2xl flex items-center justify-between text-left transition-all border border-transparent",
-                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-white/5 hover:border-white/5 cursor-pointer active:scale-[0.98]"
+                    "w-full p-3.5 rounded-xl flex items-center justify-between text-left transition-all border border-transparent",
+                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-zinc-800 cursor-pointer active:scale-[0.99]"
                   )}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <div 
-                      className="w-1.5 h-8 rounded-full" 
+                      className="w-1.5 h-6 rounded-full" 
                       style={{ 
                         backgroundColor: WORKOUT_COLORS[wo.type],
-                        boxShadow: `0 0 8px ${WORKOUT_COLORS[wo.type]}80`
                       }} 
                     />
                     <div>
-                      <div className="font-bold text-sm uppercase tracking-tight">{wo.name}</div>
-                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] leading-none mt-1.5">Day {wo.cycleDay} · {wo.badge}</div>
+                      <div className="font-bold text-sm uppercase tracking-tight text-white">{wo.name}</div>
+                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-1">Day {wo.cycleDay} · {wo.badge}</div>
                     </div>
                   </div>
                   {wo.type !== 'rest' && (
-                    <div className="flex flex-col items-end gap-1">
-                       <ChevronRight size={14} className="text-zinc-700" />
-                       <span className="text-[7px] font-mono text-zinc-800 uppercase">{wo.exercises.length} Exercises</span>
+                    <div className="flex items-center gap-2">
+                      <Badge label={`${wo.exercises.length} EXERCISES`} color="zinc" variant="subtle" />
+                      <ChevronRight size={14} className="text-zinc-500" />
                     </div>
                   )}
                 </button>
@@ -495,16 +517,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             </div>
           )}
         </div>
-      </section>
+      </Section>
 
       {/* Calendar Section */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Training Calendar</span>
-          <div className="flex-1 h-px bg-zinc-800" />
-        </div>
-        <Calendar onNavigateToHistory={onNavigateToHistory} />
-      </section>
+      <Calendar onNavigateToHistory={onNavigateToHistory} />
     </div>
   );
 };

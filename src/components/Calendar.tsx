@@ -1,235 +1,348 @@
 import React, { useState, useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isAfter, startOfDay } from 'date-fns';
-import { ChevronLeft, ChevronRight, Clock, Dumbbell, TrendingUp, Info } from 'lucide-react';
+import { format, isSameMonth, isSameDay, addMonths, subMonths, isAfter, startOfDay } from 'date-fns';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Dumbbell,
+  TrendingUp,
+  ArrowRight,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Calendar as CalendarIcon,
+  Sparkles,
+  Zap
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../store/FitnessContext';
-import { getCycleDay, getWorkoutBadgeStyle, WORKOUT_COLORS, calculateVolume } from '../utils/fitnessHelpers';
-import { SessionLog, SetLog } from '../types/fitness';
-import { StatusChip } from './StatusChip';
+import {
+  getCycleDayForDate,
+  getWorkoutBadgeStyle,
+  WORKOUT_COLORS,
+  calculateVolume
+} from '../utils/fitnessHelpers';
+import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { haptics } from '../utils/haptics';
+import { useCalendarGrid } from '../hooks/useCalendarGrid';
+import { cn } from '../lib/utils';
+import {
+  Section,
+  SectionHeader,
+  StatCard,
+  EmptyState,
+  Badge,
+  Card,
+  RADIUS
+} from './ui';
 
 interface CalendarProps {
   onNavigateToHistory?: (dateStr?: string) => void;
 }
 
-const getCompletionPercentage = (log: SessionLog): number => {
-  if (!log || !log.sets) return 0;
-  const setsArray = Object.values(log.sets).flat() as SetLog[];
-  if (setsArray.length === 0) return 0;
-  const doneSets = setsArray.filter(s => s.done).length;
-  return Math.round((doneSets / setsArray.length) * 100);
-};
-
 export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const { logs, workouts, appState } = useFitness();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // Memoize calendar range calculations on currentMonth change
-  const calendarRange = useMemo(() => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart);
-    const endDate = endOfWeek(monthEnd);
-    const days = eachDayOfInterval({ start: startDate, end: endDate });
-    return { monthStart, monthEnd, days };
-  }, [currentMonth]);
+  // 1. Shared Calendar Grid hook for month dates and log mapping
+  const {
+    monthStart,
+    days,
+    logsByDateMap,
+    dayDetailMap,
+    isCurrentMonth,
+    isToday: isDateToday,
+    isFuture: isDateFuture
+  } = useCalendarGrid({
+    monthDate: currentMonth,
+    logs,
+    workouts,
+    weekStartsOn: 0
+  });
 
-  const { monthStart, days } = calendarRange;
-
-  // Memoize logs map by date string for O(1) lookups
-  const logsByDateMap = useMemo(() => {
-    const map = new Map<string, SessionLog>();
-    (Object.values(logs) as SessionLog[]).forEach(log => {
-      if (log.date) {
-        map.set(log.date, log);
-      }
-      if (log.id) {
-        if (log.id.length >= 10) {
-          map.set(log.id.slice(0, 10), log);
-        }
-        map.set(log.id, log);
-      }
-    });
-    return map;
-  }, [logs]);
-
-  // Memoize workouts map by ID for O(1) lookups
+  // 2. Build fast lookup maps once (O(1) lookups)
   const workoutMap = useMemo(() => {
-    const map = new Map<string, typeof workouts[0]>();
+    const map = new Map<string, Workout>();
+    (workouts || []).forEach(w => map.set(w.id, w));
+    return map;
+  }, [workouts]);
+
+  const exerciseMap = useMemo(() => {
+    const map = new Map<string, Exercise>();
     (workouts || []).forEach(w => {
-      map.set(w.id, w);
+      (w.exercises || []).forEach(ex => {
+        map.set(ex.id, ex);
+      });
     });
     return map;
   }, [workouts]);
 
-  // Memoize core workouts map by cycleDay for O(1) expected workout lookups
   const coreWorkoutByCycleDayMap = useMemo(() => {
-    const map = new Map<number, typeof workouts[0]>();
+    const map = new Map<number, Workout>();
     (workouts || []).forEach(w => {
-      if (w.isCore) {
+      if (w.isCore && typeof w.cycleDay === 'number') {
         map.set(w.cycleDay, w);
       }
     });
     return map;
   }, [workouts]);
 
+  // Forward navigation cap: disable navigating beyond the current calendar month
+  const isCurrentOrFutureMonth = useMemo(() => {
+    const today = new Date();
+    return isSameMonth(currentMonth, today) || isAfter(currentMonth, today);
+  }, [currentMonth]);
+
+  const isSameMonthAsToday = isSameMonth(currentMonth, new Date());
+
+  // 3. Compute status for each day in calendar cell
   const getDayStatus = (date: Date, dateStr: string) => {
     const log = logsByDateMap.get(dateStr);
+    const dayDetail = dayDetailMap[dateStr];
     const today = new Date();
     const isFuture = isAfter(startOfDay(date), startOfDay(today));
 
-    const cycleDay = getCycleDay(appState?.cycleStart, date);
+    // Cycle day anchored to last completed workout (matching Dashboard)
+    const cycleDay = getCycleDayForDate(date, logs, workouts, appState?.cycleStart);
     const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
 
     if (log) {
       const wo = workoutMap.get(log.workoutId);
+      const doneSets = dayDetail?.doneSets ?? 0;
+      const totalSets = dayDetail?.totalSets ?? 0;
+
       if (!log.complete) {
-        const pct = getCompletionPercentage(log);
-        return { color: '#6366f1', label: `${pct}%`, log };
+        return {
+          color: '#f59e0b',
+          label: totalSets > 0 ? `${doneSets}/${totalSets} sets` : 'partial',
+          isPartial: true,
+          log
+        };
       }
-      return { color: WORKOUT_COLORS[wo?.type || 'push'] || '#6366f1', label: wo?.type || 'session', log };
+      return {
+        color: WORKOUT_COLORS[wo?.type || 'push'] || '#10b981',
+        label: wo?.type || 'session',
+        isComplete: true,
+        log
+      };
     }
 
     if (isFuture) {
       if (expectedWo) {
         if (expectedWo.type === 'rest') {
-          return { color: '#22c55e', label: 'rest', isFuture: true };
+          return { color: '#10b981', label: 'rest', isFuture: true, expectedWo };
         }
-        return { color: WORKOUT_COLORS[expectedWo.type] || '#6366f1', label: expectedWo.name, isFuture: true };
+        return {
+          color: WORKOUT_COLORS[expectedWo.type] || '#f59e0b',
+          label: expectedWo.name,
+          isFuture: true,
+          expectedWo
+        };
       }
       return null;
     }
 
     if (expectedWo) {
-      if (expectedWo.type === 'rest') return { color: '#22c55e', label: 'rest' };
-      if (!isSameDay(date, today)) return { color: '#ef4444', label: 'missed' };
+      if (expectedWo.type === 'rest') {
+        return { color: '#10b981', label: 'rest', isRest: true, expectedWo };
+      }
+      if (!isSameDay(date, today)) {
+        return { color: '#ef4444', label: 'missed', isMissed: true, expectedWo };
+      }
     }
 
     return null;
   };
 
+  // 4. Selected date analysis
   const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
   const selectedLog = selectedDateStr ? (logsByDateMap.get(selectedDateStr) || null) : null;
+  const selectedDetail = selectedDateStr ? dayDetailMap[selectedDateStr] : null;
 
-  const isSameMonthAsToday = isSameMonth(currentMonth, new Date());
+  const selectedCycleDay = selectedDate
+    ? getCycleDayForDate(selectedDate, logs, workouts, appState?.cycleStart)
+    : null;
+  const expectedWoForSelected = selectedCycleDay !== null
+    ? coreWorkoutByCycleDayMap.get(selectedCycleDay)
+    : null;
 
-  const selectedCycleDay = selectedDate ? getCycleDay(appState?.cycleStart, selectedDate) : null;
-  const expectedWoForSelected = selectedCycleDay !== null ? coreWorkoutByCycleDayMap.get(selectedCycleDay) : null;
-  const isSelectedDateFuture = selectedDate ? isAfter(startOfDay(selectedDate), startOfDay(new Date())) : false;
+  const isSelectedDateFuture = selectedDate
+    ? isAfter(startOfDay(selectedDate), startOfDay(new Date()))
+    : false;
+  const isSelectedDateToday = selectedDate ? isSameDay(selectedDate, new Date()) : false;
+  const isSelectedDatePast = selectedDate && !isSelectedDateToday && !isSelectedDateFuture;
+
+  // Compute completed / total sets for selected log
+  const selectedDoneSets = useMemo(() => {
+    if (!selectedLog || !selectedLog.sets) return 0;
+    let done = 0;
+    Object.values(selectedLog.sets).forEach(sList => {
+      (sList as SetLog[]).forEach(s => {
+        if (s && s.done) done++;
+      });
+    });
+    return done;
+  }, [selectedLog]);
+
+  const selectedTotalSets = useMemo(() => {
+    if (!selectedLog || !selectedLog.sets) return 0;
+    let total = 0;
+    Object.values(selectedLog.sets).forEach(sList => {
+      total += (sList as SetLog[]).length;
+    });
+    return total;
+  }, [selectedLog]);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Calendar Grid */}
-      <div className="flex-1 bg-zinc-900/30 border border-zinc-800 rounded-3xl p-6 h-fit">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex flex-col">
-            <h3 className="font-display text-2xl tracking-wider uppercase">
-              {format(currentMonth, 'MMMM')}
-            </h3>
-            <span className="font-mono text-xs text-zinc-500 uppercase tracking-widest">{format(currentMonth, 'yyyy')}</span>
-          </div>
-          <div className="flex gap-2 items-center">
-            {!isSameMonthAsToday && (
+    <div className="flex flex-col lg:flex-row gap-8 items-start">
+      {/* Calendar Grid Container */}
+      <div className="flex-1 w-full">
+        <Section
+          eyebrow="Timeline"
+          eyebrowColor="emerald"
+          title={`${format(currentMonth, 'MMMM')} ${format(currentMonth, 'yyyy')}`}
+          padding="relaxed"
+          action={
+            <div className="flex gap-2 items-center">
+              {!isSameMonthAsToday && (
+                <button
+                  onClick={() => {
+                    haptics.selection();
+                    const today = new Date();
+                    setCurrentMonth(today);
+                    setSelectedDate(today);
+                  }}
+                  className="px-3.5 py-1.5 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full text-xs font-mono uppercase tracking-wider transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                >
+                  Today
+                </button>
+              )}
               <button
                 onClick={() => {
                   haptics.selection();
-                  const today = new Date();
-                  setCurrentMonth(today);
-                  setSelectedDate(today);
+                  setCurrentMonth(subMonths(currentMonth, 1));
                 }}
-                className="px-4 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800 rounded-full text-xs font-mono uppercase tracking-wider transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                title="Previous Month"
+                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full transition-colors cursor-pointer text-zinc-300 hover:text-white"
               >
-                Today
+                <ChevronLeft size={16} />
               </button>
-            )}
-            <button 
-              onClick={() => { haptics.selection(); setCurrentMonth(subMonths(currentMonth, 1)); }} 
-              className="w-10 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button 
-              onClick={() => { haptics.selection(); setCurrentMonth(addMonths(currentMonth, 1)); }} 
-              className="w-10 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-7 gap-1.5">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-            <div key={d} className="text-center font-mono text-[9px] text-zinc-600 uppercase pb-4 tracking-tighter">{d}</div>
-          ))}
-          {days.map(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            const status = getDayStatus(day, dateStr);
-            const isToday = isSameDay(day, new Date());
-            const isSelected = selectedDate && isSameDay(day, selectedDate);
-            const isCurrentMonth = isSameMonth(day, monthStart);
-
-            return (
-              <motion.button
-                key={dateStr}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 onClick={() => {
+                  if (isCurrentOrFutureMonth) return;
                   haptics.selection();
-                  setSelectedDate(day);
-                  const logOnDay = logsByDateMap.get(dateStr);
-                  if (logOnDay && onNavigateToHistory) {
-                    onNavigateToHistory(logOnDay.id || dateStr);
-                  }
+                  setCurrentMonth(addMonths(currentMonth, 1));
                 }}
-                className={`group relative min-h-[70px] p-2 border transition-all duration-200 rounded-2xl flex flex-col gap-1 overflow-hidden cursor-pointer ${
-                  !isCurrentMonth ? 'opacity-20 pointer-events-none' : ''
-                } ${isSelected 
-                    ? 'border-white/40 bg-white/10' 
-                    : isToday 
-                      ? 'border-white/20 bg-zinc-800/40' 
-                      : 'border-zinc-800/30 bg-zinc-950/20 hover:bg-zinc-800/30'
-                  }`}
+                disabled={isCurrentOrFutureMonth}
+                title={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
+                className={cn(
+                  "w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full transition-colors",
+                  isCurrentOrFutureMonth
+                    ? "opacity-25 cursor-not-allowed text-zinc-600"
+                    : "hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+                )}
               >
-                <div className="flex justify-between items-start">
-                  <span 
-                    className={`text-[11px] font-mono leading-none w-6 h-6 flex items-center justify-center rounded-full transition-all ${
-                      isToday || isSelected 
-                        ? 'text-white' 
-                        : status 
-                          ? 'text-zinc-200' 
-                          : 'text-zinc-600'
-                    } ${status && !isSelected ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : ''}`}
-                    style={status && !isSelected ? { borderColor: status.color } : undefined}
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          }
+        >
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-1.5 pt-2">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+              <div
+                key={d}
+                className="text-center font-mono text-[10px] text-zinc-500 uppercase pb-2 tracking-wider font-bold"
+              >
+                {d}
+              </div>
+            ))}
+
+            {days.map(day => {
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const status = getDayStatus(day, dateStr);
+              const isToday = isSameDay(day, new Date());
+              const isSelected = selectedDate && isSameDay(day, selectedDate);
+              const isCurrentMonthDay = isSameMonth(day, monthStart);
+
+              return (
+                <motion.button
+                  key={dateStr}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => {
+                    haptics.selection();
+                    setSelectedDate(day);
+                  }}
+                  className={cn(
+                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border transition-all duration-200 rounded-2xl flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    !isCurrentMonthDay && "opacity-20 pointer-events-none",
+                    isSelected
+                      ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                      : isToday
+                        ? "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
+                        : "border-zinc-800/40 bg-zinc-950/30 hover:bg-zinc-800/40 hover:border-zinc-700/60"
+                  )}
+                >
+                  {/* Date Number Badge */}
+                  <span
+                    className={cn(
+                      "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full transition-all font-bold",
+                      isToday
+                        ? "bg-emerald-500 text-black font-black shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                        : isSelected
+                          ? "bg-white text-black font-black"
+                          : status
+                            ? "text-zinc-200"
+                            : "text-zinc-500",
+                      status && !isSelected && !isToday && (status.isFuture ? 'border-2 border-dashed' : 'border-2')
+                    )}
+                    style={status && !isSelected && !isToday ? { borderColor: status.color } : undefined}
                   >
                     {format(day, 'd')}
                   </span>
-                  {isToday && !isSelected && <div className="w-1 h-1 rounded-full bg-white animate-pulse" />}
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
 
-        {/* Legend */}
-        <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-wrap gap-x-6 gap-y-3">
-          {[
-            { label: 'Push', color: WORKOUT_COLORS.push },
-            { label: 'Pull', color: WORKOUT_COLORS.pull },
-            { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-            { label: 'Rest', color: '#22c55e' },
-            { label: 'Missed', color: '#ef4444' },
-            { label: 'Incomplete', color: '#6366f1' },
-          ].map(l => (
-            <div key={l.label} className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.1)]" style={{ backgroundColor: l.color }} />
-              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">{l.label}</span>
-            </div>
-          ))}
-        </div>
+                  {/* Color-Coded Status Dot */}
+                  {status && (
+                    <div
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full mt-1 transition-all",
+                        status.isFuture ? "opacity-70" : "opacity-100"
+                      )}
+                      style={{ backgroundColor: status.color }}
+                    />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-6 pt-5 border-t border-zinc-800/80 flex flex-wrap gap-x-5 gap-y-2.5">
+            {[
+              { label: 'Push', color: WORKOUT_COLORS.push },
+              { label: 'Pull', color: WORKOUT_COLORS.pull },
+              { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
+              { label: 'Rest', color: '#10b981' },
+              { label: 'Missed', color: '#ef4444' },
+              { label: 'Incomplete', color: '#f59e0b' },
+            ].map(l => (
+              <div key={l.label} className="flex items-center gap-2">
+                <div
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: l.color }}
+                />
+                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                  {l.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
       </div>
 
-      {/* Selected Day Detail */}
+      {/* Selected Day Detail Panel */}
       <AnimatePresence mode="wait">
         {selectedDate ? (
           <motion.div
@@ -239,128 +352,365 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             exit={{ opacity: 0, x: 20 }}
             className="w-full lg:w-96 flex flex-col"
           >
-            <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden h-full flex flex-col">
+            <Card variant="elevated" padding="none" className="overflow-hidden h-full flex flex-col">
               {/* Header */}
-              <div className="p-6 border-b border-white/5 bg-gradient-to-br from-zinc-800/50 to-transparent">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-[0.2em] mb-1">Session Protocol</p>
-                    <h4 className="font-display text-3xl uppercase leading-none">{format(selectedDate, 'EEEE')}</h4>
-                    <p className="font-mono text-xs text-white/40 mt-1">{format(selectedDate, 'MMMM do, yyyy')}</p>
-                  </div>
-                  <button 
-                    onClick={() => { haptics.selection(); setSelectedDate(null); }}
-                    className="text-zinc-500 hover:text-white transition-colors cursor-pointer"
+              <div className="p-5 border-b border-zinc-800/80 bg-zinc-900/40">
+                <div className="flex justify-between items-start mb-2">
+                  <SectionHeader
+                    eyebrow="Day Overview"
+                    eyebrowColor="emerald"
+                    title={format(selectedDate, 'EEEE')}
+                    subtitle={format(selectedDate, 'MMMM do, yyyy')}
+                  />
+                  <button
+                    onClick={() => {
+                      haptics.selection();
+                      setSelectedDate(null);
+                    }}
+                    title="Close Details"
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
                   >
-                    <ChevronRight size={24} />
+                    <X size={14} />
                   </button>
                 </div>
 
-                {selectedLog ? (
-                  <div className="grid grid-cols-3 gap-2 mt-8">
-                    <div className="bg-zinc-950/40 rounded-xl p-3 border border-white/5">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <TrendingUp size={10} className="text-blue-400" />
-                        <span className="font-mono text-[8px] uppercase text-zinc-500">Volume</span>
-                      </div>
-                      <p className="text-base font-display uppercase tracking-tight">
-                        {calculateVolume(selectedLog).toLocaleString()} <span className="text-[8px] font-mono text-zinc-500">kg</span>
-                      </p>
-                    </div>
-                    <div className="bg-zinc-950/40 rounded-xl p-3 border border-white/5">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Clock size={10} className="text-amber-400" />
-                        <span className="font-mono text-[8px] uppercase text-zinc-500">Time</span>
-                      </div>
-                      <p className="text-base font-display uppercase tracking-tight">
-                        {selectedLog.durationMinutes} <span className="text-[8px] font-mono text-zinc-500">min</span>
-                      </p>
-                    </div>
-                    <div className="bg-zinc-950/40 rounded-xl p-3 border border-white/5">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 animate-pulse" />
-                        <span className="font-mono text-[8px] uppercase text-zinc-500">Done</span>
-                      </div>
-                      <p className="text-base font-display uppercase tracking-tight">
-                        {getCompletionPercentage(selectedLog)}<span className="text-[8px] font-mono text-zinc-500">%</span>
-                      </p>
-                    </div>
-                  </div>
-                ) : (isSelectedDateFuture && expectedWoForSelected) ? (
-                  <div className="mt-8 p-4 bg-zinc-950/40 rounded-2xl border border-white/5 space-y-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Upcoming Session</span>
-                    </div>
-                    <div className="space-y-2">
-                      <StatusChip
-                        label={expectedWoForSelected.badge || (expectedWoForSelected.type === 'rest' ? 'REST' : expectedWoForSelected.type)}
-                        color={WORKOUT_COLORS[expectedWoForSelected.type] || '#6366f1'}
+                {/* Status Badges in Header */}
+                <div className="pt-2 flex flex-wrap gap-2 items-center">
+                  {selectedLog ? (
+                    <>
+                      <Badge
+                        label={
+                          selectedLog.complete
+                            ? 'COMPLETED SESSION'
+                            : `PARTIAL (${selectedDoneSets}/${selectedTotalSets} SETS)`
+                        }
+                        color={selectedLog.complete ? 'emerald' : 'zinc'}
                         variant="subtle"
                       />
-                      <h4 className="text-xl font-display uppercase tracking-tight text-white leading-none">{expectedWoForSelected.name}</h4>
-                      <p className="text-zinc-500 font-mono text-[9px] uppercase leading-relaxed">
-                        {expectedWoForSelected.type === 'rest' ? 'Rest & Recovery Protocol' : `${expectedWoForSelected.exercises?.length || 0} Exercises · Approx 60 min`}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-8 py-8 bg-zinc-950/20 rounded-2xl border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center px-6">
-                    <Info size={24} className="text-zinc-700 mb-3" />
-                    <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-wider leading-relaxed">
-                      No performance data recovered for this timestamp.
-                    </p>
-                  </div>
-                )}
+                      {isSelectedDateToday && (
+                        <Badge label="TODAY" color="emerald" variant="solid" />
+                      )}
+                    </>
+                  ) : isSelectedDateFuture && expectedWoForSelected ? (
+                    <Badge
+                      label={
+                        expectedWoForSelected.type === 'rest'
+                          ? 'SCHEDULED REST'
+                          : `UPCOMING: ${expectedWoForSelected.name}`
+                      }
+                      color={expectedWoForSelected.type === 'rest' ? 'emerald' : 'orange'}
+                      variant="subtle"
+                    />
+                  ) : isSelectedDatePast && expectedWoForSelected ? (
+                    <Badge
+                      label={
+                        expectedWoForSelected.type === 'rest'
+                          ? 'SCHEDULED REST'
+                          : `MISSED: ${expectedWoForSelected.name}`
+                      }
+                      color={expectedWoForSelected.type === 'rest' ? 'emerald' : 'red'}
+                      variant="subtle"
+                    />
+                  ) : (
+                    <Badge label="REST DAY" color="emerald" variant="subtle" />
+                  )}
+                </div>
               </div>
 
-              {/* Data Content */}
-              <div className="flex-1 p-6 overflow-y-auto font-sans">
+              {/* Scrollable Content Area: PRIMARY Exercise List, SECONDARY Stats below */}
+              <div className="flex-1 p-5 overflow-y-auto space-y-5">
+                {/* 1. PRIMARY SECTION: Exercise & Set Breakdown (Logged Session) */}
                 {selectedLog && (
-                  <div className="space-y-6">
-                    {Object.entries(selectedLog.sets || {}).map(([exId, sets]) => {
-                      const workout = workoutMap.get(selectedLog.workoutId);
-                      const exercise = workout?.exercises.find(e => e.id === exId);
-                      const doneSets = (sets as SetLog[]).filter(s => s.done);
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 font-bold">
+                        Exercise Breakdown
+                      </span>
+                      <span className="font-mono text-[10px] text-zinc-500">
+                        {Object.keys(selectedLog.sets || {}).length} exercises
+                      </span>
+                    </div>
 
-                      if (doneSets.length === 0) return null;
+                    <div className="space-y-2.5">
+                      {Object.entries(selectedLog.sets || {}).map(([exId, sets]) => {
+                        const exercise = exerciseMap.get(exId);
+                        const setsList = (sets as SetLog[]) || [];
+                        const doneSets = setsList.filter(s => s && s.done);
 
-                      return (
-                        <div key={exId} className="group">
-                          <div className="flex justify-between items-center mb-2">
-                             <h5 className="font-display uppercase text-sm tracking-wide text-zinc-200">{exercise?.name || 'Unknown Exercise'}</h5>
-                             <span className="font-mono text-[9px] text-zinc-600 bg-zinc-800/50 px-2 py-0.5 rounded-full">{doneSets.length} Sets</span>
-                          </div>
-                          <div className="flex gap-2 flex-wrap">
-                            {doneSets.map((s, idx) => (
-                              <div key={idx} className="bg-zinc-800/30 border border-white/5 rounded-lg px-3 py-1 flex items-center gap-2">
-                                <span className="font-mono text-[10px] text-white/80">{s.weight}</span>
-                                <span className="text-[8px] text-zinc-600 uppercase font-mono">x</span>
-                                <span className="font-mono text-[10px] whitespace-nowrap">{s.reps} <span className="text-[8px] text-zinc-600">reps</span></span>
+                        if (setsList.length === 0) return null;
+
+                        return (
+                          <Card
+                            key={exId}
+                            variant="default"
+                            padding="compact"
+                            className="space-y-2"
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <h5 className="font-display uppercase text-sm tracking-wide text-white leading-tight">
+                                  {exercise?.name || 'Custom Exercise'}
+                                </h5>
+                                {exercise?.target && (
+                                  <span className="font-mono text-[9px] text-zinc-500 uppercase">
+                                    {exercise.target}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge
+                                label={`${doneSets.length} / ${setsList.length} sets`}
+                                color={doneSets.length === setsList.length ? 'emerald' : 'zinc'}
+                                variant="subtle"
+                              />
+                            </div>
+
+                            {/* Set Pills */}
+                            <div className="flex gap-1.5 flex-wrap pt-1">
+                              {setsList.map((s, idx) => (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    "border rounded-lg px-2 py-1 flex items-center gap-1.5 font-mono text-[10px]",
+                                    s.done
+                                      ? "bg-zinc-900 border-zinc-700/80 text-white"
+                                      : "bg-zinc-950/40 border-zinc-800/40 text-zinc-600 line-through"
+                                  )}
+                                >
+                                  <span className="font-bold text-white/90">
+                                    {s.weight ? `${s.weight}kg` : 'BW'}
+                                  </span>
+                                  <span className="text-[8px] text-zinc-500">×</span>
+                                  <span className="text-zinc-300">{s.reps || '0'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. PRIMARY SECTION: Future Scheduled Workout Preview */}
+                {!selectedLog && isSelectedDateFuture && expectedWoForSelected && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-orange-400 font-bold flex items-center gap-1.5">
+                        <CalendarIcon size={12} />
+                        Scheduled Protocol
+                      </span>
+                      <span className="font-mono text-[10px] text-zinc-500">
+                        {expectedWoForSelected.type === 'rest'
+                          ? 'Rest Day'
+                          : `${expectedWoForSelected.exercises?.length || 0} Exercises`}
+                      </span>
+                    </div>
+
+                    {expectedWoForSelected.type === 'rest' ? (
+                      <Card variant="default" padding="default" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
+                        <h5 className="font-display uppercase text-sm text-emerald-300">
+                          Rest & Adaptation Protocol
+                        </h5>
+                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                          Muscle recovery window. Prioritize hydration, sleep quality, and reaching your daily protein targets.
+                        </p>
+                        {expectedWoForSelected.restNotes && expectedWoForSelected.restNotes.length > 0 && (
+                          <div className="space-y-1.5 pt-2 border-t border-emerald-500/20">
+                            {expectedWoForSelected.restNotes.map((note, nIdx) => (
+                              <div key={nIdx} className="flex items-center gap-2 text-[11px] font-mono text-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                <span>{note}</span>
                               </div>
                             ))}
                           </div>
+                        )}
+                      </Card>
+                    ) : (
+                      <div className="space-y-2">
+                        <Card variant="default" padding="compact" className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-mono text-zinc-400 uppercase">Workout Routine</p>
+                            <h5 className="text-sm font-display uppercase text-white">{expectedWoForSelected.name}</h5>
+                          </div>
+                          <Badge
+                            label={expectedWoForSelected.badge}
+                            color={expectedWoForSelected.type === 'push' || expectedWoForSelected.type === 'pull' || expectedWoForSelected.type === 'hybrid' ? 'orange' : 'zinc'}
+                            variant="solid"
+                          />
+                        </Card>
+
+                        {/* List of Planned Exercises */}
+                        <div className="space-y-1.5">
+                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
+                            <Card
+                              key={ex.id || eIdx}
+                              variant="default"
+                              padding="compact"
+                              className="flex items-center justify-between"
+                            >
+                              <div className="space-y-0.5">
+                                <p className="font-display text-xs uppercase text-zinc-200">{ex.name}</p>
+                                <p className="font-mono text-[9px] text-zinc-500 uppercase">{ex.target}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                  {ex.sets} × {ex.reps}
+                                </span>
+                              </div>
+                            </Card>
+                          ))}
                         </div>
-                      );
-                    })}
+
+                        {expectedWoForSelected.cardio && (
+                          <Card variant="default" padding="compact" className="text-xs font-mono text-zinc-400 flex items-center justify-between">
+                            <span>Cardio: {expectedWoForSelected.cardio.name}</span>
+                            <span className="text-zinc-500">{expectedWoForSelected.cardio.duration}</span>
+                          </Card>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. PRIMARY SECTION: Missed Past Day Preview */}
+                {!selectedLog && isSelectedDatePast && expectedWoForSelected && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-red-400 font-bold flex items-center gap-1.5">
+                        <AlertCircle size={12} />
+                        Missed Session Preview
+                      </span>
+                    </div>
+
+                    {expectedWoForSelected.type === 'rest' ? (
+                      <Card variant="default" padding="default" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
+                        <h5 className="font-display uppercase text-sm text-emerald-300">
+                          Scheduled Rest Day
+                        </h5>
+                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                          This date was a planned recovery day.
+                        </p>
+                      </Card>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <Card variant="default" padding="default" className="space-y-1.5 border-red-500/30 bg-red-500/5">
+                          <div className="flex justify-between items-center">
+                            <h5 className="font-display uppercase text-sm text-white">
+                              {expectedWoForSelected.name}
+                            </h5>
+                            <Badge label="MISSED" color="red" variant="subtle" />
+                          </div>
+                          <p className="text-xs text-zinc-400 font-sans">
+                            No performance log was submitted for this scheduled routine.
+                          </p>
+                        </Card>
+
+                        {/* List of exercises that were scheduled */}
+                        <div className="space-y-1.5">
+                          <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 block font-bold">
+                            Planned Exercises:
+                          </span>
+                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
+                            <Card
+                              key={ex.id || eIdx}
+                              variant="default"
+                              padding="compact"
+                              className="flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <span className="font-display uppercase text-zinc-300">{ex.name}</span>
+                                <span className="font-mono text-[9px] text-zinc-500 ml-2 uppercase">({ex.target})</span>
+                              </div>
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                {ex.sets} × {ex.reps}
+                              </span>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Empty / Unscheduled Day fallback */}
+                {!selectedLog && !expectedWoForSelected && (
+                  <EmptyState
+                    icon={CalendarIcon}
+                    title="Off-Protocol Day"
+                    description="No training session was scheduled or recorded."
+                    size="compact"
+                  />
+                )}
+
+                {/* 5. SECONDARY SECTION: Stats Cards (Volume, Time, Sets Completed) */}
+                {selectedLog && (
+                  <div className="space-y-3 pt-3 border-t border-zinc-800/60">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
+                      Session Summary
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <StatCard
+                        label="Volume"
+                        value={calculateVolume(selectedLog).toLocaleString()}
+                        unit="kg"
+                        color="emerald"
+                        icon={TrendingUp}
+                        variant="compact"
+                      />
+                      <StatCard
+                        label="Duration"
+                        value={selectedLog.durationMinutes ?? 0}
+                        unit="min"
+                        color="amber"
+                        icon={Clock}
+                        variant="compact"
+                      />
+                      <StatCard
+                        label="Sets Done"
+                        value={`${selectedDoneSets}/${selectedTotalSets}`}
+                        color="zinc"
+                        icon={CheckCircle2}
+                        variant="compact"
+                      />
+                    </div>
+
+                    {/* View Full Log Button inside detail panel */}
+                    {onNavigateToHistory && (
+                      <button
+                        onClick={() => {
+                          haptics.selection();
+                          onNavigateToHistory(selectedLog.id || selectedDateStr || undefined);
+                        }}
+                        className="w-full mt-2 py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 rounded-xl font-mono text-xs text-white uppercase tracking-wider font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:border-zinc-600"
+                      >
+                        <span>View Full Log In History</span>
+                        <ArrowRight size={14} className="text-emerald-400" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           </motion.div>
         ) : (
           <motion.div
             key="placeholder"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="hidden lg:flex flex-col w-96 bg-zinc-900/10 border border-zinc-800/50 border-dashed rounded-3xl items-center justify-center text-center p-12"
+            className="hidden lg:flex flex-col w-96"
           >
-            <Dumbbell className="text-zinc-800 mb-4" size={48} />
-            <p className="font-display uppercase text-zinc-600 text-lg">Protocol Inspector</p>
-            <p className="font-mono text-[10px] text-zinc-700 uppercase mt-2 tracking-widest">Select a date to audit performance logs</p>
+            <Card variant="outline" padding="relaxed" className="h-full flex items-center justify-center min-h-[380px]">
+              <EmptyState
+                icon={Dumbbell}
+                title="Session Details"
+                description="Select any date on the calendar to view workout breakdown and performance logs"
+                size="hero"
+              />
+            </Card>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 };
+
