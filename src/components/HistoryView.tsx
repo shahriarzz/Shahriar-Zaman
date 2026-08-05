@@ -241,15 +241,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     <div className="space-y-8 pt-4">
       {/* Upper header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
-            <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Growth Protocol</span>
-          </div>
-          <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter font-display bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
-            History
-          </h1>
-        </div>
+        <SectionHeader
+          eyebrow="Growth Protocol"
+          eyebrowColor="orange"
+          title="History"
+          size="lg"
+        />
 
         {/* Sub-tab navigation bar */}
         <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl w-fit">
@@ -603,24 +600,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           </div>
 
                           {/* 1. Duration field */}
-                          <div className="flex flex-col gap-2 p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
-                            <label className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">Session Duration (Minutes)</label>
-                            <input
-                              type="number"
-                              value={editSessionState.durationMinutes}
-                              onChange={(e) => {
-                                const rawVal = e.target.value;
-                                if (rawVal === '') {
-                                  setEditSessionState(prev => prev ? { ...prev, durationMinutes: 0 } : null);
-                                  return;
-                                }
-                                let val = parseInt(rawVal) || 0;
-                                if (val < 0) val = 0;
-                                if (val > 600) val = 600;
-                                setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
-                              }}
-                              className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-left max-w-[120px] focus:border-zinc-500 outline-none font-mono text-white"
-                            />
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                            <div>
+                              <label className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 font-bold block">Session Duration</label>
+                              <span className="text-xs text-zinc-500 font-sans">Total elapsed active protocol duration</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editSessionState.durationMinutes}
+                                onChange={(e) => {
+                                  const rawVal = e.target.value;
+                                  if (rawVal === '') {
+                                    setEditSessionState(prev => prev ? { ...prev, durationMinutes: 0 } : null);
+                                    return;
+                                  }
+                                  let val = parseInt(rawVal) || 0;
+                                  if (val < 0) val = 0;
+                                  if (val > 600) val = 600;
+                                  setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
+                                }}
+                                className="w-24 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-center focus:border-zinc-500 outline-none font-mono text-white"
+                              />
+                              <span className="text-xs font-mono text-zinc-400 uppercase">min</span>
+                            </div>
                           </div>
 
                           {/* Sets list per exercise */}
@@ -628,17 +631,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             {Object.entries(editSessionState.sets).map(([exId, sets]) => {
                               const meta = exMeta[exId] || { name: 'Unlisted Exercise' };
                               return (
-                                <div key={exId} className="border border-zinc-800 rounded-2xl bg-zinc-900/20 p-5 space-y-4 text-zinc-300">
+                                <div key={exId} className="border border-zinc-800 rounded-2xl bg-zinc-900/20 p-4 sm:p-5 space-y-4 text-zinc-300">
                                   <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500" />
-                                    <h5 className="font-black text-xs text-white uppercase tracking-wider">{meta.name}</h5>
+                                    <h5 className="font-black text-xs sm:text-sm text-white uppercase tracking-wider">{meta.name}</h5>
                                   </div>
 
-                                  <div className="grid grid-cols-[30px_1fr_1fr_40px] gap-3 text-[8px] font-mono uppercase tracking-wider text-zinc-400 px-1">
-                                    <span>Set</span>
-                                    <span>Weight (KG)</span>
-                                    <span>Reps</span>
-                                    <span className="text-right">Action</span>
+                                  <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 text-[9px] font-mono uppercase tracking-wider text-zinc-400 items-center">
+                                    <span className="text-center font-bold">Set</span>
+                                    <span className="text-center font-bold">Weight (KG)</span>
+                                    <span className="text-center font-bold">Reps</span>
+                                    <span className="text-center font-bold">Del</span>
                                   </div>
 
                                   <div className="space-y-2.5">
@@ -649,11 +652,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                       return (
                                         <div key={idx} className="space-y-1.5">
-                                          <div className="grid grid-cols-[30px_1fr_1fr_40px] gap-3 items-center">
-                                            <span className="font-mono text-[10px] text-zinc-400 text-center">{idx + 1}</span>
+                                          <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center">
+                                            <span className="font-mono text-xs text-zinc-400 text-center font-bold">{idx + 1}</span>
                                             <input
                                               type="number"
-                                              placeholder="kg"
+                                              placeholder="0"
                                               value={s.weight}
                                               onChange={(e) => {
                                                 const val = e.target.value;
@@ -668,13 +671,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "bg-zinc-950 border rounded-xl py-2 px-1 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border rounded-xl py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
                                                 isExtremeW ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
                                               )}
                                             />
                                             <input
                                               type="number"
-                                              placeholder="reps"
+                                              placeholder="0"
                                               value={s.reps}
                                               onChange={(e) => {
                                                 const val = e.target.value;
@@ -689,12 +692,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "bg-zinc-950 border rounded-xl py-2 px-1 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border rounded-xl py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
                                                 isExtremeR ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
                                               )}
                                             />
-                                            <div className="flex justify-end">
+                                            <div className="flex items-center justify-center">
                                               <button
+                                                type="button"
                                                 onClick={() => {
                                                   setEditSessionState(prev => {
                                                     if (!prev) return null;
@@ -703,7 +707,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                     return { ...prev, sets: newSets };
                                                   });
                                                 }}
-                                                className="p-1.5 hover:bg-zinc-950 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                                                className="p-2 hover:bg-zinc-900 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                                                title="Remove set"
                                               >
                                                 <X size={14} />
                                               </button>
@@ -712,7 +717,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                           {/* Set-Level Warning */}
                                           {isSetExtreme && (
-                                            <div className="ml-[30px] p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] text-amber-400 font-mono">
+                                            <div className="ml-9 p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] text-amber-400 font-mono">
                                               ⚠️ Unusual volume bounds: {isExtremeW ? 'Weight exceeds 500kg.' : ''} {isExtremeR ? 'Reps exceed 100.' : ''} Check typographical mistakes.
                                             </div>
                                           )}
@@ -722,6 +727,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   </div>
 
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setEditSessionState(prev => {
                                         if (!prev) return null;
@@ -730,9 +736,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                         return { ...prev, sets: newSets };
                                       });
                                     }}
-                                    className="w-full py-2 flex items-center justify-center gap-1 text-[9px] font-mono text-zinc-400 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/40 hover:text-zinc-200 transition-colors cursor-pointer"
+                                    className="w-full py-2.5 flex items-center justify-center gap-1.5 text-xs font-mono text-zinc-400 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/40 hover:text-zinc-200 transition-colors cursor-pointer"
                                   >
-                                    <Plus size={12} /> Add Set
+                                    <Plus size={13} /> Add Set
                                   </button>
                                 </div>
                               );
@@ -875,18 +881,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                     {/* Progression Line Chart using Recharts */}
                                     {prWeight > 0 && historyLogs.length > 1 && (
-                                      <div className="h-28 w-full">
+                                      <div className="h-32 w-full pt-1">
                                         <ResponsiveContainer width="100%" height="100%">
-                                          <LineChart data={historyLogs.slice().reverse()} margin={{ top: 5, right: 5, left: -32, bottom: 5 }}>
+                                          <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -15, bottom: 4 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                                             <XAxis 
                                               dataKey="date" 
                                               stroke="#71717a" 
-                                              fontSize={8} 
+                                              fontSize={9} 
                                               tickLine={false} 
+                                              axisLine={false}
                                               tickFormatter={(val) => val.split('-').slice(1).join('/')}
                                             />
-                                            <YAxis stroke="#71717a" fontSize={8} tickLine={false} />
+                                            <YAxis 
+                                              stroke="#71717a" 
+                                              fontSize={9} 
+                                              tickLine={false} 
+                                              axisLine={false}
+                                              width={35}
+                                              tickFormatter={(val) => `${val}kg`}
+                                            />
                                             <Tooltip
                                               contentStyle={{
                                                 backgroundColor: '#09090b',
@@ -934,9 +948,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               <div className="flex items-center gap-2">
                                                 <span className="font-mono text-[11px] text-zinc-400">{h.date}</span>
                                                 {isPR && (
-                                                  <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-500 text-black font-mono text-[8px] font-black uppercase tracking-widest leading-none">
-                                                    PR PEAK
-                                                  </div>
+                                                  <Badge label="PR PEAK" color="orange" size="sm" dot={false} />
                                                 )}
                                               </div>
 

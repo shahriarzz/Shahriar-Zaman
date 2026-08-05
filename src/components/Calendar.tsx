@@ -507,7 +507,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="default" padding="default" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="default" padding="md" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Rest & Adaptation Protocol
                         </h5>
@@ -583,7 +583,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="default" padding="default" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="default" padding="md" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Scheduled Rest Day
                         </h5>
@@ -593,7 +593,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       </Card>
                     ) : (
                       <div className="space-y-2.5">
-                        <Card variant="default" padding="default" className="space-y-1.5 border-red-500/30 bg-red-500/5">
+                        <Card variant="default" padding="md" className="space-y-1.5 border-red-500/30 bg-red-500/5">
                           <div className="flex justify-between items-center">
                             <h5 className="font-display uppercase text-sm text-white">
                               {expectedWoForSelected.name}
@@ -653,24 +653,24 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         label="Volume"
                         value={calculateVolume(selectedLog).toLocaleString()}
                         unit="kg"
-                        color="emerald"
+                        accent="emerald"
                         icon={TrendingUp}
-                        variant="compact"
+                        size="standard"
                       />
                       <StatCard
                         label="Duration"
                         value={selectedLog.durationMinutes ?? 0}
                         unit="min"
-                        color="amber"
+                        accent="amber"
                         icon={Clock}
-                        variant="compact"
+                        size="standard"
                       />
                       <StatCard
                         label="Sets Done"
                         value={`${selectedDoneSets}/${selectedTotalSets}`}
-                        color="zinc"
+                        accent="zinc"
                         icon={CheckCircle2}
-                        variant="compact"
+                        size="standard"
                       />
                     </div>
 

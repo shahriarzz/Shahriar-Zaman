@@ -862,7 +862,7 @@ export const AnalyticsView: React.FC = () => {
         padding="relaxed"
         action={
           priorityExercises.length > 0 ? (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-2 max-w-[200px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none">
               <span className="text-[10px] font-mono text-zinc-500 uppercase shrink-0">Lift:</span>
               <div className="flex gap-1">
                 {priorityExercises.map((ex) => (
@@ -873,7 +873,7 @@ export const AnalyticsView: React.FC = () => {
                       setSelected1RMExerciseId(ex.id);
                     }}
                     className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer whitespace-nowrap",
+                      "px-3 py-1.5 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer whitespace-nowrap shrink-0",
                       active1RMExerciseId === ex.id
                         ? "bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]"
                         : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
@@ -890,12 +890,28 @@ export const AnalyticsView: React.FC = () => {
         <div className="space-y-6">
           {/* Line chart container */}
           {aggregated.active1RMTrend.length > 0 ? (
-            <div className="h-64 w-full pt-4">
+            <div className="h-64 sm:h-72 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={aggregated.active1RMTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <LineChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="displayDate" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+                  <XAxis 
+                    dataKey="displayDate" 
+                    stroke="#71717a" 
+                    fontSize={9} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    dy={6}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis 
+                    stroke="#71717a" 
+                    fontSize={9} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    width={45}
+                    tickFormatter={(v) => `${Math.round(v)}kg`}
+                    domain={['dataMin - 5', 'dataMax + 5']} 
+                  />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
@@ -926,7 +942,7 @@ export const AnalyticsView: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              icon={<TrendingUp size={24} />}
+              icon={TrendingUp}
               title="No exercise data recorded"
               description="No completed logs found for this movement in the selected range."
             />
@@ -982,10 +998,10 @@ export const AnalyticsView: React.FC = () => {
           {/* Horizontal Bar Chart */}
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={muscleChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                <XAxis type="number" stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis dataKey="category" type="category" stroke="#a1a1aa" fontSize={11} axisLine={false} tickLine={false} />
+                <XAxis type="number" stroke="#71717a" fontSize={9} axisLine={false} tickLine={false} />
+                <YAxis dataKey="category" type="category" stroke="#a1a1aa" fontSize={10} axisLine={false} tickLine={false} width={80} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
@@ -1061,7 +1077,7 @@ export const AnalyticsView: React.FC = () => {
               <Card
                 key={rec.exId}
                 variant="interactive"
-                padding="default"
+                padding="md"
                 className="flex items-center justify-between group border-orange-500/20 hover:border-orange-500/50"
               >
                 <div className="space-y-1 truncate pr-2">
@@ -1084,7 +1100,7 @@ export const AnalyticsView: React.FC = () => {
             ))
           ) : (
             <EmptyState
-              icon={<Trophy size={20} className="text-orange-500" />}
+              icon={Trophy}
               title="No records logged"
               description="Record sets during sessions to track your all-time heaviest weights."
               className="col-span-full"

@@ -17,7 +17,6 @@ import {
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle } from '../utils/fitnessHelpers';
-import { StatusChip } from './StatusChip';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -317,15 +316,12 @@ export const ManageView: React.FC = () => {
 
   return (
     <div className="space-y-8 pt-4 pb-12">
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
-          <span className="font-mono text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Architecture</span>
-        </div>
-        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter font-display bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
-          Manage
-        </h1>
-      </div>
+      <SectionHeader
+        eyebrow="Architecture"
+        eyebrowColor="zinc"
+        title="Manage"
+        size="lg"
+      />
 
       {/* Cloud Sync Section */}
       <Card variant="elevated" padding="relaxed" className="flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative group">
@@ -463,7 +459,7 @@ export const ManageView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Action 1: Export Keys */}
-            <Card variant="default" padding="default" className="flex flex-col justify-between items-start gap-4">
+            <Card variant="default" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1">
                 <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Export Protocols</span>
                 <h4 className="text-xs font-bold text-zinc-200">Standalone Data Keyfile</h4>
@@ -494,7 +490,7 @@ export const ManageView: React.FC = () => {
             </Card>
 
             {/* Action 2: Import Keys */}
-            <Card variant="default" padding="default" className="flex flex-col justify-between items-start gap-4">
+            <Card variant="default" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1 w-full">
                 <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Restore Protocol</span>
                 <h4 className="text-xs font-bold text-zinc-200">Inward Protocol Overload</h4>

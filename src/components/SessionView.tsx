@@ -5,9 +5,14 @@ import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId } from '../utils/fitnessHelpers';
-import { StatusChip } from './StatusChip';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
+import {
+  Card,
+  StatCard,
+  Badge,
+  SEMANTIC_COLORS
+} from './ui';
 
 interface ExerciseCardProps {
   ex: Exercise;
@@ -119,12 +124,12 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             <span>·</span>
             <span>{ex.reps} Reps</span>
             <span>·</span>
-            <span className={cn(
-              "px-1.5 py-0.5 rounded text-[10px]",
-              isDone ? "bg-emerald-500/20 text-emerald-400 font-bold" : "bg-zinc-800 text-zinc-400"
-            )}>
-              {doneCount}/{totalSets} Done
-            </span>
+              <Badge
+                label={`${doneCount}/${totalSets} Done`}
+                color={isDone ? 'emerald' : 'zinc'}
+                size="sm"
+                dot={false}
+              />
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -748,18 +753,22 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   };
 
   if (!activeWorkout) return (
-    <div className="py-20 text-center space-y-6">
-      <h2 className="text-2xl font-bold">Select a Protocol to Begin</h2>
+    <div className="py-20 space-y-6">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold font-display uppercase tracking-wide">Select a Protocol to Begin</h2>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {workouts.map(wo => (
-            <button
+            <Card
               key={wo.id}
+              variant="interactive"
+              padding="md"
               onClick={() => setActiveWorkout(wo)}
-              className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-left hover:border-zinc-500 transition-colors"
+              className="text-left cursor-pointer"
             >
-              <div className="text-xs font-mono text-zinc-500">{wo.badge}</div>
-              <div className="font-bold">{wo.name}</div>
-            </button>
+              <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>
+              <div className="font-bold text-white text-base">{wo.name}</div>
+            </Card>
           ))}
       </div>
     </div>
@@ -777,24 +786,35 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-blue-500/40 p-6 rounded-3xl text-center">
-            <div className="text-3xl font-black text-blue-500">{Math.floor(duration / 60)}m</div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Duration</div>
-          </div>
-           <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-orange-500/40 p-6 rounded-3xl text-center">
-            <div className="text-3xl font-black text-orange-500">{(Object.values(sessionSets).flat() as SetLog[]).filter(s => s.done).length}</div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Sets Done</div>
-          </div>
-          <div className="bg-zinc-900/50 border border-zinc-800 border-t-2 border-t-emerald-500/40 p-6 rounded-3xl col-span-2 text-center">
-            <div className="text-3xl font-black text-emerald-500">
-              {calculateVolumeLocal().toLocaleString()}kg
-            </div>
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">Total Volume Lifted</div>
-          </div>
+          <StatCard
+            label="Duration"
+            value={`${Math.floor(duration / 60)}m`}
+            accent="blue"
+            size="hero"
+          />
+          <StatCard
+            label="Sets Done"
+            value={(Object.values(sessionSets).flat() as SetLog[]).filter(s => s.done).length}
+            accent="orange"
+            size="hero"
+          />
+          <StatCard
+            label="Total Volume Lifted"
+            value={calculateVolumeLocal().toLocaleString()}
+            unit="kg"
+            accent="emerald"
+            size="hero"
+            className="col-span-2"
+          />
 
           {/* Today's Personal Records Summary */}
           {todaysPRs.length > 0 && (
-            <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/20 p-5 rounded-3xl col-span-2 space-y-3 text-left">
+            <Card
+              variant="elevated"
+              accent="amber"
+              padding="md"
+              className="col-span-2 space-y-3 text-left bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-amber-500/20"
+            >
               <div className="flex items-center gap-2">
                 <Trophy className="text-amber-500 animate-pulse" size={16} />
                 <span className="font-mono text-[9px] text-amber-400 uppercase tracking-[0.2em] font-bold">New Records Set Today!</span>
@@ -808,13 +828,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
                         {pr.isNew ? 'Baseline Established' : 'Personal Record Smashed'}
                       </div>
                     </div>
-                    <div className="font-mono font-bold text-orange-500 bg-orange-500/5 border border-orange-550/10 px-2 py-1 rounded-xl">
-                      {pr.weight}kg × {pr.reps}
-                    </div>
+                    <Badge
+                      label={`${pr.weight}kg × ${pr.reps}`}
+                      color="orange"
+                      size="sm"
+                      dot={false}
+                    />
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
         </div>
 
@@ -846,7 +869,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             <ChevronLeft size={20} />
           </button>
           <div className="space-y-1">
-            <StatusChip
+            <Badge
               label={activeWorkout.badge}
               color={WORKOUT_COLORS[activeWorkout.type]}
               variant="subtle"

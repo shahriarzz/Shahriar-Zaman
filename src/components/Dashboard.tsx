@@ -147,7 +147,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </span>
         </div>
-        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.85] tracking-tighter font-display bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+        <h1 className="text-4xl md:text-6xl font-black uppercase leading-[0.9] tracking-tighter font-display text-white">
           Stay<br />Aggressive
         </h1>
       </div>
@@ -157,30 +157,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         <StatCard
           label="Day Streak"
           value={streakCount.toString()}
-          color="orange"
+          accent="orange"
           icon={TrendingUp}
-          variant="default"
+          size="standard"
         />
         <StatCard
           label="Sessions"
           value={animatedSessions.toString()}
-          color="emerald"
+          accent="emerald"
           icon={CalendarIcon}
-          variant="default"
+          size="standard"
         />
         <StatCard
           label="Cycles"
           value={animatedCycles.toString()}
-          color="amber"
+          accent="amber"
           icon={Repeat}
-          variant="default"
+          size="standard"
         />
         <StatCard
           label="kg Lifted"
           value={animatedWeight >= 1000 ? (animatedWeight / 1000).toFixed(1) + 'k' : animatedWeight.toString()}
-          color="emerald"
+          accent="emerald"
           icon={Trophy}
-          variant="default"
+          size="standard"
         />
       </div>
 
