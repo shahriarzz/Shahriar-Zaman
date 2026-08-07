@@ -1,42 +1,72 @@
 import React from 'react';
-import { Card } from './Card';
-import { SectionHeader } from './SectionHeader';
-import { SemanticColor } from '../../styles/tokens';
+import { Card, CardProps } from './Card';
+import { SectionHeader, SectionHeaderProps, SectionSize, HeadingLevel } from './SectionHeader';
+import { SemanticColor, SpacingIntent } from '../../styles/tokens';
+import { cn } from '../../lib/utils';
 
-export interface SectionProps {
+export interface SectionProps extends Omit<CardProps, 'size' | 'title'> {
   eyebrow?: string;
-  eyebrowColor?: SemanticColor | string;
-  title: string;
+  eyebrowColor?: SemanticColor | null;
+  colorOverride?: string;
+  title?: string;
   description?: string;
   action?: React.ReactNode;
-  size?: 'page' | 'section' | 'subsection' | 'lg' | 'md' | 'sm';
-  padding?: 'none' | 'compact' | 'sm' | 'md' | 'lg' | 'relaxed' | 'hero';
-  className?: string;
+  size?: SectionSize;
+  headingLevel?: HeadingLevel;
+  headerProps?: Partial<SectionHeaderProps>;
+  headerClassName?: string;
+  padding?: SpacingIntent;
   children: React.ReactNode;
 }
 
 export const Section: React.FC<SectionProps> = ({
   eyebrow,
   eyebrowColor,
+  colorOverride,
   title,
   description,
   action,
   size = 'section',
-  padding = 'lg',
+  headingLevel,
+  headerProps,
+  headerClassName,
+  variant = 'panel',
+  padding = 'section',
   className,
-  children
+  children,
+  ...cardProps
 }) => {
+  const combinedHeaderProps: SectionHeaderProps = {
+    eyebrow,
+    eyebrowColor,
+    colorOverride: colorOverride || cardProps.colorOverride,
+    title,
+    description,
+    action,
+    size,
+    headingLevel,
+    ...headerProps,
+    className: cn("mb-6", headerClassName, headerProps?.className),
+  };
+
+  const hasHeader = Boolean(
+    combinedHeaderProps.title ||
+    combinedHeaderProps.eyebrow ||
+    combinedHeaderProps.action ||
+    combinedHeaderProps.description
+  );
+
   return (
-    <Card variant="panel" padding={padding} className={className}>
-      <SectionHeader
-        eyebrow={eyebrow}
-        eyebrowColor={eyebrowColor}
-        title={title}
-        description={description}
-        action={action}
-        size={size}
-      />
+    <Card
+      variant={variant}
+      padding={padding}
+      colorOverride={colorOverride}
+      className={className}
+      {...cardProps}
+    >
+      {hasHeader && <SectionHeader {...combinedHeaderProps} />}
       {children}
     </Card>
   );
 };
+

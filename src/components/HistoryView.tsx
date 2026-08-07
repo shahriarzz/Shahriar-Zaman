@@ -14,6 +14,11 @@ import {
   Card,
   StatCard,
   Badge,
+  Button,
+  Input,
+  Banner,
+  Stack,
+  Grid,
   EmptyState,
   SEMANTIC_COLORS,
   RADIUS
@@ -245,7 +250,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           eyebrow="Growth Protocol"
           eyebrowColor="orange"
           title="History"
-          size="lg"
+          size="page"
         />
 
         {/* Sub-tab navigation bar */}
@@ -270,38 +275,39 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-        <input
-          type="text"
-          placeholder="Search by date, workout routine scope, or exercise name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-zinc-600 transition-all font-sans text-white placeholder-zinc-500"
-        />
-        {search && (
+      <Input
+        type="search"
+        placeholder="Search by date, workout routine scope, or exercise name..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        leftIcon={<Search size={18} />}
+        rightIcon={search ? (
           <button 
+            type="button"
             onClick={clearFilter}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-all cursor-pointer"
+            className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-all cursor-pointer"
           >
             <X size={16} />
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {initialDate && search === initialDate && (
-        <Card variant="elevated" padding="compact" className="border-orange-500/40 bg-orange-500/10 flex items-center justify-between text-xs text-orange-200">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-            <span>Filtering history for target date: <strong className="font-mono text-white">{initialDate}</strong></span>
-          </div>
-          <button 
-            onClick={clearFilter}
-            className="text-[10px] font-mono tracking-wider font-bold uppercase underline hover:text-white cursor-pointer"
-          >
-            Clear Filter
-          </button>
-        </Card>
+        <Banner
+          variant="warning"
+          title={`Filtering history for target date: ${initialDate}`}
+          onDismiss={clearFilter}
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilter}
+              className="text-[10px] uppercase font-mono tracking-wider font-bold"
+            >
+              Clear Filter
+            </Button>
+          }
+        />
       )}
 
       {/* Monthly Archive Summaries Panel */}
@@ -312,12 +318,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           title="Monthly Training Analytics"
           action={
             activeMonthTab ? (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setActiveMonthTab(null)}
-                className="text-[10px] font-mono uppercase bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 Close Report
-              </button>
+              </Button>
             ) : undefined
           }
           padding="relaxed"
@@ -376,25 +383,25 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         label="Completed Workouts"
                         value={selectedReport.sessionsCount.toString()}
                         unit="runs"
-                        color="zinc"
+                        accent="zinc"
                       />
                       <StatCard
                         label="Total Volume"
                         value={selectedReport.totalVolume.toLocaleString()}
                         unit="kg"
-                        color="emerald"
+                        accent="emerald"
                       />
                       <StatCard
                         label="Total Duration"
                         value={selectedReport.totalDuration.toString()}
                         unit="min"
-                        color="orange"
+                        accent="orange"
                       />
                       <StatCard
                         label="PR Benchmarks"
                         value={selectedReport.prCount.toString()}
                         unit="PRs"
-                        color="amber"
+                        accent="amber"
                         icon={Trophy}
                       />
                     </div>
@@ -726,8 +733,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                     })}
                                   </div>
 
-                                  <button
-                                    type="button"
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    fullWidth
+                                    icon={<Plus size={13} />}
                                     onClick={() => {
                                       setEditSessionState(prev => {
                                         if (!prev) return null;
@@ -736,10 +746,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                         return { ...prev, sets: newSets };
                                       });
                                     }}
-                                    className="w-full py-2.5 flex items-center justify-center gap-1.5 text-xs font-mono text-zinc-400 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/40 hover:text-zinc-200 transition-colors cursor-pointer"
+                                    className="py-2.5 border-dashed"
                                   >
-                                    <Plus size={13} /> Add Set
-                                  </button>
+                                    Add Set
+                                  </Button>
                                 </div>
                               );
                             })}
@@ -761,28 +771,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <button
-                              onClick={handleSaveEdit}
+                            <Button
+                              variant="primary"
+                              size="lg"
+                              fullWidth
                               disabled={!editVerified}
-                              className={cn(
-                                "flex-1 py-3.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors",
-                                editVerified
-                                  ? "bg-white text-black hover:bg-zinc-100 cursor-pointer shadow-[0_4px_12px_rgba(255,255,255,0.1)]"
-                                  : "bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed"
-                              )}
+                              onClick={handleSaveEdit}
                             >
                               Confirm Modifications
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="lg"
                               onClick={() => {
                                 setEditingLogId(null);
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
-                              className="px-6 py-3.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-xl font-bold uppercase tracking-wider text-xs text-zinc-400 hover:text-white transition-all cursor-pointer"
                             >
                               Discard
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       ) : (

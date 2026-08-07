@@ -6,43 +6,50 @@ import {
   TYPOGRAPHY
 } from '../../styles/tokens';
 
+export type SectionSize = 'page' | 'section' | 'subsection';
+export type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
 export interface SectionHeaderProps {
   eyebrow?: string;
-  eyebrowColor?: SemanticColor | string;
-  title: string;
+  eyebrowColor?: SemanticColor | null;
+  colorOverride?: string;
+  title?: string;
   description?: string;
-  subtitle?: string;
   action?: React.ReactNode;
-  size?: 'page' | 'section' | 'subsection' | 'lg' | 'md' | 'sm';
+  size?: SectionSize;
+  headingLevel?: HeadingLevel;
   className?: string;
 }
 
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
   eyebrow,
-  eyebrowColor = 'emerald',
+  eyebrowColor = 'zinc',
+  colorOverride,
   title,
   description,
-  subtitle,
   action,
   size = 'section',
+  headingLevel,
   className
 }) => {
-  const eyebrowHex = getAccentColor(eyebrowColor) || '#10b981';
-  const effectiveDescription = description || subtitle;
+  const eyebrowHex = colorOverride || getAccentColor(eyebrowColor as SemanticColor) || '#71717a';
 
-  const titleClasses: Record<string, string> = {
+  const titleClasses: Record<SectionSize, string> = {
     page: TYPOGRAPHY.titlePage,
     section: TYPOGRAPHY.titleSection,
     subsection: TYPOGRAPHY.titleSubsection,
-    lg: TYPOGRAPHY.titlePage,
-    md: TYPOGRAPHY.titleSection,
-    sm: TYPOGRAPHY.titleSubsection
   };
 
-  const selectedTitleClass = titleClasses[size] || TYPOGRAPHY.titleSection;
+  const selectedTitleClass = (size && titleClasses[size]) || TYPOGRAPHY.titleSection;
+
+  const HeadingTag = headingLevel || (
+    size === 'page' ? 'h1' :
+    size === 'subsection' ? 'h3' :
+    'h2'
+  );
 
   return (
-    <div className={cn("flex items-start justify-between gap-4 mb-6", className)}>
+    <div className={cn("flex items-start justify-between gap-4", className)}>
       <div className="space-y-1 min-w-0">
         {eyebrow && (
           <p
@@ -52,12 +59,14 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
             {eyebrow}
           </p>
         )}
-        <h3 className={selectedTitleClass}>
-          {title}
-        </h3>
-        {effectiveDescription && (
+        {title && (
+          <HeadingTag className={selectedTitleClass}>
+            {title}
+          </HeadingTag>
+        )}
+        {description && (
           <p className={TYPOGRAPHY.body}>
-            {effectiveDescription}
+            {description}
           </p>
         )}
       </div>
@@ -70,3 +79,4 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
     </div>
   );
 };
+

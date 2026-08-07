@@ -27,6 +27,10 @@ import {
   StatCard,
   Badge,
   EmptyState,
+  Button,
+  Input,
+  Stack,
+  Grid,
   SEMANTIC_COLORS,
   RADIUS
 } from './ui';
@@ -315,12 +319,12 @@ export const ManageView: React.FC = () => {
   const checkpointHistory = React.useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
 
   return (
-    <div className="space-y-8 pt-4 pb-12">
+    <Stack spacing="xl" className="pt-4 pb-12">
       <SectionHeader
         eyebrow="Architecture"
         eyebrowColor="zinc"
         title="Manage"
-        size="lg"
+        size="page"
       />
 
       {/* Cloud Sync Section */}
@@ -362,7 +366,10 @@ export const ManageView: React.FC = () => {
         </div>
         
         {user ? (
-          <button 
+          <Button 
+            variant="secondary"
+            size="md"
+            loading={loadingAction === 'auth'}
             onClick={async () => {
               if (loadingAction === 'auth') return;
               setLoadingAction('auth');
@@ -373,14 +380,16 @@ export const ManageView: React.FC = () => {
                 setLoadingAction(null);
               }
             }}
-            disabled={loadingAction === 'auth'}
-            className="px-6 py-3 bg-zinc-800 border border-zinc-700 disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-zinc-700 text-white transition-all z-10 cursor-pointer active:scale-95"
+            className="z-10"
           >
             {loadingAction === 'auth' ? 'Signing Out...' : 'Sign Out'}
-          </button>
+          </Button>
         ) : (
           <div className="flex flex-col gap-2.5 items-end">
-            <button 
+            <Button 
+              variant="primary"
+              size="md"
+              loading={loadingAction === 'auth'}
               onClick={async () => {
                 if (loadingAction === 'auth') return;
                 setLoadingAction('auth');
@@ -391,11 +400,10 @@ export const ManageView: React.FC = () => {
                   setLoadingAction(null);
                 }
               }}
-              disabled={loadingAction === 'auth'}
-              className="px-6 py-3 bg-white text-black disabled:opacity-50 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest hover:scale-105 transition-all z-10 cursor-pointer active:scale-95 shadow-md"
+              className="z-10 shadow-md"
             >
               {loadingAction === 'auth' ? 'Signing In...' : 'Sync with Google'}
-            </button>
+            </Button>
             {authError && (
               <span className="text-[9px] font-mono text-red-400 uppercase tracking-tighter text-right max-w-xs">
                 {authError}
@@ -423,18 +431,19 @@ export const ManageView: React.FC = () => {
         eyebrowColor="orange"
         title="Backup & Restore Vault"
         action={
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={loadingAction === 'savepoint'}
+            icon={<Save size={13} className="text-orange-400" />}
             onClick={handleCreateRestorePoint}
-            disabled={loadingAction === 'savepoint'}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded-xl text-[10px] font-mono uppercase tracking-widest flex items-center shadow-lg gap-2 cursor-pointer active:scale-95"
           >
-            <Save size={13} className="text-orange-400" />
             {loadingAction === 'savepoint' ? 'Saving...' : 'Create Savepoint'}
-          </button>
+          </Button>
         }
         padding="relaxed"
       >
-        <div className="space-y-6">
+        <Stack spacing="lg">
           <p className="text-xs text-zinc-400 max-w-2xl">
             Physical export files, instant clipboard extraction, and manual database restore-point checkpoints prevent and secure against data loss during splits modification or cloud sync mismatches.
           </p>
@@ -457,9 +466,9 @@ export const ManageView: React.FC = () => {
             )}
           </AnimatePresence>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Grid cols={1} colsMd={2} gap="md">
             {/* Action 1: Export Keys */}
-            <Card variant="default" padding="md" className="flex flex-col justify-between items-start gap-4">
+            <Card variant="standard" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1">
                 <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Export Protocols</span>
                 <h4 className="text-xs font-bold text-zinc-200">Standalone Data Keyfile</h4>
@@ -469,28 +478,31 @@ export const ManageView: React.FC = () => {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <button
+                <Button
+                  variant="outline"
+                  size="md"
+                  fullWidth
+                  loading={loadingAction === 'export'}
+                  icon={<Download size={13} className="text-orange-500" />}
                   onClick={handleExport}
-                  disabled={loadingAction === 'export'}
-                  className="flex-1 px-4 py-2.5 bg-zinc-800 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-200 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
-                  <Download size={13} className="text-orange-500" />
                   {loadingAction === 'export' ? 'Exporting...' : 'Download JSON'}
-                </button>
+                </Button>
 
-                <button
+                <Button
+                  variant="outline"
+                  size="md"
+                  loading={loadingAction === 'copy'}
+                  icon={copied ? <Check size={13} className="text-emerald-400 animate-pulse" /> : <ClipboardCopy size={13} />}
                   onClick={handleCopyClipboard}
-                  disabled={loadingAction === 'copy'}
-                  className="px-4 py-2.5 bg-zinc-800 border border-zinc-700 disabled:opacity-50 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  {copied ? <Check size={13} className="text-emerald-400 animate-pulse" /> : <ClipboardCopy size={13} />}
-                  <span>{copied ? "Copied!" : "Extract String"}</span>
-                </button>
+                  {copied ? "Copied!" : "Extract String"}
+                </Button>
               </div>
             </Card>
 
             {/* Action 2: Import Keys */}
-            <Card variant="default" padding="md" className="flex flex-col justify-between items-start gap-4">
+            <Card variant="standard" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1 w-full">
                 <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Restore Protocol</span>
                 <h4 className="text-xs font-bold text-zinc-200">Inward Protocol Overload</h4>
@@ -501,10 +513,10 @@ export const ManageView: React.FC = () => {
               
               <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <label className={cn(
-                  "flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all text-center cursor-pointer flex items-center justify-center gap-2 active:scale-95",
-                  loadingAction === 'upload' && "opacity-50 pointer-events-none"
+                  "flex-1 px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-black rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all text-center cursor-pointer flex items-center justify-center gap-2 select-none active:scale-[0.98]",
+                  loadingAction === 'upload' && "opacity-40 pointer-events-none"
                 )}>
-                  <Upload size={13} />
+                  <Upload size={14} />
                   <span>{loadingAction === 'upload' ? 'Uploading...' : 'Upload Keyfile'}</span>
                   <input
                     type="file"
@@ -515,15 +527,16 @@ export const ManageView: React.FC = () => {
                   />
                 </label>
 
-                <button
+                <Button
+                  variant="outline"
+                  size="md"
                   onClick={() => setShowPasteBox(!showPasteBox)}
-                  className="px-4 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-[10px] font-mono uppercase tracking-widest transition-colors cursor-pointer active:scale-95"
                 >
                   {showPasteBox ? "Close Area" : "Paste Text Data"}
-                </button>
+                </Button>
               </div>
             </Card>
-          </div>
+          </Grid>
 
           {/* Dynamic Paste Area */}
           <AnimatePresence>
@@ -542,19 +555,22 @@ export const ManageView: React.FC = () => {
                   className="w-full h-32 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl p-3 font-mono text-[10px] text-zinc-300 outline-none resize-none"
                 />
                 <div className="flex justify-end gap-2">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setPastedJson('')}
-                    className="px-3 py-1.5 text-[9px] font-mono uppercase text-zinc-500 hover:text-zinc-300"
                   >
                     Clear Fields
-                  </button>
-                  <button
-                    onClick={handlePasteRestore}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={loadingAction === 'paste'}
                     disabled={!pastedJson.trim() || loadingAction === 'paste'}
-                    className="px-4 py-1.5 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg transition-all cursor-pointer active:scale-95"
+                    onClick={handlePasteRestore}
                   >
                     {loadingAction === 'paste' ? 'Injecting...' : 'Inject Backup String'}
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             )}
@@ -601,19 +617,20 @@ export const ManageView: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={loadingAction === 'restore'}
                       onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
-                      disabled={loadingAction === 'restore'}
-                      className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 border border-zinc-800 hover:text-orange-400 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer text-zinc-300"
                     >
                       Restore
-                    </button>
+                    </Button>
                   </div>
                 ))
               )}
             </div>
           </div>
-        </div>
+        </Stack>
       </Section>
 
       {/* Routine Splits Manager & Layout Editor */}
@@ -665,14 +682,16 @@ export const ManageView: React.FC = () => {
             
             <div className="flex flex-col gap-2">
               <label className="hidden md:block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 invisible">Actions</label>
-              <button 
+              <Button 
+                variant="outline"
+                size="lg"
+                loading={loadingAction === 'reset_workouts'}
+                icon={<Repeat size={14} />}
                 onClick={handleResetWorkouts}
-                disabled={loadingAction === 'reset_workouts'}
-                className="h-[52px] px-6 bg-zinc-900 border border-zinc-800 disabled:opacity-50 rounded-2xl text-[10px] font-mono text-zinc-400 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 hover:border-zinc-600 cursor-pointer active:scale-95"
+                className="h-[52px]"
               >
-                <Repeat size={14} />
                 {loadingAction === 'reset_workouts' ? 'Resetting...' : 'Reset Routines Library'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -706,12 +725,13 @@ export const ManageView: React.FC = () => {
                             </div>
                           </div>
                           
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            icon={<Trash2 size={15} />}
+                            className="text-zinc-500 hover:text-red-400"
                             onClick={() => deleteExercise(selectedWorkout.id, ex.id)}
-                            className="p-2 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          />
                         </div>
                       ))}
                     </div>
@@ -719,61 +739,59 @@ export const ManageView: React.FC = () => {
                     {addingExWoId === selectedWorkout.id ? (
                       <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-4">
                         <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-400 font-bold">New Exercise Details</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="block text-[9px] font-mono uppercase text-zinc-400 ml-1">Exercise Name</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Incline Bench Press"
-                              value={newExName}
-                              onChange={(e) => setNewExName(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-white outline-none transition-colors"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-[9px] font-mono uppercase text-zinc-400 ml-1">Target Muscle Group</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Upper Chest"
-                              value={newExTarget}
-                              onChange={(e) => setNewExTarget(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl px-3 py-2.5 text-xs text-white outline-none transition-colors"
-                            />
-                          </div>
-                        </div>
+                        <Grid cols={1} colsMd={2} gap="sm">
+                          <Input
+                            label="Exercise Name"
+                            placeholder="e.g. Incline Bench Press"
+                            value={newExName}
+                            onChange={(e) => setNewExName(e.target.value)}
+                          />
+                          <Input
+                            label="Target Muscle Group"
+                            placeholder="e.g. Upper Chest"
+                            value={newExTarget}
+                            onChange={(e) => setNewExTarget(e.target.value)}
+                          />
+                        </Grid>
                         <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             type="button"
                             onClick={() => {
                               setAddingExWoId(null);
                               setNewExName('');
                               setNewExTarget('');
                             }}
-                            className="px-4 py-2 text-[10px] font-mono uppercase text-zinc-400 hover:text-zinc-200 cursor-pointer"
                           >
                             Cancel
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
                             type="button"
-                            onClick={() => handleSaveNewExercise(selectedWorkout.id)}
                             disabled={!newExName.trim()}
-                            className="px-5 py-2 bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-500 hover:bg-orange-600 text-black text-[10px] font-mono font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-95"
+                            onClick={() => handleSaveNewExercise(selectedWorkout.id)}
                           >
                             Append Exercise
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        fullWidth
+                        icon={<Plus size={15} />}
                         onClick={() => {
                           setAddingExWoId(selectedWorkout.id);
                           setNewExName('');
                           setNewExTarget('');
                         }}
-                        className="w-full py-4 flex items-center justify-center gap-2 text-xs font-mono text-zinc-400 border border-dashed border-zinc-800 rounded-2xl hover:bg-zinc-950 hover:text-zinc-200 hover:border-zinc-700 transition-all cursor-pointer"
+                        className="py-4 border-dashed"
                       >
-                        <Plus size={15} /> Append New Exercise to Protocol
-                      </button>
+                        Append New Exercise to Protocol
+                      </Button>
                     )}
                   </>
                 ) : (
@@ -795,7 +813,10 @@ export const ManageView: React.FC = () => {
           <p className="text-xs text-red-400/70 leading-relaxed uppercase tracking-wider font-mono">
             Caution: Purging session history logs will permanently clear all historical weights and calendars. Split routines will remain preserved.
           </p>
-          <button
+          <Button
+            variant="destructive"
+            size="md"
+            loading={loadingAction === 'purge_logs'}
             onClick={async () => {
               const proceed = await confirm({
                 title: '🚨 DANGER: IRREVERSIBLE PURGE',
@@ -811,13 +832,11 @@ export const ManageView: React.FC = () => {
                 }
               }
             }}
-            disabled={loadingAction === 'purge_logs'}
-            className="px-6 py-3 border border-red-500/30 text-red-400 disabled:opacity-50 text-[10px] font-mono uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-black transition-all cursor-pointer"
           >
             {loadingAction === 'purge_logs' ? 'Purging...' : 'Purge All Session Logs'}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </Stack>
   );
 };

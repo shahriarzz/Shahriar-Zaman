@@ -1,31 +1,16 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
 import { RADIUS } from '../../styles/tokens';
+import { renderIcon, IconProp } from './renderIcon';
 
 export interface EmptyStateProps {
-  icon?: React.ReactNode | React.ComponentType<{ size?: number | string; className?: string; style?: React.CSSProperties }>;
+  icon?: IconProp;
   title: string;
   description?: string;
   action?: { label: string; onClick: () => void };
   size?: 'compact' | 'default' | 'hero';
   className?: string;
 }
-
-const renderIcon = (
-  iconItem: EmptyStateProps['icon'],
-  props?: { size?: number | string; className?: string; style?: React.CSSProperties }
-): React.ReactNode => {
-  if (!iconItem) return null;
-  if (React.isValidElement(iconItem)) return iconItem;
-  if (
-    typeof iconItem === 'function' ||
-    (typeof iconItem === 'object' && iconItem !== null && '$$typeof' in (iconItem as object))
-  ) {
-    const IconComp = iconItem as React.ComponentType<any>;
-    return <IconComp {...props} />;
-  }
-  return iconItem as React.ReactNode;
-};
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
   icon,

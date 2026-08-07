@@ -33,6 +33,9 @@ import {
   EmptyState,
   Badge,
   Card,
+  Button,
+  Stack,
+  Grid,
   RADIUS
 } from './ui';
 
@@ -360,7 +363,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     eyebrow="Day Overview"
                     eyebrowColor="emerald"
                     title={format(selectedDate, 'EEEE')}
-                    subtitle={format(selectedDate, 'MMMM do, yyyy')}
+                    description={format(selectedDate, 'MMMM do, yyyy')}
                   />
                   <button
                     onClick={() => {
@@ -442,7 +445,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         return (
                           <Card
                             key={exId}
-                            variant="default"
+                            variant="standard"
                             padding="compact"
                             className="space-y-2"
                           >
@@ -507,7 +510,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="default" padding="md" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="standard" padding="md" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Rest & Adaptation Protocol
                         </h5>
@@ -527,7 +530,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       </Card>
                     ) : (
                       <div className="space-y-2">
-                        <Card variant="default" padding="compact" className="flex items-center justify-between">
+                        <Card variant="standard" padding="compact" className="flex items-center justify-between">
                           <div>
                             <p className="text-[10px] font-mono text-zinc-400 uppercase">Workout Routine</p>
                             <h5 className="text-sm font-display uppercase text-white">{expectedWoForSelected.name}</h5>
@@ -544,7 +547,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
                             <Card
                               key={ex.id || eIdx}
-                              variant="default"
+                              variant="standard"
                               padding="compact"
                               className="flex items-center justify-between"
                             >
@@ -562,7 +565,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         </div>
 
                         {expectedWoForSelected.cardio && (
-                          <Card variant="default" padding="compact" className="text-xs font-mono text-zinc-400 flex items-center justify-between">
+                          <Card variant="standard" padding="compact" className="text-xs font-mono text-zinc-400 flex items-center justify-between">
                             <span>Cardio: {expectedWoForSelected.cardio.name}</span>
                             <span className="text-zinc-500">{expectedWoForSelected.cardio.duration}</span>
                           </Card>
@@ -583,7 +586,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="default" padding="md" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="standard" padding="md" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Scheduled Rest Day
                         </h5>
@@ -593,7 +596,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       </Card>
                     ) : (
                       <div className="space-y-2.5">
-                        <Card variant="default" padding="md" className="space-y-1.5 border-red-500/30 bg-red-500/5">
+                        <Card variant="standard" padding="md" className="space-y-1.5 border-red-500/30 bg-red-500/5">
                           <div className="flex justify-between items-center">
                             <h5 className="font-display uppercase text-sm text-white">
                               {expectedWoForSelected.name}
@@ -613,7 +616,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
                             <Card
                               key={ex.id || eIdx}
-                              variant="default"
+                              variant="standard"
                               padding="compact"
                               className="flex items-center justify-between text-xs"
                             >
@@ -676,16 +679,19 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                     {/* View Full Log Button inside detail panel */}
                     {onNavigateToHistory && (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="md"
+                        fullWidth
+                        rightIcon={<ArrowRight size={14} className="text-emerald-400" />}
                         onClick={() => {
                           haptics.selection();
                           onNavigateToHistory(selectedLog.id || selectedDateStr || undefined);
                         }}
-                        className="w-full mt-2 py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 rounded-xl font-mono text-xs text-white uppercase tracking-wider font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:border-zinc-600"
+                        className="mt-2"
                       >
-                        <span>View Full Log In History</span>
-                        <ArrowRight size={14} className="text-emerald-400" />
-                      </button>
+                        View Full Log In History
+                      </Button>
                     )}
                   </div>
                 )}

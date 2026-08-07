@@ -57,7 +57,7 @@ import {
   Section,
   SectionHeader,
   StatCard,
-  HighlightCard,
+  AchievementCard,
   EmptyState,
   SegmentedControl,
   Badge,
@@ -662,7 +662,7 @@ export const AnalyticsView: React.FC = () => {
           eyebrow="Performance Intel"
           eyebrowColor="emerald"
           title="Analytics"
-          size="lg"
+          size="page"
         />
 
         {/* Time range segmented control */}
@@ -747,7 +747,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Adherence Matrix"
         eyebrowColor="emerald"
         title="Monthly Intensity Heatmap"
-        padding="relaxed"
+        padding="section"
         action={
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs uppercase font-bold text-zinc-300 mr-2">
@@ -859,7 +859,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Strength Progression"
         eyebrowColor="emerald"
         title="Estimated 1RM Trend"
-        padding="relaxed"
+        padding="section"
         action={
           priorityExercises.length > 0 ? (
             <div className="flex items-center gap-2 max-w-[200px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none">
@@ -961,7 +961,7 @@ export const AnalyticsView: React.FC = () => {
             />
 
             {/* Biggest Training Week Ever */}
-            <HighlightCard
+            <AchievementCard
               title="Biggest Week Ever"
               value={`${(aggregated.biggestWeek.volume / 1000).toFixed(1)}k kg`}
               subtitle={aggregated.biggestWeek.weekStr}
@@ -976,7 +976,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Anatomical Load Distribution"
         eyebrowColor="emerald"
         title="Muscle Group Targeting"
-        padding="relaxed"
+        padding="section"
         action={
           <SegmentedControl<MuscleMetric>
             options={[
@@ -1066,7 +1066,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Personal Bests"
         eyebrowColor="orange"
         title="Records"
-        padding="relaxed"
+        padding="section"
         action={
           <Badge label="All-Time Highs" color="orange" variant="outline" dot={false} />
         }
@@ -1077,7 +1077,7 @@ export const AnalyticsView: React.FC = () => {
               <Card
                 key={rec.exId}
                 variant="interactive"
-                padding="md"
+                padding="standard"
                 className="flex items-center justify-between group border-orange-500/20 hover:border-orange-500/50"
               >
                 <div className="space-y-1 truncate pr-2">
@@ -1114,7 +1114,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Cumulative Milestones"
         eyebrowColor="emerald"
         title="Lifetime Summary"
-        padding="relaxed"
+        padding="section"
       >
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1160,7 +1160,7 @@ export const AnalyticsView: React.FC = () => {
         eyebrow="Rest & Adaptation"
         eyebrowColor="emerald"
         title="Recovery Metrics"
-        padding="relaxed"
+        padding="section"
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
@@ -1193,7 +1193,7 @@ export const AnalyticsView: React.FC = () => {
           eyebrow="Automated Synthesis"
           eyebrowColor="emerald"
           title="Data Insights"
-          padding="relaxed"
+          padding="section"
           className="lg:col-span-2"
         >
           <div className="space-y-3">
@@ -1213,7 +1213,7 @@ export const AnalyticsView: React.FC = () => {
           eyebrow="Split Breakdown"
           eyebrowColor="zinc"
           title="Routine Distribution"
-          padding="relaxed"
+          padding="section"
           className="flex flex-col justify-between"
         >
           {workoutPieData.length > 0 ? (
@@ -1262,7 +1262,7 @@ export const AnalyticsView: React.FC = () => {
               <Badge
                 key={p.type}
                 label={p.name}
-                color={p.color}
+                colorOverride={p.color}
                 variant="subtle"
                 size="sm"
               />

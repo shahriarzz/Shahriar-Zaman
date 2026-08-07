@@ -5,66 +5,95 @@ import {
   BORDER,
   RADIUS,
   SPACING,
+  SpacingIntent,
   SHADOW,
   SemanticColor,
   getAccentColor
 } from '../../styles/tokens';
 
+export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised';
+export type CardAccentVariant = 'left' | 'top' | 'glow';
+
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'standard' | 'default' | 'elevated' | 'interactive' | 'panel' | 'overlay';
-  accent?: SemanticColor | string | null;
-  accentStyle?: 'border-left' | 'border-top' | 'glow' | null;
+  variant?: 'standard' | 'elevated' | 'interactive' | 'panel' | 'overlay';
+  surface?: CardSurface;
+  accent?: SemanticColor | null;
+  colorOverride?: string;
+  accentVariant?: CardAccentVariant | null;
+  accentStyle?: 'border-left' | 'border-top' | 'glow' | 'left' | 'top' | null;
   hoverable?: boolean;
   onClick?: (e?: React.MouseEvent<HTMLDivElement>) => void;
-  padding?: 'none' | 'compact' | 'sm' | 'md' | 'lg' | 'relaxed' | 'hero';
+  padding?: SpacingIntent;
   children: React.ReactNode;
   className?: string;
 }
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   variant = 'standard',
+  surface,
   accent,
+  colorOverride,
+  accentVariant,
   accentStyle,
   hoverable = false,
   onClick,
-  padding,
+  padding = 'standard',
   children,
   className,
   style,
   ...props
 }, ref) => {
-  const normalizedVariant = variant === 'default' ? 'standard' : variant;
-  // Determine default padding based on variant if not specified
-  const effectivePaddingKey = padding !== undefined ? padding : (normalizedVariant === 'panel' || normalizedVariant === 'elevated' ? 'lg' : 'md');
-  const paddingClass = SPACING[effectivePaddingKey] || '';
+  // Resolved surface appearance (base / subtle / recessed / raised)
+  const effectiveSurface: CardSurface = surface || (
+    variant === 'panel'
+      ? 'subtle'
+      : variant === 'elevated'
+      ? 'raised'
+      : 'base'
+  );
 
-  const variantClasses = {
-    standard: cn(SURFACE[2], BORDER.default, RADIUS.card, SHADOW.elevation, 'border'),
-    elevated: cn('bg-gradient-to-br from-zinc-900 to-zinc-950', BORDER.default, RADIUS.panel, SHADOW.elevation, 'border'),
-    interactive: cn(
-      SURFACE[2],
-      BORDER.default,
-      RADIUS.card,
-      'border hover:bg-zinc-900/80 hover:border-zinc-700 transition-all active:scale-[0.99] select-none'
-    ),
-    panel: cn(SURFACE[1], BORDER.default, RADIUS.panel, SHADOW.panel, 'border'),
-    overlay: cn('bg-zinc-900/95', BORDER.default, RADIUS.panel, SHADOW.panel, 'border backdrop-blur-xl')
+  const surfaceClasses: Record<CardSurface, string> = {
+    base: SURFACE.default,
+    subtle: SURFACE.subtle,
+    recessed: SURFACE.recessed,
+    raised: 'bg-gradient-to-br from-zinc-900 to-zinc-950',
   };
 
-  const resolvedAccentHex = getAccentColor(accent);
+  const paddingClass = SPACING[padding] || SPACING.standard;
+
+  const variantClasses = {
+    standard: cn(BORDER.standard, RADIUS.card, SHADOW.elevation, 'border'),
+    elevated: cn(BORDER.standard, RADIUS.panel, SHADOW.elevation, 'border'),
+    interactive: cn(
+      BORDER.standard,
+      RADIUS.card,
+      'border active:scale-[0.99] select-none cursor-pointer'
+    ),
+    panel: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
+    overlay: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border backdrop-blur-xl')
+  };
+
+  const resolvedAccentHex = colorOverride || getAccentColor(accent);
+  const effectiveAccentVariant = accentVariant || (
+    accentStyle === 'border-left'
+      ? 'left'
+      : accentStyle === 'border-top'
+      ? 'top'
+      : accentStyle
+  );
 
   let accentClasses = '';
   let accentStyles: React.CSSProperties = {};
 
-  if (resolvedAccentHex && accentStyle) {
-    if (accentStyle === 'border-left') {
+  if (resolvedAccentHex && effectiveAccentVariant) {
+    if (effectiveAccentVariant === 'left') {
       accentClasses = 'border-l-4';
       accentStyles.borderLeftColor = resolvedAccentHex;
-    } else if (accentStyle === 'border-top') {
+    } else if (effectiveAccentVariant === 'top') {
       accentClasses = 'border-t-4';
       accentStyles.borderTopColor = resolvedAccentHex;
-    } else if (accentStyle === 'glow') {
-      accentStyles.boxShadow = `0 0 20px ${resolvedAccentHex}40`;
+    } else if (effectiveAccentVariant === 'glow') {
+      accentClasses = SHADOW.accentGlow(resolvedAccentHex);
     }
   }
 
@@ -74,10 +103,11 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       onClick={onClick}
       style={{ ...accentStyles, ...style }}
       className={cn(
+        surfaceClasses[effectiveSurface],
         variantClasses[variant],
         paddingClass,
-        hoverable && 'hover:border-zinc-700 transition-all',
-        onClick && 'cursor-pointer',
+        hoverable && 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-all',
+        onClick && !hoverable && 'cursor-pointer',
         accentClasses,
         className
       )}
@@ -89,3 +119,4 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
 });
 
 Card.displayName = 'Card';
+

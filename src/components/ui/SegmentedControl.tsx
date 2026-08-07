@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, RADIUS, SURFACE, BORDER } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -14,6 +14,7 @@ export interface SegmentedControlProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   accent?: SemanticColor;
+  colorOverride?: string;
   size?: 'sm' | 'md';
   className?: string;
 }
@@ -23,15 +24,18 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   accent = 'emerald',
+  colorOverride,
   size = 'sm',
   className
 }: SegmentedControlProps<T>) {
-  const accentHex = getAccentColor(accent) || '#10b981';
+  const accentHex = colorOverride || getAccentColor(accent) || '#10b981';
 
   return (
     <div
       className={cn(
-        "bg-zinc-950/80 p-1 border border-zinc-800 flex items-center gap-1",
+        SURFACE.recessed,
+        BORDER.standard,
+        "p-1 border flex items-center gap-1",
         RADIUS.button,
         className
       )}

@@ -11,6 +11,11 @@ import {
   Card,
   StatCard,
   Badge,
+  Button,
+  Input,
+  Banner,
+  Stack,
+  Grid,
   SEMANTIC_COLORS
 } from './ui';
 
@@ -776,7 +781,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
   if (isFinishing) {
     return (
-      <div className="py-20 text-center space-y-8 max-w-lg mx-auto">
+      <Stack spacing="xl" className="py-20 text-center max-w-lg mx-auto">
         <div className="w-20 h-20 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
           <CheckCircle2 size={40} />
         </div>
@@ -785,7 +790,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <p className="text-zinc-500 font-mono text-sm tracking-widest uppercase">Target Achieved · Stats Synchronized</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <Grid cols={2} gap="md">
           <StatCard
             label="Duration"
             value={`${Math.floor(duration / 60)}m`}
@@ -839,15 +844,18 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               </div>
             </Card>
           )}
-        </div>
+        </Grid>
 
-        <button
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
           onClick={onExit}
-          className="w-full py-4 bg-white text-black rounded-2xl font-bold uppercase tracking-[0.2em] text-sm hover:scale-105 active:scale-95 transition-all"
+          className="py-4"
         >
           Dismiss Summary
-        </button>
-      </div>
+        </Button>
+      </Stack>
     );
   }
 
@@ -856,7 +864,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   );
 
   return (
-    <div className="space-y-8 pb-32">
+    <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
       <header 
         className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300"
@@ -865,9 +873,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         }}
       >
         <div className="flex items-center gap-4">
-          <button onClick={handleExitAttempt} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <ChevronLeft size={20} />
-          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleExitAttempt}
+            icon={<ChevronLeft size={20} />}
+          />
           <div className="space-y-1">
             <Badge
               label={activeWorkout.badge}
@@ -891,23 +902,23 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               <span className="text-[9px] uppercase tracking-widest">kg</span>
             </div>
           </div>
-          <button
-            onClick={finishSession}
+          <Button
+            variant="primary"
+            size="md"
+            loading={isSubmitting}
             disabled={isSubmitting || isFinishing}
+            onClick={finishSession}
             className={cn(
-              "px-6 py-3 bg-white text-black rounded-xl text-xs font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none",
-              allExercisesDone 
-                ? "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold" 
-                : "shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+              allExercisesDone && "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold"
             )}
           >
             {isSubmitting ? 'Syncing...' : 'Finish'}
-          </button>
+          </Button>
         </div>
       </header>
 
       {/* Exercises List */}
-      <div className="space-y-6">
+      <Stack spacing="lg">
         {activeWorkout.exercises.map((ex) => (
           <ExerciseCard
             key={ex.id}
@@ -947,8 +958,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 };
 

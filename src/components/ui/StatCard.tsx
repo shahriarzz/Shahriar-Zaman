@@ -1,63 +1,54 @@
 import React from 'react';
-import { Card } from './Card';
+import { Card, CardProps } from './Card';
 import { cn } from '../../lib/utils';
 import {
   SemanticColor,
   getAccentColor,
   TYPOGRAPHY
 } from '../../styles/tokens';
+import { renderIcon, IconProp } from './renderIcon';
 
 export interface StatCardProps {
   label: string;
   value: string | number;
   unit?: string;
-  icon?: React.ReactNode | React.ComponentType<{ size?: number | string; className?: string; style?: React.CSSProperties }>;
-  accent?: SemanticColor | string;
-  color?: SemanticColor | string;
+  icon?: IconProp;
+  accent?: SemanticColor;
+  colorOverride?: string;
+  accentStyle?: CardProps['accentStyle'];
   sublabel?: string;
   trend?: React.ReactNode;
   size?: 'standard' | 'hero';
-  variant?: 'standard' | 'default' | 'elevated' | 'interactive' | 'panel' | 'overlay';
   className?: string;
 }
 
-const renderIcon = (
-  iconItem: StatCardProps['icon'],
-  props?: { size?: number | string; className?: string; style?: React.CSSProperties }
-): React.ReactNode => {
-  if (!iconItem) return null;
-  if (React.isValidElement(iconItem)) return iconItem;
-  if (
-    typeof iconItem === 'function' ||
-    (typeof iconItem === 'object' && iconItem !== null && '$$typeof' in (iconItem as object))
-  ) {
-    const IconComp = iconItem as React.ComponentType<any>;
-    return <IconComp {...props} />;
-  }
-  return iconItem as React.ReactNode;
-};
+const STAT_NUMBER_VARIANTS = {
+  standard: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
+  hero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none',
+} as const;
 
 export const StatCard: React.FC<StatCardProps> = ({
   label,
   value,
   unit,
   icon,
-  accent,
-  color = 'emerald',
+  accent = 'emerald',
+  colorOverride,
+  accentStyle,
   sublabel,
   trend,
   size = 'standard',
-  variant = 'standard',
   className
 }) => {
-  const effectiveAccent = accent || color || 'emerald';
-  const accentHex = getAccentColor(effectiveAccent) || '#10b981';
-  const effectiveVariant = variant === 'default' ? 'standard' : variant;
+  const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || '#10b981';
 
   return (
     <Card
-      variant={effectiveVariant}
-      padding={size === 'hero' ? 'lg' : 'md'}
+      variant="standard"
+      accent={accent}
+      colorOverride={colorOverride}
+      accentStyle={accentStyle}
+      padding={size === 'hero' ? 'section' : 'standard'}
       className={cn("flex flex-col justify-between", className)}
     >
       <div>
@@ -65,7 +56,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           <div className="flex items-center gap-2 min-w-0">
             {icon && (
               <span className="shrink-0 flex items-center" style={{ color: accentHex }}>
-                {renderIcon(icon, { size: 16 })}
+                {renderIcon(icon, { size: 16, style: { color: accentHex } })}
               </span>
             )}
             <span className={cn(TYPOGRAPHY.label, "truncate")}>
@@ -81,11 +72,11 @@ export const StatCard: React.FC<StatCardProps> = ({
         </div>
 
         <div className="flex items-baseline gap-1 mt-1">
-          <span className={size === 'hero' ? TYPOGRAPHY.statNumberHero : TYPOGRAPHY.statNumber}>
+          <span className={STAT_NUMBER_VARIANTS[size]}>
             {typeof value === 'number' ? value.toLocaleString() : value}
           </span>
           {unit && (
-            <span className="font-mono text-xs text-zinc-500 font-normal">
+            <span className={TYPOGRAPHY.unit}>
               {unit}
             </span>
           )}
