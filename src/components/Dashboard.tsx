@@ -430,7 +430,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {recentWeightLogs.length > 0 && (
             <div className="border-t border-zinc-800/60 pt-4 space-y-2">
               <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Recent Logs</div>
-              <div className="grid grid-cols-1 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1">
+              <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {recentWeightLogs.map(([date, weight]) => (
                   <Card key={date} variant="standard" padding="compact" className="flex items-center justify-between text-xs font-mono">
                     <span className="text-zinc-400">{formatDateStr(date)}</span>
@@ -456,7 +456,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     </div>
                   </Card>
                 ))}
-              </div>
+              </Grid>
             </div>
           )}
         </Stack>

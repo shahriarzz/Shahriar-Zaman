@@ -651,7 +651,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
                       Session Summary
                     </span>
-                    <div className="grid grid-cols-3 gap-2">
+                    <Grid cols={3} gap="sm">
                       <StatCard
                         label="Volume"
                         value={calculateVolume(selectedLog).toLocaleString()}
@@ -675,7 +675,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         icon={CheckCircle2}
                         size="standard"
                       />
-                    </div>
+                    </Grid>
 
                     {/* View Full Log Button inside detail panel */}
                     {onNavigateToHistory && (

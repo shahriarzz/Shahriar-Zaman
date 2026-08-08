@@ -378,7 +378,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     className="bg-zinc-950 border border-zinc-800 p-6 rounded-2xl space-y-6 overflow-hidden text-zinc-200"
                   >
                     {/* Summary Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Grid cols={2} colsMd={4} gap="md">
                       <StatCard
                         label="Completed Workouts"
                         value={selectedReport.sessionsCount.toString()}
@@ -404,10 +404,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         accent="amber"
                         icon={Trophy}
                       />
-                    </div>
+                    </Grid>
 
                     {/* Routine split and Peaks */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-zinc-900">
+                    <Grid cols={1} colsMd={2} gap="lg" className="pt-2 border-t border-zinc-900">
                       {/* Training Split Distribution */}
                       <div className="space-y-3">
                         <h4 className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Training Plan Coverage</h4>
@@ -451,7 +451,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           )}
                         </div>
                       </div>
-                    </div>
+                    </Grid>
                   </motion.div>
                 );
               })()}
