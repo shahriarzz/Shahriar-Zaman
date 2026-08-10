@@ -32,7 +32,14 @@ import {
   Stack,
   Grid,
   SEMANTIC_COLORS,
-  RADIUS
+  RADIUS,
+  SURFACE,
+  BORDER,
+  SPACING,
+  GAP,
+  STACK_SPACING,
+  TYPOGRAPHY,
+  SHADOW
 } from './ui';
 
 export const ManageView: React.FC = () => {
@@ -456,7 +463,9 @@ export const ManageView: React.FC = () => {
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className={cn(
-                  "p-3 rounded-xl border font-mono text-[10px] uppercase tracking-wide flex items-center justify-between",
+                  "p-3 border flex items-center justify-between",
+                  RADIUS.button,
+                  TYPOGRAPHY.label,
                   restoreMessage.isError ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
                 )}
               >
@@ -470,7 +479,7 @@ export const ManageView: React.FC = () => {
             {/* Action 1: Export Keys */}
             <Card variant="standard" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1">
-                <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Export Protocols</span>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Export Protocols</span>
                 <h4 className="text-xs font-bold text-zinc-200">Standalone Data Keyfile</h4>
                 <p className="text-[10px] text-zinc-400 leading-normal">
                   Compiles all training cycles, logged weights, rep sets, and cycle configs into a structured database file.
@@ -504,7 +513,7 @@ export const ManageView: React.FC = () => {
             {/* Action 2: Import Keys */}
             <Card variant="standard" padding="md" className="flex flex-col justify-between items-start gap-4">
               <div className="space-y-1 w-full">
-                <span className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest block">Restore Protocol</span>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Restore Protocol</span>
                 <h4 className="text-xs font-bold text-zinc-200">Inward Protocol Overload</h4>
                 <p className="text-[10px] text-zinc-400 leading-normal">
                   Import routines by specifying a digital JSON file or copying string structures directly below.
@@ -514,6 +523,7 @@ export const ManageView: React.FC = () => {
               <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <label className={cn(
                   "flex-1 px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-black rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all text-center cursor-pointer flex items-center justify-center gap-2 select-none active:scale-[0.98]",
+                  RADIUS.button,
                   loadingAction === 'upload' && "opacity-40 pointer-events-none"
                 )}>
                   <Upload size={14} />
@@ -545,14 +555,14 @@ export const ManageView: React.FC = () => {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="space-y-2 bg-zinc-950 p-4 border border-zinc-800 rounded-2xl"
+                className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "space-y-2 border p-4")}
               >
-                <label className="block font-mono text-[9px] uppercase tracking-widest text-zinc-500">Raw Keyfile JSON Structure</label>
+                <label className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Raw Keyfile JSON Structure</label>
                 <textarea
                   value={pastedJson}
                   onChange={(e) => setPastedJson(e.target.value)}
                   placeholder='Paste your backup string block here... (e.g., {"version": 1, ...})'
-                  className="w-full h-32 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 rounded-xl p-3 font-mono text-[10px] text-zinc-300 outline-none resize-none"
+                  className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "w-full h-32 border hover:border-zinc-700 focus:border-zinc-600 p-3 font-mono text-[10px] text-zinc-300 outline-none resize-none")}
                 />
                 <div className="flex justify-end gap-2">
                   <Button
@@ -577,13 +587,13 @@ export const ManageView: React.FC = () => {
           </AnimatePresence>
 
           {/* Automatic Rolling Checkpoints */}
-          <div className="space-y-3 bg-zinc-950/50 p-4 border border-zinc-800 rounded-2xl">
+          <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "space-y-3 border p-4")}>
             <div className="flex items-center gap-1.5 justify-between">
-              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <h4 className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-2")}>
                 <History size={13} className="text-zinc-500" />
                 Automated Checkpoints History
               </h4>
-              <span className="text-[8px] font-mono text-zinc-500 uppercase">Up to 8 autosaves</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Up to 8 autosaves</span>
             </div>
 
             <p className="text-[10px] text-zinc-400 leading-normal">
@@ -592,14 +602,14 @@ export const ManageView: React.FC = () => {
 
             <div className="space-y-1 max-h-44 overflow-y-auto custom-scrollbar pt-1 pr-1">
               {checkpointHistory.length === 0 ? (
-                <div className="p-4 text-center border border-dashed border-zinc-800 text-[9px] font-mono text-zinc-500 uppercase rounded-xl">
+                <div className={cn(BORDER.standard, RADIUS.button, "p-4 text-center border border-dashed text-[9px] font-mono text-zinc-500 uppercase")}>
                   No local checkpoints available.
                 </div>
               ) : (
                 checkpointHistory.map((b) => (
                   <div 
                     key={b.timestamp}
-                    className="p-3 bg-zinc-950 border border-zinc-800/80 rounded-xl flex items-center justify-between gap-3 text-left hover:border-zinc-700 hover:bg-zinc-900/50 transition-all group"
+                    className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "p-3 border flex items-center justify-between gap-3 text-left hover:border-zinc-700 hover:bg-zinc-900/50 transition-all group")}
                   >
                     <div className="space-y-0.5">
                       <span className="text-[8px] font-mono text-orange-400 font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 mr-1.5">
@@ -643,10 +653,10 @@ export const ManageView: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
             <div className="relative flex-1 manage-dropdown-container">
-              <label className="block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 ml-2">Training Split Selection</label>
+              <label className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 mb-2 ml-2 block")}>Training Split Selection</label>
               <button 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 font-mono text-[10px] uppercase tracking-widest text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600 outline-none cursor-pointer text-white"
+                className={cn(SURFACE.subtle, BORDER.standard, RADIUS.card, TYPOGRAPHY.label, "w-full border p-4 text-left flex justify-between items-center hover:border-zinc-700 transition-all focus:ring-1 focus:ring-zinc-600 outline-none cursor-pointer text-white")}
               >
                 {selectedWorkout?.name || "Select Protocol to Edit"}
                 <ChevronRight size={16} className={cn("text-zinc-500 transition-transform", isDropdownOpen && "rotate-90")} />
@@ -658,7 +668,7 @@ export const ManageView: React.FC = () => {
                     className="fixed inset-0 z-10" 
                     onClick={() => setIsDropdownOpen(false)} 
                   />
-                  <div className="absolute z-20 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                  <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.card, "absolute z-20 left-0 right-0 mt-2 border p-2 shadow-2xl space-y-1 max-h-64 overflow-y-auto custom-scrollbar")}>
                     {workouts.map(wo => (
                       <button 
                         key={wo.id}
@@ -672,7 +682,7 @@ export const ManageView: React.FC = () => {
                         )}
                       >
                         <div className="w-1.5 h-3.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[wo.type] }} />
-                        <span className="text-[10px] font-mono uppercase tracking-widest">{wo.name}</span>
+                        <span className={cn(TYPOGRAPHY.label)}>{wo.name}</span>
                       </button>
                     ))}
                   </div>
@@ -681,7 +691,7 @@ export const ManageView: React.FC = () => {
             </div>
             
             <div className="flex flex-col gap-2">
-              <label className="hidden md:block font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500 mb-2 invisible">Actions</label>
+              <label className={cn(TYPOGRAPHY.eyebrow, "hidden md:block text-zinc-500 mb-2 invisible")}>Actions</label>
               <Button 
                 variant="outline"
                 size="lg"
@@ -717,11 +727,11 @@ export const ManageView: React.FC = () => {
                   <>
                     <div className="space-y-2">
                       {selectedWorkout.exercises.map(ex => (
-                        <div key={ex.id} className="flex items-center justify-between p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl group hover:border-zinc-700 transition-colors">
+                        <div key={ex.id} className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "flex items-center justify-between p-4 border group hover:border-zinc-700 transition-colors")}>
                           <div className="flex items-center gap-3">
                             <div>
                                <div className="text-sm font-bold text-zinc-200">{ex.name}</div>
-                               <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">{ex.target}</div>
+                               <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>{ex.target}</div>
                             </div>
                           </div>
                           
@@ -737,8 +747,8 @@ export const ManageView: React.FC = () => {
                     </div>
 
                     {addingExWoId === selectedWorkout.id ? (
-                      <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-4">
-                        <span className="block font-mono text-[9px] uppercase tracking-widest text-zinc-400 font-bold">New Exercise Details</span>
+                      <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "p-5 border space-y-4")}>
+                        <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 font-bold block")}>New Exercise Details</span>
                         <Grid cols={1} colsMd={2} gap="sm">
                           <Input
                             label="Exercise Name"
@@ -809,7 +819,7 @@ export const ManageView: React.FC = () => {
       {/* Danger Zone */}
       <div className="pt-6 border-t border-zinc-900">
         <div className="p-6 bg-red-500/5 border border-red-500/15 rounded-3xl space-y-4">
-          <h3 className="text-red-400 font-mono text-[10px] uppercase tracking-[0.3em] font-bold">Terminal Commands</h3>
+          <h3 className={cn(TYPOGRAPHY.eyebrow, "text-red-400 font-bold")}>Terminal Commands</h3>
           <p className="text-xs text-red-400/70 leading-relaxed uppercase tracking-wider font-mono">
             Caution: Purging session history logs will permanently clear all historical weights and calendars. Split routines will remain preserved.
           </p>

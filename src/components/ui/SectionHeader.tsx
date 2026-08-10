@@ -49,8 +49,8 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   );
 
   return (
-    <div className={cn("flex items-start justify-between gap-4", className)}>
-      <div className="space-y-1 min-w-0">
+    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4", className)}>
+      <div className="space-y-1 min-w-0 flex-1">
         {eyebrow && (
           <p
             className={TYPOGRAPHY.eyebrow}
@@ -72,7 +72,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
       </div>
 
       {action && (
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="self-start sm:self-auto shrink-0 flex items-center gap-2 max-w-full overflow-x-auto pb-1 sm:pb-0">
           {action}
         </div>
       )}

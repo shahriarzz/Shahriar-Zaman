@@ -186,7 +186,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             )}
 
             {/* Ghost Data Grid */}
-            <div className="grid grid-cols-2 bg-zinc-950/20 border-y border-zinc-800/50">
+            <Grid cols={2} gap="none" className="bg-zinc-950/20 border-y border-zinc-800/50">
               <div className="p-4 border-r border-zinc-800/50 space-y-1">
                 <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
                 {lastSession ? (
@@ -209,7 +209,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
                 )}
               </div>
-            </div>
+            </Grid>
 
             {/* Sets Table */}
             <div className="p-6 pt-4 space-y-3">
@@ -758,25 +758,25 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   };
 
   if (!activeWorkout) return (
-    <div className="py-20 space-y-6">
+    <Stack spacing="xl" className="py-20">
       <div className="text-center">
         <h2 className="text-2xl font-bold font-display uppercase tracking-wide">Select a Protocol to Begin</h2>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {workouts.map(wo => (
-            <Card
-              key={wo.id}
-              variant="interactive"
-              padding="md"
-              onClick={() => setActiveWorkout(wo)}
-              className="text-left cursor-pointer"
-            >
-              <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>
-              <div className="font-bold text-white text-base">{wo.name}</div>
-            </Card>
-          ))}
-      </div>
-    </div>
+      <Grid cols={1} colsSm={2} gap="md">
+        {workouts.map(wo => (
+          <Card
+            key={wo.id}
+            variant="interactive"
+            padding="md"
+            onClick={() => setActiveWorkout(wo)}
+            className="text-left cursor-pointer"
+          >
+            <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>
+            <div className="font-bold text-white text-base">{wo.name}</div>
+          </Card>
+        ))}
+      </Grid>
+    </Stack>
   );
 
   if (isFinishing) {

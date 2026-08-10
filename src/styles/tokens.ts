@@ -24,6 +24,7 @@ export const SPACING = {
   compact: 'py-2.5 px-3.5',
   standard: 'p-5',
   section: 'p-6',
+  relaxed: 'p-6',
   hero: 'p-8',
 } as const;
 

@@ -61,7 +61,17 @@ import {
   EmptyState,
   SegmentedControl,
   Badge,
-  Card
+  Card,
+  Stack,
+  Grid,
+  SURFACE,
+  BORDER,
+  RADIUS,
+  SPACING,
+  GAP,
+  STACK_SPACING,
+  TYPOGRAPHY,
+  SEMANTIC_COLORS
 } from './ui';
 
 type TimeRange = '7d' | '30d' | '90d' | 'all';
@@ -655,7 +665,7 @@ export const AnalyticsView: React.FC = () => {
   }, [aggregated]);
 
   return (
-    <div className="space-y-10 pt-4 pb-16">
+    <Stack spacing="2xl" className="pt-4 pb-16">
       {/* 1. HEADER & TIME TOGGLE */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <SectionHeader
@@ -684,7 +694,7 @@ export const AnalyticsView: React.FC = () => {
       </div>
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <Grid cols={2} colsLg={4} gap="md">
         {/* Streak: Clearly split Current vs Longest */}
         <StatCard
           label="Training Streak"
@@ -740,7 +750,7 @@ export const AnalyticsView: React.FC = () => {
             ) : undefined
           }
         />
-      </div>
+      </Grid>
 
       {/* 3. SECTION 2: CONSISTENCY (HEATMAP) */}
       <Section
@@ -750,7 +760,7 @@ export const AnalyticsView: React.FC = () => {
         padding="section"
         action={
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs uppercase font-bold text-zinc-300 mr-2">
+            <span className={cn(TYPOGRAPHY.label, "text-zinc-300 mr-2")}>
               {format(heatmapData.monthStart, 'MMMM yyyy')}
             </span>
             <button
@@ -758,7 +768,7 @@ export const AnalyticsView: React.FC = () => {
                 haptics.selection();
                 setCurrentHeatmapMonth(subMonths(currentHeatmapMonth, 1));
               }}
-              className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full cursor-pointer transition-colors"
+              className={cn(SURFACE.subtle, BORDER.standard, "w-8 h-8 flex items-center justify-center border hover:bg-zinc-800 rounded-full cursor-pointer transition-colors")}
             >
               <ChevronLeft size={16} />
             </button>
@@ -767,18 +777,18 @@ export const AnalyticsView: React.FC = () => {
                 haptics.selection();
                 setCurrentHeatmapMonth(addMonths(currentHeatmapMonth, 1));
               }}
-              className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full cursor-pointer transition-colors"
+              className={cn(SURFACE.subtle, BORDER.standard, "w-8 h-8 flex items-center justify-center border hover:bg-zinc-800 rounded-full cursor-pointer transition-colors")}
             >
               <ChevronRight size={16} />
             </button>
           </div>
         }
       >
-        <div className="space-y-6">
+        <Stack spacing="lg">
           {/* Heatmap Grid */}
-          <div className="space-y-2">
+          <Stack spacing="xs">
             {/* Weekday headers */}
-            <div className="grid grid-cols-7 gap-1.5 text-center font-mono text-[10px] text-zinc-500 uppercase font-bold">
+            <div className={cn("grid grid-cols-7 gap-1.5 text-center uppercase", TYPOGRAPHY.label, "text-zinc-500")}>
               <span>Mon</span>
               <span>Tue</span>
               <span>Wed</span>
@@ -817,7 +827,8 @@ export const AnalyticsView: React.FC = () => {
                     key={dateStr}
                     title={tooltipText}
                     className={cn(
-                      "aspect-square rounded-xl border flex flex-col items-center justify-center text-xs transition-all p-1 relative group cursor-default",
+                      "aspect-square border flex flex-col items-center justify-center text-xs transition-all p-1 relative group cursor-default",
+                      RADIUS.button,
                       isCurrentMonth ? intensityClass : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
                     )}
                   >
@@ -831,7 +842,7 @@ export const AnalyticsView: React.FC = () => {
                 );
               })}
             </div>
-          </div>
+          </Stack>
 
           {/* Legend + Summary line */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-zinc-800/60 text-xs font-mono text-zinc-400">
@@ -851,7 +862,7 @@ export const AnalyticsView: React.FC = () => {
               <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days · <span className="text-zinc-500">{aggregated.missedTrainingDays} Skipped</span> · <span className="text-zinc-300">{aggregated.consistencyPct}% Consistency</span>
             </div>
           </div>
-        </div>
+        </Stack>
       </Section>
 
       {/* 4. SECTION 3: PERFORMANCE (1RM TREND CHART) */}
@@ -863,7 +874,7 @@ export const AnalyticsView: React.FC = () => {
         action={
           priorityExercises.length > 0 ? (
             <div className="flex items-center gap-2 max-w-[200px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none">
-              <span className="text-[10px] font-mono text-zinc-500 uppercase shrink-0">Lift:</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
               <div className="flex gap-1">
                 {priorityExercises.map((ex) => (
                   <button
@@ -873,10 +884,11 @@ export const AnalyticsView: React.FC = () => {
                       setSelected1RMExerciseId(ex.id);
                     }}
                     className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer whitespace-nowrap shrink-0",
+                      "px-3 py-1.5 text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer whitespace-nowrap shrink-0",
+                      RADIUS.button,
                       active1RMExerciseId === ex.id
                         ? "bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                        : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
+                        : cn(SURFACE.subtle, BORDER.standard, "border text-zinc-400 hover:text-white")
                     )}
                   >
                     {ex.name}
@@ -887,7 +899,7 @@ export const AnalyticsView: React.FC = () => {
           ) : undefined
         }
       >
-        <div className="space-y-6">
+        <Stack spacing="lg">
           {/* Line chart container */}
           {aggregated.active1RMTrend.length > 0 ? (
             <div className="h-64 sm:h-72 w-full pt-2">
@@ -917,7 +929,7 @@ export const AnalyticsView: React.FC = () => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
                         return (
-                          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-2xl font-mono text-xs space-y-1">
+                          <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, "border p-3 shadow-2xl font-mono text-xs space-y-1")}>
                             <p className="text-zinc-400 font-bold">{data.date}</p>
                             <p className="text-emerald-400 font-black text-sm">
                               Est. 1RM: {data.epley1RM} kg
@@ -949,7 +961,7 @@ export const AnalyticsView: React.FC = () => {
           )}
 
           {/* Summary beneath chart */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <Grid cols={1} colsMd={2} gap="md" className="pt-2">
             {/* Average Session Duration */}
             <StatCard
               label="Average Session Length"
@@ -967,8 +979,8 @@ export const AnalyticsView: React.FC = () => {
               subtitle={aggregated.biggestWeek.weekStr}
               icon={<Trophy size={18} />}
             />
-          </div>
-        </div>
+          </Grid>
+        </Stack>
       </Section>
 
       {/* 5. SECTION 4: MUSCLES (HORIZONTAL BAR CHART) */}
@@ -994,7 +1006,7 @@ export const AnalyticsView: React.FC = () => {
           />
         }
       >
-        <div className="space-y-6">
+        <Stack spacing="lg">
           {/* Horizontal Bar Chart */}
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
@@ -1007,7 +1019,7 @@ export const AnalyticsView: React.FC = () => {
                     if (active && payload && payload.length) {
                       const d = payload[0].payload;
                       return (
-                        <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-xs">
+                        <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, "border p-2.5 font-mono text-xs")}>
                           <span className="text-zinc-400 uppercase">{d.category}: </span>
                           <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
                         </div>
@@ -1026,11 +1038,11 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           {/* Summary beneath: Exercise Rankings */}
-          <div className="pt-2 border-t border-zinc-800/60 space-y-3">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 font-bold block">
+          <Stack spacing="sm" className="pt-2 border-t border-zinc-800/60">
+            <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>
               Top Trained Exercises in Window
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <Grid cols={1} colsSm={2} colsMd={3} colsLg={5} gap="sm">
               {aggregated.topExercises.length > 0 ? (
                 aggregated.topExercises.map((ex, idx) => (
                   <Card key={ex.name} variant="elevated" padding="compact" className="flex items-center gap-3">
@@ -1046,9 +1058,9 @@ export const AnalyticsView: React.FC = () => {
               ) : (
                 <p className="text-xs font-mono text-zinc-500 col-span-full">No exercise logs recorded in this period.</p>
               )}
-            </div>
-          </div>
-        </div>
+            </Grid>
+          </Stack>
+        </Stack>
       </Section>
 
       {/* SUBTLE DIVIDER BEFORE LIFETIME & RECORDS */}
@@ -1071,7 +1083,7 @@ export const AnalyticsView: React.FC = () => {
           <Badge label="All-Time Highs" color="orange" variant="outline" dot={false} />
         }
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <Grid cols={1} colsMd={2} colsLg={3} gap="sm">
           {aggregated.recordsList.length > 0 ? (
             aggregated.recordsList.map((rec) => (
               <Card
@@ -1106,7 +1118,7 @@ export const AnalyticsView: React.FC = () => {
               className="col-span-full"
             />
           )}
-        </div>
+        </Grid>
       </Section>
 
       {/* 7. SECTION 6: LIFETIME */}
@@ -1116,8 +1128,8 @@ export const AnalyticsView: React.FC = () => {
         title="Lifetime Summary"
         padding="section"
       >
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Stack spacing="lg">
+          <Grid cols={2} colsLg={4} gap="md">
             <StatCard
               label="Total Workouts"
               value={aggregated.totalLogsCount}
@@ -1144,7 +1156,7 @@ export const AnalyticsView: React.FC = () => {
               accent="emerald"
               sublabel="Cumulative tonnage"
             />
-          </div>
+          </Grid>
 
           {aggregated.firstLogDate && (
             <div className="pt-4 border-t border-zinc-800/60 font-mono text-xs text-zinc-400 flex items-center gap-2">
@@ -1152,7 +1164,7 @@ export const AnalyticsView: React.FC = () => {
               Training active since <strong className="text-white">{aggregated.firstLogDate}</strong>
             </div>
           )}
-        </div>
+        </Stack>
       </Section>
 
       {/* 8. SECTION 7: RECOVERY */}
@@ -1162,7 +1174,7 @@ export const AnalyticsView: React.FC = () => {
         title="Recovery Metrics"
         padding="section"
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Grid cols={1} colsMd={3} gap="md">
           <StatCard
             label="Days Since Last Session"
             value={aggregated.daysSinceLast === 0 ? 'Today' : `${aggregated.daysSinceLast}`}
@@ -1183,11 +1195,11 @@ export const AnalyticsView: React.FC = () => {
             accent="emerald"
             sublabel={aggregated.daysSinceLast === 0 ? 'In training window' : 'Adaptation period'}
           />
-        </div>
+        </Grid>
       </Section>
 
       {/* 9. SECTION 8: INSIGHTS & WORKOUT TYPE SPLIT */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Grid cols={1} colsLg={3} gap="lg">
         {/* Deterministic Sentences List */}
         <Section
           eyebrow="Automated Synthesis"
@@ -1196,16 +1208,16 @@ export const AnalyticsView: React.FC = () => {
           padding="section"
           className="lg:col-span-2"
         >
-          <div className="space-y-3">
+          <Stack spacing="sm">
             {insightsList.map((sentence, idx) => (
-              <div key={idx} className="flex items-start gap-3 bg-zinc-950/40 border border-zinc-800/50 p-3.5 rounded-2xl">
+              <div key={idx} className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "flex items-start gap-3 border p-3.5")}>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                 <p className="font-mono text-xs text-zinc-300 leading-relaxed">
                   {sentence}
                 </p>
               </div>
             ))}
-          </div>
+          </Stack>
         </Section>
 
         {/* Workout Type Distribution Pie Chart */}
@@ -1238,7 +1250,7 @@ export const AnalyticsView: React.FC = () => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;
                         return (
-                          <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-xl font-mono text-xs">
+                          <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, "border p-2 font-mono text-xs")}>
                             <span style={{ color: d.color }}>{d.name}: </span>
                             <strong className="text-white">{d.value} sessions</strong>
                           </div>
@@ -1269,8 +1281,8 @@ export const AnalyticsView: React.FC = () => {
             ))}
           </div>
         </Section>
-      </div>
-    </div>
+      </Grid>
+    </Stack>
   );
 };
 

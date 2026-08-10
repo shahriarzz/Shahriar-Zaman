@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Card } from './Card';
 import { Badge } from './Badge';
-import { SemanticColor, SEMANTIC_COLORS } from '../../styles/tokens';
+import { SemanticColor, TYPOGRAPHY } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export type BannerVariant = 'warning' | 'success' | 'danger' | 'error' | 'info' | 'achievement';
@@ -93,14 +93,14 @@ export const Banner: React.FC<BannerProps> = ({
             </div>
           )}
           {typeof title === 'string' ? (
-            <h3 className="text-2xl font-black uppercase text-white tracking-tight leading-none font-display">
+            <h3 className={cn(TYPOGRAPHY.titleSection, "font-black")}>
               {title}
             </h3>
           ) : (
             title
           )}
           {typeof description === 'string' ? (
-            <p className="text-xs text-zinc-400 font-mono">
+            <p className={cn(TYPOGRAPHY.body, "text-xs font-mono")}>
               {description}
             </p>
           ) : (

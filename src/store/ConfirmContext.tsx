@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TriangleAlert, HelpCircle } from 'lucide-react';
+import { Button } from '../components/ui';
 
 interface ConfirmOptions {
   title: string;
@@ -151,25 +152,24 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
               {/* Action Buttons */}
               <div className="mt-8 flex items-center justify-end gap-3 font-mono text-[10px] tracking-widest uppercase">
-                <button
+                <Button
                   ref={abortButtonRef}
                   type="button"
+                  variant="outline"
+                  size="md"
                   onClick={() => handleClose(false)}
-                  className="px-5 py-3 border border-zinc-800 hover:bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-zinc-700"
                 >
                   ABORT
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant={options.isDanger ? "destructive" : "primary"}
+                  color={options.isDanger ? "red" : "orange"}
+                  size="md"
                   onClick={() => handleClose(true)}
-                  className={`px-5 py-3 rounded-xl hover:shadow-lg transition-all cursor-pointer ${
-                    options.isDanger 
-                      ? 'bg-red-500/10 hover:bg-red-500 border border-red-500/30 text-red-500 hover:text-black' 
-                      : 'bg-orange-500/10 hover:bg-orange-500 border border-orange-500/30 text-orange-500 hover:text-black'
-                  }`}
                 >
                   EXECUTE
-                </button>
+                </Button>
               </div>
             </motion.div>
           </div>

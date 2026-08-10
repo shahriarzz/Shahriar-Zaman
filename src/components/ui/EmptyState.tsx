@@ -1,7 +1,8 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
+import { Button } from './Button';
 
 export interface EmptyStateProps {
   icon?: IconProp;
@@ -50,7 +51,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             {renderIcon(icon, { size: 36 })}
           </div>
         )}
-        <p className="font-display uppercase text-zinc-400 text-lg tracking-wide">
+        <p className={cn(TYPOGRAPHY.titleSubsection, "text-zinc-400")}>
           {title}
         </p>
         {description && (
@@ -59,15 +60,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           </p>
         )}
         {action && (
-          <button
+          <Button
+            size="md"
+            variant="secondary"
             onClick={action.onClick}
-            className={cn(
-              "mt-3 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs uppercase font-bold tracking-wider transition-all cursor-pointer",
-              RADIUS.button
-            )}
+            className="mt-3"
           >
             {action.label}
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -96,16 +96,16 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </p>
       )}
       {action && (
-        <button
+        <Button
+          size="sm"
+          variant="secondary"
           onClick={action.onClick}
-          className={cn(
-            "mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs uppercase font-bold tracking-wider transition-all cursor-pointer",
-            RADIUS.button
-          )}
+          className="mt-2"
         >
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   );
 };
+

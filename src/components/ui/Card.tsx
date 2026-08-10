@@ -15,7 +15,7 @@ export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised';
 export type CardAccentVariant = 'left' | 'top' | 'glow';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'standard' | 'elevated' | 'interactive' | 'panel' | 'overlay';
+  variant?: 'standard' | 'elevated' | 'interactive' | 'panel' | 'overlay' | 'default';
   surface?: CardSurface;
   accent?: SemanticColor | null;
   colorOverride?: string;
@@ -43,11 +43,13 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   style,
   ...props
 }, ref) => {
+  const normalizedVariant = variant === 'default' ? 'standard' : variant;
+
   // Resolved surface appearance (base / subtle / recessed / raised)
   const effectiveSurface: CardSurface = surface || (
-    variant === 'panel'
+    normalizedVariant === 'panel'
       ? 'subtle'
-      : variant === 'elevated'
+      : normalizedVariant === 'elevated'
       ? 'raised'
       : 'base'
   );
@@ -104,7 +106,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       style={{ ...accentStyles, ...style }}
       className={cn(
         surfaceClasses[effectiveSurface],
-        variantClasses[variant],
+        variantClasses[normalizedVariant],
         paddingClass,
         hoverable && 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-all',
         onClick && !hoverable && 'cursor-pointer',

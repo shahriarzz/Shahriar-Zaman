@@ -21,7 +21,14 @@ import {
   Grid,
   EmptyState,
   SEMANTIC_COLORS,
-  RADIUS
+  RADIUS,
+  SURFACE,
+  BORDER,
+  SPACING,
+  TYPOGRAPHY,
+  SHADOW,
+  GAP,
+  STACK_SPACING
 } from './ui';
 
 interface HistoryViewProps {
@@ -243,7 +250,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   const [historySubTab, setHistorySubTab] = useState<'log'>('log');
 
   return (
-    <div className="space-y-8 pt-4">
+    <Stack spacing="xl" className="pt-4">
       {/* Upper header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <SectionHeader
@@ -254,7 +261,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         />
 
         {/* Sub-tab navigation bar */}
-        <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl w-fit">
+        <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.card, "flex items-center border p-1 w-fit")}>
           <button
             type="button"
             onClick={() => {
@@ -302,7 +309,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
               variant="ghost"
               size="sm"
               onClick={clearFilter}
-              className="text-[10px] uppercase font-mono tracking-wider font-bold"
+              className={cn(TYPOGRAPHY.eyebrow, "text-amber-400")}
             >
               Clear Filter
             </Button>
@@ -330,7 +337,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           padding="relaxed"
         >
           <div className="space-y-4">
-            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none snap-x pr-2">
+            <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
               {monthlySummaries.map((summary) => {
                 const isSelected = activeMonthTab === summary.monthKey;
                 return (
@@ -341,20 +348,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       setActiveMonthTab(isSelected ? null : summary.monthKey);
                     }}
                     className={cn(
-                      "snap-center shrink-0 p-4 rounded-2xl border text-left min-w-[200px] transition-all relative overflow-hidden group cursor-pointer",
+                      "snap-center shrink-0 border text-left min-w-[200px] transition-all relative overflow-hidden group cursor-pointer",
+                      SPACING.standard,
+                      RADIUS.card,
                       isSelected 
                         ? "bg-gradient-to-br from-orange-500/15 to-transparent border-orange-500 text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]"
-                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60 text-zinc-400 hover:text-white"
+                        : cn(SURFACE.recessed, BORDER.standard, "hover:border-zinc-700 hover:bg-zinc-900/60 text-zinc-400 hover:text-white")
                     )}
                   >
-                    <div className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 group-hover:text-amber-400 transition-colors">
+                    <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 group-hover:text-amber-400 transition-colors")}>
                       {summary.monthKey}
                     </div>
                     <div className="text-sm font-black uppercase tracking-wide leading-tight mt-1 text-white">
                       {summary.monthName}
                     </div>
                     <div className="mt-3 flex justify-between items-end">
-                      <span className="font-mono text-[10px] text-zinc-500">Completed Runs</span>
+                      <span className={TYPOGRAPHY.label}>Completed Runs</span>
                       <span className="text-lg font-mono font-black text-white">{summary.sessionsCount}</span>
                     </div>
                   </button>
@@ -375,7 +384,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.25 }}
-                    className="bg-zinc-950 border border-zinc-800 p-6 rounded-2xl space-y-6 overflow-hidden text-zinc-200"
+                    className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
                   >
                     {/* Summary Grid */}
                     <Grid cols={2} colsMd={4} gap="md">
@@ -410,7 +419,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <Grid cols={1} colsMd={2} gap="lg" className="pt-2 border-t border-zinc-900">
                       {/* Training Split Distribution */}
                       <div className="space-y-3">
-                        <h4 className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Training Plan Coverage</h4>
+                        <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
                         <div className="space-y-2.5">
                           {(Object.entries(selectedReport.workoutsByType) as [string, number][]).map(([type, count]) => {
                             const percentage = totalWorkouts ? Math.round((count / totalWorkouts) * 100) : 0;
@@ -437,13 +446,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                       {/* Monthly Peak Performance */}
                       <div className="space-y-3">
-                        <h4 className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Month Peak Lifts Achievements</h4>
+                        <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
                         <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
                           {Object.keys(selectedReport.peakLifts).length === 0 ? (
                             <div className="text-xs text-zinc-600 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
                           ) : (
                             (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
-                              <div key={exId} className="flex justify-between items-center p-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-300">
+                              <div key={exId} className={cn("flex justify-between items-center p-2 rounded-lg border text-xs text-zinc-300", SURFACE.subtle, BORDER.standard)}>
                                 <span className="font-medium truncate max-w-[200px]">{lift.exerciseName}</span>
                                 <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" />
                               </div>
@@ -504,11 +513,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                        <span className="font-mono text-zinc-400 text-xs font-bold uppercase tracking-wider">
+                        <span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold")}>
                           {session.date}
                         </span>
                       </div>
-                      <h3 className="text-2xl font-black uppercase text-white font-display leading-[0.9] tracking-wider">
+                      <h3 className={cn(TYPOGRAPHY.titleSection, "text-white font-black leading-[0.9] tracking-wider")}>
                         {workout?.name || 'Custom Protocol'}
                       </h3>
                       <div className="flex flex-wrap gap-3 text-xs font-mono text-zinc-400 uppercase tracking-wider">
@@ -540,8 +549,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           setExpandedDate(session.id);
                         }}
                         className={cn(
-                          "p-2.5 bg-zinc-950 border hover:bg-zinc-800 hover:text-orange-400 rounded-xl text-zinc-400 transition-all cursor-pointer",
-                          editingLogId === session.id ? "border-orange-500 text-orange-400 bg-orange-500/10" : "border-zinc-800"
+                          "p-2.5 border transition-all cursor-pointer",
+                          SURFACE.recessed,
+                          RADIUS.button,
+                          "hover:bg-zinc-800 hover:text-orange-400 text-zinc-400",
+                          editingLogId === session.id ? "border-orange-500 text-orange-400 bg-orange-500/10" : BORDER.standard
                         )}
                         title="Edit session logs"
                       >
@@ -561,13 +573,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             await deleteLog(session.id);
                           }
                         }}
-                        className="p-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 hover:border-red-500/50 hover:text-red-400 rounded-xl text-zinc-400 transition-all cursor-pointer"
+                        className={cn(
+                          "p-2.5 border hover:bg-zinc-800 hover:border-red-500/50 hover:text-red-400 text-zinc-400 transition-all cursor-pointer",
+                          SURFACE.recessed,
+                          BORDER.standard,
+                          RADIUS.button
+                        )}
                         title="Purge session"
                       >
                         <Trash2 size={15} />
                       </button>
                       
-                      <div className="w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-zinc-400 bg-zinc-950">
+                      <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400", SURFACE.recessed, BORDER.standard)}>
                         <ChevronRight 
                           size={16} 
                           className={cn("transition-transform duration-300", isExpanded && "rotate-90 text-orange-500")} 
@@ -584,14 +601,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="border-t border-zinc-800 bg-zinc-950/40 p-6 space-y-4"
+                      className={cn("border-t p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
                     >
                       {editingLogId === session.id && editSessionState ? (
                         <div className="space-y-6 text-zinc-300">
                           {/* Secure Editor Header */}
-                          <div className="flex justify-between items-center bg-zinc-900/50 p-4 border border-zinc-800 rounded-2xl">
+                          <div className={cn("flex justify-between items-center p-4 border", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                             <div className="space-y-1">
-                              <span className="font-mono text-[8.5px] uppercase tracking-widest text-orange-500 block font-bold">Secure Archive Modification</span>
+                              <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>Secure Archive Modification</span>
                               <h4 className="text-sm font-black uppercase text-white leading-tight">Edit Session Logs</h4>
                             </div>
                             <button
@@ -607,9 +624,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           </div>
 
                           {/* 1. Duration field */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                             <div>
-                              <label className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 font-bold block">Session Duration</label>
+                              <label className={cn(TYPOGRAPHY.label, "block")}>Session Duration</label>
                               <span className="text-xs text-zinc-500 font-sans">Total elapsed active protocol duration</span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -627,7 +644,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   if (val > 600) val = 600;
                                   setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
                                 }}
-                                className="w-24 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-center focus:border-zinc-500 outline-none font-mono text-white"
+                                className={cn("w-24 border px-3 py-2 text-sm text-center focus:border-zinc-500 outline-none font-mono text-white", SURFACE.recessed, BORDER.standard, RADIUS.button)}
                               />
                               <span className="text-xs font-mono text-zinc-400 uppercase">min</span>
                             </div>
@@ -638,13 +655,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             {Object.entries(editSessionState.sets).map(([exId, sets]) => {
                               const meta = exMeta[exId] || { name: 'Unlisted Exercise' };
                               return (
-                                <div key={exId} className="border border-zinc-800 rounded-2xl bg-zinc-900/20 p-4 sm:p-5 space-y-4 text-zinc-300">
+                                <div key={exId} className={cn("border p-4 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                                   <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500" />
                                     <h5 className="font-black text-xs sm:text-sm text-white uppercase tracking-wider">{meta.name}</h5>
                                   </div>
 
-                                  <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 text-[9px] font-mono uppercase tracking-wider text-zinc-400 items-center">
+                                  <div className={cn("grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                                     <span className="text-center font-bold">Set</span>
                                     <span className="text-center font-bold">Weight (KG)</span>
                                     <span className="text-center font-bold">Reps</span>
@@ -678,7 +695,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border rounded-xl py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                RADIUS.button,
                                                 isExtremeW ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
                                               )}
                                             />
@@ -699,7 +717,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border rounded-xl py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                RADIUS.button,
                                                 isExtremeR ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
                                               )}
                                             />
@@ -756,7 +775,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           </div>
 
                           {/* Dynamic Safeguard: Verification Checkbox */}
-                          <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-400">
+                          <div className={cn("p-4 border text-zinc-400", SURFACE.recessed, BORDER.standard, RADIUS.card)}>
                             <label className="flex items-start gap-3 cursor-pointer text-xs select-none">
                               <input
                                 type="checkbox"
@@ -795,7 +814,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         </div>
                       ) : (
                         <>
-                          <div className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-400">
+                          <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                             Completed Exercises · Select one to view historical timeline
                           </div>
 
@@ -818,7 +837,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const exColor = WORKOUT_COLORS[meta.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
 
                           return (
-                            <div key={exId} className="border border-zinc-800 rounded-2xl bg-zinc-900/20 overflow-hidden">
+                            <div key={exId} className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}>
                               <button
                                 onClick={() => {
                                   haptics.selection();
@@ -846,7 +865,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                 <div className="flex items-center gap-4 self-start sm:self-auto">
                                   {currentMaxWeight > 0 && (
-                                    <div className="px-2.5 py-1 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] font-mono text-zinc-300">
+                                    <div className={cn("px-2.5 py-1 border text-[10px] font-mono text-zinc-300", SURFACE.recessed, BORDER.standard, RADIUS.button)}>
                                       Peak Today: <span className="text-white font-bold">{currentMaxWeight}kg</span>
                                     </div>
                                   )}
@@ -866,12 +885,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                     animate={{ height: "auto", opacity: 1 }}
                                     exit={{ height: 0, opacity: 0 }}
                                     transition={{ duration: 0.2 }}
-                                    className="border-t border-zinc-800 bg-zinc-950/80 p-5 space-y-4"
+                                    className={cn("border-t p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
                                         <Trophy size={12} className="shrink-0" style={{ color: exColor }} />
-                                        <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400">Progressive Benchmark</span>
+                                        <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Progressive Benchmark</span>
                                       </div>
                                       {prWeight > 0 && (
                                         <div 
@@ -938,7 +957,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                     {/* Times Done Timeline Logs (with PRs highlighted) */}
                                     <div className="space-y-2">
-                                      <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-zinc-500">History Progression Logs (Latest First)</span>
+                                      <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>History Progression Logs (Latest First)</span>
                                       <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                         {historyLogs.map((h, hIdx) => {
                                           const isPR = prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate;
@@ -995,6 +1014,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           </div>
         )}
       </Section>
-    </div>
+    </Stack>
   );
 };

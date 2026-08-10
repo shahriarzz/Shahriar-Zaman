@@ -10,15 +10,12 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
-  Calendar as CalendarIcon,
-  Sparkles,
-  Zap
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../store/FitnessContext';
 import {
   getCycleDayForDate,
-  getWorkoutBadgeStyle,
   WORKOUT_COLORS,
   calculateVolume
 } from '../utils/fitnessHelpers';
@@ -35,8 +32,7 @@ import {
   Card,
   Button,
   Stack,
-  Grid,
-  RADIUS
+  Grid
 } from './ui';
 
 interface CalendarProps {
@@ -510,7 +506,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="standard" padding="md" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="standard" padding="standard" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Rest & Adaptation Protocol
                         </h5>
@@ -586,7 +582,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </div>
 
                     {expectedWoForSelected.type === 'rest' ? (
-                      <Card variant="standard" padding="md" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
+                      <Card variant="standard" padding="standard" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
                         <h5 className="font-display uppercase text-sm text-emerald-300">
                           Scheduled Rest Day
                         </h5>
@@ -596,7 +592,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       </Card>
                     ) : (
                       <div className="space-y-2.5">
-                        <Card variant="standard" padding="md" className="space-y-1.5 border-red-500/30 bg-red-500/5">
+                        <Card variant="standard" padding="standard" className="space-y-1.5 border-red-500/30 bg-red-500/5">
                           <div className="flex justify-between items-center">
                             <h5 className="font-display uppercase text-sm text-white">
                               {expectedWoForSelected.name}
@@ -705,7 +701,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             animate={{ opacity: 1 }}
             className="hidden lg:flex flex-col w-96"
           >
-            <Card variant="outline" padding="relaxed" className="h-full flex items-center justify-center min-h-[380px]">
+            <Card variant="standard" padding="relaxed" className="h-full flex items-center justify-center min-h-[380px]">
               <EmptyState
                 icon={Dumbbell}
                 title="Session Details"
