@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, Layers, Dumbbell, Repeat, Sparkles } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronLeft, Dumbbell, Repeat } from 'lucide-react';
 import { Workout, Exercise } from '../../types/fitness';
 import { useFitness } from '../../store/FitnessContext';
 import { haptics } from '../../utils/haptics';
@@ -8,17 +8,10 @@ import { WorkoutEditor } from './WorkoutEditor';
 import { ExerciseEditor } from './ExerciseEditor';
 import { ExerciseLibrary } from './ExerciseLibrary';
 import {
-  Section,
-  Card,
   Button,
-  Badge,
   SegmentedControl,
   Stack,
-  TYPOGRAPHY,
-  GAP,
-  BORDER,
-  SURFACE,
-  RADIUS
+  TYPOGRAPHY
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -39,10 +32,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     workoutId?: string | null;
   } | null>(null);
 
-  // Creating a new exercise in library mode
-  const [isCreatingNewEx, setIsCreatingNewEx] = useState(false);
-
-  const selectedWorkout = React.useMemo(() => {
+  const selectedWorkout = useMemo(() => {
     if (!selectedWorkoutId) return null;
     return workouts.find(w => w.id === selectedWorkoutId) || null;
   }, [workouts, selectedWorkoutId]);
@@ -52,7 +42,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
   };
 
   const handleSaveExercise = (updatedExercise: Exercise) => {
-    // If opened within a specific workout, update that workout's exercise
+    // 1. Editing from within a specific workout: update programming and exercise fields for that workout assignment
     if (editingExerciseContext?.workoutId) {
       setWorkouts(prev => prev.map(w => {
         if (w.id === editingExerciseContext.workoutId) {
@@ -64,11 +54,11 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
         return w;
       }));
     } else {
-      // Global definition update: synchronize name, target, equipment, instructions across all workouts with this exercise name or ID
+      // 2. Global Definition Update: update core definition fields across all workouts by exercise ID without overwriting workout-specific programming
       setWorkouts(prev => prev.map(w => ({
         ...w,
         exercises: (w.exercises || []).map(e => {
-          if (e.id === updatedExercise.id || e.name.toLowerCase().trim() === updatedExercise.name.toLowerCase().trim()) {
+          if (e.id === updatedExercise.id) {
             return {
               ...e,
               name: updatedExercise.name,
@@ -84,7 +74,6 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     }
 
     setEditingExerciseContext(null);
-    setIsCreatingNewEx(false);
   };
 
   const handleCreateNewLibraryExercise = () => {
@@ -101,7 +90,6 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
       note: ''
     };
     setEditingExerciseContext({ exercise: newBlankExercise, workoutId: null });
-    setIsCreatingNewEx(true);
   };
 
   // 1. Deep Exercise Editor View
@@ -117,7 +105,6 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
         onSave={handleSaveExercise}
         onCancel={() => {
           setEditingExerciseContext(null);
-          setIsCreatingNewEx(false);
         }}
       />
     );
@@ -198,3 +185,4 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     </Stack>
   );
 };
+
