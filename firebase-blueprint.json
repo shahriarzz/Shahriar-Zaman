@@ -40,12 +40,30 @@
         "duration": { "type": "number" }
       },
       "required": ["workoutId", "date", "sets"]
+    },
+    "ExerciseDefinition": {
+      "title": "Exercise Definition",
+      "description": "Master library definition of an exercise movement",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "target": { "type": "string" },
+        "equipment": { "type": "string" },
+        "instructions": { "type": "string" },
+        "tags": { "type": "array" }
+      },
+      "required": ["id", "name", "target"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "User configuration and cycle state"
+    },
+    "/users/{userId}/exerciseDefinitions/{exerciseDefId}": {
+      "schema": "ExerciseDefinition",
+      "description": "Master library of reusable exercise definitions"
     },
     "/users/{userId}/workouts/{workoutId}": {
       "schema": "Workout",

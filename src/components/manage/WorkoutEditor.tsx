@@ -16,9 +16,10 @@ import {
   Check,
   Tag
 } from 'lucide-react';
-import { Workout, Exercise } from '../../types/fitness';
-import { WORKOUT_COLORS } from '../../utils/fitnessHelpers';
+import { Workout, Exercise, WorkoutExercise, ExerciseDefinition } from '../../types/fitness';
+import { WORKOUT_COLORS, resolveWorkoutExercise } from '../../utils/fitnessHelpers';
 import { useConfirm } from '../../store/ConfirmContext';
+import { useFitness } from '../../store/FitnessContext';
 import { haptics } from '../../utils/haptics';
 import {
   Card,
@@ -52,6 +53,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   onBack
 }) => {
   const { confirm } = useConfirm();
+  const { exerciseDefinitions, addExerciseDefinition } = useFitness();
 
   // Track expanded state for each exercise card (using exercise ID)
   const [expandedExIds, setExpandedExIds] = useState<Set<string>>(new Set());
@@ -75,19 +77,23 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   const [restNotes, setRestNotes] = useState<string[]>(workout.restNotes || []);
   const [newRestNote, setNewRestNote] = useState('');
 
-  // Collect unique exercises across entire library for easy picking
+  // Use persisted exercise definitions from library
   const libraryExercises = React.useMemo(() => {
-    const map = new Map<string, Exercise>();
-    allWorkouts.forEach(w => {
-      (w.exercises || []).forEach(ex => {
-        const key = ex.name.toLowerCase().trim();
-        if (!map.has(key)) {
-          map.set(key, ex);
-        }
-      });
-    });
-    return Array.from(map.values());
-  }, [allWorkouts]);
+    return (exerciseDefinitions || []).map(def => ({
+      id: def.id,
+      exerciseDefinitionId: def.id,
+      exerciseId: def.id,
+      name: def.name,
+      target: def.target,
+      equipment: def.equipment,
+      instructions: def.instructions,
+      tags: def.tags || [],
+      sets: 3,
+      reps: '10–12',
+      rest: '90s',
+      note: ''
+    }));
+  }, [exerciseDefinitions]);
 
   const filteredLibraryExercises = React.useMemo(() => {
     const q = searchLibraryQuery.toLowerCase().trim();
@@ -181,19 +187,17 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     handleUpdateExerciseField(exId, 'tags', newTags);
   };
 
-  const handleAddExerciseFromLibrary = (libEx: Exercise) => {
+  const handleAddExerciseFromLibrary = (libEx: Exercise | ExerciseDefinition) => {
     haptics.success();
-    const newEx: Exercise = {
-      id: `ex-${crypto.randomUUID()}`,
-      name: libEx.name,
-      target: libEx.target,
-      sets: libEx.sets || 3,
-      reps: libEx.reps || '10–12',
-      rest: libEx.rest || '90s',
-      tags: libEx.tags || [],
-      note: libEx.note || '',
-      equipment: libEx.equipment || '',
-      instructions: libEx.instructions || ''
+    const defId = (libEx as Exercise).exerciseDefinitionId || libEx.id;
+    const newEx: WorkoutExercise = {
+      exerciseDefinitionId: defId,
+      exerciseId: defId,
+      sets: (libEx as Exercise).sets || 3,
+      reps: (libEx as Exercise).reps || '10–12',
+      rest: (libEx as Exercise).rest || '90s',
+      tags: [],
+      note: (libEx as Exercise).note || ''
     };
 
     onSaveWorkout({
@@ -203,14 +207,21 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     setIsAddingExercise(false);
   };
 
-  const handleCreateNewExercise = () => {
+  const handleCreateNewExercise = async () => {
     if (!newExName.trim()) return;
     haptics.success();
 
-    const newEx: Exercise = {
-      id: `ex-${crypto.randomUUID()}`,
+    const createdDef = await addExerciseDefinition({
       name: newExName.trim(),
       target: newExTarget.trim() || 'General',
+      equipment: '',
+      instructions: '',
+      tags: []
+    });
+
+    const newEx: WorkoutExercise = {
+      exerciseDefinitionId: createdDef.id,
+      exerciseId: createdDef.id,
       sets: Math.max(1, newExSets || 3),
       reps: newExReps.trim() || '10–12',
       rest: '90s',
@@ -458,7 +469,9 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
             </Card>
           ) : (
             workout.exercises.map((ex, index) => {
-              const isExpanded = expandedExIds.has(ex.id);
+              const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
+              const exId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
+              const isExpanded = expandedExIds.has(exId);
               const isFirst = index === 0;
               const isLast = index === workout.exercises.length - 1;
               const isPriority = (ex.tags || []).includes('priority');
@@ -466,7 +479,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
               return (
                 <div
-                  key={ex.id}
+                  key={exId}
                   className={cn(
                     SURFACE.default,
                     BORDER.standard,
@@ -477,7 +490,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                 >
                   {/* COLLAPSED HEADER (SessionView Pattern) */}
                   <div
-                    onClick={() => toggleExpandExercise(ex.id)}
+                    onClick={() => toggleExpandExercise(exId)}
                     className="p-4 cursor-pointer hover:bg-zinc-800/20 transition-colors flex items-center justify-between gap-3 select-none"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -489,7 +502,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                       <div className="space-y-0.5 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-white text-sm truncate">
-                            {ex.name}
+                            {resolvedEx.name}
                           </span>
                           {isPriority && (
                             <Badge label="PRIORITY" color="orange" size="sm" dot={false} />
@@ -500,7 +513,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         </div>
 
                         <div className={cn(TYPOGRAPHY.label, "text-zinc-500 text-[10px] flex items-center gap-1.5 flex-wrap")}>
-                          <span>{ex.target}</span>
+                          <span>{resolvedEx.target}</span>
                           <span>·</span>
                           <span className="text-zinc-300 font-bold">{ex.sets} Sets</span>
                           <span>·</span>
@@ -667,7 +680,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                               variant="outline"
                               size="sm"
                               icon={<Edit3 size={12} />}
-                              onClick={() => onOpenExerciseEditor(ex)}
+                              onClick={() => onOpenExerciseEditor(resolvedEx)}
                             >
                               Edit Definition →
                             </Button>
@@ -677,7 +690,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                               size="sm"
                               icon={<Trash2 size={13} />}
                               className="text-zinc-500 hover:text-red-400"
-                              onClick={() => handleDeleteExercise(ex.id, ex.name)}
+                              onClick={() => handleDeleteExercise(exId, resolvedEx.name)}
                             >
                               Remove
                             </Button>

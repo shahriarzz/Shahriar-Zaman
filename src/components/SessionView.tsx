@@ -4,7 +4,7 @@ import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote
 import { useFitness } from '../store/FitnessContext';
 import { useConfirm } from '../store/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
-import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -332,6 +332,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const { 
     workouts, 
     logs, 
+    exerciseDefinitions,
     addLog, 
     updateCycleStart,
     activeSession,
@@ -919,25 +920,28 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
       {/* Exercises List */}
       <Stack spacing="lg">
-        {activeWorkout.exercises.map((ex) => (
-          <ExerciseCard
-            key={ex.id}
-            ex={ex}
-            workoutType={activeWorkout.type}
-            ghostData={ghostData[ex.id]}
-            aiAdvice={aiAdvice}
-            loadingAdvice={loadingAdvice}
-            sessionSets={sessionSets}
-            getAiAdvice={getAiAdvice}
-            updateSet={updateSet}
-            addSet={addSet}
-            deleteSet={deleteSet}
-            isExpanded={expandedExId === ex.id}
-            onToggleExpand={() => {
-              setExpandedExId(prev => prev === ex.id ? null : ex.id);
-            }}
-          />
-        ))}
+        {activeWorkout.exercises.map((ex) => {
+          const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
+          return (
+            <ExerciseCard
+              key={ex.id}
+              ex={resolvedEx}
+              workoutType={activeWorkout.type}
+              ghostData={ghostData[ex.id]}
+              aiAdvice={aiAdvice}
+              loadingAdvice={loadingAdvice}
+              sessionSets={sessionSets}
+              getAiAdvice={getAiAdvice}
+              updateSet={updateSet}
+              addSet={addSet}
+              deleteSet={deleteSet}
+              isExpanded={expandedExId === ex.id}
+              onToggleExpand={() => {
+                setExpandedExId(prev => prev === ex.id ? null : ex.id);
+              }}
+            />
+          );
+        })}
 
         {activeWorkout.cardio && (
           <div className="bg-gradient-to-br from-zinc-800/10 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

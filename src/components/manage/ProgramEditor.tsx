@@ -20,7 +20,13 @@ export interface ProgramEditorProps {
 }
 
 export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) => {
-  const { workouts, setWorkouts } = useFitness();
+  const {
+    workouts,
+    setWorkouts,
+    addExerciseDefinition,
+    updateExerciseDefinition,
+    updateWorkoutExerciseProgramming
+  } = useFitness();
 
   // Mode: 'cycle' | 'exercises'
   const [activeMode, setActiveMode] = useState<'cycle' | 'exercises'>('cycle');
@@ -41,36 +47,28 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     setWorkouts(prev => prev.map(w => w.id === updatedWorkout.id ? updatedWorkout : w));
   };
 
-  const handleSaveExercise = (updatedExercise: Exercise) => {
-    // 1. Editing from within a specific workout: update programming and exercise fields for that workout assignment
+  const handleSaveExercise = async (updatedExercise: Exercise) => {
+    const exDefId = updatedExercise.exerciseDefinitionId || updatedExercise.id;
+
     if (editingExerciseContext?.workoutId) {
-      setWorkouts(prev => prev.map(w => {
-        if (w.id === editingExerciseContext.workoutId) {
-          return {
-            ...w,
-            exercises: (w.exercises || []).map(e => e.id === updatedExercise.id ? updatedExercise : e)
-          };
-        }
-        return w;
-      }));
+      // 1. Editing from within a specific workout: update programming fields for that workout assignment
+      await updateWorkoutExerciseProgramming(editingExerciseContext.workoutId, exDefId, {
+        sets: updatedExercise.sets || 3,
+        reps: updatedExercise.reps || '10–12',
+        rest: updatedExercise.rest || '90s',
+        note: updatedExercise.note || '',
+        tags: updatedExercise.tags || []
+      });
     } else {
-      // 2. Global Definition Update: update core definition fields across all workouts by exercise ID without overwriting workout-specific programming
-      setWorkouts(prev => prev.map(w => ({
-        ...w,
-        exercises: (w.exercises || []).map(e => {
-          if (e.id === updatedExercise.id) {
-            return {
-              ...e,
-              name: updatedExercise.name,
-              target: updatedExercise.target,
-              equipment: updatedExercise.equipment,
-              instructions: updatedExercise.instructions,
-              tags: updatedExercise.tags
-            };
-          }
-          return e;
-        })
-      })));
+      // 2. Global Definition Update: update core definition fields in central Exercise Library
+      await addExerciseDefinition({
+        id: exDefId,
+        name: updatedExercise.name,
+        target: updatedExercise.target || 'General',
+        equipment: updatedExercise.equipment || '',
+        instructions: updatedExercise.instructions || '',
+        tags: updatedExercise.tags || []
+      });
     }
 
     setEditingExerciseContext(null);
@@ -79,6 +77,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
   const handleCreateNewLibraryExercise = () => {
     const newBlankExercise: Exercise = {
       id: `ex-${crypto.randomUUID()}`,
+      exerciseDefinitionId: `ex-${crypto.randomUUID()}`,
       name: '',
       target: '',
       sets: 3,

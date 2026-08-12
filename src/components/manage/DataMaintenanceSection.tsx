@@ -41,6 +41,7 @@ export const DataMaintenanceSection: React.FC = () => {
     workouts,
     setWorkouts,
     logs,
+    exerciseDefinitions,
     resetLogs,
     exportBackup,
     importBackup,
@@ -62,13 +63,10 @@ export const DataMaintenanceSection: React.FC = () => {
   // Compute authoritative data-health metric string
   const dataHealthInfo = useMemo(() => {
     const totalWorkouts = workouts.length;
-    const uniqueExerciseEntities = new Set(
-      workouts.flatMap(w => (w.exercises || []).map(e => e.id))
-    );
-    const totalExercises = uniqueExerciseEntities.size;
+    const totalExercises = (exerciseDefinitions || []).length;
     const completedSessions = (Object.values(logs || {}) as SessionLog[]).filter(l => Boolean(l?.complete)).length;
     return `${totalWorkouts} Workouts · ${totalExercises} Exercises · ${completedSessions} Completed Sessions`;
-  }, [workouts, logs]);
+  }, [workouts, exerciseDefinitions, logs]);
 
   const checkpointHistory = useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
 

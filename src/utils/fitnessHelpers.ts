@@ -1,5 +1,5 @@
 import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
-import { SessionLog, SetLog, Workout, WorkoutType } from '../types/fitness';
+import { SessionLog, SetLog, Workout, WorkoutType, WorkoutExercise, ExerciseDefinition, Exercise } from '../types/fitness';
 
 export const CYCLE_LENGTH = 8;
 
@@ -132,5 +132,32 @@ export function getWorkoutBadgeStyle(type: WorkoutType | string) {
     backgroundColor: `${color}22`,
     color: color,
     border: `1px solid ${color}55`
+  };
+}
+
+export function resolveWorkoutExercise(
+  we: WorkoutExercise | any,
+  definitions: ExerciseDefinition[] = []
+): Exercise {
+  const defId = we.exerciseDefinitionId || we.exerciseId || we.id;
+  const def = definitions.find(d => d.id === defId) || {
+    id: defId || generateId(),
+    name: we.name || 'Exercise',
+    target: we.target || 'General',
+    equipment: we.equipment || '',
+    instructions: we.instructions || '',
+    tags: we.tags || []
+  };
+
+  return {
+    ...def,
+    exerciseDefinitionId: def.id,
+    exerciseId: def.id,
+    id: def.id,
+    sets: we.sets || 3,
+    reps: we.reps || '10–12',
+    rest: we.rest || '90s',
+    note: we.note || '',
+    tags: Array.from(new Set([...(def.tags || []), ...(we.tags || [])]))
   };
 }

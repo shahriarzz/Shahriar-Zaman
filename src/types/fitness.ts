@@ -1,17 +1,26 @@
 export type WorkoutType = 'push' | 'pull' | 'hybrid' | 'rest' | 'date' | 'upper' | 'lower' | 'custom';
 
-export interface Exercise {
+export interface ExerciseDefinition {
   id: string;
   name: string;
   target: string;
-  sets: number;
-  reps: string;
-  note?: string;
-  tags?: string[];
   equipment?: string;
   instructions?: string;
-  rest?: string;
+  tags?: string[];
 }
+
+export interface WorkoutExercise {
+  exerciseDefinitionId: string;
+  exerciseId?: string; // Backward compatibility alias
+  sets: number;
+  reps: string;
+  rest?: string;
+  note?: string;
+  tags?: string[];
+}
+
+// Backward compatibility alias for components operating on combined views
+export type Exercise = ExerciseDefinition & WorkoutExercise & { id: string };
 
 export interface CardioFinisher {
   name: string;
@@ -24,7 +33,7 @@ export interface Workout {
   name: string;
   badge: string;
   type: WorkoutType;
-  exercises: Exercise[];
+  exercises: WorkoutExercise[];
   cardio?: CardioFinisher | null;
   cycleDay?: number | null;
   isCore?: boolean;
@@ -50,4 +59,5 @@ export interface SessionLog {
 export interface AppState {
   cycleStart: string; // YYYY-MM-DD
   weightLog?: Record<string, number>; // date -> kg
+  exerciseDefinitions?: ExerciseDefinition[];
 }

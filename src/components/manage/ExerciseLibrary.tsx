@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, Tag, Dumbbell, Layers, Filter } from 'lucide-react';
-import { Workout, Exercise } from '../../types/fitness';
+import { Workout, Exercise, ExerciseDefinition } from '../../types/fitness';
+import { useFitness } from '../../store/FitnessContext';
 import {
   Card,
   Button,
@@ -23,17 +24,7 @@ export interface ExerciseLibraryProps {
   onCreateNewExercise: () => void;
 }
 
-export interface LibraryItem {
-  id: string;
-  name: string;
-  target: string;
-  equipment?: string;
-  instructions?: string;
-  tags?: string[];
-  sets?: number;
-  reps?: string;
-  rest?: string;
-  note?: string;
+export interface LibraryItem extends ExerciseDefinition {
   usedInWorkouts: { id: string; name: string }[];
 }
 
@@ -42,47 +33,23 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
   onOpenExerciseEditor,
   onCreateNewExercise
 }) => {
+  const { exerciseDefinitions } = useFitness();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
-  // Build aggregated unique exercise catalog from all workouts
+  // Build items directly from persisted exercise definitions
   const libraryItems: LibraryItem[] = useMemo(() => {
-    const map = new Map<string, LibraryItem>();
+    return (exerciseDefinitions || []).map(def => {
+      const usedWorkouts = workouts.filter(wo =>
+        (wo.exercises || []).some(ex => (ex.exerciseDefinitionId || ex.exerciseId) === def.id)
+      ).map(wo => ({ id: wo.id, name: wo.name }));
 
-    workouts.forEach(wo => {
-      (wo.exercises || []).forEach(ex => {
-        const key = ex.name.toLowerCase().trim();
-        if (!map.has(key)) {
-          map.set(key, {
-            id: ex.id,
-            name: ex.name,
-            target: ex.target,
-            equipment: ex.equipment,
-            instructions: ex.instructions,
-            tags: ex.tags || [],
-            sets: ex.sets,
-            reps: ex.reps,
-            rest: ex.rest,
-            note: ex.note,
-            usedInWorkouts: [{ id: wo.id, name: wo.name }]
-          });
-        } else {
-          const existing = map.get(key)!;
-          if (!existing.usedInWorkouts.some(w => w.id === wo.id)) {
-            existing.usedInWorkouts.push({ id: wo.id, name: wo.name });
-          }
-          // Merge tags and instructions if available
-          if (ex.tags && ex.tags.length > 0) {
-            existing.tags = Array.from(new Set([...(existing.tags || []), ...ex.tags]));
-          }
-          if (ex.equipment && !existing.equipment) existing.equipment = ex.equipment;
-          if (ex.instructions && !existing.instructions) existing.instructions = ex.instructions;
-        }
-      });
-    });
-
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [workouts]);
+      return {
+        ...def,
+        usedInWorkouts: usedWorkouts
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [exerciseDefinitions, workouts]);
 
   // Filter categories
   const targetCategories = ['all', 'chest', 'back', 'delts', 'biceps', 'triceps', 'legs', 'forearms', 'core'];
