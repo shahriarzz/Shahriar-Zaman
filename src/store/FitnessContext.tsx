@@ -1264,6 +1264,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (user) {
         const path = `users/${user.uid}/logs/${logId}`;
         handleFirestoreError(error, OperationType.WRITE, path);
+        setSyncStatus('failed');
+        setSyncError("Logged workout locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1286,6 +1288,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (user) {
         const path = `users/${user.uid}/logs/${logId}`;
         handleFirestoreError(error, OperationType.DELETE, path);
+        setSyncStatus('failed');
+        setSyncError("Deleted log locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1310,6 +1314,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error("Failed to update workouts", error);
       if (user) {
         handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts`);
+        setSyncStatus('failed');
+        setSyncError("Saved workouts locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1328,6 +1334,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error("Failed to update cycle start", error);
       if (user) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        setSyncStatus('failed');
+        setSyncError("Updated cycle start locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1350,6 +1358,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error("Failed to log body weight", error);
       if (user) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        setSyncStatus('failed');
+        setSyncError("Logged body weight locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1371,6 +1381,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error("Failed to delete body weight", error);
       if (user) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        setSyncStatus('failed');
+        setSyncError("Deleted body weight locally, but cloud sync failed.");
       }
     }
   }, [user]);
@@ -1392,6 +1404,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error("Failed to flush logs", error);
       if (user) {
         handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/logs`);
+        setSyncStatus('failed');
+        setSyncError("Reset logs locally, but cloud sync failed.");
       }
     }
   }, [user]);
