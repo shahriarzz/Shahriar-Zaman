@@ -82,35 +82,54 @@ const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 // Extract exercise definitions from workouts if migrating from legacy data
 function extractExerciseDefinitionsFromWorkouts(rawWorkouts: any[]): { defs: ExerciseDefinition[]; workouts: Workout[] } {
   const defMap = new Map<string, ExerciseDefinition>();
+  const nameToIdMap = new Map<string, string>();
 
   // Pre-seed with INITIAL_EXERCISE_DEFINITIONS
   INITIAL_EXERCISE_DEFINITIONS.forEach(def => {
     defMap.set(def.id, { ...def });
+    if (def.name) {
+      nameToIdMap.set(def.name.trim().toLowerCase(), def.id);
+    }
   });
 
   const migratedWorkouts: Workout[] = (rawWorkouts || []).map(w => {
     const migratedExercises: WorkoutExercise[] = (w.exercises || []).map((ex: any) => {
-      const defId = ex.exerciseDefinitionId || ex.exerciseId || ex.id || `ex-${generateId()}`;
-      
-      if (!defMap.has(defId) && ex.name) {
-        defMap.set(defId, {
+      let defId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
+
+      // If no explicit ID or if ID not in defMap, check if name matches an existing definition
+      if (ex.name && (!defId || !defMap.has(defId))) {
+        const lowerName = ex.name.trim().toLowerCase();
+        if (nameToIdMap.has(lowerName)) {
+          defId = nameToIdMap.get(lowerName)!;
+        }
+      }
+
+      if (!defId) {
+        defId = `ex-${generateId()}`;
+      }
+
+      if (!defMap.has(defId)) {
+        const defName = ex.name?.trim() || 'Exercise';
+        const newDef: ExerciseDefinition = {
           id: defId,
-          name: ex.name,
+          name: defName,
           target: ex.target || 'General',
           equipment: ex.equipment || '',
           instructions: ex.instructions || '',
           tags: ex.tags || []
-        });
+        };
+        defMap.set(defId, newDef);
+        nameToIdMap.set(defName.toLowerCase(), defId);
       }
 
       return {
         exerciseDefinitionId: defId,
         exerciseId: defId,
-        sets: ex.sets || 3,
+        sets: typeof ex.sets === 'number' ? ex.sets : 3,
         reps: ex.reps || '10–12',
         rest: ex.rest || '90s',
         note: ex.note || '',
-        tags: ex.tags || []
+        tags: Array.isArray(ex.tags) ? ex.tags : []
       };
     });
 
@@ -437,22 +456,23 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
       tags: defData.tags || []
     };
 
-    setExerciseDefinitionsState(prev => {
-      const existingIdx = prev.findIndex(d => d.id === id);
-      let updated: ExerciseDefinition[];
-      if (existingIdx !== -1) {
-        updated = [...prev];
-        updated[existingIdx] = newDef;
-      } else {
-        updated = [...prev, newDef];
-      }
-      try {
-        localStorage.setItem('gl_exercise_definitions', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
-      }
-      return updated;
-    });
+    const currentDefs = exerciseDefsRef.current;
+    const existingIdx = currentDefs.findIndex(d => d.id === id);
+    let nextDefs: ExerciseDefinition[];
+    if (existingIdx !== -1) {
+      nextDefs = [...currentDefs];
+      nextDefs[existingIdx] = newDef;
+    } else {
+      nextDefs = [...currentDefs, newDef];
+    }
+
+    try {
+      localStorage.setItem('gl_exercise_definitions', JSON.stringify(nextDefs));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setExerciseDefinitionsState(nextDefs);
 
     if (user) {
       try {
@@ -467,15 +487,16 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [user]);
 
   const updateExerciseDefinition = useCallback(async (def: ExerciseDefinition): Promise<void> => {
-    setExerciseDefinitionsState(prev => {
-      const updated = prev.map(d => d.id === def.id ? def : d);
-      try {
-        localStorage.setItem('gl_exercise_definitions', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
-      }
-      return updated;
-    });
+    const currentDefs = exerciseDefsRef.current;
+    const nextDefs = currentDefs.map(d => d.id === def.id ? def : d);
+
+    try {
+      localStorage.setItem('gl_exercise_definitions', JSON.stringify(nextDefs));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setExerciseDefinitionsState(nextDefs);
 
     if (user) {
       try {
@@ -488,45 +509,36 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [user]);
 
   const deleteExerciseDefinition = useCallback(async (id: string): Promise<void> => {
-    setExerciseDefinitionsState(prev => {
-      const updated = prev.filter(d => d.id !== id);
-      try {
-        localStorage.setItem('gl_exercise_definitions', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
-      }
-      return updated;
-    });
+    const currentDefs = exerciseDefsRef.current;
+    const nextDefs = currentDefs.filter(d => d.id !== id);
 
-    setWorkoutsState(prevWorkouts => {
-      const updatedWorkouts = prevWorkouts.map(w => ({
-        ...w,
-        exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== id)
-      }));
-      try {
-        localStorage.setItem('gl_workouts', JSON.stringify(updatedWorkouts));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
-      }
+    const currentWorkouts = workoutsRef.current;
+    const nextWorkouts = currentWorkouts.map(w => ({
+      ...w,
+      exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== id)
+    }));
 
-      if (user) {
-        const colRef = collection(db, 'users', user.uid, 'workouts');
-        const batch = writeBatch(db);
-        updatedWorkouts.forEach(wo => {
-          batch.set(doc(colRef, wo.id), wo);
-        });
-        batch.commit().catch(e => console.error("Failed to sync workouts after deleting exercise definition", e));
-      }
+    try {
+      localStorage.setItem('gl_exercise_definitions', JSON.stringify(nextDefs));
+      localStorage.setItem('gl_workouts', JSON.stringify(nextWorkouts));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
 
-      return updatedWorkouts;
-    });
+    setExerciseDefinitionsState(nextDefs);
+    setWorkoutsState(nextWorkouts);
 
     if (user) {
       try {
-        const path = `users/${user.uid}/exerciseDefinitions/${id}`;
-        await deleteDoc(doc(db, path));
+        const batch = writeBatch(db);
+        batch.delete(doc(db, `users/${user.uid}/exerciseDefinitions/${id}`));
+        const colRef = collection(db, 'users', user.uid, 'workouts');
+        nextWorkouts.forEach(wo => {
+          batch.set(doc(colRef, wo.id), wo);
+        });
+        await batch.commit();
       } catch (e) {
-        console.error("Failed to delete exercise definition from cloud", e);
+        console.error("Failed to sync deletions to cloud", e);
       }
     }
   }, [user]);
@@ -537,126 +549,151 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     exerciseDefId: string, 
     programming?: Partial<Omit<WorkoutExercise, 'exerciseDefinitionId'>>
   ) => {
-    setWorkoutsState(prevWorkouts => {
-      const updated = prevWorkouts.map(w => {
-        if (w.id === workoutId) {
-          const newExEntry: WorkoutExercise = {
-            exerciseDefinitionId: exerciseDefId,
-            exerciseId: exerciseDefId,
-            sets: programming?.sets || 3,
-            reps: programming?.reps || '10–12',
-            rest: programming?.rest || '90s',
-            note: programming?.note || '',
-            tags: programming?.tags || []
-          };
-          return {
-            ...w,
-            exercises: [...(w.exercises || []), newExEntry]
-          };
-        }
-        return w;
-      });
+    const currentWorkouts = workoutsRef.current;
+    const targetW = currentWorkouts.find(w => w.id === workoutId);
+    if (!targetW) return;
 
-      try {
-        localStorage.setItem('gl_workouts', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
+    // Prevent duplicate assignment
+    const exists = (targetW.exercises || []).some(
+      e => (e.exerciseDefinitionId || e.exerciseId) === exerciseDefId
+    );
+    if (exists) return;
+
+    const newExEntry: WorkoutExercise = {
+      exerciseDefinitionId: exerciseDefId,
+      exerciseId: exerciseDefId,
+      sets: programming?.sets ?? 3,
+      reps: programming?.reps ?? '10–12',
+      rest: programming?.rest ?? '90s',
+      note: programming?.note ?? '',
+      tags: programming?.tags ?? []
+    };
+
+    const nextWorkouts = currentWorkouts.map(w => {
+      if (w.id === workoutId) {
+        return {
+          ...w,
+          exercises: [...(w.exercises || []), newExEntry]
+        };
       }
-
-      if (user) {
-        const targetW = updated.find(w => w.id === workoutId);
-        if (targetW) {
-          setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), targetW).catch(e => console.error(e));
-        }
-      }
-
-      return updated;
+      return w;
     });
+
+    try {
+      localStorage.setItem('gl_workouts', JSON.stringify(nextWorkouts));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setWorkoutsState(nextWorkouts);
+
+    if (user) {
+      const updatedW = nextWorkouts.find(w => w.id === workoutId);
+      if (updatedW) {
+        try {
+          await setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), updatedW);
+        } catch (e) {
+          console.error("Failed to sync assigned exercise to cloud", e);
+        }
+      }
+    }
   }, [user]);
 
   const removeExerciseFromWorkout = useCallback(async (workoutId: string, exerciseDefId: string) => {
-    setWorkoutsState(prevWorkouts => {
-      const updated = prevWorkouts.map(w => {
-        if (w.id === workoutId) {
-          return {
-            ...w,
-            exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== exerciseDefId)
-          };
-        }
-        return w;
-      });
-
-      try {
-        localStorage.setItem('gl_workouts', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
+    const currentWorkouts = workoutsRef.current;
+    const nextWorkouts = currentWorkouts.map(w => {
+      if (w.id === workoutId) {
+        return {
+          ...w,
+          exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== exerciseDefId)
+        };
       }
-
-      if (user) {
-        const targetW = updated.find(w => w.id === workoutId);
-        if (targetW) {
-          setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), targetW).catch(e => console.error(e));
-        }
-      }
-
-      return updated;
+      return w;
     });
+
+    try {
+      localStorage.setItem('gl_workouts', JSON.stringify(nextWorkouts));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setWorkoutsState(nextWorkouts);
+
+    if (user) {
+      const updatedW = nextWorkouts.find(w => w.id === workoutId);
+      if (updatedW) {
+        try {
+          await setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), updatedW);
+        } catch (e) {
+          console.error("Failed to sync removed exercise to cloud", e);
+        }
+      }
+    }
   }, [user]);
 
-  const updateWorkoutExerciseProgramming = useCallback(async (workoutId: string, exerciseDefId: string, programming: Partial<WorkoutExercise>) => {
-    setWorkoutsState(prevWorkouts => {
-      const updated = prevWorkouts.map(w => {
-        if (w.id === workoutId) {
-          return {
-            ...w,
-            exercises: (w.exercises || []).map(e => {
-              if ((e.exerciseDefinitionId || e.exerciseId) === exerciseDefId) {
-                return {
-                  ...e,
-                  ...programming
-                };
-              }
-              return e;
-            })
-          };
-        }
-        return w;
-      });
-
-      try {
-        localStorage.setItem('gl_workouts', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
+  const updateWorkoutExerciseProgramming = useCallback(async (
+    workoutId: string, 
+    exerciseDefId: string, 
+    programming: Partial<WorkoutExercise>
+  ) => {
+    const currentWorkouts = workoutsRef.current;
+    const nextWorkouts = currentWorkouts.map(w => {
+      if (w.id === workoutId) {
+        return {
+          ...w,
+          exercises: (w.exercises || []).map(e => {
+            if ((e.exerciseDefinitionId || e.exerciseId) === exerciseDefId) {
+              return {
+                ...e,
+                ...programming,
+                exerciseDefinitionId: exerciseDefId,
+                exerciseId: exerciseDefId
+              };
+            }
+            return e;
+          })
+        };
       }
-
-      if (user) {
-        const targetW = updated.find(w => w.id === workoutId);
-        if (targetW) {
-          setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), targetW).catch(e => console.error(e));
-        }
-      }
-
-      return updated;
+      return w;
     });
+
+    try {
+      localStorage.setItem('gl_workouts', JSON.stringify(nextWorkouts));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setWorkoutsState(nextWorkouts);
+
+    if (user) {
+      const updatedW = nextWorkouts.find(w => w.id === workoutId);
+      if (updatedW) {
+        try {
+          await setDoc(doc(db, 'users', user.uid, 'workouts', workoutId), updatedW);
+        } catch (e) {
+          console.error("Failed to sync updated programming to cloud", e);
+        }
+      }
+    }
   }, [user]);
 
   const deleteWorkout = useCallback(async (workoutId: string) => {
-    setWorkoutsState(prevWorkouts => {
-      const updated = prevWorkouts.filter(w => w.id !== workoutId);
-      try {
-        localStorage.setItem('gl_workouts', JSON.stringify(updated));
-      } catch (e) {
-        console.warn("localStorage write warn", e);
-      }
-      return updated;
-    });
+    const currentWorkouts = workoutsRef.current;
+    const nextWorkouts = currentWorkouts.filter(w => w.id !== workoutId);
+
+    try {
+      localStorage.setItem('gl_workouts', JSON.stringify(nextWorkouts));
+    } catch (e) {
+      console.warn("localStorage write warn", e);
+    }
+
+    setWorkoutsState(nextWorkouts);
 
     if (user) {
       try {
-        const path = `users/${user.uid}/workouts/${workoutId}`;
-        await deleteDoc(doc(db, path));
+        await deleteDoc(doc(db, 'users', user.uid, 'workouts', workoutId));
       } catch (e) {
-        console.error("Failed to delete workout cloud doc", e);
+        console.error("Failed to delete workout from cloud", e);
       }
     }
   }, [user]);
