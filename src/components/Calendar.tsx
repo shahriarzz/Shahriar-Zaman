@@ -467,7 +467,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                             <div className="flex gap-1.5 flex-wrap pt-1">
                               {setsList.map((s, idx) => (
                                 <div
-                                  key={idx}
+                                  key={`set-${exId}-${idx}`}
                                   className={cn(
                                     "border rounded-lg px-2 py-1 flex items-center gap-1.5 font-mono text-[10px]",
                                     s.done
@@ -516,7 +516,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         {expectedWoForSelected.restNotes && expectedWoForSelected.restNotes.length > 0 && (
                           <div className="space-y-1.5 pt-2 border-t border-emerald-500/20">
                             {expectedWoForSelected.restNotes.map((note, nIdx) => (
-                              <div key={nIdx} className="flex items-center gap-2 text-[11px] font-mono text-emerald-200">
+                              <div key={`note-${nIdx}`} className="flex items-center gap-2 text-[11px] font-mono text-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                                 <span>{note}</span>
                               </div>
@@ -542,7 +542,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         <div className="space-y-1.5">
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
                             <Card
-                              key={ex.id || eIdx}
+                              key={ex.id ? `planned-${ex.id}-${eIdx}` : `planned-${eIdx}`}
                               variant="standard"
                               padding="compact"
                               className="flex items-center justify-between"
@@ -611,7 +611,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           </span>
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
                             <Card
-                              key={ex.id || eIdx}
+                              key={ex.id ? `missed-${ex.id}-${eIdx}` : `missed-${eIdx}`}
                               variant="standard"
                               padding="compact"
                               className="flex items-center justify-between text-xs"

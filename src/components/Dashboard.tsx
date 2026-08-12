@@ -395,7 +395,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   />
                   {sparklineData.sorted.map((e, i) => (
                     <circle
-                      key={i}
+                      key={`spark-${e[0]}-${i}`}
                       cx={i * sparklineData.w}
                       cy={32 - ((e[1] - sparklineData.min) / sparklineData.range) * 28}
                       r="2"

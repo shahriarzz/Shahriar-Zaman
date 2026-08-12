@@ -894,7 +894,7 @@ export const AnalyticsView: React.FC = () => {
 
             {/* Days grid */}
             <div className={cn("grid grid-cols-7", GAP.xs)}>
-              {heatmapData.days.map((day) => {
+              {heatmapData.days.map((day, dayIdx) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
                 const vol = heatmapData.logVolMap[dateStr] || 0;
@@ -917,7 +917,7 @@ export const AnalyticsView: React.FC = () => {
 
                 return (
                   <div
-                    key={dateStr}
+                    key={`day-${dateStr}-${dayIdx}`}
                     title={tooltipText}
                     className={cn(
                       "aspect-square border flex flex-col items-center justify-center transition-all p-1 relative group cursor-default",
@@ -951,7 +951,7 @@ export const AnalyticsView: React.FC = () => {
               <div className={cn("flex", GAP.xs)}>
                 {HEATMAP_INTENSITY_STEPS.map((step) => (
                   <span
-                    key={step.level}
+                    key={`step-${step.level}`}
                     className={cn("w-3.5 h-3.5 border", RADIUS.button, step.bg, step.border)}
                   />
                 ))}
@@ -979,9 +979,9 @@ export const AnalyticsView: React.FC = () => {
             <div className={cn("flex items-center max-w-[220px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none", GAP.sm)}>
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
               <div className={cn("flex", GAP.xs)}>
-                {priorityExercises.map((ex) => (
+                {priorityExercises.map((ex, idx) => (
                   <Button
-                    key={ex.id}
+                    key={ex.id ? `p-ex-${ex.id}-${idx}` : `p-ex-${idx}`}
                     size="sm"
                     variant={active1RMExerciseId === ex.id ? 'success' : 'secondary'}
                     onClick={() => {
@@ -1153,7 +1153,7 @@ export const AnalyticsView: React.FC = () => {
                 <div className={cn("divide-y", BORDER.subtle)}>
                   {visibleExercises.map((ex, idx) => (
                     <div
-                      key={ex.name}
+                      key={`freq-ex-${ex.name}-${idx}`}
                       className={cn(
                         "flex items-center justify-between py-2.5 first:pt-0 last:pb-0",
                         GAP.sm
@@ -1221,9 +1221,9 @@ export const AnalyticsView: React.FC = () => {
         <Stack spacing="md">
           {aggregated.recordsList.length > 0 ? (
             <Grid cols={1} colsMd={2} colsLg={3} gap="sm">
-              {visibleRecords.map((rec) => (
+              {visibleRecords.map((rec, idx) => (
                 <Card
-                  key={rec.exerciseName}
+                  key={rec.exerciseName ? `rec-${rec.exerciseName}-${idx}` : `rec-${idx}`}
                   variant="interactive"
                   padding="standard"
                   className="flex items-center justify-between group border-orange-500/20 hover:border-orange-500/50"
@@ -1367,7 +1367,7 @@ export const AnalyticsView: React.FC = () => {
           <Stack spacing="sm">
             {insightsList.map((sentence, idx) => (
               <Card
-                key={idx}
+                key={`insight-${idx}`}
                 surface="recessed"
                 variant="standard"
                 padding="compact"
@@ -1403,9 +1403,9 @@ export const AnalyticsView: React.FC = () => {
                     paddingAngle={4}
                     dataKey="value"
                   >
-                    {workoutPieData.map((entry) => (
+                    {workoutPieData.map((entry, idx) => (
                       <Cell
-                        key={`cell-${entry.type}`}
+                        key={`cell-${entry.type || idx}`}
                         fill={entry.color}
                         stroke={CHART_THEME.background}
                         strokeWidth={2}
@@ -1437,9 +1437,9 @@ export const AnalyticsView: React.FC = () => {
 
           {/* Compact Routine Legend (Top 5) */}
           <div className={cn("flex flex-wrap pt-3 border-t", GAP.sm, BORDER.subtle)}>
-            {workoutPieData.slice(0, 5).map((p) => (
+            {workoutPieData.slice(0, 5).map((p, idx) => (
               <Badge
-                key={p.type}
+                key={`badge-${p.type || idx}`}
                 label={`${p.name} (${p.value})`}
                 colorOverride={p.color}
                 variant="subtle"
