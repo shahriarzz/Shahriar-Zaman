@@ -12,7 +12,9 @@ import {
   Auth
 } from 'firebase/auth';
 import { 
-  getFirestore, 
+  getFirestore,
+  initializeFirestore,
+  setLogLevel,
   doc as fbDoc, 
   getDoc as fbGetDoc, 
   getDocFromServer as fbGetDocFromServer,
@@ -105,12 +107,31 @@ function applyOfflineStubs() {
 
 if (isFirebaseConfigured) {
   try {
+    // Suppress non-fatal Firestore internal WebChannel connection retry spam
+    try {
+      setLogLevel('error');
+    } catch {
+      // Ignored if not supported
+    }
+
     // Guard initializeApp against double-initialization
     const app = getApps().length > 0 ? getApp() : initializeApp(actualConfig);
     
-    dbInstance = actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== "(default)"
-      ? getFirestore(app, actualConfig.firestoreDatabaseId) 
-      : getFirestore(app);
+    const dbSettings = {
+      experimentalAutoDetectLongPolling: true,
+      ignoreUndefinedProperties: true
+    };
+
+    try {
+      dbInstance = actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== "(default)"
+        ? initializeFirestore(app, dbSettings, actualConfig.firestoreDatabaseId)
+        : initializeFirestore(app, dbSettings);
+    } catch {
+      dbInstance = actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== "(default)"
+        ? getFirestore(app, actualConfig.firestoreDatabaseId) 
+        : getFirestore(app);
+    }
+
     authInstance = getAuth(app);
 
     // Configure local persistence to survive user app restarts

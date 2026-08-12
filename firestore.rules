@@ -6,6 +6,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Health check test connection path
+    match /test/{document=**} {
+      allow read: if true;
+    }
+
     // User Profile
     match /users/{userId} {
       allow get: if request.auth != null && request.auth.uid == userId;

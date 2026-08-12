@@ -5,7 +5,8 @@
       "description": "Global settings for the user",
       "type": "object",
       "properties": {
-        "cycleStart": { "type": "string", "format": "date", "description": "The date the 8-day cycle started" }
+        "cycleStart": { "type": "string", "format": "date", "description": "The date the 8-day cycle started" },
+        "weightLog": { "type": "object", "description": "Map of date string to body weight number" }
       },
       "required": ["cycleStart"]
     },

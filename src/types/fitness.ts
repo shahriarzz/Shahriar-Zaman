@@ -8,6 +8,9 @@ export interface Exercise {
   reps: string;
   note?: string;
   tags?: string[];
+  equipment?: string;
+  instructions?: string;
+  rest?: string;
 }
 
 export interface CardioFinisher {
