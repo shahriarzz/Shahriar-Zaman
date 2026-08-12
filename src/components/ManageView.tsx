@@ -1,15 +1,10 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../store/FitnessContext';
 import { ProgramIdentityCard } from './manage/ProgramIdentityCard';
 import { AccountSection } from './manage/AccountSection';
 import { DataMaintenanceSection } from './manage/DataMaintenanceSection';
 import { ProgramEditor } from './manage/ProgramEditor';
-import {
-  SectionHeader,
-  Stack,
-  TYPOGRAPHY
-} from './ui';
+import { SectionHeader, Stack } from './ui';
 
 export const ManageView: React.FC = () => {
   const { workouts } = useFitness();
@@ -25,7 +20,7 @@ export const ManageView: React.FC = () => {
   }
 
   return (
-    <Stack spacing="xl" className="pt-4 pb-12 animate-in fade-in-50 duration-200">
+    <Stack spacing="xl" className="pt-4 pb-12">
       {/* Top Page Header */}
       <SectionHeader
         eyebrow="System & Training"
@@ -35,12 +30,10 @@ export const ManageView: React.FC = () => {
       />
 
       {/* 1. PRIMARY ZONE: PROGRAM IDENTITY */}
-      <div className="space-y-2">
-        <ProgramIdentityCard
-          workouts={workouts}
-          onEditProgram={() => setIsEditingProgram(true)}
-        />
-      </div>
+      <ProgramIdentityCard
+        workouts={workouts}
+        onEditProgram={() => setIsEditingProgram(true)}
+      />
 
       {/* 2. SECONDARY ZONE: ACCOUNT & SYNCHRONIZATION */}
       <AccountSection />
