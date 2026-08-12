@@ -1,24 +1,26 @@
 import React, { useMemo } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Layers } from 'lucide-react';
 import { Workout } from '../../types/fitness';
-import { Card, Button, TYPOGRAPHY } from '../ui';
+import { Card, Button, EmptyState, TYPOGRAPHY } from '../ui';
 import { cn } from '../../lib/utils';
 
 export interface ProgramIdentityCardProps {
-  workouts: Workout[];
+  workouts?: Workout[];
   onEditProgram: () => void;
 }
 
 export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
-  workouts,
+  workouts = [],
   onEditProgram
 }) => {
   // Authoritative cycle workouts definition (matching CycleEditor / ProgramEditor)
   const cycleWorkouts = useMemo(() => {
-    return [...workouts]
+    return (workouts || [])
       .filter(w => typeof w.cycleDay === 'number' && w.cycleDay > 0)
       .sort((a, b) => (a.cycleDay || 0) - (b.cycleDay || 0));
   }, [workouts]);
+
+  const totalDays = cycleWorkouts.length;
 
   const activeCount = useMemo(() => {
     return cycleWorkouts.filter(w => w.type !== 'rest').length;
@@ -28,8 +30,22 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
     return cycleWorkouts.filter(w => w.type === 'rest').length;
   }, [cycleWorkouts]);
 
-  const totalDays = cycleWorkouts.length;
-  const programName = totalDays > 0 ? `${totalDays}-Day Routine Cycle` : 'Routine Program';
+  // Handle empty / missing program data without fabricating values
+  if (totalDays === 0) {
+    return (
+      <EmptyState
+        icon={Layers}
+        title="No Active Program"
+        description="Configure your workout cycle and progression schedule."
+        action={{
+          label: "Configure Program",
+          onClick: onEditProgram
+        }}
+      />
+    );
+  }
+
+  const programName = `${totalDays}-Day Routine Cycle`;
 
   return (
     <Card variant="standard" padding="relaxed">
@@ -57,3 +73,4 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
     </Card>
   );
 };
+
