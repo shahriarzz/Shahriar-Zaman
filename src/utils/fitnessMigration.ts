@@ -161,6 +161,146 @@ export function migrateV1ToV2(raw: {
   };
 }
 
+export function validateAndSanitizeFitnessData(parsed: any): {
+  success: boolean;
+  message?: string;
+  data?: {
+    schemaVersion: number;
+    exportDate?: string;
+    exerciseDefinitions: ExerciseDefinition[];
+    workouts: Workout[];
+    logs: Record<string, SessionLog>;
+    appState: AppState;
+  };
+} {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { success: false, message: 'Invalid JSON file structure.' };
+  }
+
+  // Detect schema version
+  const rawVersion = parsed.schemaVersion ?? parsed.version;
+  const version = typeof rawVersion === 'number' ? rawVersion : 1;
+
+  if (version > CURRENT_SCHEMA_VERSION) {
+    return {
+      success: false,
+      message: `Unsupported backup schema version (v${version}). Please update GainLog to import this file.`
+    };
+  }
+
+  let rawDefs: any[] | null = null;
+  let rawWorkouts: any[] | null = null;
+  let rawLogs: any = null;
+  let rawState: any = null;
+
+  if (version === 2 && Array.isArray(parsed.exerciseDefinitions)) {
+    rawDefs = parsed.exerciseDefinitions;
+    rawWorkouts = Array.isArray(parsed.workouts) ? parsed.workouts : [];
+    rawLogs = parsed.logs || {};
+    rawState = parsed.appState || null;
+  } else if (Array.isArray(parsed.workouts)) {
+    // Legacy v1 backup format
+    rawDefs = Array.isArray(parsed.exerciseDefinitions) ? parsed.exerciseDefinitions : null;
+    rawWorkouts = parsed.workouts;
+    rawLogs = parsed.logs || {};
+    rawState = parsed.appState || null;
+  } else {
+    return {
+      success: false,
+      message: 'Unrecognized backup format. File missing workouts or exerciseDefinitions array.'
+    };
+  }
+
+  // Perform migration/normalization
+  const migrated = migrateV1ToV2({
+    rawDefs,
+    rawWorkouts,
+    rawLogs,
+    rawState
+  });
+
+  // Ensure orphan-reference prevention across all workouts and logs
+  const defMap = new Map<string, ExerciseDefinition>();
+  migrated.defs.forEach(d => {
+    if (d && d.id) defMap.set(d.id, { ...d });
+  });
+
+  const sanitizedWorkouts: Workout[] = migrated.workouts.map(w => {
+    const sanitizedExercises: WorkoutExercise[] = (w.exercises || []).map((ex: any) => {
+      let defId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
+      if (!defId) {
+        defId = `ex-${generateId()}`;
+      }
+
+      // If definition missing from defMap, auto-create fallback definition to prevent orphan references
+      if (!defMap.has(defId)) {
+        const fallbackDef: ExerciseDefinition = {
+          id: defId,
+          name: ex.name?.trim() || 'Exercise',
+          target: ex.target || 'General',
+          equipment: ex.equipment || '',
+          instructions: ex.instructions || '',
+          tags: Array.isArray(ex.tags) ? ex.tags : []
+        };
+        defMap.set(defId, fallbackDef);
+      }
+
+      return {
+        exerciseDefinitionId: defId,
+        sets: typeof ex.sets === 'number' && ex.sets > 0 ? ex.sets : 3,
+        reps: String(ex.reps || '10–12'),
+        rest: String(ex.rest || '90s'),
+        note: String(ex.note || ''),
+        tags: Array.isArray(ex.tags) ? ex.tags : []
+      };
+    });
+
+    return {
+      id: w.id || generateId(),
+      name: w.name || 'Workout',
+      badge: w.badge || 'WORKOUT',
+      type: w.type || 'custom',
+      exercises: sanitizedExercises,
+      cardio: w.cardio ?? null,
+      cycleDay: typeof w.cycleDay === 'number' ? w.cycleDay : null,
+      isCore: Boolean(w.isCore),
+      restNotes: Array.isArray(w.restNotes) ? w.restNotes : []
+    };
+  });
+
+  // Also check logs for exercise keys and synthesize definitions if missing
+  Object.values(migrated.logs || {}).forEach(log => {
+    if (log && log.sets && typeof log.sets === 'object') {
+      Object.keys(log.sets).forEach(exDefId => {
+        if (!defMap.has(exDefId)) {
+          defMap.set(exDefId, {
+            id: exDefId,
+            name: 'Exercise',
+            target: 'General',
+            equipment: '',
+            instructions: '',
+            tags: []
+          });
+        }
+      });
+    }
+  });
+
+  const finalDefs = Array.from(defMap.values());
+
+  return {
+    success: true,
+    data: {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      exportDate: parsed.exportDate || new Date().toISOString(),
+      exerciseDefinitions: finalDefs,
+      workouts: sanitizedWorkouts,
+      logs: migrated.logs,
+      appState: migrated.appState
+    }
+  };
+}
+
 export function loadInitialFitnessData(): {
   defs: ExerciseDefinition[];
   workouts: Workout[];

@@ -5,6 +5,7 @@ import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitn
 import { dk } from '../utils/fitnessHelpers';
 import { 
   getDeletedIdsTracker, 
+  removeDeletedId,
   clearDeletedIdsTracker, 
   areLogsEqual 
 } from '../utils/fitnessSyncHelpers';
@@ -98,32 +99,57 @@ export function useFitnessSync({
     setSyncError(null);
 
     try {
-      // 0. Purge offline deleted items
+      // 0. Purge offline deleted items (failed deletions stay in queue for retry)
       const deletedTracker = getDeletedIdsTracker();
       if (deletedTracker.defs.length > 0) {
-        for (const defId of deletedTracker.defs) {
-          try { await deleteExerciseDefinition(uid, defId); } catch (e) { console.warn(e); }
+        for (const defId of [...deletedTracker.defs]) {
+          try {
+            await deleteExerciseDefinition(uid, defId);
+            removeDeletedId('defs', defId);
+          } catch (e) {
+            console.warn(`Cloud deletion failed for def ${defId}, retaining in retry queue:`, e);
+          }
         }
       }
       if (deletedTracker.workouts.length > 0) {
-        for (const woId of deletedTracker.workouts) {
-          try { await deleteWorkout(uid, woId); } catch (e) { console.warn(e); }
+        for (const woId of [...deletedTracker.workouts]) {
+          try {
+            await deleteWorkout(uid, woId);
+            removeDeletedId('workouts', woId);
+          } catch (e) {
+            console.warn(`Cloud deletion failed for workout ${woId}, retaining in retry queue:`, e);
+          }
         }
       }
       if (deletedTracker.logs.length > 0) {
-        for (const logId of deletedTracker.logs) {
-          try { await deleteLog(uid, logId); } catch (e) { console.warn(e); }
+        for (const logId of [...deletedTracker.logs]) {
+          try {
+            await deleteLog(uid, logId);
+            removeDeletedId('logs', logId);
+          } catch (e) {
+            console.warn(`Cloud deletion failed for log ${logId}, retaining in retry queue:`, e);
+          }
         }
       }
-      clearDeletedIdsTracker();
 
       // Parallel download
-      const [cloudDefs, cloudWorkouts, cloudLogs, cloudState] = await Promise.all([
+      const [rawCloudDefs, rawCloudWorkouts, rawCloudLogs, cloudState] = await Promise.all([
         getExerciseDefinitions(uid),
         getWorkouts(uid),
         getLogs(uid),
         getAppState(uid)
       ]);
+
+      // Filter cloud records against active tombstones to prevent resurrection
+      const activeTracker = getDeletedIdsTracker();
+      const cloudDefs = rawCloudDefs.filter(d => !activeTracker.defs.includes(d.id));
+      const cloudWorkouts = rawCloudWorkouts.filter(w => !activeTracker.workouts.includes(w.id));
+      const cloudLogsMap: Record<string, SessionLog> = {};
+      Object.entries(rawCloudLogs || {}).forEach(([id, l]) => {
+        if (!activeTracker.logs.includes(id)) {
+          cloudLogsMap[id] = l as SessionLog;
+        }
+      });
 
       // 1. App State Sync
       let mergedState = { ...appStateRef.current };
@@ -173,7 +199,6 @@ export function useFitnessSync({
       setWorkouts(mergedWorkouts);
 
       // 4. Logs Sync
-      const cloudLogsMap: Record<string, SessionLog> = cloudLogs || {};
       const logsToUploadEntries = Object.entries(logsRef.current).filter(([id, l]) => {
         const cloudL = cloudLogsMap[id];
         return !cloudL || !areLogsEqual(cloudL, l as SessionLog);
@@ -238,8 +263,10 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = [...exerciseDefsRef.current];
+        const tombstones = getDeletedIdsTracker().defs;
         changes.forEach(change => {
           const id = change.doc.id;
+          if (tombstones.includes(id)) return;
           if (change.type === 'added' || change.type === 'modified') {
             const cloudDef = change.doc.data() as ExerciseDefinition;
             const idx = current.findIndex(d => d.id === id);
@@ -268,8 +295,10 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = [...workoutsRef.current];
+        const tombstones = getDeletedIdsTracker().workouts;
         changes.forEach(change => {
           const id = change.doc.id;
+          if (tombstones.includes(id)) return;
           if (change.type === 'added' || change.type === 'modified') {
             const cloudW = change.doc.data() as Workout;
             const idx = current.findIndex(w => w.id === id);
@@ -298,8 +327,10 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = { ...logsRef.current };
+        const tombstones = getDeletedIdsTracker().logs;
         changes.forEach(change => {
           const id = change.doc.id;
+          if (tombstones.includes(id)) return;
           if (change.type === 'added' || change.type === 'modified') {
             const raw = change.doc.data() as any;
             const cloudVal: SessionLog = {

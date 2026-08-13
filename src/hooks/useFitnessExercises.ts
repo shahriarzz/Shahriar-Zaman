@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { ExerciseDefinition, Workout } from '../types/fitness';
 import { generateId } from '../utils/fitnessHelpers';
-import { trackDeletedId } from '../utils/fitnessSyncHelpers';
+import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveExerciseDefinition, deleteExerciseDefinition as deleteExerciseDefFirestore, saveWorkoutsBatch } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
@@ -109,6 +109,7 @@ export function useFitnessExercises({
     if (user) {
       try {
         await deleteExerciseDefFirestore(user.uid, id);
+        removeDeletedId('defs', id);
         await saveWorkoutsBatch(user.uid, nextWorkouts);
       } catch (e) {
         console.error("Failed to sync deletions to cloud", e);

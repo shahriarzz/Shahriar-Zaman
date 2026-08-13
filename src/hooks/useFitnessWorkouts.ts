@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, WorkoutExercise } from '../types/fitness';
 import { extractExerciseDefinitionsFromWorkouts } from '../utils/fitnessMigration';
-import { trackDeletedId } from '../utils/fitnessSyncHelpers';
+import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveWorkout, saveWorkoutsBatch, deleteWorkout as deleteWorkoutFirestore } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
@@ -184,6 +184,7 @@ export function useFitnessWorkouts({
     if (user) {
       try {
         await deleteWorkoutFirestore(user.uid, workoutId);
+        removeDeletedId('workouts', workoutId);
       } catch (e) {
         console.error("Failed to delete workout from cloud", e);
         handleFirestoreError(e, OperationType.DELETE, `users/${user.uid}/workouts/${workoutId}`);

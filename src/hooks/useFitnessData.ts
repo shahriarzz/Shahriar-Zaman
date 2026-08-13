@@ -9,7 +9,11 @@ export function useFitnessData() {
   const [workouts, setWorkoutsState] = useState<Workout[]>(initialData.workouts);
   const [logs, setLogsState] = useState<Record<string, SessionLog>>(initialData.logs);
   const [appState, setAppStateState] = useState<AppState>(initialData.appState);
-  const [isInitialized, setIsInitialized] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    setIsInitialized(true);
+  }, []);
 
   // Synchronous refs for async & subscription operations
   const exerciseDefsRef = useRef<ExerciseDefinition[]>(exerciseDefinitions);
@@ -50,7 +54,7 @@ export function useFitnessData() {
     });
   }, []);
 
-  // Safe debounced persistence to localStorage
+  // Immediate persistence to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));

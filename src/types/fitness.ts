@@ -64,6 +64,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface FitnessDatabase {
   schemaVersion: number;
+  exportDate?: string;
   exerciseDefinitions: ExerciseDefinition[];
   workouts: Workout[];
   logs: Record<string, SessionLog>;

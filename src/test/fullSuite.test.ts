@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadInitialFitnessData, extractExerciseDefinitionsFromWorkouts } from '../utils/fitnessMigration';
-import { trackDeletedId, getDeletedIdsTracker, clearDeletedIdsTracker, areLogsEqual } from '../utils/fitnessSyncHelpers';
+import { loadInitialFitnessData, extractExerciseDefinitionsFromWorkouts, validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
+import { trackDeletedId, removeDeletedId, getDeletedIdsTracker, clearDeletedIdsTracker, areLogsEqual } from '../utils/fitnessSyncHelpers';
 import {
   createExerciseDefinitionMap,
   getResolvedExerciseMeta,
@@ -394,6 +394,131 @@ describe('GainLog Comprehensive Validation Suite', () => {
       expect(mapTargetToCategory('Triceps Long Head')).toBe('Triceps');
       expect(mapTargetToCategory('Hamstrings')).toBe('Legs');
       expect(mapTargetToCategory('Lats')).toBe('Back');
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 9. BACKUP & MIGRATION VALIDATION
+  // -------------------------------------------------------------
+  describe('9. Backup & Migration Validation', () => {
+    it('validates canonical FitnessDatabase v2 backup structure successfully', () => {
+      const backup = {
+        schemaVersion: 2,
+        exportDate: '2026-08-13T00:00:00.000Z',
+        exerciseDefinitions: [
+          { id: 'def-1', name: 'Barbell Bench Press', target: 'Chest', equipment: 'Barbell', instructions: '', tags: [] }
+        ],
+        workouts: [
+          {
+            id: 'w-1',
+            name: 'Push Day',
+            badge: 'PUSH',
+            type: 'push',
+            exercises: [{ exerciseDefinitionId: 'def-1', sets: 3, reps: '10' }]
+          }
+        ],
+        logs: {},
+        appState: { cycleStart: '2026-08-01' }
+      };
+
+      const res = validateAndSanitizeFitnessData(backup);
+      expect(res.success).toBe(true);
+      expect(res.data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(res.data?.exerciseDefinitions).toHaveLength(1);
+      expect(res.data?.workouts[0].exercises[0].exerciseDefinitionId).toBe('def-1');
+    });
+
+    it('migrates legacy v1 backup structure seamlessly', () => {
+      const legacyBackup = {
+        version: 1,
+        workouts: [
+          {
+            id: 'w-legacy-1',
+            name: 'Leg Day',
+            type: 'legs',
+            exercises: [
+              { id: 'ex-squat', name: 'Barbell Back Squat', target: 'Quads', sets: 4, reps: '8' }
+            ]
+          }
+        ]
+      };
+
+      const res = validateAndSanitizeFitnessData(legacyBackup);
+      expect(res.success).toBe(true);
+      expect(res.data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(res.data?.exerciseDefinitions.find(d => d.name === 'Barbell Back Squat')).toBeDefined();
+    });
+
+    it('rejects unsupported future schema version with clear error message', () => {
+      const futureBackup = {
+        schemaVersion: 99,
+        exerciseDefinitions: [],
+        workouts: []
+      };
+
+      const res = validateAndSanitizeFitnessData(futureBackup);
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('Unsupported backup schema version (v99)');
+    });
+
+    it('rejects malformed or non-object backup JSON cleanly', () => {
+      expect(validateAndSanitizeFitnessData(null).success).toBe(false);
+      expect(validateAndSanitizeFitnessData("not an object").success).toBe(false);
+      expect(validateAndSanitizeFitnessData([]).success).toBe(false);
+      expect(validateAndSanitizeFitnessData({ foo: "bar" }).success).toBe(false);
+    });
+
+    it('prevents orphan references by synthesizing definition for unlinked exercise in workout or log', () => {
+      const orphanBackup = {
+        schemaVersion: 2,
+        exerciseDefinitions: [], // Empty definitions!
+        workouts: [
+          {
+            id: 'w-orphan',
+            name: 'Orphan Test',
+            exercises: [{ exerciseDefinitionId: 'unlinked-def-99', name: 'Ghost Pull-Up', sets: 3 }]
+          }
+        ],
+        logs: {
+          'l-orphan': {
+            id: 'l-orphan',
+            workoutId: 'w-orphan',
+            date: '2026-08-13',
+            sets: {
+              'unlinked-def-100': [{ id: 's1', weight: '50', reps: '10', done: true }]
+            },
+            complete: true,
+            durationMinutes: 30
+          }
+        }
+      };
+
+      const res = validateAndSanitizeFitnessData(orphanBackup);
+      expect(res.success).toBe(true);
+      const defIds = res.data?.exerciseDefinitions.map(d => d.id);
+      expect(defIds).toContain('unlinked-def-99');
+      expect(defIds).toContain('unlinked-def-100');
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 10. DELETION & SYNC TOMBSTONE SUITE
+  // -------------------------------------------------------------
+  describe('10. Deletion & Sync Tombstone Suite', () => {
+    it('tracks deleted IDs and removes individual IDs selectively upon sync', () => {
+      trackDeletedId('defs', 'def-to-del-1');
+      trackDeletedId('defs', 'def-to-del-2');
+      trackDeletedId('workouts', 'w-to-del-1');
+
+      let tracker = getDeletedIdsTracker();
+      expect(tracker.defs).toEqual(['def-to-del-1', 'def-to-del-2']);
+      expect(tracker.workouts).toEqual(['w-to-del-1']);
+
+      // Remove def-to-del-1 after sync
+      removeDeletedId('defs', 'def-to-del-1');
+      tracker = getDeletedIdsTracker();
+      expect(tracker.defs).toEqual(['def-to-del-2']);
+      expect(tracker.workouts).toEqual(['w-to-del-1']);
     });
   });
 });

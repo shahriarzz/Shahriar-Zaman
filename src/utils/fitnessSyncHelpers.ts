@@ -54,6 +54,14 @@ export function trackDeletedId(type: 'defs' | 'workouts' | 'logs', id: string): 
   }
 }
 
+export function removeDeletedId(type: 'defs' | 'workouts' | 'logs', id: string): void {
+  const tracker = getDeletedIdsTracker();
+  if (tracker[type].includes(id)) {
+    tracker[type] = tracker[type].filter(item => item !== id);
+    saveDeletedIdsTracker(tracker);
+  }
+}
+
 export function clearDeletedIdsTracker(): void {
   try {
     localStorage.removeItem('gl_deleted_ids');

@@ -1,8 +1,8 @@
 import React, { useCallback } from 'react';
 import { User } from 'firebase/auth';
-import { Workout, SessionLog, AppState, ExerciseDefinition } from '../types/fitness';
+import { Workout, SessionLog, AppState, ExerciseDefinition, FitnessDatabase, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
-import { extractExerciseDefinitionsFromWorkouts } from '../utils/fitnessMigration';
+import { extractExerciseDefinitionsFromWorkouts, validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
 import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitnessSyncHelpers';
 import { saveExerciseDefinitionsBatch, saveWorkoutsBatch, saveLogsBatch, saveAppState } from '../services/fitnessFirestore';
 
@@ -140,8 +140,8 @@ export function useFitnessBackups({
   }, [pushAutoBackup, workoutsRef, logsRef, appStateRef, exerciseDefsRef]);
 
   const exportBackup = useCallback((): string => {
-    const backupObj = {
-      version: 2,
+    const backupObj: FitnessDatabase = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       exportDate: new Date().toISOString(),
       exerciseDefinitions: exerciseDefsRef.current,
       workouts: workoutsRef.current,
@@ -153,31 +153,22 @@ export function useFitnessBackups({
 
   const importBackup = useCallback(async (backupJson: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const parsed = JSON.parse(backupJson);
-      if (!parsed || typeof parsed !== 'object') {
-        return { success: false, message: 'Invalid JSON file structure.' };
+      let parsed: any;
+      try {
+        parsed = JSON.parse(backupJson);
+      } catch {
+        return { success: false, message: 'Invalid JSON format. Could not parse file.' };
       }
 
-      let restoredDefs: ExerciseDefinition[] = [];
-      let restoredWorkouts: Workout[] = [];
-      let restoredLogs: Record<string, SessionLog> = {};
-      let restoredAppState: AppState = { cycleStart: new Date().toISOString().split('T')[0] };
-
-      if (parsed.version === 2 && Array.isArray(parsed.exerciseDefinitions)) {
-        restoredDefs = parsed.exerciseDefinitions;
-        restoredWorkouts = parsed.workouts || [];
-        restoredLogs = parsed.logs || {};
-        restoredAppState = parsed.appState || restoredAppState;
-      } else if (Array.isArray(parsed.workouts)) {
-        // Legacy backup format
-        const { defs, workouts: migWorkouts } = extractExerciseDefinitionsFromWorkouts(parsed.workouts);
-        restoredDefs = defs;
-        restoredWorkouts = migWorkouts;
-        restoredLogs = parsed.logs || {};
-        restoredAppState = parsed.appState || restoredAppState;
-      } else {
-        return { success: false, message: 'Unrecognized backup format. File missing workouts or definitions array.' };
+      const validation = validateAndSanitizeFitnessData(parsed);
+      if (!validation.success || !validation.data) {
+        return {
+          success: false,
+          message: validation.message || 'Failed to validate backup structure.'
+        };
       }
+
+      const { exerciseDefinitions: restoredDefs, workouts: restoredWorkouts, logs: restoredLogs, appState: restoredAppState } = validation.data;
 
       pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Import Savepoint', exerciseDefsRef.current);
 

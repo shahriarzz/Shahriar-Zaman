@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { SessionLog, AppState, Workout } from '../types/fitness';
-import { trackDeletedId } from '../utils/fitnessSyncHelpers';
+import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveLog, deleteLog as deleteLogFirestore, saveAppState, deleteLogsBatch } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
@@ -67,6 +67,7 @@ export function useFitnessLogs({
 
       if (user) {
         await deleteLogFirestore(user.uid, logId);
+        removeDeletedId('logs', logId);
       }
     } catch (error) {
       console.error("Failed to delete log", error);
@@ -89,6 +90,7 @@ export function useFitnessLogs({
 
       if (user) {
         await deleteLogsBatch(user.uid, currentLogIds);
+        currentLogIds.forEach(id => removeDeletedId('logs', id));
       }
     } catch (error) {
       console.error("Failed to flush logs", error);
