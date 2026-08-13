@@ -5,7 +5,7 @@ import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edi
 import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, calculateVolume, generateId } from '../utils/fitnessHelpers';
-import { SessionLog, SetLog } from '../types/fitness';
+import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -37,7 +37,7 @@ interface HistoryViewProps {
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
-  const { logs, workouts, deleteLog, addLog } = useFitness();
+  const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -62,15 +62,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     }
   }, [initialDate, logs]);
 
-  // Find workout metadata for each exercise mapping exercise ID to details
-  const exMeta = React.useMemo(() => {
-    const meta: Record<string, { name: string; type: string; workoutName: string }> = {};
-    workouts.forEach(wo => {
-      wo.exercises.forEach(ex => {
-        meta[ex.id] = { name: ex.name, type: wo.type, workoutName: wo.name };
-      });
+  // Map exercise definitions by ID for canonical exercise identity
+  const exerciseDefinitionsById = React.useMemo(() => {
+    const map = new Map<string, ExerciseDefinition>();
+    exerciseDefinitions.forEach(def => {
+      map.set(def.id, def);
     });
-    return meta;
+    return map;
+  }, [exerciseDefinitions]);
+
+  // Workouts by ID for workout-level metadata
+  const workoutsById = React.useMemo(() => {
+    const map = new Map<string, Workout>();
+    workouts.forEach(wo => {
+      map.set(wo.id, wo);
+    });
+    return map;
   }, [workouts]);
 
   // Group logs by exercise - MEMOIZED for PR mapping
@@ -94,7 +101,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     return history;
   }, [logs]);
 
-  // Get chronological session list
+  // Get chronological session list without in-place mutation
   const sessionsList = React.useMemo(() => {
     return Object.entries(logs).map(([id, log]) => ({
       ...(log as any),
@@ -105,7 +112,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   // Filter day sessions based on search
   const filteredSessions = React.useMemo(() => {
     return sessionsList.filter(session => {
-      const wo = workouts.find(w => w.id === session.workoutId);
+      const wo = workoutsById.get(session.workoutId);
       const workoutName = wo?.name || 'Session';
       const lowercaseSearch = search.toLowerCase();
       
@@ -113,15 +120,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       const matchesWorkout = workoutName.toLowerCase().includes(lowercaseSearch);
       const matchesId = session.id?.toLowerCase().includes(lowercaseSearch);
       
-      // Also match if any of the completed exercises match the search
+      // Also match if any of the completed exercises match the search via canonical ExerciseDefinition
       const matchesExercises = Object.keys(session.sets).some(exId => {
-        const meta = exMeta[exId];
-        return meta?.name.toLowerCase().includes(lowercaseSearch);
+        const def = exerciseDefinitionsById.get(exId);
+        const exName = def?.name || 'Unlisted Exercise';
+        return exName.toLowerCase().includes(lowercaseSearch);
       });
 
       return matchesDate || matchesWorkout || matchesExercises || matchesId;
     });
-  }, [sessionsList, workouts, search, exMeta]);
+  }, [sessionsList, workoutsById, search, exerciseDefinitionsById]);
 
   const clearFilter = () => {
     setSearch('');
@@ -173,7 +181,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       summary.totalDuration += log.durationMinutes || 0;
       summary.totalVolume += calculateVolume(log);
 
-      const workout = workouts.find(w => w.id === log.workoutId);
+      const workout = workoutsById.get(log.workoutId);
       if (workout) {
         const type = workout.type || 'custom';
         summary.workoutsByType[type] = (summary.workoutsByType[type] || 0) + 1;
@@ -183,7 +191,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         const doneSets = (sets as SetLog[]).filter(s => s.done);
         if (doneSets.length === 0) return;
 
-        const exerciseName = exMeta[exId]?.name || 'Exercise';
+        const def = exerciseDefinitionsById.get(exId);
+        const exerciseName = def?.name || 'Unlisted Exercise';
         const weights = doneSets.map(s => parseFloat(s.weight) || 0);
         const logMaxWeight = weights.length > 0 ? Math.max(...weights) : 0;
 
@@ -201,8 +210,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       });
     });
 
-    return Object.values(summaries).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [logs, workouts, exMeta]);
+    return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  }, [logs, workoutsById, exerciseDefinitionsById]);
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
@@ -218,7 +227,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
     const extremeSets: string[] = [];
     Object.entries(editSessionState.sets).forEach(([exId, sets]) => {
-      const exName = exMeta[exId]?.name || 'Exercise';
+      const def = exerciseDefinitionsById.get(exId);
+      const exName = def?.name || 'Unlisted Exercise';
       (sets as SetLog[]).forEach((s, idx) => {
         const w = parseFloat(s.weight) || 0;
         const r = parseInt(s.reps) || 0;
@@ -653,12 +663,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           {/* Sets list per exercise */}
                           <div className="space-y-6">
                             {Object.entries(editSessionState.sets).map(([exId, sets]) => {
-                              const meta = exMeta[exId] || { name: 'Unlisted Exercise' };
+                              const def = exerciseDefinitionsById.get(exId);
+                              const exName = def?.name || 'Unlisted Exercise';
                               return (
                                 <div key={exId} className={cn("border p-4 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                                   <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500" />
-                                    <h5 className="font-black text-xs sm:text-sm text-white uppercase tracking-wider">{meta.name}</h5>
+                                    <h5 className="font-black text-xs sm:text-sm text-white uppercase tracking-wider">{exName}</h5>
                                   </div>
 
                                   <div className={cn("grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
@@ -820,7 +831,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                           <div className="space-y-3">
                         {Object.entries(session.sets).map(([exId, sets]) => {
-                          const meta = exMeta[exId] || { name: 'Unlisted Exercise', type: 'custom', workoutName: 'Routine' };
+                          const def = exerciseDefinitionsById.get(exId);
+                          const exerciseName = def?.name || 'Unlisted Exercise';
+                          const workout = workoutsById.get(session.workoutId);
                           const doneSets = (sets as SetLog[]).filter(s => s.done);
                           if (doneSets.length === 0) return null;
 
@@ -828,13 +841,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const isSelected = selectedExKey === exKey;
 
                           // Dynamic PR calculation of all time for this exercise
-                          const historyLogs = (exerciseHistory[exId] || []).sort((a, b) => b.date.localeCompare(a.date));
+                          const historyLogs = (exerciseHistory[exId] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
                           const prWeight = historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0;
                           const oldestPrDate = prWeight > 0 
                             ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date 
                             : null;
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
-                          const exColor = WORKOUT_COLORS[meta.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
+                          const exColor = WORKOUT_COLORS[workout?.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
 
                           return (
                             <div key={exId} className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}>
@@ -855,7 +868,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       style={{ backgroundColor: exColor }} 
                                     />
                                     <h4 className="font-bold text-zinc-200 text-sm tracking-wide">
-                                      {meta.name}
+                                      {exerciseName}
                                     </h4>
                                   </div>
                                   <div className="flex flex-wrap gap-2 text-[10px] text-zinc-400 font-mono uppercase tracking-wider">
