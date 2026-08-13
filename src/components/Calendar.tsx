@@ -37,10 +37,11 @@ import {
 
 interface CalendarProps {
   onNavigateToHistory?: (dateStr?: string) => void;
+  onStartWorkout?: (workoutId: string) => void;
 }
 
-export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
-  const { logs, workouts, appState } = useFitness();
+export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStartWorkout }) => {
+  const { logs, workouts, exerciseDefinitions, appState } = useFitness();
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -67,15 +68,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     return map;
   }, [workouts]);
 
-  const exerciseMap = useMemo(() => {
-    const map = new Map<string, Exercise>();
-    (workouts || []).forEach(w => {
-      (w.exercises || []).forEach(ex => {
-        map.set(ex.id, ex);
-      });
-    });
+  const defsMap = useMemo(() => {
+    const map = new Map<string, import('../types/fitness').ExerciseDefinition>();
+    (exerciseDefinitions || []).forEach(d => map.set(d.id, d));
     return map;
-  }, [workouts]);
+  }, [exerciseDefinitions]);
 
   const coreWorkoutByCycleDayMap = useMemo(() => {
     const map = new Map<number, Workout>();
@@ -108,6 +105,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
     if (log) {
       const wo = workoutMap.get(log.workoutId);
+      if (log.workoutId && !wo && process.env.NODE_ENV !== 'production') {
+        console.warn('Unresolved workout ID:', log.workoutId);
+      }
       const doneSets = dayDetail?.doneSets ?? 0;
       const totalSets = dayDetail?.totalSets ?? 0;
 
@@ -121,7 +121,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
       }
       return {
         color: WORKOUT_COLORS[wo?.type || 'push'] || '#10b981',
-        label: wo?.type || 'session',
+        label: wo?.name || wo?.type || 'Workout unavailable',
         isComplete: true,
         log
       };
@@ -432,7 +432,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                     <div className="space-y-2.5">
                       {Object.entries(selectedLog.sets || {}).map(([exId, sets]) => {
-                        const exercise = exerciseMap.get(exId);
+                        const exercise = defsMap.get(exId);
+                        if (!exercise && process.env.NODE_ENV !== 'production') {
+                          console.warn('Unresolved exercise definition ID in log:', exId);
+                        }
+                        const exName = exercise?.name || 'Workout unavailable';
                         const setsList = (sets as SetLog[]) || [];
                         const doneSets = setsList.filter(s => s && s.done);
 
@@ -448,7 +452,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                             <div className="flex justify-between items-start gap-2">
                               <div>
                                 <h5 className="font-display uppercase text-sm tracking-wide text-white leading-tight">
-                                  {exercise?.name || 'Custom Exercise'}
+                                  {exName}
                                 </h5>
                                 {exercise?.target && (
                                   <span className="font-mono text-[9px] text-zinc-500 uppercase">
@@ -540,24 +544,33 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                         {/* List of Planned Exercises */}
                         <div className="space-y-1.5">
-                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
-                            <Card
-                              key={ex.id ? `planned-${ex.id}-${eIdx}` : `planned-${eIdx}`}
-                              variant="standard"
-                              padding="compact"
-                              className="flex items-center justify-between"
-                            >
-                              <div className="space-y-0.5">
-                                <p className="font-display text-xs uppercase text-zinc-200">{ex.name}</p>
-                                <p className="font-mono text-[9px] text-zinc-500 uppercase">{ex.target}</p>
-                              </div>
-                              <div className="text-right">
-                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                                  {ex.sets} × {ex.reps}
-                                </span>
-                              </div>
-                            </Card>
-                          ))}
+                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
+                            const def = defsMap.get(ex.exerciseDefinitionId);
+                            if (!def && ex.exerciseDefinitionId && process.env.NODE_ENV !== 'production') {
+                              console.warn('Unresolved exercise definition ID:', ex.exerciseDefinitionId);
+                            }
+                            const exName = def?.name || 'Workout unavailable';
+                            const exTarget = def?.target || '';
+
+                            return (
+                              <Card
+                                key={`planned-${ex.exerciseDefinitionId}-${eIdx}`}
+                                variant="standard"
+                                padding="compact"
+                                className="flex items-center justify-between"
+                              >
+                                <div className="space-y-0.5">
+                                  <p className="font-display text-xs uppercase text-zinc-200">{exName}</p>
+                                  {exTarget && <p className="font-mono text-[9px] text-zinc-500 uppercase">{exTarget}</p>}
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                    {ex.sets} × {ex.reps}
+                                  </span>
+                                </div>
+                              </Card>
+                            );
+                          })}
                         </div>
 
                         {expectedWoForSelected.cardio && (
@@ -565,6 +578,20 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                             <span>Cardio: {expectedWoForSelected.cardio.name}</span>
                             <span className="text-zinc-500">{expectedWoForSelected.cardio.duration}</span>
                           </Card>
+                        )}
+
+                        {onStartWorkout && (
+                          <Button
+                            variant="primary"
+                            size="md"
+                            onClick={() => {
+                              haptics.selection();
+                              onStartWorkout(expectedWoForSelected.id);
+                            }}
+                            className="w-full font-bold justify-center mt-3"
+                          >
+                            Start {expectedWoForSelected.name} <ArrowRight className="w-4 h-4 ml-1.5" />
+                          </Button>
                         )}
                       </div>
                     )}
@@ -609,22 +636,31 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 block font-bold">
                             Planned Exercises:
                           </span>
-                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => (
-                            <Card
-                              key={ex.id ? `missed-${ex.id}-${eIdx}` : `missed-${eIdx}`}
-                              variant="standard"
-                              padding="compact"
-                              className="flex items-center justify-between text-xs"
-                            >
-                              <div>
-                                <span className="font-display uppercase text-zinc-300">{ex.name}</span>
-                                <span className="font-mono text-[9px] text-zinc-500 ml-2 uppercase">({ex.target})</span>
-                              </div>
-                              <span className="font-mono text-[10px] text-zinc-400">
-                                {ex.sets} × {ex.reps}
-                              </span>
-                            </Card>
-                          ))}
+                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
+                            const def = defsMap.get(ex.exerciseDefinitionId);
+                            if (!def && ex.exerciseDefinitionId && process.env.NODE_ENV !== 'production') {
+                              console.warn('Unresolved exercise definition ID:', ex.exerciseDefinitionId);
+                            }
+                            const exName = def?.name || 'Workout unavailable';
+                            const exTarget = def?.target || '';
+
+                            return (
+                              <Card
+                                key={`missed-${ex.exerciseDefinitionId}-${eIdx}`}
+                                variant="standard"
+                                padding="compact"
+                                className="flex items-center justify-between text-xs"
+                              >
+                                <div>
+                                  <span className="font-display uppercase text-zinc-300">{exName}</span>
+                                  {exTarget && <span className="font-mono text-[9px] text-zinc-500 ml-2 uppercase">({exTarget})</span>}
+                                </div>
+                                <span className="font-mono text-[10px] text-zinc-400">
+                                  {ex.sets} × {ex.reps}
+                                </span>
+                              </Card>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

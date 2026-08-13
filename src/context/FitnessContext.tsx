@@ -43,7 +43,7 @@ export interface FitnessContextType {
   deleteWorkout: (workoutId: string) => Promise<void>;
 
   // Log Actions
-  addLog: (logId: string, logOriginal: SessionLog) => Promise<void>;
+  addLog: (log: SessionLog) => Promise<void>;
   deleteLog: (logId: string) => Promise<void>;
   resetLogs: () => Promise<void>;
   updateCycleStart: (date: string) => Promise<void>;

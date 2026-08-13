@@ -36,9 +36,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [workouts, currentCycleDay]);
 
   const latestWeight = useMemo(() => {
-    const entries = Object.entries(appState?.bodyWeight || {}).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
+    const entries = Object.entries(appState?.weightLog || {}).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
     return entries.length > 0 ? entries[0][1] : null;
-  }, [appState?.bodyWeight]);
+  }, [appState?.weightLog]);
 
   return (
     <div className="space-y-6 pb-20">
@@ -59,15 +59,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <TodayWorkoutCard
             workout={todayWorkout}
             cycleDay={currentCycleDay}
+            allWorkouts={workouts || []}
             onStart={onStartWorkout}
           />
 
-          <Calendar onSelectDate={(date) => onNavigateToHistory(date)} />
+          <Calendar
+            onSelectDate={(date) => onNavigateToHistory(date)}
+            onStartWorkout={onStartWorkout}
+          />
         </div>
 
         <div>
           <BodyWeightCard
-            bodyWeightLogs={appState?.bodyWeight || {}}
+            bodyWeightLogs={appState?.weightLog || {}}
             onLogWeight={logBodyWeight}
             onDeleteWeight={deleteBodyWeight}
           />
