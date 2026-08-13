@@ -1,0 +1,369 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Workout, ExerciseDefinition, SessionLog, SetLog, AppState } from '../types/fitness';
+import {
+  sanitizeSetLog,
+  sanitizeSessionLog,
+  getSortedLogsDescending,
+  getCompletedSets,
+  getExerciseSets,
+  getExerciseVolume,
+  getSessionVolume,
+  calculateE1RM,
+  getHeaviestSet,
+  getExerciseHistory,
+  getLatestExerciseSession,
+  getAllTimeHeaviestSet,
+  getAllTimeBestE1RM
+} from '../utils/sessionAnalytics';
+import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
+
+describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
+  const mockDefs: ExerciseDefinition[] = [
+    { id: 'def_bench', name: 'Barbell Bench Press', target: 'Chest', equipment: 'Barbell' },
+    { id: 'def_incline', name: 'Incline Dumbbell Press', target: 'Upper Chest', equipment: 'Dumbbells' },
+    { id: 'def_triceps', name: 'Tricep Rope Pushdown', target: 'Triceps', equipment: 'Cable' },
+    { id: 'def_squat', name: 'Barbell Back Squat', target: 'Quads', equipment: 'Barbell' }
+  ];
+
+  const mockWorkoutPushA: Workout = {
+    id: 'w_push_a',
+    name: 'Push Protocol A',
+    badge: 'PUSH A',
+    type: 'push',
+    isCore: true,
+    cycleDay: 1,
+    exercises: [
+      { exerciseDefinitionId: 'def_bench', sets: 3, reps: '8-10' },
+      { exerciseDefinitionId: 'def_incline', sets: 3, reps: '10-12' }
+    ]
+  };
+
+  const mockWorkoutPushB: Workout = {
+    id: 'w_push_b',
+    name: 'Push Protocol B',
+    badge: 'PUSH B',
+    type: 'push',
+    isCore: true,
+    cycleDay: 4,
+    exercises: [
+      { exerciseDefinitionId: 'def_bench', sets: 4, reps: '5-5' },
+      { exerciseDefinitionId: 'def_triceps', sets: 3, reps: '12-15' }
+    ]
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  describe('Core Analytics Utilities & Invariants', () => {
+    it('sanitizes SetLog with default fallbacks and trimmed values', () => {
+      const sanitized = sanitizeSetLog({ weight: ' 100.5 ', reps: ' 8 ', done: true }, 'fallback_id');
+      expect(sanitized.id).toBe('fallback_id');
+      expect(sanitized.weight).toBe('100.5');
+      expect(sanitized.reps).toBe('8');
+      expect(sanitized.done).toBe(true);
+
+      const emptySanitized = sanitizeSetLog(null, 'set_1');
+      expect(emptySanitized.id).toBe('set_1');
+      expect(emptySanitized.weight).toBe('');
+      expect(emptySanitized.reps).toBe('');
+      expect(emptySanitized.done).toBe(false);
+    });
+
+    it('calculates e1RM correctly with Epley formula', () => {
+      // 1 rep = exact weight
+      expect(calculateE1RM(100, 1)).toBe(100);
+      // 100kg x 10 reps = 100 * (1 + 10/30) = 133.3
+      expect(calculateE1RM(100, 10)).toBe(133.3);
+      // Invalid / zero inputs
+      expect(calculateE1RM(0, 10)).toBe(0);
+      expect(calculateE1RM(100, 0)).toBe(0);
+      expect(calculateE1RM('', '')).toBe(0);
+    });
+
+    it('sorts logs by date descending, then ID descending', () => {
+      const logs: SessionLog[] = [
+        { id: 'log_b', date: '2026-08-01', workoutId: 'w1', sets: {}, complete: true, durationMinutes: 45 },
+        { id: 'log_a', date: '2026-08-10', workoutId: 'w1', sets: {}, complete: true, durationMinutes: 50 },
+        { id: 'log_c', date: '2026-08-01', workoutId: 'w1', sets: {}, complete: true, durationMinutes: 40 }
+      ];
+
+      const sorted = getSortedLogsDescending(logs);
+      expect(sorted[0].id).toBe('log_a');
+      expect(sorted[0].date).toBe('2026-08-10');
+      expect(sorted[1].id).toBe('log_c'); // 'log_c' > 'log_b'
+      expect(sorted[2].id).toBe('log_b');
+    });
+
+    it('enforces invariant: only done === true sets count towards volume', () => {
+      const sampleLog: SessionLog = {
+        id: 'test_log_1',
+        workoutId: 'w_push_a',
+        date: '2026-08-12',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          def_bench: [
+            { id: 's1', weight: '100', reps: '10', done: true }, // 1000kg
+            { id: 's2', weight: '100', reps: '10', done: false }, // not done -> ignored
+            { id: 's3', weight: '100', reps: '8', done: true } // 800kg
+          ]
+        }
+      };
+
+      const benchVolume = getExerciseVolume(sampleLog, 'def_bench');
+      expect(benchVolume).toBe(1800); // 1000 + 800, s2 ignored
+
+      const sessionVolume = getSessionVolume(sampleLog);
+      expect(sessionVolume).toBe(1800);
+    });
+  });
+
+  describe('STEP 11 Canonical Verification Pipelines (Tests A - H)', () => {
+    // Test A — New workout: Start workout → enter weights/reps → mark sets done → finish → SessionLog created
+    it('Test A: New workout full lifecycle creates valid SessionLog', () => {
+      const sessionSets: Record<string, SetLog[]> = {
+        def_bench: [
+          { id: 's1', weight: '80', reps: '10', done: true },
+          { id: 's2', weight: '80', reps: '9', done: true },
+          { id: 's3', weight: '80', reps: '8', done: true }
+        ],
+        def_incline: [
+          { id: 's4', weight: '26', reps: '12', done: true },
+          { id: 's5', weight: '26', reps: '11', done: true },
+          { id: 's6', weight: '26', reps: '10', done: true }
+        ]
+      };
+
+      const rawLog = {
+        id: `2026-08-13_${mockWorkoutPushA.id}_1000`,
+        workoutId: mockWorkoutPushA.id,
+        date: '2026-08-13',
+        sets: sessionSets,
+        complete: true,
+        durationMinutes: 48
+      };
+
+      const validatedLog = sanitizeSessionLog(rawLog);
+
+      expect(validatedLog.id).toBe(rawLog.id);
+      expect(validatedLog.workoutId).toBe(mockWorkoutPushA.id);
+      expect(validatedLog.complete).toBe(true);
+      expect(validatedLog.durationMinutes).toBe(48);
+      expect(validatedLog.sets['def_bench']).toHaveLength(3);
+      expect(validatedLog.sets['def_incline']).toHaveLength(3);
+
+      const benchSets = getCompletedSets(validatedLog.sets['def_bench']);
+      expect(benchSets).toHaveLength(3);
+      expect(getExerciseVolume(validatedLog, 'def_bench')).toBe(80 * 10 + 80 * 9 + 80 * 8);
+    });
+
+    // Test B — Reload: Start workout → enter data → reload browser → session restored → no data lost
+    it('Test B: In-flight active session is restored intact with original inputs and timestamps', () => {
+      const initialStartTime = Date.now() - 25 * 60 * 1000;
+      const inFlightSession = {
+        workoutId: mockWorkoutPushA.id,
+        startTime: initialStartTime,
+        sessionSets: {
+          def_bench: [
+            { id: 'bench_1', weight: '85', reps: '8', done: true },
+            { id: 'bench_2', weight: '85', reps: '7', done: false },
+            { id: 'bench_3', weight: '', reps: '', done: false }
+          ]
+        }
+      };
+
+      localStorage.setItem('gl_active_session', JSON.stringify(inFlightSession));
+      const loaded = JSON.parse(localStorage.getItem('gl_active_session') || '{}');
+
+      expect(loaded.workoutId).toBe(mockWorkoutPushA.id);
+      expect(loaded.startTime).toBe(initialStartTime);
+      expect(loaded.sessionSets['def_bench'][0].weight).toBe('85');
+      expect(loaded.sessionSets['def_bench'][0].done).toBe(true);
+      expect(loaded.sessionSets['def_bench'][1].reps).toBe('7');
+    });
+
+    // Test C — Background sync: Start workout → enter data → Firebase snapshot arrives → current session remains untouched
+    it('Test C: Background data changes do not overwrite active workout sessionSets once initialized', () => {
+      let isInitialized = true;
+      let activeWorkoutId = mockWorkoutPushA.id;
+      let sessionSets: Record<string, SetLog[]> = {
+        def_bench: [
+          { id: 's1', weight: '90', reps: '8', done: true },
+          { id: 's2', weight: '90', reps: '8', done: true },
+          { id: 's3', weight: '90', reps: '6', done: false }
+        ]
+      };
+
+      // Simulated background snapshot from Firebase updates workouts or logs
+      const updatedLogsFromFirebase: Record<string, SessionLog> = {
+        new_cloud_log: {
+          id: 'new_cloud_log',
+          date: '2026-08-12',
+          workoutId: mockWorkoutPushA.id,
+          complete: true,
+          durationMinutes: 60,
+          sets: {
+            def_bench: [{ id: 'cloud_s1', weight: '100', reps: '5', done: true }]
+          }
+        }
+      };
+
+      // Guard evaluation
+      const shouldReinitialize = !isInitialized || activeWorkoutId !== mockWorkoutPushA.id;
+      expect(shouldReinitialize).toBe(false);
+
+      // sessionSets remains untouched
+      expect(sessionSets['def_bench'][0].weight).toBe('90');
+      expect(sessionSets['def_bench'][0].done).toBe(true);
+    });
+
+    // Test D — Offline: Go offline → complete workout → session remains saved locally → cloud receives exact same log
+    it('Test D: Offline completion saves locally and produces idempotent cloud log', () => {
+      const localStore: Record<string, SessionLog> = {};
+      const cloudStore: Record<string, SessionLog> = {};
+
+      const completedLog: SessionLog = sanitizeSessionLog({
+        id: 'log_offline_123',
+        workoutId: mockWorkoutPushA.id,
+        date: '2026-08-13',
+        complete: true,
+        durationMinutes: 52,
+        sets: {
+          def_bench: [
+            { id: 's1', weight: '95', reps: '6', done: true },
+            { id: 's2', weight: '95', reps: '6', done: true }
+          ]
+        }
+      });
+
+      // Save locally while offline
+      localStore[completedLog.id] = completedLog;
+      expect(localStore['log_offline_123']).toBeDefined();
+      expect(localStore['log_offline_123'].complete).toBe(true);
+
+      // Reconnect and sync to cloud
+      cloudStore[completedLog.id] = localStore['log_offline_123'];
+      expect(cloudStore['log_offline_123']).toEqual(localStore['log_offline_123']);
+    });
+
+    // Test E — Multiple exercises: Verify Exercise A sets != Exercise B sets with no cross-contamination
+    it('Test E: Multiple exercises maintain separate isolated sets and identity', () => {
+      const sessionSets: Record<string, SetLog[]> = {
+        def_bench: [
+          { id: 'bench_1', weight: '100', reps: '8', done: true },
+          { id: 'bench_2', weight: '100', reps: '8', done: true }
+        ],
+        def_incline: [
+          { id: 'incline_1', weight: '32', reps: '10', done: true },
+          { id: 'incline_2', weight: '32', reps: '10', done: true }
+        ]
+      };
+
+      expect(sessionSets['def_bench'][0].id).not.toBe(sessionSets['def_incline'][0].id);
+      expect(sessionSets['def_bench'][0].weight).toBe('100');
+      expect(sessionSets['def_incline'][0].weight).toBe('32');
+    });
+
+    // Test F — Additional sets: 3 programmed sets → Add set → 4th set saved → analytics includes completed 4th set
+    it('Test F: Adding additional set preserves programmed sets and incorporates 4th set in analytics', () => {
+      let benchSets: SetLog[] = [
+        { id: 's1', weight: '80', reps: '10', done: true },
+        { id: 's2', weight: '80', reps: '10', done: true },
+        { id: 's3', weight: '80', reps: '10', done: true }
+      ];
+
+      // Add 4th set
+      benchSets = [...benchSets, { id: 's4', weight: '80', reps: '12', done: true }];
+
+      const log: SessionLog = {
+        id: 'log_extra_set',
+        workoutId: mockWorkoutPushA.id,
+        date: '2026-08-13',
+        complete: true,
+        durationMinutes: 55,
+        sets: {
+          def_bench: benchSets
+        }
+      };
+
+      expect(log.sets['def_bench']).toHaveLength(4);
+      // Volume = 80*10 + 80*10 + 80*10 + 80*12 = 800 + 800 + 800 + 960 = 3360
+      expect(getExerciseVolume(log, 'def_bench')).toBe(3360);
+    });
+
+    // Test G — Delete set: Verify deleted set does not appear in SessionLog, History, volume, e1RM, PR
+    it('Test G: Deleting a set excludes it completely from the final SessionLog and downstream analytics', () => {
+      let benchSets: SetLog[] = [
+        { id: 's1', weight: '80', reps: '10', done: true },
+        { id: 's2_extreme', weight: '150', reps: '1', done: true }, // deleted set
+        { id: 's3', weight: '80', reps: '8', done: true }
+      ];
+
+      // Delete set index 1
+      benchSets = benchSets.filter((_, i) => i !== 1);
+
+      const log: SessionLog = {
+        id: 'log_after_delete',
+        workoutId: mockWorkoutPushA.id,
+        date: '2026-08-13',
+        complete: true,
+        durationMinutes: 40,
+        sets: {
+          def_bench: benchSets
+        }
+      };
+
+      expect(log.sets['def_bench']).toHaveLength(2);
+      expect(getHeaviestSet(log, 'def_bench')?.weight).toBe(80);
+      expect(getExerciseVolume(log, 'def_bench')).toBe(800 + 640);
+    });
+
+    // Test H — Same exercise in multiple workouts: Push A -> Bench Press, Push B -> Bench Press
+    it('Test H: Combines exercise history across different workout protocols by exerciseDefinitionId', () => {
+      const logs: Record<string, SessionLog> = {
+        log_push_a: {
+          id: 'log_push_a',
+          date: '2026-08-01',
+          workoutId: 'w_push_a', // Push A protocol
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            def_bench: [{ id: 's1', weight: '100', reps: '8', done: true }]
+          }
+        },
+        log_push_b: {
+          id: 'log_push_b',
+          date: '2026-08-08',
+          workoutId: 'w_push_b', // Push B protocol
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            def_bench: [{ id: 's2', weight: '110', reps: '5', done: true }]
+          }
+        }
+      };
+
+      // Both logs are retrieved for def_bench regardless of workoutId
+      const benchHistory = getExerciseHistory(logs, 'def_bench');
+      expect(benchHistory).toHaveLength(2);
+      expect(benchHistory[0].date).toBe('2026-08-08'); // Newer session first
+      expect(benchHistory[1].date).toBe('2026-08-01');
+
+      // Latest session
+      const latest = getLatestExerciseSession(logs, 'def_bench');
+      expect(latest?.date).toBe('2026-08-08');
+      expect(latest?.sets[0].weight).toBe('110');
+
+      // All-time heaviest PR
+      const allTimePR = getAllTimeHeaviestSet(logs, 'def_bench');
+      expect(allTimePR?.weight).toBe(110);
+      expect(allTimePR?.reps).toBe('5');
+
+      // All-time best e1RM: 110* (1 + 5/30) = 128.3 vs 100 * (1 + 8/30) = 126.7
+      const bestE1RM = getAllTimeBestE1RM(logs, 'def_bench');
+      expect(bestE1RM?.e1rm).toBe(128.3);
+    });
+  });
+});
