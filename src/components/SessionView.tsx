@@ -359,9 +359,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   useEffect(() => {
     if (!activeWorkout || expandedExId) return;
     const firstIncomplete = activeWorkout.exercises.find(ex => 
-      !sessionSets[ex.id]?.slice(0, ex.sets).every(s => s.done)
+      !sessionSets[ex.exerciseDefinitionId]?.slice(0, ex.sets).every(s => s.done)
     );
-    setExpandedExId(firstIncomplete?.id || activeWorkout.exercises[0]?.id || null);
+    setExpandedExId(firstIncomplete?.exerciseDefinitionId || activeWorkout.exercises[0]?.exerciseDefinitionId || null);
   }, [activeWorkout?.id, sessionSets, expandedExId]);
 
   // Clean up AbortControllers on unmount
@@ -386,7 +386,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       return;
     }
 
-    const hasSetsForThisWo = Object.keys(sessionSets).length > 0 && wo.exercises.every(ex => sessionSets[ex.id]);
+    const hasSetsForThisWo = Object.keys(sessionSets).length > 0 && wo.exercises.every(ex => sessionSets[ex.exerciseDefinitionId]);
 
     if (!hasSetsForThisWo) {
       initializedWorkoutIdRef.current = wo.id;
@@ -411,11 +411,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         const sortedLogValues = (Object.values(logs) as SessionLog[]).sort((a, b) => a.date.localeCompare(b.date));
 
         wo.exercises.forEach(ex => {
+          const exDefId = ex.exerciseDefinitionId;
           const exLogs = sortedLogValues
-            .filter(l => l.sets?.[ex.id] && (l.sets[ex.id] as SetLog[]).some(s => s.done && s.weight));
-          const lastExLog = exLogs.length > 0 ? (exLogs[exLogs.length - 1].sets?.[ex.id] as SetLog[]) : null;
+            .filter(l => l.sets?.[exDefId] && (l.sets[exDefId] as SetLog[]).some(s => s.done && s.weight));
+          const lastExLog = exLogs.length > 0 ? (exLogs[exLogs.length - 1].sets?.[exDefId] as SetLog[]) : null;
 
-          initialSets[ex.id] = Array.from({ length: Math.max(ex.sets, lastExLog?.length || 0) }, (_, idx) => {
+          initialSets[exDefId] = Array.from({ length: Math.max(ex.sets, lastExLog?.length || 0) }, (_, idx) => {
             const prevSet = lastExLog?.[idx];
             return {
               id: prevSet?.id || generateId(),
@@ -452,8 +453,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     if (!activeWorkout) return data;
 
     activeWorkout.exercises.forEach(ex => {
+      const exDefId = ex.exerciseDefinitionId;
       const exLogs = (Object.values(logs) as SessionLog[])
-        .map(l => ({ date: l.date, sets: l.sets?.[ex.id] }))
+        .map(l => ({ date: l.date, sets: l.sets?.[exDefId] }))
         .filter(l => l.sets && (l.sets as SetLog[]).some(s => s.done && s.weight));
 
       const lastSession = exLogs.length > 0 ? exLogs[exLogs.length - 1] : null;
@@ -467,7 +469,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           }
         });
       });
-      data[ex.id] = { lastSession, allTimePR };
+      data[exDefId] = { lastSession, allTimePR };
     });
     return data;
   }, [logs, activeWorkout?.id]);
@@ -477,7 +479,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     const prs: { name: string; weight: number; reps: string; isNew: boolean }[] = [];
     
     activeWorkout.exercises.forEach(ex => {
-      const todaySets = sessionSets[ex.id] || [];
+      const exDefId = ex.exerciseDefinitionId;
+      const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
+      const todaySets = sessionSets[exDefId] || [];
       const doneToday = todaySets.filter(s => s.done && s.weight);
       if (doneToday.length === 0) return;
       
@@ -495,7 +499,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       let hasHistory = false;
       
       historicLogs.forEach(l => {
-         const sets = l.sets?.[ex.id] || [];
+         const sets = l.sets?.[exDefId] || [];
          sets.forEach(s => {
            if (s.done && s.weight) {
              hasHistory = true;
@@ -509,7 +513,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       
       if (!hasHistory || todayMax > prevPRWeight) {
         prs.push({
-          name: ex.name,
+          name: resolvedEx.name,
           weight: todayMax,
           reps: todayReps,
           isNew: !hasHistory
@@ -518,7 +522,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
     
     return prs;
-  }, [isFinishing, activeWorkout, sessionSets, logs]);
+  }, [isFinishing, activeWorkout, sessionSets, logs, exerciseDefinitions]);
 
   const updateSet = (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
     // Audit: Prevent excessive length or non-numeric input for weights/reps
@@ -536,16 +540,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     // Auto-advance logic: if a set is marked done, check if the exercise is complete
     if (field === 'done' && value === true && activeWorkout) {
-      const ex = activeWorkout.exercises.find(e => e.id === exId);
+      const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
       if (ex) {
         const isNowDone = nextSets[exId]?.slice(0, ex.sets).every(s => s.done);
         if (isNowDone) {
           // Find the first incomplete exercise
           const nextIncomplete = activeWorkout.exercises.find(e => 
-            !nextSets[e.id]?.slice(0, e.sets).every(s => s.done)
+            !nextSets[e.exerciseDefinitionId]?.slice(0, e.sets).every(s => s.done)
           );
           if (nextIncomplete) {
-            setExpandedExId(nextIncomplete.id);
+            setExpandedExId(nextIncomplete.exerciseDefinitionId);
           }
         }
       }
@@ -700,7 +704,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     // Safety checks for extreme or illogical inputs to secure tracking data
     const extremeSets: { exName: string; weight: number; reps: number }[] = [];
     Object.entries(sessionSets).forEach(([exId, sets]) => {
-      const exName = activeWorkout.exercises.find(e => e.id === exId)?.name || 'Exercise';
+      const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
+      const exName = ex ? resolveWorkoutExercise(ex, exerciseDefinitions).name : 'Exercise';
       (sets as SetLog[]).forEach((s: SetLog) => {
         if (s.done) {
           const w = parseFloat(s.weight) || 0;
@@ -861,7 +866,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   }
 
   const allExercisesDone = activeWorkout.exercises.every(ex =>
-    (sessionSets[ex.id] || []).slice(0, ex.sets).every(s => s.done)
+    (sessionSets[ex.exerciseDefinitionId] || []).slice(0, ex.sets).every(s => s.done)
   );
 
   return (
@@ -922,12 +927,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       <Stack spacing="lg">
         {activeWorkout.exercises.map((ex, exIdx) => {
           const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
+          const exDefId = ex.exerciseDefinitionId;
           return (
             <ExerciseCard
-              key={ex.id ? `session-ex-${ex.id}-${exIdx}` : `session-ex-${exIdx}`}
+              key={`session-ex-${exDefId}-${exIdx}`}
               ex={resolvedEx}
               workoutType={activeWorkout.type}
-              ghostData={ghostData[ex.id]}
+              ghostData={ghostData[exDefId]}
               aiAdvice={aiAdvice}
               loadingAdvice={loadingAdvice}
               sessionSets={sessionSets}
@@ -935,9 +941,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               updateSet={updateSet}
               addSet={addSet}
               deleteSet={deleteSet}
-              isExpanded={expandedExId === ex.id}
+              isExpanded={expandedExId === exDefId}
               onToggleExpand={() => {
-                setExpandedExId(prev => prev === ex.id ? null : ex.id);
+                setExpandedExId(prev => prev === exDefId ? null : exDefId);
               }}
             />
           );
