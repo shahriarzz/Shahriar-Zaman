@@ -1,14 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Dumbbell } from 'lucide-react';
-import { useFitness } from '../context/FitnessContext';
-import { getNextCycleDayFromLogs, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
-import { SetLog, SessionLog } from '../types/fitness';
+import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { formatDateStr } from '../utils/dashboardSelectors';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
 import { useConfirm } from '../context/ConfirmContext';
-import { useCountUp } from '../hooks/useCountUp';
-import { INITIAL_WORKOUTS } from '../types/initialData';
+import { useDashboardData } from '../hooks/useDashboardData';
 import {
   Section,
   SectionHeader,
@@ -25,34 +23,26 @@ import {
 } from './ui';
 import { cn } from '../lib/utils';
 
-const formatDateStr = (dateStr: string) => {
-  try {
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  } catch {
-    return dateStr;
-  }
-};
-
 interface DashboardProps {
   onStartWorkout: (id: string) => void;
   onNavigateToHistory: (dateStr?: string) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigateToHistory }) => {
-  const { 
-    logs, 
-    workouts, 
-    appState, 
-    updateCycleStart, 
-    activeSession, 
+  const {
+    heroDateStr,
+    stats,
+    unfinishedSession,
+    todayWorkout,
+    currentCycleDay,
+    hasWorkouts,
+    workouts,
+    weightSummary,
     clearActiveSession,
-    logBodyWeight,
-    deleteBodyWeight,
-    setWorkouts
-  } = useFitness();
+    resetToCycleDay1,
+    reloadInitialWorkouts
+  } = useDashboardData();
+
   const { confirm } = useConfirm();
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const [weightInput, setWeightInput] = React.useState('');
@@ -67,102 +57,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isDropdownOpen]);
 
-  const currentCycleDay = React.useMemo(() => {
-    return getNextCycleDayFromLogs(logs, workouts, appState?.cycleStart);
-  }, [logs, workouts, appState?.cycleStart]);
-
-  const todayWorkout = React.useMemo(() => {
-    return (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
-  }, [workouts, currentCycleDay]);
-
-  const handleLogWeight = () => {
+  const handleLogWeightSubmit = () => {
     const val = parseFloat(weightInput);
     if (!val || val < 20 || val > 300) return;
     haptics.success();
-    logBodyWeight(dk(), val);
+    weightSummary.logWeight(val);
     setWeightInput('');
   };
-
-  const totalWeight = React.useMemo(() => {
-    return (Object.values(logs || {}) as SessionLog[]).reduce((acc: number, log) => {
-      let logVol = 0;
-      Object.values(log?.sets || {}).forEach((exSets) => {
-        (exSets as SetLog[] || []).forEach((s: SetLog) => {
-          if (s && s.done && s.weight && s.reps) {
-            logVol += (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0);
-          }
-        });
-      });
-      return acc + logVol;
-    }, 0);
-  }, [logs]);
-
-  const streakCount = React.useMemo(() => {
-    const datesSet = new Set((Object.values(logs || {}) as SessionLog[]).map(l => l.date));
-    if (datesSet.size === 0) return 0;
-    
-    let streak = 0;
-    let checkDate = new Date();
-    
-    const formatDate = (d: Date) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const r = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${r}`;
-    };
-
-    let checkStr = formatDate(checkDate);
-    
-    // If today is not in the set, check yesterday to sustain the current active streak
-    if (!datesSet.has(checkStr)) {
-      checkDate.setDate(checkDate.getDate() - 1);
-      checkStr = formatDate(checkDate);
-      if (!datesSet.has(checkStr)) {
-        return 0;
-      }
-    }
-    
-    while (datesSet.has(formatDate(checkDate))) {
-      streak++;
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-    return streak;
-  }, [logs]);
-
-  const animatedSessions = useCountUp(Object.keys(logs || {}).length);
-  const animatedCycles = useCountUp(Math.floor(Object.keys(logs || {}).length / 8));
-  const animatedWeight = useCountUp(Math.round(totalWeight));
-
-  // Memoized weight calculations
-  const weightEntries = React.useMemo(() => {
-    return (Object.entries(appState.weightLog || {}) as [string, number][])
-      .sort((a, b) => b[0].localeCompare(a[0]));
-  }, [appState.weightLog]);
-
-  const currentWeight = React.useMemo(() => {
-    if (weightEntries.length === 0) return '--';
-    return weightEntries[0][1];
-  }, [weightEntries]);
-
-  const recentWeightLogs = React.useMemo(() => {
-    return weightEntries.slice(0, 5);
-  }, [weightEntries]);
-
-  const sparklineData = React.useMemo(() => {
-    const raw = Object.entries(appState.weightLog || {}) as [string, number][];
-    if (raw.length <= 1) return null;
-    const sorted = [...raw].sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
-    const weights = sorted.map(e => e[1]);
-    const min = Math.min(...weights) - 0.5;
-    const max = Math.max(...weights) + 0.5;
-    const range = max - min || 1;
-    const w = 100 / (sorted.length - 1);
-    return { sorted, weights, min, max, range, w };
-  }, [appState.weightLog]);
-
-  const heroDateStr = React.useMemo(() => {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  }, []);
 
   return (
     <Stack spacing="2xl" className="pt-4">
@@ -178,28 +79,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       <Grid cols={2} colsMd={4} gap="md">
         <StatCard
           label="Day Streak"
-          value={streakCount.toString()}
+          value={stats.streakCount.toString()}
           accent="orange"
           icon={TrendingUp}
           size="standard"
         />
         <StatCard
           label="Sessions"
-          value={animatedSessions.toString()}
+          value={stats.animatedSessions.toString()}
           accent="emerald"
           icon={CalendarIcon}
           size="standard"
         />
         <StatCard
           label="Cycles"
-          value={animatedCycles.toString()}
+          value={stats.animatedCycles.toString()}
           accent="zinc"
           icon={Repeat}
           size="standard"
         />
         <StatCard
           label="kg Lifted"
-          value={animatedWeight >= 1000 ? (animatedWeight / 1000).toFixed(1) + 'k' : animatedWeight.toString()}
+          value={stats.formattedWeightLifted}
           accent="emerald"
           icon={Trophy}
           size="standard"
@@ -207,55 +108,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       </Grid>
 
       {/* Unfinished Session Alert */}
-      {activeSession && (() => {
-        const unfinishedWo = workouts.find(w => w.id === activeSession.workoutId);
-        if (!unfinishedWo) return null;
-        
-        const elapsedMin = Math.floor((Date.now() - activeSession.startTime) / 60000);
-        const relativeTime = elapsedMin < 60 
-          ? `${elapsedMin} min ago` 
-          : `${Math.floor(elapsedMin / 60)}h ago`;
-
-        return (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Banner
-              variant="warning"
-              badge="UNFINISHED SESSION RESTORED"
-              title={unfinishedWo.name}
-              description={`Started ${relativeTime}`}
-              action={
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="md"
-                    onClick={() => {
-                      haptics.warning();
-                      clearActiveSession();
-                    }}
-                    className="flex-1 sm:flex-initial"
-                  >
-                    Discard
-                  </Button>
-                  <Button
-                    variant="warning"
-                    size="md"
-                    onClick={() => {
-                      haptics.medium();
-                      onStartWorkout(activeSession.workoutId);
-                    }}
-                    className="flex-1 sm:flex-initial"
-                  >
-                    Resume Session
-                  </Button>
-                </div>
-              }
-            />
-          </motion.div>
-        );
-      })()}
+      {unfinishedSession && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Banner
+            variant="warning"
+            badge="UNFINISHED SESSION RESTORED"
+            title={unfinishedSession.workout.name}
+            description={`Started ${unfinishedSession.relativeTime}`}
+            action={
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={() => {
+                    haptics.warning();
+                    clearActiveSession();
+                  }}
+                  className="flex-1 sm:flex-initial"
+                >
+                  Discard
+                </Button>
+                <Button
+                  variant="warning"
+                  size="md"
+                  onClick={() => {
+                    haptics.medium();
+                    onStartWorkout(unfinishedSession.workoutId);
+                  }}
+                  className="flex-1 sm:flex-initial"
+                >
+                  Resume Session
+                </Button>
+              </div>
+            }
+          />
+        </motion.div>
+      )}
 
       {/* Today's Workout */}
       <Section
@@ -264,7 +155,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         title="Active Target"
         padding="none"
       >
-        {workouts.length === 0 ? (
+        {!hasWorkouts ? (
           <EmptyState
             icon={Dumbbell}
             title="Routines Library Is Empty"
@@ -273,7 +164,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               label: 'Reload Engine',
               onClick: () => {
                 haptics.medium();
-                setWorkouts(INITIAL_WORKOUTS);
+                reloadInitialWorkouts();
               }
             }}
           />
@@ -321,7 +212,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             description={`No core workout found for Day ${currentCycleDay}.`}
             action={{
               label: 'Reset to Cycle Day 1',
-              onClick: () => updateCycleStart(dk())
+              onClick: () => resetToCycleDay1()
             }}
           />
         )}
@@ -341,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Current</span>
               <div className="flex items-end gap-1.5">
                 <span className="text-4xl font-black text-white tabular-nums">
-                  {currentWeight}
+                  {weightSummary.currentWeight}
                 </span>
                 <span className="text-zinc-500 font-mono text-xs mb-1.5">kg</span>
               </div>
@@ -360,7 +251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   onChange={(e) => setWeightInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      handleLogWeight();
+                      handleLogWeightSubmit();
                     }
                   }}
                   className="text-center font-bold"
@@ -369,7 +260,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               <Button
                 variant="primary"
                 color="orange"
-                onClick={handleLogWeight}
+                onClick={handleLogWeightSubmit}
                 className="whitespace-nowrap"
               >
                 Log
@@ -378,13 +269,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           </div>
 
           {/* Sparkline */}
-          {sparklineData && (
+          {weightSummary.sparklineData && (
             <Stack spacing="xs">
               <div className="relative h-12 w-full">
                 <svg viewBox="0 0 100 32" className="w-full h-full" preserveAspectRatio="none">
                   <polyline
-                    points={sparklineData.sorted.map((e, i) => 
-                      `${i * sparklineData.w},${32 - ((e[1] - sparklineData.min) / sparklineData.range) * 28}`
+                    points={weightSummary.sparklineData.sorted.map((e, i) => 
+                      `${i * weightSummary.sparklineData!.w},${32 - ((e[1] - weightSummary.sparklineData!.min) / weightSummary.sparklineData!.range) * 28}`
                     ).join(' ')}
                     fill="none"
                     stroke={SEMANTIC_COLORS.orange}
@@ -393,11 +284,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                   />
-                  {sparklineData.sorted.map((e, i) => (
+                  {weightSummary.sparklineData.sorted.map((e, i) => (
                     <circle
                       key={`spark-${e[0]}-${i}`}
-                      cx={i * sparklineData.w}
-                      cy={32 - ((e[1] - sparklineData.min) / sparklineData.range) * 28}
+                      cx={i * weightSummary.sparklineData!.w}
+                      cy={32 - ((e[1] - weightSummary.sparklineData!.min) / weightSummary.sparklineData!.range) * 28}
                       r="2"
                       fill={SEMANTIC_COLORS.orange}
                       vectorEffect="non-scaling-stroke"
@@ -408,17 +299,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
               {/* Min/Max labels */}
               <div className="flex justify-between text-[8px] font-mono text-zinc-600 uppercase">
-                <span>{sparklineData.sorted[0][0].slice(5)}</span>
+                <span>{weightSummary.sparklineData.sorted[0][0].slice(5)}</span>
                 <span className="text-zinc-500">
-                  {Math.min(...sparklineData.weights)}kg → {Math.max(...sparklineData.weights)}kg
+                  {Math.min(...weightSummary.sparklineData.weights)}kg → {Math.max(...weightSummary.sparklineData.weights)}kg
                 </span>
-                <span>{sparklineData.sorted[sparklineData.sorted.length - 1][0].slice(5)}</span>
+                <span>{weightSummary.sparklineData.sorted[weightSummary.sparklineData.sorted.length - 1][0].slice(5)}</span>
               </div>
             </Stack>
           )}
 
           {/* Empty state */}
-          {weightEntries.length === 0 && (
+          {weightSummary.weightEntries.length === 0 && (
             <EmptyState
               size="compact"
               title="No Weight Records"
@@ -427,11 +318,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           )}
 
           {/* Recent Entries */}
-          {recentWeightLogs.length > 0 && (
+          {weightSummary.recentWeightLogs.length > 0 && (
             <div className="border-t border-zinc-800/60 pt-4 space-y-2">
               <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Recent Logs</div>
               <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
-                {recentWeightLogs.map(([date, weight]) => (
+                {weightSummary.recentWeightLogs.map(([date, weight]) => (
                   <Card key={date} variant="standard" padding="compact" className="flex items-center justify-between text-xs font-mono">
                     <span className="text-zinc-400">{formatDateStr(date)}</span>
                     <div className="flex items-center gap-3">
@@ -445,7 +336,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                             isDanger: true,
                           });
                           if (proceed) {
-                            deleteBodyWeight(date);
+                            weightSummary.deleteWeight(date);
                           }
                         }}
                         className="text-zinc-600 hover:text-red-400 p-1 transition-colors cursor-pointer"
@@ -527,4 +418,3 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     </Stack>
   );
 };
-
