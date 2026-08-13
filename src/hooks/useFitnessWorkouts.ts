@@ -67,7 +67,6 @@ export function useFitnessWorkouts({
 
     const newExEntry: WorkoutExercise = {
       exerciseDefinitionId: exerciseDefId,
-      exerciseId: exerciseDefId,
       sets: programming?.sets ?? 3,
       reps: programming?.reps ?? '10–12',
       rest: programming?.rest ?? '90s',

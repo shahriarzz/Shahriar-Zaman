@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Workout, SessionLog, AppState, ExerciseDefinition } from '../types/fitness';
+import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
 
 export function useFitnessData() {
@@ -53,6 +53,7 @@ export function useFitnessData() {
   // Safe debounced persistence to localStorage
   useEffect(() => {
     try {
+      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
       localStorage.setItem('gl_exercise_definitions', JSON.stringify(exerciseDefinitions));
     } catch (e) {
       console.warn("Failed to persist gl_exercise_definitions", e);
@@ -61,6 +62,7 @@ export function useFitnessData() {
 
   useEffect(() => {
     try {
+      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
       localStorage.setItem('gl_workouts', JSON.stringify(workouts));
     } catch (e) {
       console.warn("Failed to persist gl_workouts", e);
@@ -69,6 +71,7 @@ export function useFitnessData() {
 
   useEffect(() => {
     try {
+      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
       localStorage.setItem('gl_logs', JSON.stringify(logs));
     } catch (e) {
       console.warn("Failed to persist gl_logs", e);
@@ -77,11 +80,13 @@ export function useFitnessData() {
 
   useEffect(() => {
     try {
+      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
       localStorage.setItem('gl_state', JSON.stringify(appState));
     } catch (e) {
       console.warn("Failed to persist gl_state", e);
     }
   }, [appState]);
+
 
   return {
     exerciseDefinitions,

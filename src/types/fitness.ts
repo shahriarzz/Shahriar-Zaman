@@ -11,7 +11,6 @@ export interface ExerciseDefinition {
 
 export interface WorkoutExercise {
   exerciseDefinitionId: string;
-  exerciseId?: string; // Backward compatibility alias
   sets: number;
   reps: string;
   rest?: string;
@@ -19,7 +18,7 @@ export interface WorkoutExercise {
   tags?: string[];
 }
 
-// Backward compatibility alias for components operating on combined views
+// Helper alias for components building combined display objects from ExerciseDefinition + WorkoutExercise
 export type Exercise = ExerciseDefinition & WorkoutExercise & { id: string };
 
 export interface CardioFinisher {
@@ -51,7 +50,7 @@ export interface SessionLog {
   id: string;
   workoutId: string;
   date: string; // YYYY-MM-DD
-  sets: Record<string, SetLog[]>; // exerciseId -> sets
+  sets: Record<string, SetLog[]>; // exerciseDefinitionId -> sets
   complete: boolean;
   durationMinutes: number; // minutes
 }
@@ -59,5 +58,14 @@ export interface SessionLog {
 export interface AppState {
   cycleStart: string; // YYYY-MM-DD
   weightLog?: Record<string, number>; // date -> kg
-  exerciseDefinitions?: ExerciseDefinition[];
+}
+
+export const CURRENT_SCHEMA_VERSION = 2;
+
+export interface FitnessDatabase {
+  schemaVersion: number;
+  exerciseDefinitions: ExerciseDefinition[];
+  workouts: Workout[];
+  logs: Record<string, SessionLog>;
+  appState: AppState;
 }

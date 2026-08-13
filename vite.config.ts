@@ -39,6 +39,10 @@ function firebaseConfigFallbackPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    test: {
+      environment: 'jsdom',
+      globals: true,
+    },
     plugins: [react(), tailwindcss(), firebaseConfigFallbackPlugin()],
     resolve: {
       alias: {

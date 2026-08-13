@@ -152,7 +152,6 @@ export function resolveWorkoutExercise(
   return {
     ...def,
     exerciseDefinitionId: def.id,
-    exerciseId: def.id,
     id: def.id,
     sets: we.sets || 3,
     reps: we.reps || '10–12',

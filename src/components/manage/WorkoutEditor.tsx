@@ -192,7 +192,6 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     const defId = (libEx as Exercise).exerciseDefinitionId || libEx.id;
     const newEx: WorkoutExercise = {
       exerciseDefinitionId: defId,
-      exerciseId: defId,
       sets: (libEx as Exercise).sets || 3,
       reps: (libEx as Exercise).reps || '10–12',
       rest: (libEx as Exercise).rest || '90s',
@@ -221,7 +220,6 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
     const newEx: WorkoutExercise = {
       exerciseDefinitionId: createdDef.id,
-      exerciseId: createdDef.id,
       sets: Math.max(1, newExSets || 3),
       reps: newExReps.trim() || '10–12',
       rest: '90s',
