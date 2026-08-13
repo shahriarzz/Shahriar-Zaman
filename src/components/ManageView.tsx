@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useFitness } from '../store/FitnessContext';
+import { useFitness } from '../context/FitnessContext';
 import { ProgramIdentityCard } from './manage/ProgramIdentityCard';
 import { AccountSection } from './manage/AccountSection';
 import { DataMaintenanceSection } from './manage/DataMaintenanceSection';

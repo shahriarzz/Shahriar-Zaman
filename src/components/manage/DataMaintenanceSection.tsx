@@ -12,8 +12,8 @@ import {
   Activity,
   AlertTriangle
 } from 'lucide-react';
-import { useFitness } from '../../store/FitnessContext';
-import { useConfirm } from '../../store/ConfirmContext';
+import { useFitness } from '../../context/FitnessContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { SessionLog } from '../../types/fitness';
 import { INITIAL_WORKOUTS } from '../../types/initialData';
 import { haptics } from '../../utils/haptics';

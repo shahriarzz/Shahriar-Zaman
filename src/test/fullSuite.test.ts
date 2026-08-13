@@ -2,6 +2,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { loadInitialFitnessData, extractExerciseDefinitionsFromWorkouts } from '../utils/fitnessMigration';
 import { trackDeletedId, getDeletedIdsTracker, clearDeletedIdsTracker, areLogsEqual } from '../utils/fitnessSyncHelpers';
+import {
+  createExerciseDefinitionMap,
+  getResolvedExerciseMeta,
+  getPriorityExercises,
+  mapTargetToCategory,
+  calcEpley1RM
+} from '../utils/fitnessAnalyticsHelpers';
 import { ExerciseDefinition, Workout, SessionLog, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_EXERCISE_DEFINITIONS, INITIAL_WORKOUTS } from '../types/initialData';
 
@@ -345,6 +352,48 @@ describe('GainLog Comprehensive Validation Suite', () => {
 
       expect(completedPushALogs.length).toBeGreaterThan(150);
       expect(duration).toBeLessThan(10); // Under 10ms execution limit
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 8. ANALYTICS EXERCISE RESOLUTION HELPERS
+  // -------------------------------------------------------------
+  describe('8. Analytics Exercise Resolution Helpers', () => {
+    it('resolves exercise metadata via exerciseDefinitionId cleanly', () => {
+      const defs: ExerciseDefinition[] = [
+        { id: 'e1', name: 'Barbell Flat Bench Press', target: 'Chest', tags: ['priority'] },
+        { id: 'e2', name: 'Incline Dumbbell Press', target: 'Upper Chest' }
+      ];
+      const defsMap = createExerciseDefinitionMap(defs);
+
+      const resolved = getResolvedExerciseMeta('e1', defsMap);
+      expect(resolved.id).toBe('e1');
+      expect(resolved.name).toBe('Barbell Flat Bench Press');
+      expect(resolved.target).toBe('Chest');
+      expect(resolved.category).toBe('Chest');
+      expect(resolved.tags).toContain('priority');
+    });
+
+    it('ranks priority and compound exercises correctly', () => {
+      const defs: ExerciseDefinition[] = [
+        { id: 'e1', name: 'Barbell Squat', target: 'Quads', tags: ['priority'] },
+        { id: 'e2', name: 'Barbell Deadlift', target: 'Back' },
+        { id: 'e3', name: 'Triceps Pushdown', target: 'Triceps' }
+      ];
+      const defsMap = createExerciseDefinitionMap(defs);
+      const priority = getPriorityExercises(defs, [], defsMap);
+
+      expect(priority.length).toBeGreaterThanOrEqual(3);
+      expect(priority[0].id).toBe('e1'); // Priority tagged
+      expect(priority[1].name).toContain('Deadlift'); // High compound score
+    });
+
+    it('calculates 1RM Epley formula and maps targets accurately', () => {
+      expect(calcEpley1RM(100, 1)).toBe(100);
+      expect(calcEpley1RM(100, 10)).toBe(133.3);
+      expect(mapTargetToCategory('Triceps Long Head')).toBe('Triceps');
+      expect(mapTargetToCategory('Hamstrings')).toBe('Legs');
+      expect(mapTargetToCategory('Lats')).toBe('Back');
     });
   });
 });

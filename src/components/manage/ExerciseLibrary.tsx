@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, Tag, Dumbbell, Layers, Filter } from 'lucide-react';
 import { Workout, Exercise, ExerciseDefinition } from '../../types/fitness';
-import { useFitness } from '../../store/FitnessContext';
+import { useFitness } from '../../context/FitnessContext';
 import {
   Card,
   Button,
@@ -9,6 +9,7 @@ import {
   Badge,
   Stack,
   Grid,
+  SegmentedControl,
   TYPOGRAPHY,
   GAP,
   BORDER,
@@ -108,30 +109,20 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
         leftIcon={<Search size={14} className="text-zinc-500" />}
       />
 
-      {/* Muscle Filter Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
-        {targetCategories.map(cat => {
-          const isSelected = selectedFilter === cat;
-          return (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => {
-                haptics.selection();
-                setSelectedFilter(cat);
-              }}
-              className={cn(
-                "px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider transition-all shrink-0 cursor-pointer select-none border",
-                isSelected
-                  ? "bg-orange-500 border-orange-500 text-black shadow-sm"
-                  : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-              )}
-            >
-              {cat}
-            </button>
-          );
-        })}
-      </div>
+      {/* Muscle Filter Categories using SegmentedControl primitive */}
+      <SegmentedControl
+        options={targetCategories.map(cat => ({
+          value: cat,
+          label: cat
+        }))}
+        value={selectedFilter}
+        onChange={(val) => {
+          haptics.selection();
+          setSelectedFilter(val);
+        }}
+        accent="orange"
+        className="overflow-x-auto custom-scrollbar flex-nowrap"
+      />
 
       {/* Exercise Cards Grid / List */}
       <div className="space-y-2.5">

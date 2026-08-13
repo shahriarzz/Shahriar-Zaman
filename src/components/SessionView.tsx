@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
-import { useFitness } from '../store/FitnessContext';
-import { useConfirm } from '../store/ConfirmContext';
+import { useFitness } from '../context/FitnessContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
 import { cn } from '../lib/utils';

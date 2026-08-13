@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
-import { useFitness } from '../store/FitnessContext';
+import { useFitness } from '../context/FitnessContext';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -70,9 +70,9 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
 
   const getSyncTooltip = () => {
     switch (syncStatus) {
-      case 'syncing': return 'Synchronizing database...';
-      case 'synced': return 'All training splits isomorphically synced';
-      case 'failed': return `Synchronization issue: ${syncError || 'Timeout'}`;
+      case 'syncing': return 'Syncing training data...';
+      case 'synced': return 'Training data fully synced';
+      case 'failed': return `Sync issue: ${syncError || 'Timeout'}`;
       default: return 'Local storage active';
     }
   };

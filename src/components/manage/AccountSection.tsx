@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Cloud, User as UserIcon, LogOut, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useFitness } from '../../store/FitnessContext';
-import { useConfirm } from '../../store/ConfirmContext';
+import { useFitness } from '../../context/FitnessContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { haptics } from '../../utils/haptics';
 import {
   Section,

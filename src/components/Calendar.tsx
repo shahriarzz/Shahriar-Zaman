@@ -13,7 +13,7 @@ import {
   Calendar as CalendarIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useFitness } from '../store/FitnessContext';
+import { useFitness } from '../context/FitnessContext';
 import {
   getCycleDayForDate,
   WORKOUT_COLORS,

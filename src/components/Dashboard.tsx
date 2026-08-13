@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Dumbbell } from 'lucide-react';
-import { useFitness } from '../store/FitnessContext';
+import { useFitness } from '../context/FitnessContext';
 import { getNextCycleDayFromLogs, WORKOUT_COLORS, dk } from '../utils/fitnessHelpers';
 import { SetLog, SessionLog } from '../types/fitness';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
-import { useConfirm } from '../store/ConfirmContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useCountUp } from '../hooks/useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, Dumbbell, Repeat } from 'lucide-react';
 import { Workout, Exercise } from '../../types/fitness';
-import { useFitness } from '../../store/FitnessContext';
+import { useFitness } from '../../context/FitnessContext';
 import { haptics } from '../../utils/haptics';
 import { CycleEditor } from './CycleEditor';
 import { WorkoutEditor } from './WorkoutEditor';

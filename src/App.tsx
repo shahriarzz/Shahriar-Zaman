@@ -3,15 +3,14 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { FitnessProvider } from './store/FitnessContext';
-import { ConfirmProvider, useConfirm } from './store/ConfirmContext';
+import { FitnessProvider, useFitness } from './context/FitnessContext';
+import { ConfirmProvider, useConfirm } from './context/ConfirmContext';
 import { Layout, ActiveTab } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { SessionView } from './components/SessionView';
 import { HistoryView } from './components/HistoryView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { ManageView } from './components/ManageView';
-import { useFitness } from './store/FitnessContext';
 import { isFirebaseConfigured } from './lib/firebase';
 
 function AppContent() {

@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 import { Workout, Exercise, WorkoutExercise, ExerciseDefinition } from '../../types/fitness';
 import { WORKOUT_COLORS, resolveWorkoutExercise } from '../../utils/fitnessHelpers';
-import { useConfirm } from '../../store/ConfirmContext';
-import { useFitness } from '../../store/FitnessContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useFitness } from '../../context/FitnessContext';
 import { haptics } from '../../utils/haptics';
 import {
   Card,

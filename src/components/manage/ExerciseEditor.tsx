@@ -8,6 +8,7 @@ import {
   Badge,
   Stack,
   Grid,
+  SegmentedControl,
   TYPOGRAPHY,
   GAP,
   BORDER,
@@ -121,34 +122,17 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
         </div>
       </div>
 
-      {/* Mode Selector Tabs */}
-      <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-fit">
-        <button
-          type="button"
-          onClick={() => setActiveTab('definition')}
-          className={cn(
-            "px-4 py-1.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer select-none",
-            activeTab === 'definition'
-              ? "bg-zinc-800 text-white shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200"
-          )}
-        >
-          1. Exercise Definition
-        </button>
-        {workout && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('programming')}
-            className={cn(
-              "px-4 py-1.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer select-none",
-              activeTab === 'programming'
-                ? "bg-orange-500 text-black shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
-            )}
-          >
-            2. Workout Programming ({workout.name})
-          </button>
-        )}
+      {/* Mode Selector Tabs using SegmentedControl primitive */}
+      <div className="w-fit">
+        <SegmentedControl
+          options={[
+            { value: 'definition', label: '1. Exercise Definition' },
+            ...(workout ? [{ value: 'programming', label: `2. Programming (${workout.name})` }] : [])
+          ]}
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as 'definition' | 'programming')}
+          accent="orange"
+        />
       </div>
 
       {/* SECTION 1: GLOBAL EXERCISE DEFINITION */}

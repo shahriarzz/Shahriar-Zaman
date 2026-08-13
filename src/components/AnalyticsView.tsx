@@ -43,8 +43,17 @@ import {
   isSameMonth,
   eachDayOfInterval
 } from 'date-fns';
-import { useFitness } from '../store/FitnessContext';
+import { useFitness } from '../context/FitnessContext';
 import { calculateVolume, WORKOUT_COLORS, getCycleDay, getCycleDayForDate } from '../utils/fitnessHelpers';
+import {
+  MUSCLE_CATEGORIES,
+  MuscleCategory,
+  mapTargetToCategory,
+  calcEpley1RM,
+  createExerciseDefinitionMap,
+  getResolvedExerciseMeta,
+  getPriorityExercises
+} from '../utils/fitnessAnalyticsHelpers';
 import { SessionLog, SetLog, Exercise, Workout, WorkoutType } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -74,74 +83,6 @@ import {
 
 type TimeRange = '7d' | '30d' | '90d' | 'all';
 type MuscleMetric = 'volume' | 'sets' | 'frequency';
-
-// Standard 8-category muscle taxonomy
-export const MUSCLE_CATEGORIES = [
-  'Chest',
-  'Shoulders',
-  'Back',
-  'Biceps',
-  'Triceps',
-  'Forearms',
-  'Legs',
-  'Core'
-] as const;
-
-export type MuscleCategory = typeof MUSCLE_CATEGORIES[number];
-
-// Deliberate non-overlapping muscle category mapping
-function mapTargetToCategory(targetStr: string): MuscleCategory {
-  if (!targetStr) return 'Core';
-  const t = targetStr.toLowerCase();
-
-  if (t.includes('tricep')) return 'Triceps';
-  if (t.includes('bicep')) return 'Biceps';
-  if (t.includes('forearm') || t.includes('grip') || t.includes('wrist')) return 'Forearms';
-  if (t.includes('arm')) return 'Biceps';
-
-  if (t.includes('chest') || t.includes('pec')) return 'Chest';
-  if (t.includes('shoulder') || t.includes('delt') || t.includes('trap')) return 'Shoulders';
-  if (t.includes('back') || t.includes('lat') || t.includes('rhomboid') || t.includes('erector') || t.includes('spine')) return 'Back';
-  if (t.includes('quad') || t.includes('hamstring') || t.includes('glute') || t.includes('calf') || t.includes('calves') || t.includes('leg') || t.includes('thigh') || t.includes('adductor')) return 'Legs';
-  if (t.includes('core') || t.includes('ab') || t.includes('oblique')) return 'Core';
-
-  return 'Core';
-}
-
-// 1RM Epley formula
-function calcEpley1RM(weight: number, reps: number): number {
-  if (weight <= 0 || reps <= 0) return 0;
-  if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30) * 10) / 10;
-}
-
-// Compound lift priority ranker
-const COMPOUND_KEYWORDS = [
-  'squat',
-  'bench',
-  'deadlift',
-  'overhead press',
-  'ohp',
-  'shoulder press',
-  'incline',
-  'row',
-  'pull-up',
-  'pullup',
-  'chin-up',
-  'lat pulldown',
-  'leg press',
-  'rdl'
-];
-
-function getCompoundScore(name: string): number {
-  const lower = name.toLowerCase();
-  for (let i = 0; i < COMPOUND_KEYWORDS.length; i++) {
-    if (lower.includes(COMPOUND_KEYWORDS[i])) {
-      return 100 - i;
-    }
-  }
-  return 0;
-}
 
 // Semantic chart color constants derived from token system
 const CHART_THEME = {
@@ -173,7 +114,7 @@ function getHeatmapIntensity(vol: number, maxVol: number) {
 }
 
 export const AnalyticsView: React.FC = () => {
-  const { logs, workouts, appState } = useFitness();
+  const { logs, workouts, appState, exerciseDefinitions } = useFitness();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>('volume');
   const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(null);
@@ -181,7 +122,7 @@ export const AnalyticsView: React.FC = () => {
   const [showAllRecords, setShowAllRecords] = useState<boolean>(false);
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
 
-  // 1. Fast workout & exercise lookups
+  // 1. Fast workout & canonical exercise definition lookups
   const workoutMap = useMemo(() => {
     const map = new Map<string, Workout>();
     (workouts || []).forEach(w => map.set(w.id, w));
@@ -198,48 +139,15 @@ export const AnalyticsView: React.FC = () => {
     return map;
   }, [workouts]);
 
-  const { exMap, priorityExercises } = useMemo(() => {
-    const meta: Record<string, { exercise: Exercise; workoutName: string; workoutType: string }> = {};
-    const priorityList: { id: string; name: string; target: string }[] = [];
-    const seenPriorityIds = new Set<string>();
+  // Canonical Exercise Definitions Lookup Map
+  const defsMap = useMemo(() => {
+    return createExerciseDefinitionMap(exerciseDefinitions || []);
+  }, [exerciseDefinitions]);
 
-    // 1. Gather all explicitly tagged priority exercises
-    (workouts || []).forEach(wo => {
-      (wo.exercises || []).forEach(ex => {
-        meta[ex.id] = { exercise: ex, workoutName: wo.name, workoutType: wo.type };
-        if (ex.tags?.includes('priority') && !seenPriorityIds.has(ex.id)) {
-          seenPriorityIds.add(ex.id);
-          priorityList.push({ id: ex.id, name: ex.name, target: ex.target });
-        }
-      });
-    });
-
-    // 2. If priority list is sparse, collect and rank compound lifts
-    if (priorityList.length < 5) {
-      const candidates: { id: string; name: string; target: string; score: number }[] = [];
-      (workouts || []).forEach(wo => {
-        (wo.exercises || []).forEach(ex => {
-          if (!seenPriorityIds.has(ex.id)) {
-            const score = getCompoundScore(ex.name);
-            candidates.push({ id: ex.id, name: ex.name, target: ex.target, score });
-          }
-        });
-      });
-
-      // Sort by compound relevance score descending
-      candidates.sort((a, b) => b.score - a.score);
-
-      for (const cand of candidates) {
-        if (priorityList.length >= 6) break;
-        if (!seenPriorityIds.has(cand.id)) {
-          seenPriorityIds.add(cand.id);
-          priorityList.push({ id: cand.id, name: cand.name, target: cand.target });
-        }
-      }
-    }
-
-    return { exMap: meta, priorityExercises: priorityList };
-  }, [workouts]);
+  // Priority & Compound Exercises for Strength Progression Selector
+  const priorityExercises = useMemo(() => {
+    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
+  }, [exerciseDefinitions, workouts, defsMap]);
 
   // Active 1RM selection
   const active1RMExerciseId = selected1RMExerciseId || priorityExercises[0]?.id || '';
@@ -295,8 +203,8 @@ export const AnalyticsView: React.FC = () => {
     const firstLogDate = sortedLogs[0]?.date || null;
     const lastLogDate = sortedLogs[sortedLogs.length - 1]?.date || null;
 
-    // PRs: Keyed by normalized exercise name to avoid duplicates across workouts with differing exercise IDs
-    const recordsByNameMap: Record<string, {
+    // PRs: Keyed by canonical exercise definition ID
+    const recordsByIdMap: Record<string, {
       exerciseName: string;
       maxWeight: number;
       repsAtMax: number;
@@ -357,7 +265,7 @@ export const AnalyticsView: React.FC = () => {
         } catch (_) {}
       }
 
-      // Process sets for PRs with name deduplication
+      // Process sets for PRs using canonical exercise definition IDs
       if (log.sets) {
         Object.entries(log.sets).forEach(([exId, setList]) => {
           const doneSets = (setList as SetLog[]).filter(s => s.done);
@@ -368,18 +276,17 @@ export const AnalyticsView: React.FC = () => {
             const r = parseInt(s.reps, 10) || 0;
             if (w > 0 && r > 0) {
               const epley = calcEpley1RM(w, r);
-              const exMeta = exMap[exId];
-              const exName = exMeta?.exercise.name || 'Exercise';
-              const normName = exName.trim().toLowerCase();
+              const exMeta = getResolvedExerciseMeta(exId, defsMap);
+              const normId = exMeta.id;
 
-              if (!recordsByNameMap[normName] || epley > recordsByNameMap[normName].maxEpley) {
-                recordsByNameMap[normName] = {
-                  exerciseName: exName,
+              if (!recordsByIdMap[normId] || epley > recordsByIdMap[normId].maxEpley) {
+                recordsByIdMap[normId] = {
+                  exerciseName: exMeta.name,
                   maxWeight: w,
                   repsAtMax: r,
                   maxEpley: epley,
                   date: log.date,
-                  exerciseId: exId
+                  exerciseId: normId
                 };
               }
             }
@@ -411,9 +318,8 @@ export const AnalyticsView: React.FC = () => {
           const doneSets = (setList as SetLog[]).filter(s => s.done);
           if (doneSets.length === 0) return;
 
-          const exMeta = exMap[exId];
-          const targetStr = exMeta?.exercise.target || 'Core';
-          const category = mapTargetToCategory(targetStr);
+          const exMeta = getResolvedExerciseMeta(exId, defsMap);
+          const category = exMeta.category;
 
           let exVol = 0;
           doneSets.forEach(s => {
@@ -426,20 +332,19 @@ export const AnalyticsView: React.FC = () => {
           rangeMuscleSets[category] = (rangeMuscleSets[category] || 0) + doneSets.length;
           rangeMuscleFrequency[category]?.add(log.id);
 
-          const exName = exMeta?.exercise.name || 'Exercise';
-          const normKey = exName.trim().toLowerCase();
-          if (!exerciseSessionCounts[normKey]) {
-            exerciseSessionCounts[normKey] = {
-              name: exName,
+          const normId = exMeta.id;
+          if (!exerciseSessionCounts[normId]) {
+            exerciseSessionCounts[normId] = {
+              name: exMeta.name,
               count: 0,
               volume: 0
             };
           }
-          exerciseSessionCounts[normKey].count += 1;
-          exerciseSessionCounts[normKey].volume += exVol;
+          exerciseSessionCounts[normId].count += 1;
+          exerciseSessionCounts[normId].volume += exVol;
 
           // 1RM Trend point if matching active 1RM exercise
-          if (exId === active1RMExerciseId) {
+          if (exId === active1RMExerciseId || exMeta.id === active1RMExerciseId) {
             let maxSetEpley = 0;
             let maxSetDetail = '';
             doneSets.forEach(s => {
@@ -623,7 +528,7 @@ export const AnalyticsView: React.FC = () => {
     }
 
     // Sort PR records by highest estimated 1RM descending
-    const recordsList = Object.values(recordsByNameMap).sort((a, b) => b.maxEpley - a.maxEpley);
+    const recordsList = Object.values(recordsByIdMap).sort((a, b) => b.maxEpley - a.maxEpley);
 
     return {
       totalLogsCount,
@@ -658,7 +563,7 @@ export const AnalyticsView: React.FC = () => {
       daysSinceLast,
       avgGapDays
     };
-  }, [logs, workouts, exMap, workoutMap, coreWorkoutByCycleDayMap, active1RMExerciseId, timeRange, appState?.cycleStart]);
+  }, [logs, workouts, defsMap, workoutMap, coreWorkoutByCycleDayMap, active1RMExerciseId, timeRange, appState?.cycleStart]);
 
   // 3. Heatmap calendar data
   const heatmapData = useCalendarGrid({
