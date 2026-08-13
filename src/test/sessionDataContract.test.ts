@@ -366,4 +366,196 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       expect(bestE1RM?.e1rm).toBe(128.3);
     });
   });
+
+  describe('Single Ingestion Path: sanitizeSessionLog() Contract & Validation', () => {
+    it('preserves all legitimate workout data and types without discarding valid entries', () => {
+      const complexRawLog = {
+        id: 'log_2026_08_13_push',
+        workoutId: 'w_push_a',
+        date: '2026-08-13',
+        durationMinutes: 55,
+        complete: true,
+        sets: {
+          def_bench: [
+            { id: 's1', weight: '100', reps: '10', done: true },
+            { id: 's2', weight: '102.5', reps: '8', done: true },
+            { id: 's3', weight: '0', reps: '15', done: true } // Bodyweight / 0kg set
+          ],
+          def_incline: [
+            { id: 'inc_1', weight: '30', reps: '12', done: false }
+          ]
+        }
+      };
+
+      const sanitized = sanitizeSessionLog(complexRawLog);
+      expect(sanitized.id).toBe('log_2026_08_13_push');
+      expect(sanitized.workoutId).toBe('w_push_a');
+      expect(sanitized.date).toBe('2026-08-13');
+      expect(sanitized.durationMinutes).toBe(55);
+      expect(sanitized.complete).toBe(true);
+
+      // Verify exercise definition keys are preserved
+      expect(Object.keys(sanitized.sets)).toEqual(['def_bench', 'def_incline']);
+
+      // Verify sets preserved with types and exact values
+      expect(sanitized.sets['def_bench']).toHaveLength(3);
+      expect(sanitized.sets['def_bench'][0]).toEqual({ id: 's1', weight: '100', reps: '10', done: true });
+      expect(sanitized.sets['def_bench'][1]).toEqual({ id: 's2', weight: '102.5', reps: '8', done: true });
+      expect(sanitized.sets['def_bench'][2]).toEqual({ id: 's3', weight: '0', reps: '15', done: true });
+      expect(sanitized.sets['def_incline'][0]).toEqual({ id: 'inc_1', weight: '30', reps: '12', done: false });
+    });
+
+    it('handles malformed, missing, or extreme values gracefully', () => {
+      const malformedLog = {
+        id: 'log_corrupt',
+        workoutId: 'w1',
+        date: '2026-08-13',
+        durationMinutes: -15 as any, // Negative duration
+        complete: 'yes' as any, // Truthy string coerced to boolean
+        sets: {
+          def_bench: [
+            { weight: ' 100 ', reps: ' 10 ', done: 1 as any }, // whitespace and truthy number
+            null as any, // Null set
+            { id: 'custom_id' } as any // Empty set
+          ]
+        }
+      };
+
+      const sanitized = sanitizeSessionLog(malformedLog as any);
+      expect(sanitized.durationMinutes).toBe(0); // Coerced to 0
+      expect(sanitized.complete).toBe(true);
+      expect(sanitized.sets['def_bench']).toHaveLength(3);
+      expect(sanitized.sets['def_bench'][0]).toEqual({ id: 'def_bench_set_0', weight: '100', reps: '10', done: true });
+      expect(sanitized.sets['def_bench'][1]).toEqual({ id: 'def_bench_set_1', weight: '', reps: '', done: false });
+      expect(sanitized.sets['def_bench'][2]).toEqual({ id: 'custom_id', weight: '', reps: '', done: false });
+    });
+  });
+
+  describe('Exercise-History Semantics: Bodyweight & Zero-Weight Support', () => {
+    it('correctly includes bodyweight exercises in ghost history, progression, and latest session', () => {
+      const logsWithBodyweight: Record<string, SessionLog> = {
+        log_pullups_1: {
+          id: 'log_bw_1',
+          date: '2026-08-05',
+          workoutId: 'w_pull',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            def_pullups: [
+              { id: 'p1', weight: '0', reps: '12', done: true },
+              { id: 'p2', weight: '0', reps: '10', done: true },
+              { id: 'p3', weight: '0', reps: '8', done: true }
+            ]
+          }
+        },
+        log_pullups_2: {
+          id: 'log_bw_2',
+          date: '2026-08-12',
+          workoutId: 'w_pull',
+          complete: true,
+          durationMinutes: 42,
+          sets: {
+            def_pullups: [
+              { id: 'p4', weight: '', reps: '15', done: true },
+              { id: 'p5', weight: '', reps: '12', done: true },
+              { id: 'p6', weight: '', reps: '10', done: true }
+            ]
+          }
+        }
+      };
+
+      // Both bodyweight sessions must appear in history
+      const bwHistory = getExerciseHistory(logsWithBodyweight, 'def_pullups');
+      expect(bwHistory).toHaveLength(2);
+      expect(bwHistory[0].date).toBe('2026-08-12');
+      expect(bwHistory[0].sets[0].reps).toBe('15');
+      expect(bwHistory[1].date).toBe('2026-08-05');
+      expect(bwHistory[1].sets[0].reps).toBe('12');
+
+      // Latest session lookup for ghost data returns newest bodyweight session
+      const latest = getLatestExerciseSession(logsWithBodyweight, 'def_pullups');
+      expect(latest).not.toBeNull();
+      expect(latest?.date).toBe('2026-08-12');
+      expect(latest?.sets).toHaveLength(3);
+      expect(latest?.sets[0].reps).toBe('15');
+
+      // PR lookup correctly evaluates bodyweight sets (weight >= 0)
+      const pr = getAllTimeHeaviestSet(logsWithBodyweight, 'def_pullups');
+      expect(pr).not.toBeNull();
+      expect(pr?.weight).toBe(0);
+    });
+  });
+
+  describe('Complete Session -> Analytics Pipeline Integration', () => {
+    it('executes the full session lifecycle and ensures Dashboard, History, and Analytics observe identical metrics', () => {
+      const logsState: Record<string, SessionLog> = {};
+
+      // 1. Start session with 2 exercises
+      const inFlightSessionSets: Record<string, SetLog[]> = {
+        def_bench: [
+          { id: 'b1', weight: '100', reps: '8', done: true },
+          { id: 'b2', weight: '100', reps: '8', done: true },
+          { id: 'b3', weight: '100', reps: '7', done: false } // Incomplete
+        ],
+        def_incline: [
+          { id: 'i1', weight: '30', reps: '12', done: true },
+          { id: 'i2', weight: '30', reps: '10', done: true }
+        ]
+      };
+
+      // 2. Add extra set to bench press
+      inFlightSessionSets['def_bench'].push({ id: 'b4', weight: '100', reps: '6', done: true });
+
+      // 3. Mark incomplete set completed
+      inFlightSessionSets['def_bench'][2].done = true;
+
+      // 4. Finish session
+      const sessionDate = '2026-08-13';
+      const logId = `${sessionDate}_${mockWorkoutPushA.id}_test`;
+      const finalLog: SessionLog = sanitizeSessionLog({
+        id: logId,
+        workoutId: mockWorkoutPushA.id,
+        date: sessionDate,
+        sets: inFlightSessionSets,
+        complete: true,
+        durationMinutes: 46
+      });
+
+      // 5. Ingest into logs state
+      logsState[logId] = finalLog;
+
+      // Invariant: Log survives and has all 4 bench sets + 2 incline sets
+      expect(logsState[logId]).toBeDefined();
+      expect(logsState[logId].sets['def_bench']).toHaveLength(4);
+      expect(logsState[logId].sets['def_incline']).toHaveLength(2);
+
+      // 6. Verification: Dashboard volume calculation
+      const dashboardTotalVolume = getSessionVolume(logsState[logId]);
+      // Bench: 100*8 + 100*8 + 100*7 + 100*6 = 2900 kg
+      // Incline: 30*12 + 30*10 = 660 kg
+      // Total = 3560 kg
+      expect(dashboardTotalVolume).toBe(3560);
+
+      // 7. Verification: History view sorted retrieval
+      const historyList = getSortedLogsDescending(logsState);
+      expect(historyList).toHaveLength(1);
+      expect(historyList[0].id).toBe(logId);
+      expect(getExerciseVolume(historyList[0], 'def_bench')).toBe(2900);
+
+      // 8. Verification: Analytics & PR metrics reflect the newly logged workout
+      const benchPR = getAllTimeHeaviestSet(logsState, 'def_bench');
+      expect(benchPR?.weight).toBe(100);
+      expect(benchPR?.date).toBe('2026-08-13');
+
+      const benchE1RM = getAllTimeBestE1RM(logsState, 'def_bench');
+      // 100 * (1 + 8/30) = 126.7
+      expect(benchE1RM?.e1rm).toBe(126.7);
+
+      // 9. Verification: Next session ghost data sees this exact session
+      const nextGhostSession = getLatestExerciseSession(logsState, 'def_bench');
+      expect(nextGhostSession?.date).toBe('2026-08-13');
+      expect(nextGhostSession?.sets).toHaveLength(4);
+      expect(nextGhostSession?.sets[0].weight).toBe('100');
+    });
+  });
 });

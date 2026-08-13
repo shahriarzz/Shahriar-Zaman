@@ -160,6 +160,7 @@ export function getHeaviestSet(
 /**
  * Extracts chronologically sorted history for a specific exercise definition.
  * [0] is newest session, remaining are older.
+ * Handles both weighted and bodyweight/zero-weight exercises.
  */
 export function getExerciseHistory(
   logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
@@ -170,7 +171,8 @@ export function getExerciseHistory(
 
   sorted.forEach(l => {
     const sets = getExerciseSets(l, exerciseDefinitionId, true);
-    if (sets.length > 0 && sets.some(s => parseFloat(s.weight) > 0)) {
+    // Include completed sessions: whether weighted (weight > 0) or bodyweight (reps > 0 or weight !== '' or reps !== '')
+    if (sets.length > 0 && sets.some(s => parseFloat(s.weight) > 0 || parseInt(s.reps, 10) > 0 || s.weight !== '' || s.reps !== '')) {
       history.push({
         date: l.date,
         sets,
@@ -205,9 +207,11 @@ export function getAllTimeHeaviestSet(
 
   history.forEach(session => {
     session.sets.forEach(s => {
-      const w = parseFloat(s.weight) || 0;
-      if (w > 0 && (!heaviest || w > heaviest.weight)) {
-        heaviest = { weight: w, reps: s.reps || '0', date: session.date };
+      const w = parseFloat(s.weight);
+      if (!isNaN(w) && w >= 0) {
+        if (!heaviest || w > heaviest.weight) {
+          heaviest = { weight: w, reps: s.reps || '0', date: session.date };
+        }
       }
     });
   });

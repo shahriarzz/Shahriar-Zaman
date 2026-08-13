@@ -4,6 +4,7 @@ import { SessionLog, AppState, Workout } from '../types/fitness';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveLog, deleteLog as deleteLogFirestore, saveAppState, deleteLogsBatch } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
+import { sanitizeSessionLog } from '../utils/sessionAnalytics';
 
 interface UseFitnessLogsProps {
   user: User | null;
@@ -30,16 +31,12 @@ export function useFitnessLogs({
 }: UseFitnessLogsProps) {
 
   const addLog = useCallback(async (logId: string, logOriginal: SessionLog): Promise<void> => {
-    const log: SessionLog = {
-      id: logId,
-      workoutId: logOriginal.workoutId,
-      date: logOriginal.date,
-      sets: logOriginal.sets || {},
-      complete: !!logOriginal.complete,
-      durationMinutes: Number(logOriginal.durationMinutes) || 0
-    };
+    // Single canonical ingestion path: sanitize and validate according to data contract
+    const log = sanitizeSessionLog({ ...logOriginal, id: logId });
     try {
       const nextLogs = { ...logsRef.current, [logId]: log };
+      // Assign ref synchronously alongside setLogs so ref and state represent the same logical write immediately
+      logsRef.current = nextLogs;
       setLogs(nextLogs);
       pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-session', `Logged routine: ${logId}`);
 
@@ -61,6 +58,7 @@ export function useFitnessLogs({
     try {
       const nextLogs = { ...logsRef.current };
       delete nextLogs[logId];
+      logsRef.current = nextLogs;
       trackDeletedId('logs', logId);
       setLogs(nextLogs);
       pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-edit', `Deleted log: ${logId}`);
@@ -86,6 +84,7 @@ export function useFitnessLogs({
       const currentLogIds = Object.keys(logsRef.current);
       currentLogIds.forEach(id => trackDeletedId('logs', id));
 
+      logsRef.current = {};
       setLogs({});
 
       if (user) {
@@ -105,6 +104,7 @@ export function useFitnessLogs({
   const updateCycleStart = useCallback(async (date: string): Promise<void> => {
     try {
       const nextState = { ...appStateRef.current, cycleStart: date };
+      appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
@@ -127,6 +127,7 @@ export function useFitnessLogs({
         ...currentAppState, 
         weightLog: { ...(currentAppState.weightLog || {}), [date]: weight }
       };
+      appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
@@ -148,6 +149,7 @@ export function useFitnessLogs({
       const nextLog = { ...(currentAppState.weightLog || {}) };
       delete nextLog[date];
       const nextState = { ...currentAppState, weightLog: nextLog };
+      appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
