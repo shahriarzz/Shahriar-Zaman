@@ -50,7 +50,6 @@ export interface SessionLog {
   id: string;
   workoutId: string;
   date: string; // YYYY-MM-DD
-  cycleDay?: number;
   sets: Record<string, SetLog[]>; // exerciseDefinitionId -> sets
   complete: boolean;
   durationMinutes: number; // minutes

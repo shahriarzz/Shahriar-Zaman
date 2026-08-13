@@ -29,13 +29,11 @@ export function useFitnessLogs({
   setSyncError
 }: UseFitnessLogsProps) {
 
-  const addLog = useCallback(async (logOriginal: SessionLog): Promise<void> => {
-    const logId = logOriginal.id;
+  const addLog = useCallback(async (logId: string, logOriginal: SessionLog): Promise<void> => {
     const log: SessionLog = {
       id: logId,
       workoutId: logOriginal.workoutId,
       date: logOriginal.date,
-      cycleDay: logOriginal.cycleDay,
       sets: logOriginal.sets || {},
       complete: !!logOriginal.complete,
       durationMinutes: Number(logOriginal.durationMinutes) || 0
