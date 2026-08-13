@@ -494,7 +494,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
               return (
                 <Card
-                  key={sIdx}
+                  key={session.id ? `session-${session.id}-${sIdx}` : `session-${sIdx}`}
                   variant={isExpanded ? "elevated" : "default"}
                   padding="none"
                   className={cn(
@@ -675,7 +675,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       const isSetExtreme = isExtremeW || isExtremeR;
 
                                       return (
-                                        <div key={idx} className="space-y-1.5">
+                                        <div key={s.id ? `edit-set-${s.id}-${idx}` : `edit-set-${exId}-${idx}`} className="space-y-1.5">
                                           <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center">
                                             <span className="font-mono text-xs text-zinc-400 text-center font-bold">{idx + 1}</span>
                                             <input

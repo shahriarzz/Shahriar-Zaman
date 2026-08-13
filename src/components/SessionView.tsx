@@ -192,7 +192,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 {lastSession ? (
                   <div className="text-[10px] font-mono text-zinc-400">
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
-                      <div key={idx}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
+                      <div key={s.id || `ghost-set-${idx}`}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
                     ))}
                   </div>
                 ) : (
@@ -229,7 +229,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
                   return (
                     <div
-                      key={s.id || `set-${si}`}
+                      key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
                         "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
@@ -764,9 +764,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         <h2 className="text-2xl font-bold font-display uppercase tracking-wide">Select a Protocol to Begin</h2>
       </div>
       <Grid cols={1} colsSm={2} gap="md">
-        {workouts.map(wo => (
+        {workouts.map((wo, woIdx) => (
           <Card
-            key={wo.id}
+            key={wo.id ? `wo-${wo.id}-${woIdx}` : `wo-${woIdx}`}
             variant="interactive"
             padding="md"
             onClick={() => setActiveWorkout(wo)}
@@ -827,7 +827,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               </div>
               <div className="space-y-2">
                 {todaysPRs.map((pr, idx) => (
-                  <div key={idx} className="flex justify-between items-center py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
+                  <div key={`session-pr-${pr.name}-${idx}`} className="flex justify-between items-center py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
                     <div>
                       <div className="font-bold text-white leading-tight">{pr.name}</div>
                       <div className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-wider">
@@ -920,11 +920,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
       {/* Exercises List */}
       <Stack spacing="lg">
-        {activeWorkout.exercises.map((ex) => {
+        {activeWorkout.exercises.map((ex, exIdx) => {
           const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
           return (
             <ExerciseCard
-              key={ex.id}
+              key={ex.id ? `session-ex-${ex.id}-${exIdx}` : `session-ex-${exIdx}`}
               ex={resolvedEx}
               workoutType={activeWorkout.type}
               ghostData={ghostData[ex.id]}
