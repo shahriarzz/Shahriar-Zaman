@@ -15,7 +15,7 @@ import {
   getLatestExerciseSession,
   getAllTimeHeaviestSet,
   getAllTimeBestE1RM
-} from '../utils/sessionAnalytics';
+} from '../utils/fitnessCalculations';
 import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
 
 describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {

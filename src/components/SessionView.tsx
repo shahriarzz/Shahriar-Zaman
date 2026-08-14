@@ -5,12 +5,8 @@ import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
-import {
-  sanitizeSessionLog,
-  getExerciseHistory,
-  getLatestExerciseSession,
-  getAllTimeHeaviestSet
-} from '../utils/sessionAnalytics';
+import { sanitizeSessionLog } from '../utils/fitnessCalculations';
+import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -347,6 +343,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     clearActiveSession,
     user
   } = useFitness();
+  const { getLatestForExercise, getHeaviestForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [sessionSets, setSessionSets] = useState<Record<string, SetLog[]>>({});
@@ -427,8 +424,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     wo.exercises.forEach(ex => {
       const exDefId = ex.exerciseDefinitionId;
-      // Fetch latest completed historical session using canonical ordering
-      const latestHistorical = getLatestExerciseSession(logs, exDefId);
+      // Fetch latest completed historical session using canonical index
+      const latestHistorical = getLatestForExercise(exDefId);
       const lastExSets = latestHistorical?.sets || null;
 
       // STEP 6 Invariant: Programmed sets count (ex.sets) determines initial displayed rows.
@@ -446,7 +443,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     setSessionSets(initialSets);
     startActiveSession(wo.id, initialSets, sessionStart);
-  }, [workoutId, workouts, activeSession, startActiveSession]);
+  }, [workoutId, workouts, activeSession, startActiveSession, getLatestForExercise, activeWorkout]);
 
   useEffect(() => {
     let interval: any;
@@ -464,27 +461,24 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }, []);
 
-  // Ghost data & All-Time Heaviest Weight computed via canonical sessionAnalytics
+  // Ghost data & All-Time Heaviest Weight computed via canonical derived index
   const ghostData = React.useMemo(() => {
     const data: Record<string, { lastSession: any, allTimePR: any }> = {};
     if (!activeWorkout) return data;
 
     activeWorkout.exercises.forEach(ex => {
       const exDefId = ex.exerciseDefinitionId;
-      const lastSession = getLatestExerciseSession(logs, exDefId);
-      const allTimePR = getAllTimeHeaviestSet(logs, exDefId);
+      const lastSession = getLatestForExercise(exDefId);
+      const allTimePR = getHeaviestForExercise(exDefId);
       data[exDefId] = { lastSession, allTimePR };
     });
     return data;
-  }, [logs, activeWorkout]);
+  }, [activeWorkout, getLatestForExercise, getHeaviestForExercise]);
 
   // Today's PRs: Heaviest completed weight compared against prior historical logs
   const todaysPRs = React.useMemo(() => {
     if (!activeWorkout || !isFinishing) return [];
     const prs: { name: string; weight: number; reps: string; isNew: boolean }[] = [];
-    
-    // Historical logs prior to today
-    const historicLogs = (Object.values(logs) as SessionLog[]).filter(l => l.date !== dk());
 
     activeWorkout.exercises.forEach(ex => {
       const exDefId = ex.exerciseDefinitionId;
@@ -500,7 +494,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const bestTodaySet = doneToday.find(s => (parseFloat(s.weight) || 0) === todayMax);
       const todayReps = bestTodaySet?.reps || '0';
       
-      const prevPR = getAllTimeHeaviestSet(historicLogs, exDefId);
+      const prevPR = getHeaviestForExercise(exDefId);
       const hasHistory = !!prevPR;
       const prevPRWeight = prevPR?.weight || 0;
       
@@ -515,7 +509,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
     
     return prs;
-  }, [isFinishing, activeWorkout, sessionSets, logs, exerciseDefinitions]);
+  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getHeaviestForExercise]);
 
   // Resilient set mutation with defensive fallback and input validation
   const updateSet = (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
@@ -606,8 +600,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     setLoadingAdvice(exDefId);
     try {
-      // Historical lookup using canonical sessionAnalytics ordering (most recent 3 sessions)
-      const history = getExerciseHistory(logs, exDefId).slice(0, 3);
+      // Historical lookup using canonical derived index (most recent 3 sessions)
+      const history = getHistoryForExercise(exDefId).slice(0, 3);
 
       let idToken = '';
       if (user && typeof user.getIdToken === 'function') {

@@ -121,16 +121,33 @@ export function getExerciseSets(
 }
 
 /**
+ * Calculates volume (weight × reps in kg) for a single set.
+ * Invariant: only done === true sets count.
+ */
+export function calculateSetVolume(set: Partial<SetLog> | null | undefined): number {
+  if (!set || !set.done) return 0;
+  const w = parseFloat(String(set.weight)) || 0;
+  let r = parseInt(String(set.reps), 10);
+  if (Number.isNaN(r) || r < 0) r = 0;
+  return w * r;
+}
+
+/**
+ * Calculates total volume across an array of sets.
+ * Invariant: only done === true sets count.
+ */
+export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[] | null | undefined): number {
+  if (!Array.isArray(sets) || sets.length === 0) return 0;
+  return sets.reduce((total, s) => total + calculateSetVolume(s), 0);
+}
+
+/**
  * Calculates total volume (weight × reps in kg) for a specific exercise within a session.
  * Invariant: only done === true sets count.
  */
 export function getExerciseVolume(log: SessionLog | null | undefined, exerciseDefinitionId: string): number {
-  const sets = getExerciseSets(log, exerciseDefinitionId, true);
-  return sets.reduce((total, s) => {
-    const w = parseFloat(s.weight) || 0;
-    const r = parseInt(s.reps, 10) || 0;
-    return total + (w * r);
-  }, 0);
+  if (!log || !log.sets || !log.sets[exerciseDefinitionId]) return 0;
+  return calculateSetsVolume(log.sets[exerciseDefinitionId]);
 }
 
 /**
@@ -138,31 +155,17 @@ export function getExerciseVolume(log: SessionLog | null | undefined, exerciseDe
  * Invariant: only done === true sets count.
  */
 export function getSessionVolume(log: SessionLog | null | undefined): number {
-  if (!log || !log.sets) return 0;
-  let total = 0;
-  Object.keys(log.sets).forEach(exDefId => {
-    total += getExerciseVolume(log, exDefId);
-  });
-  return total;
+  return calculateVolume(log);
 }
 
 /**
  * Canonical general volume calculator (for SessionLog or raw sets record)
  */
-export function calculateVolume(log: SessionLog | { sets: Record<string, SetLog[]> } | null | undefined): number {
+export function calculateVolume(log: SessionLog | { sets?: Record<string, SetLog[]> } | null | undefined): number {
   if (!log || !log.sets) return 0;
   let total = 0;
-  Object.values(log.sets).forEach(sets => {
-    (sets || []).forEach(s => {
-      if (s && s.done && s.weight && s.reps) {
-        const weightVal = parseFloat(s.weight) || 0;
-        let repsVal = parseInt(s.reps, 10);
-        if (Number.isNaN(repsVal)) {
-          repsVal = 0;
-        }
-        total += weightVal * repsVal;
-      }
-    });
+  Object.values(log.sets).forEach(setsList => {
+    total += calculateSetsVolume(setsList);
   });
   return total;
 }

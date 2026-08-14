@@ -4,11 +4,11 @@ import { loadInitialFitnessData, extractExerciseDefinitionsFromWorkouts, validat
 import { trackDeletedId, removeDeletedId, getDeletedIdsTracker, clearDeletedIdsTracker, areLogsEqual } from '../utils/fitnessSyncHelpers';
 import {
   createExerciseDefinitionMap,
-  getResolvedExerciseMeta,
+  resolveExercise as getResolvedExerciseMeta,
   getPriorityExercises,
-  mapTargetToCategory,
-  calcEpley1RM
-} from '../utils/fitnessAnalyticsHelpers';
+  mapTargetToCategory
+} from '../utils/exerciseResolver';
+import { calculateE1RM as calcEpley1RM } from '../utils/fitnessCalculations';
 import { ExerciseDefinition, Workout, SessionLog, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_EXERCISE_DEFINITIONS, INITIAL_WORKOUTS } from '../types/initialData';
 

@@ -4,7 +4,7 @@ import { SessionLog, AppState, Workout } from '../types/fitness';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveLog, deleteLog as deleteLogFirestore, saveAppState, deleteLogsBatch } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
-import { sanitizeSessionLog } from '../utils/sessionAnalytics';
+import { sanitizeSessionLog } from '../utils/fitnessCalculations';
 
 interface UseFitnessLogsProps {
   user: User | null;

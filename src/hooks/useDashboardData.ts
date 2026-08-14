@@ -1,17 +1,12 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
+import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { getNextCycleDayFromLogs, dk } from '../utils/fitnessHelpers';
 import { useCountUp } from './useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
-import {
-  calculateStreak,
-  calculateTotalWeightLifted,
-  getSortedWeightEntries,
-  getWeightSparklineData,
-  getRelativeTimeString,
-  SparklineData
-} from '../utils/dashboardSelectors';
+import { getRelativeTimeString } from '../utils/dashboardSelectors';
+import { SparklineData } from '../utils/fitnessDerivedSelectors';
 
 export interface DashboardStats {
   streakCount: number;
@@ -66,6 +61,11 @@ export function useDashboardData(): DashboardData {
     setWorkouts
   } = useFitness();
 
+  const {
+    lifetimeStats,
+    weightSummary: derivedWeightSummary
+  } = useFitnessDerivedData();
+
   // 1. Hero Date String
   const heroDateStr = React.useMemo(() => {
     return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -80,22 +80,11 @@ export function useDashboardData(): DashboardData {
     return (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
   }, [workouts, currentCycleDay]);
 
-  // 3. Stats & Metrics
-  const totalWeight = React.useMemo(() => {
-    return calculateTotalWeightLifted(logs);
-  }, [logs]);
-
-  const streakCount = React.useMemo(() => {
-    return calculateStreak(logs);
-  }, [logs]);
-
-  const sessionsCount = React.useMemo(() => {
-    return Object.keys(logs || {}).length;
-  }, [logs]);
-
-  const cyclesCount = React.useMemo(() => {
-    return Math.floor(sessionsCount / 8);
-  }, [sessionsCount]);
+  // 3. Stats & Metrics from canonical derived pipeline
+  const totalWeight = lifetimeStats.totalVolume;
+  const streakCount = lifetimeStats.currentStreak;
+  const sessionsCount = lifetimeStats.totalSessions;
+  const cyclesCount = Math.floor(sessionsCount / 8);
 
   const animatedSessions = useCountUp(sessionsCount);
   const animatedCycles = useCountUp(cyclesCount);
@@ -129,24 +118,7 @@ export function useDashboardData(): DashboardData {
     };
   }, [activeSession, workouts]);
 
-  // 5. Body Weight Biometrics
-  const weightEntries = React.useMemo(() => {
-    return getSortedWeightEntries(appState?.weightLog);
-  }, [appState?.weightLog]);
-
-  const currentWeight = React.useMemo(() => {
-    if (weightEntries.length === 0) return '--';
-    return weightEntries[0][1];
-  }, [weightEntries]);
-
-  const recentWeightLogs = React.useMemo(() => {
-    return weightEntries.slice(0, 5);
-  }, [weightEntries]);
-
-  const sparklineData = React.useMemo(() => {
-    return getWeightSparklineData(appState?.weightLog);
-  }, [appState?.weightLog]);
-
+  // 5. Body Weight Biometrics from canonical pipeline
   const handleLogWeight = React.useCallback((val: number) => {
     if (!val || val < 20 || val > 300) return;
     logBodyWeight(dk(), val);
@@ -157,10 +129,10 @@ export function useDashboardData(): DashboardData {
   }, [deleteBodyWeight]);
 
   const weightSummary: WeightSummary = {
-    currentWeight,
-    weightEntries,
-    recentWeightLogs,
-    sparklineData,
+    currentWeight: derivedWeightSummary.currentWeight,
+    weightEntries: derivedWeightSummary.weightEntries,
+    recentWeightLogs: derivedWeightSummary.recentWeightLogs,
+    sparklineData: derivedWeightSummary.sparklineData,
     logWeight: handleLogWeight,
     deleteWeight: handleDeleteWeight
   };

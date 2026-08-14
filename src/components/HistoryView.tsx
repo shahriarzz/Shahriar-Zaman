@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus, Sparkles } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
+import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, calculateVolume, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
@@ -38,6 +39,7 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
   const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
+  const { sortedLogs, defsMap, workoutMap, index } = useFitnessDerivedData();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -63,51 +65,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   }, [initialDate, logs]);
 
   // Map exercise definitions by ID for canonical exercise identity
-  const exerciseDefinitionsById = React.useMemo(() => {
-    const map = new Map<string, ExerciseDefinition>();
-    exerciseDefinitions.forEach(def => {
-      map.set(def.id, def);
-    });
-    return map;
-  }, [exerciseDefinitions]);
+  const exerciseDefinitionsById = defsMap;
 
   // Workouts by ID for workout-level metadata
-  const workoutsById = React.useMemo(() => {
-    const map = new Map<string, Workout>();
-    workouts.forEach(wo => {
-      map.set(wo.id, wo);
-    });
-    return map;
-  }, [workouts]);
+  const workoutsById = workoutMap;
 
-  // Group logs by exercise - MEMOIZED for PR mapping
+  // Group logs by exercise - accessed directly from canonical index
   const exerciseHistory = React.useMemo(() => {
     const history: Record<string, any[]> = {};
-    (Object.values(logs) as SessionLog[]).forEach(log => {
-      Object.entries(log.sets).forEach(([exId, sets]) => {
-        const doneSets = (sets as SetLog[]).filter(s => s.done);
-        if (doneSets.length > 0) {
-          const weights = doneSets.map(s => parseFloat(s.weight) || 0);
-          const maxW = weights.length > 0 ? Math.max(...weights) : 0;
-          if (!history[exId]) history[exId] = [];
-          history[exId].push({
-            date: log.date,
-            maxW,
-            sets: doneSets
-          });
-        }
-      });
+    index.exerciseIndex.forEach((entry, exId) => {
+      history[exId] = entry.sessions.map(s => ({
+        date: s.date,
+        maxW: s.maxW,
+        sets: s.sets
+      }));
     });
     return history;
-  }, [logs]);
+  }, [index]);
 
-  // Get chronological session list without in-place mutation
-  const sessionsList = React.useMemo(() => {
-    return Object.entries(logs).map(([id, log]) => ({
-      ...(log as any),
-      id
-    })).sort((a: any, b: any) => b.date.localeCompare(a.date));
-  }, [logs]);
+  // Get chronological session list from canonical pipeline
+  const sessionsList = sortedLogs;
 
   // Filter day sessions based on search
   const filteredSessions = React.useMemo(() => {
