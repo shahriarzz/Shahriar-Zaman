@@ -91,6 +91,7 @@ export interface ExerciseIndexEntry {
   name: string;
   category: MuscleCategory;
   sessions: ExerciseSessionHistoryEntry[];
+  latestSession: ExerciseSessionHistoryEntry | null;
   completedSets: { date: string; set: SetLog; logId: string }[];
   totalVolume: number;
   sessionCount: number;
@@ -129,7 +130,7 @@ export interface FitnessIndex {
  */
 export function buildFitnessIndex(
   logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitions: ExerciseDefinition[] | Map<string, ExerciseDefinition> | null | undefined
+  exerciseDefinitions?: ExerciseDefinition[] | Map<string, ExerciseDefinition> | null | undefined
 ): FitnessIndex {
   const defsMap = Array.isArray(exerciseDefinitions)
     ? createExerciseDefinitionMap(exerciseDefinitions)
@@ -338,7 +339,9 @@ export function buildFitnessIndex(
   // Construct comprehensive exerciseIndex map for O(1) multi-faceted access
   const exerciseIndex = new Map<string, ExerciseIndexEntry>();
   exerciseCountsMap.forEach((freqVal, exId) => {
-    const sessions = historyByExercise.get(exId) || [];
+    const ascendingSessions = historyByExercise.get(exId) || [];
+    const sessions = [...ascendingSessions].reverse();
+    const latestSession = sessions[0] || null;
     const completedSets = completedSetsByExercise.get(exId) || [];
     const bestE1RM = personalBestsMap.get(exId) || null;
     const progression = e1rmHistoryByExercise.get(exId) || [];
@@ -354,6 +357,7 @@ export function buildFitnessIndex(
       name: freqVal.name,
       category: freqVal.category,
       sessions,
+      latestSession,
       completedSets,
       totalVolume: freqVal.volume,
       sessionCount: freqVal.count,

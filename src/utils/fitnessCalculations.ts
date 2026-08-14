@@ -108,19 +108,6 @@ export function getCompletedSets(setsOrLog: SetLog[] | SessionLog | null | undef
 }
 
 /**
- * Returns all sets for a given exercise from a session log (raw or completed).
- */
-export function getExerciseSets(
-  log: SessionLog | null | undefined,
-  exerciseDefinitionId: string,
-  onlyDone = false
-): SetLog[] {
-  if (!log || !log.sets || !log.sets[exerciseDefinitionId]) return [];
-  const sets = log.sets[exerciseDefinitionId] || [];
-  return onlyDone ? sets.filter(s => s && s.done) : sets;
-}
-
-/**
  * Calculates volume (weight × reps in kg) for a single set.
  * Invariant: only done === true sets count.
  */
@@ -139,23 +126,6 @@ export function calculateSetVolume(set: Partial<SetLog> | null | undefined): num
 export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[] | null | undefined): number {
   if (!Array.isArray(sets) || sets.length === 0) return 0;
   return sets.reduce((total, s) => total + calculateSetVolume(s), 0);
-}
-
-/**
- * Calculates total volume (weight × reps in kg) for a specific exercise within a session.
- * Invariant: only done === true sets count.
- */
-export function getExerciseVolume(log: SessionLog | null | undefined, exerciseDefinitionId: string): number {
-  if (!log || !log.sets || !log.sets[exerciseDefinitionId]) return 0;
-  return calculateSetsVolume(log.sets[exerciseDefinitionId]);
-}
-
-/**
- * Calculates total volume across all completed exercises in a session.
- * Invariant: only done === true sets count.
- */
-export function getSessionVolume(log: SessionLog | null | undefined): number {
-  return calculateVolume(log);
 }
 
 /**
@@ -194,113 +164,6 @@ export function calculateE1RM(weight: number | string, reps: number | string): n
   const effectiveReps = Math.min(r, 30);
   const e1rm = w * (1 + effectiveReps / 30);
   return Math.round(e1rm * 10) / 10;
-}
-
-/**
- * Finds the heaviest completed set for an exercise in a single session.
- */
-export function getHeaviestSet(
-  log: SessionLog | null | undefined,
-  exerciseDefinitionId: string
-): { weight: number; reps: string; set: SetLog } | null {
-  const completed = getExerciseSets(log, exerciseDefinitionId, true);
-  let best: { weight: number; reps: string; set: SetLog } | null = null;
-
-  completed.forEach(s => {
-    const w = parseFloat(s.weight) || 0;
-    if (w > 0 && (!best || w > best.weight)) {
-      best = { weight: w, reps: s.reps || '0', set: s };
-    }
-  });
-
-  return best;
-}
-
-/**
- * Extracts chronologically sorted history for a specific exercise definition.
- * [0] is newest session, remaining are older.
- */
-export function getExerciseHistory(
-  logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitionId: string
-): { date: string; sets: SetLog[]; logId: string; maxW: number }[] {
-  const sorted = getSortedLogsDescending(logs);
-  const history: { date: string; sets: SetLog[]; logId: string; maxW: number }[] = [];
-
-  sorted.forEach(l => {
-    const sets = getExerciseSets(l, exerciseDefinitionId, true);
-    if (sets.length > 0) {
-      const weights = sets.map(s => parseFloat(s.weight) || 0);
-      const maxW = weights.length > 0 ? Math.max(...weights) : 0;
-      history.push({
-        date: l.date,
-        sets,
-        logId: l.id,
-        maxW
-      });
-    }
-  });
-
-  return history;
-}
-
-/**
- * Retrieves the latest completed session record for an exercise definition.
- */
-export function getLatestExerciseSession(
-  logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitionId: string
-): { date: string; sets: SetLog[]; logId: string; maxW: number } | null {
-  const history = getExerciseHistory(logs, exerciseDefinitionId);
-  return history.length > 0 ? history[0] : null;
-}
-
-/**
- * Finds all-time heaviest completed weight for an exercise.
- */
-export function getAllTimeHeaviestSet(
-  logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitionId: string
-): { weight: number; reps: string; date: string } | null {
-  const history = getExerciseHistory(logs, exerciseDefinitionId);
-  let heaviest: { weight: number; reps: string; date: string } | null = null;
-
-  history.forEach(session => {
-    session.sets.forEach(s => {
-      const w = parseFloat(s.weight);
-      if (!isNaN(w) && w >= 0) {
-        if (!heaviest || w > heaviest.weight) {
-          heaviest = { weight: w, reps: s.reps || '0', date: session.date };
-        }
-      }
-    });
-  });
-
-  return heaviest;
-}
-
-/**
- * Finds all-time best estimated 1RM for an exercise.
- */
-export function getAllTimeBestE1RM(
-  logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitionId: string
-): { e1rm: number; weight: number; reps: string; date: string } | null {
-  const history = getExerciseHistory(logs, exerciseDefinitionId);
-  let best: { e1rm: number; weight: number; reps: string; date: string } | null = null;
-
-  history.forEach(session => {
-    session.sets.forEach(s => {
-      const w = parseFloat(s.weight) || 0;
-      const r = parseInt(s.reps, 10) || 0;
-      const e1rm = calculateE1RM(w, r);
-      if (e1rm > 0 && (!best || e1rm > best.e1rm)) {
-        best = { e1rm, weight: w, reps: s.reps || '0', date: session.date };
-      }
-    });
-  });
-
-  return best;
 }
 
 /**

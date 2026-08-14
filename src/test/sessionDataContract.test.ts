@@ -6,16 +6,16 @@ import {
   sanitizeSessionLog,
   getSortedLogsDescending,
   getCompletedSets,
-  getExerciseSets,
-  getExerciseVolume,
-  getSessionVolume,
-  calculateE1RM,
-  getHeaviestSet,
-  getExerciseHistory,
-  getLatestExerciseSession,
-  getAllTimeHeaviestSet,
-  getAllTimeBestE1RM
+  calculateVolume,
+  calculateSetsVolume,
+  calculateE1RM
 } from '../utils/fitnessCalculations';
+import {
+  buildFitnessIndex,
+  selectPersonalBests,
+  selectExerciseHistory
+} from '../utils/fitnessDerivedSelectors';
+import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
 import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
 
 describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
@@ -112,10 +112,10 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         }
       };
 
-      const benchVolume = getExerciseVolume(sampleLog, 'def_bench');
+      const benchVolume = calculateSetsVolume(sampleLog.sets['def_bench']);
       expect(benchVolume).toBe(1800); // 1000 + 800, s2 ignored
 
-      const sessionVolume = getSessionVolume(sampleLog);
+      const sessionVolume = calculateVolume(sampleLog);
       expect(sessionVolume).toBe(1800);
     });
   });
@@ -156,7 +156,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
 
       const benchSets = getCompletedSets(validatedLog.sets['def_bench']);
       expect(benchSets).toHaveLength(3);
-      expect(getExerciseVolume(validatedLog, 'def_bench')).toBe(80 * 10 + 80 * 9 + 80 * 8);
+      expect(calculateSetsVolume(validatedLog.sets['def_bench'])).toBe(80 * 10 + 80 * 9 + 80 * 8);
     });
 
     // Test B — Reload: Start workout → enter data → reload browser → session restored → no data lost
@@ -290,7 +290,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
 
       expect(log.sets['def_bench']).toHaveLength(4);
       // Volume = 80*10 + 80*10 + 80*10 + 80*12 = 800 + 800 + 800 + 960 = 3360
-      expect(getExerciseVolume(log, 'def_bench')).toBe(3360);
+      expect(calculateSetsVolume(log.sets['def_bench'])).toBe(3360);
     });
 
     // Test G — Delete set: Verify deleted set does not appear in SessionLog, History, volume, e1RM, PR
@@ -315,9 +315,12 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         }
       };
 
+      const indexAfterDelete = buildFitnessIndex([log]);
+      const benchMeta = indexAfterDelete.exerciseIndex.get('def_bench');
+
       expect(log.sets['def_bench']).toHaveLength(2);
-      expect(getHeaviestSet(log, 'def_bench')?.weight).toBe(80);
-      expect(getExerciseVolume(log, 'def_bench')).toBe(800 + 640);
+      expect(benchMeta?.maxWeight).toBe(80);
+      expect(calculateSetsVolume(log.sets['def_bench'])).toBe(800 + 640);
     });
 
     // Test H — Same exercise in multiple workouts: Push A -> Bench Press, Push B -> Bench Press
@@ -345,25 +348,27 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         }
       };
 
-      // Both logs are retrieved for def_bench regardless of workoutId
-      const benchHistory = getExerciseHistory(logs, 'def_bench');
-      expect(benchHistory).toHaveLength(2);
-      expect(benchHistory[0].date).toBe('2026-08-08'); // Newer session first
-      expect(benchHistory[1].date).toBe('2026-08-01');
+      const defsMap = createExerciseDefinitionMap(mockDefs);
+      const index = buildFitnessIndex(Object.values(logs), defsMap);
+      const benchEntry = index.exerciseIndex.get('def_bench');
+
+      // Both logs are indexed for def_bench regardless of workoutId
+      expect(benchEntry).toBeDefined();
+      expect(benchEntry?.sessions).toHaveLength(2);
+      expect(benchEntry?.sessions[0].date).toBe('2026-08-08'); // Newer session first
+      expect(benchEntry?.sessions[1].date).toBe('2026-08-01');
 
       // Latest session
-      const latest = getLatestExerciseSession(logs, 'def_bench');
-      expect(latest?.date).toBe('2026-08-08');
-      expect(latest?.sets[0].weight).toBe('110');
+      expect(benchEntry?.latestSession?.date).toBe('2026-08-08');
+      expect(benchEntry?.latestSession?.sets[0].weight).toBe('110');
 
       // All-time heaviest PR
-      const allTimePR = getAllTimeHeaviestSet(logs, 'def_bench');
-      expect(allTimePR?.weight).toBe(110);
-      expect(allTimePR?.reps).toBe('5');
+      expect(benchEntry?.maxWeight).toBe(110);
+      expect(benchEntry?.bestE1RM?.maxWeight).toBe(110);
+      expect(benchEntry?.bestE1RM?.repsAtMax).toBe(5);
 
-      // All-time best e1RM: 110* (1 + 5/30) = 128.3 vs 100 * (1 + 8/30) = 126.7
-      const bestE1RM = getAllTimeBestE1RM(logs, 'def_bench');
-      expect(bestE1RM?.e1rm).toBe(128.3);
+      // All-time best e1RM: 110 * (1 + 5/30) = 128.3 vs 100 * (1 + 8/30) = 126.7
+      expect(benchEntry?.bestE1RM?.maxEpley).toBe(128.3);
     });
   });
 
@@ -464,25 +469,29 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         }
       };
 
-      // Both bodyweight sessions must appear in history
-      const bwHistory = getExerciseHistory(logsWithBodyweight, 'def_pullups');
-      expect(bwHistory).toHaveLength(2);
-      expect(bwHistory[0].date).toBe('2026-08-12');
-      expect(bwHistory[0].sets[0].reps).toBe('15');
-      expect(bwHistory[1].date).toBe('2026-08-05');
-      expect(bwHistory[1].sets[0].reps).toBe('12');
+      // Both bodyweight sessions must appear in index
+      const defsMap = createExerciseDefinitionMap([
+        { id: 'def_pullups', name: 'Pull Ups', target: 'Lats' }
+      ]);
+      const index = buildFitnessIndex(Object.values(logsWithBodyweight), defsMap);
+      const pullupsEntry = index.exerciseIndex.get('def_pullups');
+
+      expect(pullupsEntry).toBeDefined();
+      expect(pullupsEntry?.sessions).toHaveLength(2);
+      expect(pullupsEntry?.sessions[0].date).toBe('2026-08-12');
+      expect(pullupsEntry?.sessions[0].sets[0].reps).toBe('15');
+      expect(pullupsEntry?.sessions[1].date).toBe('2026-08-05');
+      expect(pullupsEntry?.sessions[1].sets[0].reps).toBe('12');
 
       // Latest session lookup for ghost data returns newest bodyweight session
-      const latest = getLatestExerciseSession(logsWithBodyweight, 'def_pullups');
-      expect(latest).not.toBeNull();
-      expect(latest?.date).toBe('2026-08-12');
-      expect(latest?.sets).toHaveLength(3);
-      expect(latest?.sets[0].reps).toBe('15');
+      expect(pullupsEntry?.latestSession).not.toBeNull();
+      expect(pullupsEntry?.latestSession?.date).toBe('2026-08-12');
+      expect(pullupsEntry?.latestSession?.sets).toHaveLength(3);
+      expect(pullupsEntry?.latestSession?.sets[0].reps).toBe('15');
 
       // PR lookup correctly evaluates bodyweight sets (weight >= 0)
-      const pr = getAllTimeHeaviestSet(logsWithBodyweight, 'def_pullups');
-      expect(pr).not.toBeNull();
-      expect(pr?.weight).toBe(0);
+      expect(pullupsEntry?.maxWeight).toBe(0);
+      expect(pullupsEntry?.sessions).toHaveLength(2);
     });
   });
 
@@ -530,7 +539,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       expect(logsState[logId].sets['def_incline']).toHaveLength(2);
 
       // 6. Verification: Dashboard volume calculation
-      const dashboardTotalVolume = getSessionVolume(logsState[logId]);
+      const dashboardTotalVolume = calculateVolume(logsState[logId]);
       // Bench: 100*8 + 100*8 + 100*7 + 100*6 = 2900 kg
       // Incline: 30*12 + 30*10 = 660 kg
       // Total = 3560 kg
@@ -540,22 +549,23 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       const historyList = getSortedLogsDescending(logsState);
       expect(historyList).toHaveLength(1);
       expect(historyList[0].id).toBe(logId);
-      expect(getExerciseVolume(historyList[0], 'def_bench')).toBe(2900);
+      expect(calculateSetsVolume(historyList[0].sets['def_bench'])).toBe(2900);
 
-      // 8. Verification: Analytics & PR metrics reflect the newly logged workout
-      const benchPR = getAllTimeHeaviestSet(logsState, 'def_bench');
-      expect(benchPR?.weight).toBe(100);
-      expect(benchPR?.date).toBe('2026-08-13');
+      // 8. Verification: Canonical index & Analytics reflect the newly logged workout
+      const defsMap = createExerciseDefinitionMap(mockDefs);
+      const index = buildFitnessIndex(Object.values(logsState), defsMap);
+      const benchMeta = index.exerciseIndex.get('def_bench');
 
-      const benchE1RM = getAllTimeBestE1RM(logsState, 'def_bench');
+      expect(benchMeta?.maxWeight).toBe(100);
+      expect(benchMeta?.bestE1RM?.date).toBe('2026-08-13');
+
       // 100 * (1 + 8/30) = 126.7
-      expect(benchE1RM?.e1rm).toBe(126.7);
+      expect(benchMeta?.bestE1RM?.maxEpley).toBe(126.7);
 
       // 9. Verification: Next session ghost data sees this exact session
-      const nextGhostSession = getLatestExerciseSession(logsState, 'def_bench');
-      expect(nextGhostSession?.date).toBe('2026-08-13');
-      expect(nextGhostSession?.sets).toHaveLength(4);
-      expect(nextGhostSession?.sets[0].weight).toBe('100');
+      expect(benchMeta?.latestSession?.date).toBe('2026-08-13');
+      expect(benchMeta?.latestSession?.sets).toHaveLength(4);
+      expect(benchMeta?.latestSession?.sets[0].weight).toBe('100');
     });
   });
 });
