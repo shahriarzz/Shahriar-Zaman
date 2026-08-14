@@ -446,6 +446,21 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(analyticsAll.rangeLogsCount).toBe(2);
       expect(analyticsAll.rangeVolume).toBe(1700);
     });
+
+    it('ensures analytics operates over existing FitnessIndex without mutating or rebuilding it', () => {
+      const initialIndexReference = index;
+      const analyticsA = selectTimeRangeAnalytics(index, defsMap, workouts, '7d', '2026-08-01', 'squat');
+      const analyticsB = selectTimeRangeAnalytics(index, defsMap, workouts, '30d', '2026-08-01', 'squat');
+      const analyticsC = selectTimeRangeAnalytics(index, defsMap, workouts, 'all', '2026-08-01', 'bench');
+
+      // The canonical index reference remains identical and unmutated
+      expect(index).toBe(initialIndexReference);
+      expect(index.sortedLogsDescending.length).toBe(2);
+      expect(index.sortedLogsAscending.length).toBe(2);
+      expect(analyticsA.rangeLogsCount).toBe(1);
+      expect(analyticsB.rangeLogsCount).toBe(1);
+      expect(analyticsC.rangeLogsCount).toBe(2);
+    });
   });
 
   // -------------------------------------------------------------

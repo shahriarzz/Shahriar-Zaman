@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { useFitness } from '../context/FitnessContext';
-import { SessionLog, SetLog, Workout } from '../types/fitness';
+import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
   buildFitnessIndex,
   selectWeightSummary,
@@ -17,13 +17,16 @@ import {
 import {
   createExerciseDefinitionMap,
   resolveExercise,
+  getPriorityExercises,
   ResolvedExerciseMeta
 } from '../utils/exerciseResolver';
 
 export interface FitnessDerivedData {
   index: FitnessIndex;
-  defsMap: Map<string, any>;
+  defsMap: Map<string, ExerciseDefinition>;
   workoutMap: Map<string, Workout>;
+  coreWorkoutByCycleDayMap: Map<number, Workout>;
+  priorityExercises: ResolvedExerciseMeta[];
   exerciseIndex: Map<string, ExerciseIndexEntry>;
   sortedLogs: SessionLog[];
   totalVolume: number;
@@ -61,12 +64,28 @@ export function useFitnessDerivedData(): FitnessDerivedData {
     return map;
   }, [workouts]);
 
-  // 3. High-Performance Canonical FitnessIndex (Single O(N) pass on logs/definitions change)
+  // 3. Core Workout by Cycle Day Map
+  const coreWorkoutByCycleDayMap = useMemo(() => {
+    const map = new Map<number, Workout>();
+    (workouts || []).forEach(w => {
+      if (w.isCore && typeof w.cycleDay === 'number') {
+        map.set(w.cycleDay, w);
+      }
+    });
+    return map;
+  }, [workouts]);
+
+  // 4. Priority & Compound Exercises for Strength Progression
+  const priorityExercises = useMemo(() => {
+    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
+  }, [exerciseDefinitions, workouts, defsMap]);
+
+  // 5. High-Performance Canonical FitnessIndex (Single O(N) pass on logs/definitions change)
   const index = useMemo(() => {
     return buildFitnessIndex(logs, defsMap);
   }, [logs, defsMap]);
 
-  // 4. Body Weight Biometrics summary
+  // 6. Body Weight Biometrics summary
   const weightSummary = useMemo(() => {
     return selectWeightSummary(appState?.weightLog);
   }, [appState?.weightLog]);
@@ -116,6 +135,8 @@ export function useFitnessDerivedData(): FitnessDerivedData {
     index,
     defsMap,
     workoutMap,
+    coreWorkoutByCycleDayMap,
+    priorityExercises,
     exerciseIndex: index.exerciseIndex,
     sortedLogs: index.sortedLogsDescending,
     totalVolume: index.lifetimeStats.totalVolume,

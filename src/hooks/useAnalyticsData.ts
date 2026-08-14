@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
+import { useFitness } from '../context/FitnessContext';
+import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { SessionLog, Workout, ExerciseDefinition, AppState, WorkoutType } from '../types/fitness';
 import {
-  buildFitnessIndex,
   selectTimeRangeAnalytics,
   FitnessIndex
 } from '../utils/fitnessDerivedSelectors';
 import {
-  createExerciseDefinitionMap,
-  getPriorityExercises,
   MUSCLE_CATEGORIES,
   MuscleCategory
 } from '../utils/exerciseResolver';
@@ -19,62 +18,44 @@ export type TimeRange = '7d' | '30d' | '90d' | 'all';
 export type MuscleMetric = 'volume' | 'sets' | 'frequency';
 
 export interface UseAnalyticsDataParams {
-  logs: Record<string, SessionLog>;
-  workouts: Workout[];
-  exerciseDefinitions: ExerciseDefinition[];
-  appState: AppState | null;
   timeRange: TimeRange;
   muscleMetric: MuscleMetric;
   selected1RMExerciseId: string | null;
   currentHeatmapMonth: Date;
+  logs?: Record<string, SessionLog>;
+  workouts?: Workout[];
+  exerciseDefinitions?: ExerciseDefinition[];
+  appState?: AppState | null;
 }
 
 export function useAnalyticsData({
-  logs,
-  workouts,
-  exerciseDefinitions,
-  appState,
+  logs: propLogs,
+  workouts: propWorkouts,
+  appState: propAppState,
   timeRange,
   muscleMetric,
   selected1RMExerciseId,
   currentHeatmapMonth
 }: UseAnalyticsDataParams) {
-  // Fast workout maps
-  const workoutMap = useMemo(() => {
-    const map = new Map<string, Workout>();
-    (workouts || []).forEach(w => map.set(w.id, w));
-    return map;
-  }, [workouts]);
+  const fitnessContext = useFitness();
+  const derivedData = useFitnessDerivedData();
 
-  const coreWorkoutByCycleDayMap = useMemo(() => {
-    const map = new Map<number, Workout>();
-    (workouts || []).forEach(w => {
-      if (w.isCore && typeof w.cycleDay === 'number') {
-        map.set(w.cycleDay, w);
-      }
-    });
-    return map;
-  }, [workouts]);
+  const logs = propLogs ?? fitnessContext.logs;
+  const workouts = propWorkouts ?? fitnessContext.workouts;
+  const appState = propAppState ?? fitnessContext.appState;
 
-  // 1. Memoized canonical definitions map
-  const defsMap = useMemo(() => {
-    return createExerciseDefinitionMap(exerciseDefinitions || []);
-  }, [exerciseDefinitions]);
-
-  // 2. Priority & Compound Exercises for Strength Progression
-  const priorityExercises = useMemo(() => {
-    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
-  }, [exerciseDefinitions, workouts, defsMap]);
+  const {
+    index,
+    defsMap,
+    workoutMap,
+    coreWorkoutByCycleDayMap,
+    priorityExercises
+  } = derivedData;
 
   // Active 1RM selection
   const active1RMExerciseId = selected1RMExerciseId || priorityExercises[0]?.id || '';
 
-  // 3. High-Performance Canonical FitnessIndex
-  const index: FitnessIndex = useMemo(() => {
-    return buildFitnessIndex(logs, defsMap);
-  }, [logs, defsMap]);
-
-  // 4. Time Range Slice & Aggregated Metrics
+  // 1. Time Range Slice & Aggregated Metrics via selector over canonical index
   const aggregated = useMemo(() => {
     return selectTimeRangeAnalytics(
       index,
@@ -86,7 +67,7 @@ export function useAnalyticsData({
     );
   }, [index, defsMap, workouts, timeRange, appState?.cycleStart, active1RMExerciseId]);
 
-  // 5. Heatmap calendar data
+  // 2. Heatmap calendar data
   const heatmapData = useCalendarGrid({
     monthDate: currentHeatmapMonth,
     logs,
@@ -94,7 +75,7 @@ export function useAnalyticsData({
     weekStartsOn: 1
   });
 
-  // 6. Muscle chart data formatted for Recharts
+  // 3. Muscle chart data formatted for Recharts
   const muscleChartData = useMemo(() => {
     return MUSCLE_CATEGORIES.map(cat => {
       let val = 0;
@@ -113,7 +94,7 @@ export function useAnalyticsData({
     });
   }, [muscleMetric, aggregated.rangeMuscleVolume, aggregated.rangeMuscleSets, aggregated.rangeMuscleFrequency]);
 
-  // 7. Workout Distribution Pie Chart Data
+  // 4. Workout Distribution Pie Chart Data
   const workoutPieData = useMemo(() => {
     return (Object.entries(aggregated.workoutTypeDistribution) as [string, number][])
       .map(([type, count]) => ({
@@ -125,7 +106,7 @@ export function useAnalyticsData({
       .sort((a, b) => b.value - a.value);
   }, [aggregated.workoutTypeDistribution]);
 
-  // 8. Data-derived Insights
+  // 5. Data-derived Insights
   const insightsList = useMemo(() => {
     const list: string[] = [];
 

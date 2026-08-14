@@ -402,86 +402,61 @@ export function buildFitnessIndex(
 }
 
 // -------------------------------------------------------------
-// PURE SELECTORS (Polymorphic: accept pre-computed FitnessIndex or raw logs)
+// PURE SELECTORS (Fast, non-allocating reads over pre-computed FitnessIndex)
 // -------------------------------------------------------------
 
-function resolveIndex(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
-): FitnessIndex {
-  if (input && typeof input === 'object' && 'sortedLogsDescending' in input && 'personalBests' in input) {
-    return input as FitnessIndex;
-  }
-  return buildFitnessIndex(input as Record<string, SessionLog> | SessionLog[], defsMap);
-}
-
 export function selectExerciseIndex(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  exerciseDefinitionId: string,
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex,
+  exerciseDefinitionId: string
 ): ExerciseIndexEntry | null {
-  const index = resolveIndex(input, defsMap);
   return index.exerciseIndex.get(exerciseDefinitionId) || null;
 }
 
 export function selectSortedLogs(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex
 ): SessionLog[] {
-  const index = resolveIndex(input, defsMap);
   return index.sortedLogsDescending;
 }
 
 export function selectLifetimeStats(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex
 ): LifetimeStats {
-  const index = resolveIndex(input, defsMap);
   return index.lifetimeStats;
 }
 
 export function selectPersonalBests(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex
 ): PersonalBestRecord[] {
-  const index = resolveIndex(input, defsMap);
   return index.personalBests;
 }
 
 export function selectPersonalBestForExercise(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  exerciseDefinitionId: string,
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex,
+  exerciseDefinitionId: string
 ): PersonalBestRecord | null {
-  const index = resolveIndex(input, defsMap);
   return index.personalBestsMap.get(exerciseDefinitionId) || null;
 }
 
 export function selectExerciseHistory(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  exerciseDefinitionId: string,
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex,
+  exerciseDefinitionId: string
 ): ExerciseSessionHistoryEntry[] {
-  const index = resolveIndex(input, defsMap);
   // Returns descending (newest first)
   const history = index.historyByExercise.get(exerciseDefinitionId) || [];
   return [...history].reverse();
 }
 
 export function selectExercise1RMProgression(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  exerciseDefinitionId: string,
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex,
+  exerciseDefinitionId: string
 ): E1RMProgressionPoint[] {
-  const index = resolveIndex(input, defsMap);
   return index.e1rmHistoryByExercise.get(exerciseDefinitionId) || [];
 }
 
 export function selectMuscleDistribution(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex,
+  _defsMap?: Map<string, ExerciseDefinition>
 ): MuscleDistributionStats {
-  const index = resolveIndex(input, defsMap);
   return {
     volume: index.volumeByMuscle,
     sets: index.setsByMuscle,
@@ -492,10 +467,8 @@ export function selectMuscleDistribution(
 }
 
 export function selectExerciseFrequency(
-  input: FitnessIndex | Record<string, SessionLog> | SessionLog[],
-  defsMap?: Map<string, ExerciseDefinition> | ExerciseDefinition[]
+  index: FitnessIndex
 ): ExerciseFrequencyStat[] {
-  const index = resolveIndex(input, defsMap);
   return index.frequencyByExercise;
 }
 
