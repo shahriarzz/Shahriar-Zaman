@@ -17,9 +17,9 @@ import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
   getCycleDayForDate,
-  WORKOUT_COLORS,
-  calculateVolume
+  WORKOUT_COLORS
 } from '../utils/fitnessHelpers';
+import { calculateVolume } from '../utils/fitnessCalculations';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { haptics } from '../utils/haptics';
 import { useCalendarGrid } from '../hooks/useCalendarGrid';
@@ -42,11 +42,11 @@ interface CalendarProps {
 
 export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const { logs, workouts, appState } = useFitness();
-  const { workoutMap, coreWorkoutByCycleDayMap, resolveExerciseMeta } = useFitnessDerivedData();
+  const { index, workoutMap, coreWorkoutByCycleDayMap, resolveExerciseMeta } = useFitnessDerivedData();
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // 1. Shared Calendar Grid hook for month dates and log mapping
+  // 1. Shared Calendar Grid hook for month dates and log mapping consuming canonical FitnessIndex
   const {
     monthStart,
     days,
@@ -57,8 +57,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     isFuture: isDateFuture
   } = useCalendarGrid({
     monthDate: currentMonth,
-    logs,
-    workouts,
+    index,
+    workoutMap,
     weekStartsOn: 0
   });
 

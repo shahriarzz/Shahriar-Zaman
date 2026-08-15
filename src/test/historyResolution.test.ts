@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ExerciseDefinition, Workout, SessionLog, SetLog } from '../types/fitness';
-import { calculateVolume } from '../utils/fitnessHelpers';
+import { calculateVolume } from '../utils/fitnessCalculations';
 
 describe('History View Canonical Exercise Resolution Suite', () => {
   const mockDefs: ExerciseDefinition[] = [

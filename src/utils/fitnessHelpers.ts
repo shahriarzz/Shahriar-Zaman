@@ -10,8 +10,7 @@ export {
   getAdjustedCycleStart,
   getCycleDay,
   getNextCycleDayFromLogs,
-  getCycleDayForDate,
-  calculateVolume
+  getCycleDayForDate
 } from './fitnessCalculations';
 
 export {

@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { loadInitialFitnessData, extractExerciseDefinitionsFromWorkouts, validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
-import { trackDeletedId, removeDeletedId, getDeletedIdsTracker, clearDeletedIdsTracker, areLogsEqual } from '../utils/fitnessSyncHelpers';
+import { 
+  trackDeletedId, 
+  removeDeletedId, 
+  getDeletedIdsTracker, 
+  clearDeletedIdsTracker, 
+  areLogsEqual,
+  mergeDefinitions,
+  mergeWorkouts,
+  mergeLogs,
+  mergeAppState
+} from '../utils/fitnessSyncHelpers';
 import {
   createExerciseDefinitionMap,
   resolveExercise as getResolvedExerciseMeta,
@@ -519,6 +529,87 @@ describe('GainLog Comprehensive Validation Suite', () => {
       tracker = getDeletedIdsTracker();
       expect(tracker.defs).toEqual(['def-to-del-2']);
       expect(tracker.workouts).toEqual(['w-to-del-1']);
+    });
+
+    it('deterministic merge: local offline modifications take precedence over stale cloud data without updatedAt', () => {
+      const localDefs: ExerciseDefinition[] = [
+        { id: 'd1', name: 'Barbell Bench Press (Local Edit)', target: 'Chest' }
+      ];
+      const cloudDefs: ExerciseDefinition[] = [
+        { id: 'd1', name: 'Barbell Bench Press (Old Cloud)', target: 'Chest' },
+        { id: 'd2', name: 'Incline Dumbbell Press', target: 'Chest' }
+      ];
+
+      const { merged, toUpload } = mergeDefinitions(localDefs, cloudDefs, []);
+      expect(merged).toHaveLength(2);
+      expect(merged.find(d => d.id === 'd1')?.name).toBe('Barbell Bench Press (Local Edit)');
+      expect(merged.find(d => d.id === 'd2')?.name).toBe('Incline Dumbbell Press');
+      expect(toUpload).toHaveLength(1);
+      expect(toUpload[0].id).toBe('d1');
+    });
+
+    it('deterministic merge: respects explicit updatedAt timestamps', () => {
+      const localDefs: ExerciseDefinition[] = [
+        { id: 'd1', name: 'Older Local', target: 'Chest', updatedAt: 1000 },
+        { id: 'd2', name: 'Newer Local', target: 'Back', updatedAt: 3000 }
+      ];
+      const cloudDefs: ExerciseDefinition[] = [
+        { id: 'd1', name: 'Newer Cloud', target: 'Chest', updatedAt: 2000 },
+        { id: 'd2', name: 'Older Cloud', target: 'Back', updatedAt: 2000 }
+      ];
+
+      const { merged, toUpload } = mergeDefinitions(localDefs, cloudDefs, []);
+      expect(merged.find(d => d.id === 'd1')?.name).toBe('Newer Cloud');
+      expect(merged.find(d => d.id === 'd2')?.name).toBe('Newer Local');
+      expect(toUpload.map(d => d.id)).toEqual(['d2']);
+    });
+
+    it('deterministic merge: tombstone prevents deleted local item from resurfacing from cloud', () => {
+      const localLogs: Record<string, SessionLog> = {};
+      const cloudLogs: Record<string, SessionLog> = {
+        'log-deleted-offline': {
+          id: 'log-deleted-offline',
+          workoutId: 'w1',
+          date: '2026-08-14',
+          sets: {},
+          complete: true,
+          durationMinutes: 45
+        },
+        'log-kept': {
+          id: 'log-kept',
+          workoutId: 'w1',
+          date: '2026-08-15',
+          sets: {},
+          complete: true,
+          durationMinutes: 50
+        }
+      };
+
+      const tombstones = ['log-deleted-offline'];
+      const { merged, toUpload } = mergeLogs(localLogs, cloudLogs, tombstones);
+      expect(merged['log-deleted-offline']).toBeUndefined();
+      expect(merged['log-kept']).toBeDefined();
+      expect(Object.keys(toUpload)).toHaveLength(0);
+    });
+
+    it('deterministic merge: mergeAppState handles local and cloud cycleStart and weight logs deterministically', () => {
+      const localState = {
+        cycleStart: '2026-08-10',
+        weightLog: { '2026-08-10': 75.5, '2026-08-11': 75.8 },
+        updatedAt: 2000
+      };
+      const cloudState = {
+        cycleStart: '2026-08-01',
+        weightLog: { '2026-08-09': 75.2, '2026-08-10': 75.4 },
+        updatedAt: 1000
+      };
+
+      const { merged, needsUpload } = mergeAppState(localState, cloudState);
+      expect(merged.cycleStart).toBe('2026-08-10'); // Newer local updatedAt
+      expect(merged.weightLog?.['2026-08-09']).toBe(75.2);
+      expect(merged.weightLog?.['2026-08-10']).toBe(75.5); // Local overrides
+      expect(merged.weightLog?.['2026-08-11']).toBe(75.8);
+      expect(needsUpload).toBe(true);
     });
   });
 });

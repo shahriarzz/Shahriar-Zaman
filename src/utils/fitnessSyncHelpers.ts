@@ -1,5 +1,5 @@
 import { db, writeBatch, collection, getDocs } from '../lib/firebase';
-import { ExerciseDefinition, Workout, SessionLog } from '../types/fitness';
+import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 
 // Chunked batch operations helper to prevent Firestore 500-operation limits
 export async function commitBatchOperations<T>(
@@ -127,3 +127,218 @@ export const areLogsEqual = (a: SessionLog, b: SessionLog): boolean => {
   }
   return true;
 };
+
+// ==========================================
+// DETERMINISTIC SYNC MERGE UTILITIES
+// ==========================================
+
+export type ConflictWinner = 'local' | 'cloud' | 'equal' | 'tombstone';
+
+export interface ResolveRecordResult<T> {
+  winner: ConflictWinner;
+  resolved: T | null;
+  needsUpload: boolean;
+}
+
+/**
+ * Canonical conflict resolution function between local and cloud records.
+ * Follows strict updatedAt rules and offline deletion tombstones.
+ */
+export function resolveLocalCloudRecord<T extends { id?: string; updatedAt?: number }>(
+  local: T | undefined | null,
+  cloud: T | undefined | null,
+  isTombstoned = false
+): ResolveRecordResult<T> {
+  if (isTombstoned) {
+    return { winner: 'tombstone', resolved: null, needsUpload: false };
+  }
+
+  if (local && !cloud) {
+    return { winner: 'local', resolved: local, needsUpload: true };
+  }
+
+  if (!local && cloud) {
+    return { winner: 'cloud', resolved: cloud, needsUpload: false };
+  }
+
+  if (!local && !cloud) {
+    return { winner: 'equal', resolved: null, needsUpload: false };
+  }
+
+  const localUpdated = local!.updatedAt || 0;
+  const cloudUpdated = cloud!.updatedAt || 0;
+
+  if (localUpdated > cloudUpdated) {
+    return { winner: 'local', resolved: local!, needsUpload: true };
+  }
+
+  if (cloudUpdated > localUpdated) {
+    return { winner: 'cloud', resolved: cloud!, needsUpload: false };
+  }
+
+  // Same timestamp: compare content
+  if (JSON.stringify(local) !== JSON.stringify(cloud)) {
+    // If content differs at equal timestamps, local is preferred and uploaded
+    return { winner: 'local', resolved: local!, needsUpload: true };
+  }
+
+  return { winner: 'equal', resolved: local!, needsUpload: false };
+}
+
+export function mergeDefinitions(
+  localDefs: ExerciseDefinition[],
+  cloudDefs: ExerciseDefinition[],
+  tombstones: string[] = []
+): { merged: ExerciseDefinition[]; toUpload: ExerciseDefinition[] } {
+  const tombstoneSet = new Set(tombstones);
+  const cloudMap = new Map<string, ExerciseDefinition>();
+  (cloudDefs || []).forEach(d => {
+    if (d && d.id && !tombstoneSet.has(d.id)) {
+      cloudMap.set(d.id, d);
+    }
+  });
+
+  const mergedMap = new Map<string, ExerciseDefinition>();
+  const toUpload: ExerciseDefinition[] = [];
+
+  (localDefs || []).forEach(localDef => {
+    if (!localDef || !localDef.id || tombstoneSet.has(localDef.id)) return;
+    const cloudDef = cloudMap.get(localDef.id);
+    const result = resolveLocalCloudRecord(localDef, cloudDef, false);
+
+    if (result.winner === 'local' && result.resolved) {
+      mergedMap.set(localDef.id, result.resolved);
+      if (result.needsUpload) toUpload.push(result.resolved);
+    } else if (result.winner === 'cloud' && result.resolved) {
+      mergedMap.set(localDef.id, result.resolved);
+    } else if (result.resolved) {
+      mergedMap.set(localDef.id, result.resolved);
+    }
+    cloudMap.delete(localDef.id);
+  });
+
+  cloudMap.forEach(cloudDef => {
+    mergedMap.set(cloudDef.id, cloudDef);
+  });
+
+  return {
+    merged: Array.from(mergedMap.values()),
+    toUpload
+  };
+}
+
+export function mergeWorkouts(
+  localWorkouts: Workout[],
+  cloudWorkouts: Workout[],
+  tombstones: string[] = []
+): { merged: Workout[]; toUpload: Workout[] } {
+  const tombstoneSet = new Set(tombstones);
+  const cloudMap = new Map<string, Workout>();
+  (cloudWorkouts || []).forEach(w => {
+    if (w && w.id && !tombstoneSet.has(w.id)) {
+      cloudMap.set(w.id, w);
+    }
+  });
+
+  const mergedMap = new Map<string, Workout>();
+  const toUpload: Workout[] = [];
+
+  (localWorkouts || []).forEach(localW => {
+    if (!localW || !localW.id || tombstoneSet.has(localW.id)) return;
+    const cloudW = cloudMap.get(localW.id);
+    const result = resolveLocalCloudRecord(localW, cloudW, false);
+
+    if (result.winner === 'local' && result.resolved) {
+      mergedMap.set(localW.id, result.resolved);
+      if (result.needsUpload) toUpload.push(result.resolved);
+    } else if (result.winner === 'cloud' && result.resolved) {
+      mergedMap.set(localW.id, result.resolved);
+    } else if (result.resolved) {
+      mergedMap.set(localW.id, result.resolved);
+    }
+    cloudMap.delete(localW.id);
+  });
+
+  cloudMap.forEach(cloudW => {
+    mergedMap.set(cloudW.id, cloudW);
+  });
+
+  return {
+    merged: Array.from(mergedMap.values()),
+    toUpload
+  };
+}
+
+export function mergeLogs(
+  localLogs: Record<string, SessionLog>,
+  cloudLogs: Record<string, SessionLog>,
+  tombstones: string[] = []
+): { merged: Record<string, SessionLog>; toUpload: Record<string, SessionLog> } {
+  const tombstoneSet = new Set(tombstones);
+  const cloudMap = new Map<string, SessionLog>();
+  Object.entries(cloudLogs || {}).forEach(([id, l]) => {
+    if (l && !tombstoneSet.has(id)) {
+      cloudMap.set(id, l);
+    }
+  });
+
+  const merged: Record<string, SessionLog> = {};
+  const toUpload: Record<string, SessionLog> = {};
+
+  Object.entries(localLogs || {}).forEach(([id, localL]) => {
+    if (!localL || tombstoneSet.has(id)) return;
+    const cloudL = cloudMap.get(id);
+    const result = resolveLocalCloudRecord(localL, cloudL, false);
+
+    if (result.winner === 'local' && result.resolved) {
+      merged[id] = result.resolved;
+      if (result.needsUpload) toUpload[id] = result.resolved;
+    } else if (result.winner === 'cloud' && result.resolved) {
+      merged[id] = result.resolved;
+    } else if (result.resolved) {
+      merged[id] = result.resolved;
+    }
+    cloudMap.delete(id);
+  });
+
+  cloudMap.forEach((cloudL, id) => {
+    merged[id] = cloudL;
+  });
+
+  return {
+    merged,
+    toUpload
+  };
+}
+
+export function mergeAppState(
+  localState: AppState,
+  cloudState: AppState | null
+): { merged: AppState; needsUpload: boolean } {
+  if (!cloudState) {
+    return { merged: localState, needsUpload: true };
+  }
+
+  const localUpdated = localState.updatedAt || 0;
+  const cloudUpdated = cloudState.updatedAt || 0;
+
+  const cycleStart = (localUpdated >= cloudUpdated)
+    ? (localState.cycleStart || cloudState.cycleStart)
+    : (cloudState.cycleStart || localState.cycleStart);
+
+  const mergedWeight: Record<string, number> = {
+    ...(cloudState.weightLog || {}),
+    ...(localState.weightLog || {})
+  };
+
+  const merged: AppState = {
+    cycleStart,
+    weightLog: mergedWeight,
+    updatedAt: Math.max(localUpdated, cloudUpdated)
+  };
+
+  const needsUpload = JSON.stringify(merged) !== JSON.stringify(cloudState);
+
+  return { merged, needsUpload };
+}
+

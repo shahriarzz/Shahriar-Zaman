@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { auth, signInWithGoogle, onAuthStateChanged, getRedirectResult, User } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
@@ -7,7 +7,12 @@ import {
   getDeletedIdsTracker, 
   removeDeletedId,
   clearDeletedIdsTracker, 
-  areLogsEqual 
+  areLogsEqual,
+  resolveLocalCloudRecord,
+  mergeDefinitions,
+  mergeWorkouts,
+  mergeLogs,
+  mergeAppState
 } from '../utils/fitnessSyncHelpers';
 import { 
   getExerciseDefinitions, 
@@ -151,65 +156,44 @@ export function useFitnessSync({
         }
       });
 
-      // 1. App State Sync
-      let mergedState = { ...appStateRef.current };
-      if (cloudState) {
-        mergedState = {
-          cycleStart: appStateRef.current.cycleStart || cloudState.cycleStart || dk(),
-          weightLog: { ...(cloudState.weightLog || {}), ...(appStateRef.current.weightLog || {}) }
-        };
+      // 1. Deterministic App State Sync
+      const { merged: mergedState, needsUpload: stateNeedsUpload } = mergeAppState(appStateRef.current, cloudState);
+      if (stateNeedsUpload) {
         await saveAppState(uid, mergedState, true);
-      } else {
-        await saveAppState(uid, appStateRef.current, true);
       }
       setAppState(mergedState);
 
-      // 2. Defs Sync
-      const cloudDefsMap = new Map<string, ExerciseDefinition>();
-      cloudDefs.forEach(d => cloudDefsMap.set(d.id, d));
-
-      const defsToUpload = exerciseDefsRef.current.filter(d => !cloudDefsMap.has(d.id) || JSON.stringify(cloudDefsMap.get(d.id)) !== JSON.stringify(d));
+      // 2. Deterministic Defs Sync
+      const { merged: mergedDefs, toUpload: defsToUpload } = mergeDefinitions(
+        exerciseDefsRef.current,
+        rawCloudDefs,
+        activeTracker.defs
+      );
       if (defsToUpload.length > 0) {
         await saveExerciseDefinitionsBatch(uid, defsToUpload);
       }
-
-      const mergedDefs = [...exerciseDefsRef.current];
-      cloudDefs.forEach(d => {
-        if (!mergedDefs.some(local => local.id === d.id)) {
-          mergedDefs.push(d);
-        }
-      });
       setExerciseDefinitions(mergedDefs);
 
-      // 3. Workouts Sync
-      const cloudWorkoutsMap = new Map<string, Workout>();
-      cloudWorkouts.forEach(w => cloudWorkoutsMap.set(w.id, w));
-
-      const workoutsToUpload = workoutsRef.current.filter(w => !cloudWorkoutsMap.has(w.id) || JSON.stringify(cloudWorkoutsMap.get(w.id)) !== JSON.stringify(w));
+      // 3. Deterministic Workouts Sync
+      const { merged: mergedWorkouts, toUpload: workoutsToUpload } = mergeWorkouts(
+        workoutsRef.current,
+        rawCloudWorkouts,
+        activeTracker.workouts
+      );
       if (workoutsToUpload.length > 0) {
         await saveWorkoutsBatch(uid, workoutsToUpload);
       }
-
-      const mergedWorkouts = [...workoutsRef.current];
-      cloudWorkouts.forEach(w => {
-        if (!mergedWorkouts.some(local => local.id === w.id)) {
-          mergedWorkouts.push(w);
-        }
-      });
       setWorkouts(mergedWorkouts);
 
-      // 4. Logs Sync
-      const logsToUploadEntries = Object.entries(logsRef.current).filter(([id, l]) => {
-        const cloudL = cloudLogsMap[id];
-        return !cloudL || !areLogsEqual(cloudL, l as SessionLog);
-      });
-      if (logsToUploadEntries.length > 0) {
-        const logsMapToUpload: Record<string, SessionLog> = {};
-        logsToUploadEntries.forEach(([id, l]) => logsMapToUpload[id] = l as SessionLog);
-        await saveLogsBatch(uid, logsMapToUpload);
+      // 4. Deterministic Logs Sync
+      const { merged: mergedLogs, toUpload: logsToUpload } = mergeLogs(
+        logsRef.current,
+        rawCloudLogs || {},
+        activeTracker.logs
+      );
+      if (Object.keys(logsToUpload).length > 0) {
+        await saveLogsBatch(uid, logsToUpload);
       }
-
-      const mergedLogs: Record<string, SessionLog> = { ...logsRef.current, ...cloudLogsMap };
       setLogs(mergedLogs);
 
       setSyncStatus('synced');
@@ -266,20 +250,29 @@ export function useFitnessSync({
         const tombstones = getDeletedIdsTracker().defs;
         changes.forEach(change => {
           const id = change.doc.id;
-          if (tombstones.includes(id)) return;
+          const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
             const cloudDef = change.doc.data() as ExerciseDefinition;
             const idx = current.findIndex(d => d.id === id);
-            if (idx === -1) {
-              current.push(cloudDef);
+            const localDef = idx !== -1 ? current[idx] : null;
+            const result = resolveLocalCloudRecord(localDef, cloudDef, isTombstoned);
+
+            if (result.winner === 'cloud' && result.resolved) {
+              if (idx === -1) {
+                current.push(result.resolved);
+              } else {
+                current[idx] = result.resolved;
+              }
               hasChanges = true;
-            } else if (!change.doc.metadata.hasPendingWrites && JSON.stringify(current[idx]) !== JSON.stringify(cloudDef)) {
-              current[idx] = cloudDef;
-              hasChanges = true;
+            } else if (result.winner === 'tombstone') {
+              if (idx !== -1) {
+                current.splice(idx, 1);
+                hasChanges = true;
+              }
             }
           } else if (change.type === 'removed') {
             const idx = current.findIndex(d => d.id === id);
-            if (idx !== -1) {
+            if (idx !== -1 && !change.doc.metadata.hasPendingWrites) {
               current.splice(idx, 1);
               hasChanges = true;
             }
@@ -298,20 +291,29 @@ export function useFitnessSync({
         const tombstones = getDeletedIdsTracker().workouts;
         changes.forEach(change => {
           const id = change.doc.id;
-          if (tombstones.includes(id)) return;
+          const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
             const cloudW = change.doc.data() as Workout;
             const idx = current.findIndex(w => w.id === id);
-            if (idx === -1) {
-              current.push(cloudW);
+            const localW = idx !== -1 ? current[idx] : null;
+            const result = resolveLocalCloudRecord(localW, cloudW, isTombstoned);
+
+            if (result.winner === 'cloud' && result.resolved) {
+              if (idx === -1) {
+                current.push(result.resolved);
+              } else {
+                current[idx] = result.resolved;
+              }
               hasChanges = true;
-            } else if (!change.doc.metadata.hasPendingWrites && JSON.stringify(current[idx]) !== JSON.stringify(cloudW)) {
-              current[idx] = cloudW;
-              hasChanges = true;
+            } else if (result.winner === 'tombstone') {
+              if (idx !== -1) {
+                current.splice(idx, 1);
+                hasChanges = true;
+              }
             }
           } else if (change.type === 'removed') {
             const idx = current.findIndex(w => w.id === id);
-            if (idx !== -1) {
+            if (idx !== -1 && !change.doc.metadata.hasPendingWrites) {
               current.splice(idx, 1);
               hasChanges = true;
             }
@@ -330,7 +332,7 @@ export function useFitnessSync({
         const tombstones = getDeletedIdsTracker().logs;
         changes.forEach(change => {
           const id = change.doc.id;
-          if (tombstones.includes(id)) return;
+          const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
             const raw = change.doc.data() as any;
             const cloudVal: SessionLog = {
@@ -339,14 +341,23 @@ export function useFitnessSync({
               date: raw.date,
               sets: raw.sets || {},
               complete: !!raw.complete,
-              durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0
+              durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0,
+              updatedAt: Number(raw.updatedAt) || 0
             };
-            if (!current[id] || (!change.doc.metadata.hasPendingWrites && !areLogsEqual(current[id], cloudVal))) {
-              current[id] = cloudVal;
+            const localL = current[id] || null;
+            const result = resolveLocalCloudRecord(localL, cloudVal, isTombstoned);
+
+            if (result.winner === 'cloud' && result.resolved) {
+              current[id] = result.resolved;
               hasChanges = true;
+            } else if (result.winner === 'tombstone') {
+              if (current[id]) {
+                delete current[id];
+                hasChanges = true;
+              }
             }
           } else if (change.type === 'removed') {
-            if (current[id]) {
+            if (current[id] && !change.doc.metadata.hasPendingWrites) {
               delete current[id];
               hasChanges = true;
             }
@@ -360,8 +371,12 @@ export function useFitnessSync({
     const unsubState = subscribeAppState(
       user.uid,
       (cloudState, hasPendingWrites) => {
-        if (!hasPendingWrites && cloudState && JSON.stringify(appStateRef.current) !== JSON.stringify(cloudState)) {
-          setAppState(cloudState);
+        if (!hasPendingWrites && cloudState) {
+          const localState = appStateRef.current;
+          const { merged } = mergeAppState(localState, cloudState);
+          if (JSON.stringify(localState) !== JSON.stringify(merged)) {
+            setAppState(merged);
+          }
         }
       },
       (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}`)
@@ -385,7 +400,7 @@ export function useFitnessSync({
     if (user) syncDataBackground(user.uid);
   }, [user, syncDataBackground]);
 
-  return {
+  return useMemo(() => ({
     user,
     loading,
     syncStatus,
@@ -395,5 +410,13 @@ export function useFitnessSync({
     login,
     logout,
     retrySync
-  };
+  }), [
+    user,
+    loading,
+    syncStatus,
+    syncError,
+    login,
+    logout,
+    retrySync
+  ]);
 }

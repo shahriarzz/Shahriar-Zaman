@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { SetLog } from '../types/fitness';
 
 export interface ActiveSession {
@@ -49,10 +49,15 @@ export function useActiveSession() {
     setActiveSession(null);
   }, []);
 
-  return {
+  return useMemo(() => ({
     activeSession,
     startActiveSession,
     updateActiveSessionSets,
     clearActiveSession
-  };
+  }), [
+    activeSession,
+    startActiveSession,
+    updateActiveSessionSets,
+    clearActiveSession
+  ]);
 }

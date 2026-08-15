@@ -2,6 +2,28 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
 
+export interface FitnessDatabaseSnapshot {
+  exerciseDefinitions: ExerciseDefinition[];
+  workouts: Workout[];
+  logs: Record<string, SessionLog>;
+  appState: AppState;
+}
+
+/**
+ * Unified persistence function writing schema version and full snapshot together.
+ */
+export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): void {
+  try {
+    localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
+    localStorage.setItem('gl_exercise_definitions', JSON.stringify(snapshot.exerciseDefinitions));
+    localStorage.setItem('gl_workouts', JSON.stringify(snapshot.workouts));
+    localStorage.setItem('gl_logs', JSON.stringify(snapshot.logs));
+    localStorage.setItem('gl_state', JSON.stringify(snapshot.appState));
+  } catch (e) {
+    console.warn("Failed to persist fitness database snapshot", e);
+  }
+}
+
 export function useFitnessData() {
   const [initialData] = useState(() => loadInitialFitnessData());
 
@@ -54,43 +76,31 @@ export function useFitnessData() {
     });
   }, []);
 
-  // Immediate persistence to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-      localStorage.setItem('gl_exercise_definitions', JSON.stringify(exerciseDefinitions));
-    } catch (e) {
-      console.warn("Failed to persist gl_exercise_definitions", e);
-    }
-  }, [exerciseDefinitions]);
+  // Atomic snapshot setter to apply full state without intermediate inconsistent states
+  const applyFitnessDatabaseSnapshot = useCallback((snapshot: FitnessDatabaseSnapshot) => {
+    exerciseDefsRef.current = snapshot.exerciseDefinitions;
+    workoutsRef.current = snapshot.workouts;
+    logsRef.current = snapshot.logs;
+    appStateRef.current = snapshot.appState;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-      localStorage.setItem('gl_workouts', JSON.stringify(workouts));
-    } catch (e) {
-      console.warn("Failed to persist gl_workouts", e);
-    }
-  }, [workouts]);
+    setExerciseDefinitionsState(snapshot.exerciseDefinitions);
+    setWorkoutsState(snapshot.workouts);
+    setLogsState(snapshot.logs);
+    setAppStateState(snapshot.appState);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-      localStorage.setItem('gl_logs', JSON.stringify(logs));
-    } catch (e) {
-      console.warn("Failed to persist gl_logs", e);
-    }
-  }, [logs]);
+    persistFitnessDatabase(snapshot);
+  }, []);
 
+  // Unified single-point persistence to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-      localStorage.setItem('gl_state', JSON.stringify(appState));
-    } catch (e) {
-      console.warn("Failed to persist gl_state", e);
-    }
-  }, [appState]);
-
+    if (!isInitialized) return;
+    persistFitnessDatabase({
+      exerciseDefinitions,
+      workouts,
+      logs,
+      appState
+    });
+  }, [exerciseDefinitions, workouts, logs, appState, isInitialized]);
 
   return {
     exerciseDefinitions,
@@ -108,6 +118,8 @@ export function useFitnessData() {
     appState,
     setAppState,
     appStateRef,
+
+    applyFitnessDatabaseSnapshot,
 
     isInitialized,
     setIsInitialized

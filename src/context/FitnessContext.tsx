@@ -8,6 +8,7 @@ import { useFitnessWorkouts } from '../hooks/useFitnessWorkouts';
 import { useFitnessLogs } from '../hooks/useFitnessLogs';
 import { useActiveSession, ActiveSession } from '../hooks/useActiveSession';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
+import { FitnessDerivedProvider } from './FitnessDerivedContext';
 
 export interface FitnessContextType {
   // Auth & Sync state
@@ -92,6 +93,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     workoutsRef: data.workoutsRef,
     logsRef: data.logsRef,
     appStateRef: data.appStateRef,
+    applyFitnessDatabaseSnapshot: data.applyFitnessDatabaseSnapshot,
     setExerciseDefinitions: data.setExerciseDefinitions,
     setWorkouts: data.setWorkouts,
     setLogs: data.setLogs,
@@ -183,22 +185,49 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     exportBackup: backups.exportBackup,
     importBackup: backups.importBackup
   }), [
-    sync,
+    sync.user,
+    sync.loading,
+    sync.syncStatus,
+    sync.syncError,
+    sync.login,
+    sync.logout,
+    sync.retrySync,
     data.isInitialized,
     data.exerciseDefinitions,
     data.workouts,
     data.logs,
     data.appState,
-    exercises,
-    workouts,
-    logs,
-    activeSession,
-    backups
+    exercises.addExerciseDefinition,
+    exercises.updateExerciseDefinition,
+    exercises.deleteExerciseDefinition,
+    workouts.setWorkouts,
+    workouts.assignExerciseToWorkout,
+    workouts.removeExerciseFromWorkout,
+    workouts.updateWorkoutExerciseProgramming,
+    workouts.deleteWorkout,
+    logs.addLog,
+    logs.deleteLog,
+    logs.resetLogs,
+    logs.updateCycleStart,
+    activeSession.activeSession,
+    activeSession.startActiveSession,
+    activeSession.updateActiveSessionSets,
+    activeSession.clearActiveSession,
+    logs.logBodyWeight,
+    logs.deleteBodyWeight,
+    backups.pushAutoBackup,
+    backups.getAutoBackups,
+    backups.restoreAutoBackup,
+    backups.createManualBackup,
+    backups.exportBackup,
+    backups.importBackup
   ]);
 
   return (
     <FitnessContext.Provider value={value}>
-      {children}
+      <FitnessDerivedProvider>
+        {children}
+      </FitnessDerivedProvider>
     </FitnessContext.Provider>
   );
 };

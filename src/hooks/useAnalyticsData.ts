@@ -55,11 +55,11 @@ export function useAnalyticsData({
     );
   }, [index, defsMap, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, active1RMExerciseId]);
 
-  // 2. Heatmap calendar data
+  // 2. Heatmap calendar data consuming canonical index
   const heatmapData = useCalendarGrid({
     monthDate: currentHeatmapMonth,
-    logs,
-    workouts,
+    index,
+    workoutMap,
     weekStartsOn: 1
   });
 

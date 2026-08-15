@@ -5,7 +5,8 @@ import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edi
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
-import { WORKOUT_COLORS, calculateVolume, generateId } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
+import { calculateVolume } from '../utils/fitnessCalculations';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';

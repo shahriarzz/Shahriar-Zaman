@@ -1,10 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, ExerciseDefinition, FitnessDatabase, CURRENT_SCHEMA_VERSION } from '../types/fitness';
-import { INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
-import { extractExerciseDefinitionsFromWorkouts, validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
+import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
 import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitnessSyncHelpers';
 import { saveExerciseDefinitionsBatch, saveWorkoutsBatch, saveLogsBatch, saveAppState } from '../services/fitnessFirestore';
+import { FitnessDatabaseSnapshot } from './useFitnessData';
 
 export interface AutoBackupEntry {
   timestamp: string;
@@ -22,6 +22,7 @@ interface UseFitnessBackupsProps {
   workoutsRef: React.MutableRefObject<Workout[]>;
   logsRef: React.MutableRefObject<Record<string, SessionLog>>;
   appStateRef: React.MutableRefObject<AppState>;
+  applyFitnessDatabaseSnapshot: (snapshot: FitnessDatabaseSnapshot) => void;
   setExerciseDefinitions: (defs: ExerciseDefinition[] | ((prev: ExerciseDefinition[]) => ExerciseDefinition[])) => void;
   setWorkouts: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => void;
   setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
@@ -34,10 +35,7 @@ export function useFitnessBackups({
   workoutsRef,
   logsRef,
   appStateRef,
-  setExerciseDefinitions,
-  setWorkouts,
-  setLogs,
-  setAppState
+  applyFitnessDatabaseSnapshot
 }: UseFitnessBackupsProps) {
 
   const pushAutoBackup = useCallback((
@@ -90,30 +88,41 @@ export function useFitnessBackups({
         return { success: false, message: 'Could not find backup checkpoint matching timestamp' };
       }
 
-      const restoredDefs = match.exerciseDefinitions || INITIAL_EXERCISE_DEFINITIONS;
-
-      const sanitizedLogs: Record<string, SessionLog> = {};
-      Object.entries(match.logs || {}).forEach(([id, logVal]: [string, any]) => {
-        sanitizedLogs[id] = {
-          ...logVal,
-          durationMinutes: Number(logVal.durationMinutes !== undefined ? logVal.durationMinutes : logVal.duration) || 0
-        };
+      // Canonical validation & sanitization pipeline
+      const validation = validateAndSanitizeFitnessData({
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        exerciseDefinitions: match.exerciseDefinitions,
+        workouts: match.workouts,
+        logs: match.logs,
+        appState: match.appState
       });
+
+      if (!validation.success || !validation.data) {
+        return {
+          success: false,
+          message: validation.message || 'Failed to validate checkpoint structure.'
+        };
+      }
+
+      const { exerciseDefinitions: restoredDefs, workouts: restoredWorkouts, logs: restoredLogs, appState: restoredAppState } = validation.data;
 
       clearDeletedIdsTracker();
 
-      setExerciseDefinitions(restoredDefs);
-      setWorkouts(match.workouts || []);
-      setLogs(sanitizedLogs);
-      setAppState(match.appState);
+      // Atomic snapshot restore
+      applyFitnessDatabaseSnapshot({
+        exerciseDefinitions: restoredDefs,
+        workouts: restoredWorkouts,
+        logs: restoredLogs,
+        appState: restoredAppState
+      });
 
       if (user) {
         try {
-          await saveAppState(user.uid, match.appState, true);
-          await syncCloudDataWithRestored(user.uid, restoredDefs, match.workouts || [], sanitizedLogs);
+          await saveAppState(user.uid, restoredAppState, true);
+          await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
           await saveExerciseDefinitionsBatch(user.uid, restoredDefs);
-          await saveWorkoutsBatch(user.uid, match.workouts || []);
-          await saveLogsBatch(user.uid, sanitizedLogs);
+          await saveWorkoutsBatch(user.uid, restoredWorkouts);
+          await saveLogsBatch(user.uid, restoredLogs);
         } catch (cloudError: any) {
           console.error("Cloud synchronization failed during restore:", cloudError);
           return {
@@ -128,7 +137,7 @@ export function useFitnessBackups({
       console.error("Failed to restore checkpoint", e);
       return { success: false, message: `Failed to restore checkpoint: ${e.message || String(e)}` };
     }
-  }, [user, getAutoBackups, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
+  }, [user, getAutoBackups, applyFitnessDatabaseSnapshot]);
 
   const createManualBackup = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
@@ -174,10 +183,13 @@ export function useFitnessBackups({
 
       clearDeletedIdsTracker();
 
-      setExerciseDefinitions(restoredDefs);
-      setWorkouts(restoredWorkouts);
-      setLogs(restoredLogs);
-      setAppState(restoredAppState);
+      // Atomic snapshot restore
+      applyFitnessDatabaseSnapshot({
+        exerciseDefinitions: restoredDefs,
+        workouts: restoredWorkouts,
+        logs: restoredLogs,
+        appState: restoredAppState
+      });
 
       if (user) {
         try {
@@ -200,14 +212,21 @@ export function useFitnessBackups({
       console.error("Import backup error", e);
       return { success: false, message: `Failed to import backup: ${e.message || String(e)}` };
     }
-  }, [user, pushAutoBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
+  }, [user, pushAutoBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, applyFitnessDatabaseSnapshot]);
 
-  return {
+  return useMemo(() => ({
     pushAutoBackup,
     getAutoBackups,
     restoreAutoBackup,
     createManualBackup,
     exportBackup,
     importBackup
-  };
+  }), [
+    pushAutoBackup,
+    getAutoBackups,
+    restoreAutoBackup,
+    createManualBackup,
+    exportBackup,
+    importBackup
+  ]);
 }

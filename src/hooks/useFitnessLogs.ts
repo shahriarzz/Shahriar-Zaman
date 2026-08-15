@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { SessionLog, AppState, Workout } from '../types/fitness';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
@@ -165,12 +165,19 @@ export function useFitnessLogs({
     }
   }, [user, appStateRef, setAppState, setSyncStatus, setSyncError]);
 
-  return {
+  return useMemo(() => ({
     addLog,
     deleteLog,
     resetLogs,
     updateCycleStart,
     logBodyWeight,
     deleteBodyWeight
-  };
+  }), [
+    addLog,
+    deleteLog,
+    resetLogs,
+    updateCycleStart,
+    logBodyWeight,
+    deleteBodyWeight
+  ]);
 }

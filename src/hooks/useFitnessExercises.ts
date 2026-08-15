@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { ExerciseDefinition, Workout } from '../types/fitness';
 import { generateId } from '../utils/fitnessHelpers';
@@ -120,9 +120,13 @@ export function useFitnessExercises({
     }
   }, [user, exerciseDefsRef, workoutsRef, setExerciseDefinitions, setWorkouts, pushAutoBackup, setSyncStatus, setSyncError, logsRef, appStateRef]);
 
-  return {
+  return useMemo(() => ({
     addExerciseDefinition,
     updateExerciseDefinition,
     deleteExerciseDefinition
-  };
+  }), [
+    addExerciseDefinition,
+    updateExerciseDefinition,
+    deleteExerciseDefinition
+  ]);
 }

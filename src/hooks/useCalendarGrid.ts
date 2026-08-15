@@ -11,8 +11,8 @@ import {
   startOfDay,
   format
 } from 'date-fns';
-import { SessionLog, SetLog, Workout } from '../types/fitness';
-import { calculateVolume } from '../utils/fitnessHelpers';
+import { SessionLog, Workout } from '../types/fitness';
+import { FitnessIndex } from '../utils/fitnessDerivedSelectors';
 
 export interface DayDetail {
   workoutNames: string[];
@@ -26,8 +26,8 @@ export interface DayDetail {
 
 export interface UseCalendarGridOptions {
   monthDate: Date;
-  logs?: Record<string, SessionLog> | null;
-  workouts?: Workout[] | null;
+  index: FitnessIndex;
+  workoutMap: Map<string, Workout>;
   weekStartsOn?: 0 | 1;
 }
 
@@ -48,18 +48,11 @@ export interface UseCalendarGridResult {
 
 export function useCalendarGrid({
   monthDate,
-  logs = {},
-  workouts = [],
+  index,
+  workoutMap,
   weekStartsOn = 0
 }: UseCalendarGridOptions): UseCalendarGridResult {
-  // 1. Build fast workout lookup map
-  const workoutMap = useMemo(() => {
-    const map = new Map<string, Workout>();
-    (workouts || []).forEach(w => map.set(w.id, w));
-    return map;
-  }, [workouts]);
-
-  // 2. Compute calendar grid interval and days
+  // 1. Compute calendar grid interval and days
   const { monthStart, monthEnd, startDate, endDate, days } = useMemo(() => {
     const mStart = startOfMonth(monthDate);
     const mEnd = endOfMonth(mStart);
@@ -75,59 +68,58 @@ export function useCalendarGrid({
     };
   }, [monthDate, weekStartsOn]);
 
-  // 3. Map logs by date and calculate per-day volume & detail
+  // 2. Map logs by date and extract per-day volume & detail directly from the canonical index
   const { logsByDateMap, logVolMap, dayDetailMap, maxDayVol } = useMemo(() => {
     const dateMap = new Map<string, SessionLog>();
-    const volMap: Record<string, number> = {};
+    const volMap: Record<string, number> = index.volumeByDate || {};
     const detailMap: Record<string, DayDetail> = {};
 
-    (Object.values(logs || {}) as SessionLog[]).forEach(l => {
-      if (!l || !l.date) return;
-
-      // Register in date map (latest or primary log for this date)
-      dateMap.set(l.date, l);
-      if (l.id) {
-        dateMap.set(l.id, l);
-        if (l.id.length >= 10) {
-          dateMap.set(l.id.slice(0, 10), l);
+    // Populate dateMap and detailMap from index.logsByDate
+    index.logsByDate.forEach((logsForDate, dateStr) => {
+      if (!logsForDate || logsForDate.length === 0) return;
+      const primaryLog = logsForDate[0];
+      dateMap.set(dateStr, primaryLog);
+      if (primaryLog.id) {
+        dateMap.set(primaryLog.id, primaryLog);
+        if (primaryLog.id.length >= 10) {
+          dateMap.set(primaryLog.id.slice(0, 10), primaryLog);
         }
       }
 
-      const vol = calculateVolume(l);
-      volMap[l.date] = (volMap[l.date] || 0) + vol;
+      const workoutNames: string[] = [];
+      const workoutIds: string[] = [];
+      let isComplete = true;
 
-      const wo = workoutMap.get(l.workoutId);
-      const woName = wo?.name || 'Session';
+      logsForDate.forEach(l => {
+        const wo = workoutMap.get(l.workoutId);
+        workoutNames.push(wo?.name || 'Session');
+        workoutIds.push(l.workoutId);
+        if (!l.complete) isComplete = false;
+      });
 
-      let doneSetsCount = 0;
-      let totalSetsCount = 0;
-      if (l.sets) {
-        Object.values(l.sets).forEach(sList => {
-          const setsArr = (sList as SetLog[]) || [];
-          totalSetsCount += setsArr.length;
-          doneSetsCount += setsArr.filter(s => s.done).length;
-        });
-      }
+      const dayVol = volMap[dateStr] || 0;
+      const doneSets = index.setsByDate[dateStr] || 0;
 
-      if (!detailMap[l.date]) {
-        detailMap[l.date] = {
-          workoutNames: [woName],
-          workoutIds: [l.workoutId],
-          volume: vol,
-          doneSets: doneSetsCount,
-          totalSets: totalSetsCount,
-          isComplete: l.complete,
-          logs: [l]
-        };
-      } else {
-        detailMap[l.date].workoutNames.push(woName);
-        detailMap[l.date].workoutIds.push(l.workoutId);
-        detailMap[l.date].volume += vol;
-        detailMap[l.date].doneSets += doneSetsCount;
-        detailMap[l.date].totalSets += totalSetsCount;
-        detailMap[l.date].isComplete = detailMap[l.date].isComplete && l.complete;
-        detailMap[l.date].logs.push(l);
-      }
+      let totalSets = 0;
+      logsForDate.forEach(l => {
+        if (l.sets && typeof l.sets === 'object') {
+          Object.values(l.sets).forEach(sList => {
+            if (Array.isArray(sList)) {
+              totalSets += sList.length;
+            }
+          });
+        }
+      });
+
+      detailMap[dateStr] = {
+        workoutNames,
+        workoutIds,
+        volume: dayVol,
+        doneSets,
+        totalSets: Math.max(totalSets, doneSets),
+        isComplete,
+        logs: logsForDate
+      };
     });
 
     // Compute max single-day volume within this month for normalized heatmap intensity
@@ -148,7 +140,7 @@ export function useCalendarGrid({
       dayDetailMap: detailMap,
       maxDayVol: maxVol
     };
-  }, [logs, workoutMap, days, monthStart]);
+  }, [index, workoutMap, days, monthStart]);
 
   const isCurrentMonth = useMemo(() => (d: Date) => isSameMonth(d, monthStart), [monthStart]);
   const isToday = useMemo(() => (d: Date) => isSameDay(d, new Date()), []);

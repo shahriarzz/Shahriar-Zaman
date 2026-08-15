@@ -7,6 +7,7 @@ export interface ExerciseDefinition {
   equipment?: string;
   instructions?: string;
   tags?: string[];
+  updatedAt?: number;
 }
 
 export interface WorkoutExercise {
@@ -37,6 +38,7 @@ export interface Workout {
   cycleDay?: number | null;
   isCore?: boolean;
   restNotes?: string[];
+  updatedAt?: number;
 }
 
 export interface SetLog {
@@ -53,11 +55,13 @@ export interface SessionLog {
   sets: Record<string, SetLog[]>; // exerciseDefinitionId -> sets
   complete: boolean;
   durationMinutes: number; // minutes
+  updatedAt?: number;
 }
 
 export interface AppState {
   cycleStart: string; // YYYY-MM-DD
   weightLog?: Record<string, number>; // date -> kg
+  updatedAt?: number;
 }
 
 export const CURRENT_SCHEMA_VERSION = 2;
