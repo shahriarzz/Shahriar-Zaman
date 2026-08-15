@@ -25,6 +25,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
     { id: 'def_triceps', name: 'Tricep Rope Pushdown', target: 'Triceps', equipment: 'Cable' },
     { id: 'def_squat', name: 'Barbell Back Squat', target: 'Quads', equipment: 'Barbell' }
   ];
+  const defsMap = createExerciseDefinitionMap(mockDefs);
 
   const mockWorkoutPushA: Workout = {
     id: 'w_push_a',
@@ -315,7 +316,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         }
       };
 
-      const indexAfterDelete = buildFitnessIndex([log]);
+      const indexAfterDelete = buildFitnessIndex([log], defsMap);
       const benchMeta = indexAfterDelete.exerciseIndex.get('def_bench');
 
       expect(log.sets['def_bench']).toHaveLength(2);

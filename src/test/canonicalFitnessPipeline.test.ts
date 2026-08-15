@@ -265,7 +265,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
     });
 
     it('selects muscle distribution with correct volumes and set counts', () => {
-      const dist = selectMuscleDistribution(index, defsMap);
+      const dist = selectMuscleDistribution(index);
       expect(dist.volume.Chest).toBe(1840);
       expect(dist.volume.Legs).toBe(700);
       expect(dist.sets.Chest).toBe(2);
@@ -415,6 +415,15 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       }
     ];
 
+    const workoutMap = new Map<string, Workout>();
+    const coreWorkoutByCycleDayMap = new Map<number, Workout>();
+    workouts.forEach(w => {
+      workoutMap.set(w.id, w);
+      if (w.isCore && typeof w.cycleDay === 'number') {
+        coreWorkoutByCycleDayMap.set(w.cycleDay, w);
+      }
+    });
+
     const index = buildFitnessIndex(logs, defsMap);
 
     it('filters analytics strictly within the requested time range', () => {
@@ -422,7 +431,8 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const analytics7d = selectTimeRangeAnalytics(
         index,
         defsMap,
-        workouts,
+        workoutMap,
+        coreWorkoutByCycleDayMap,
         '7d',
         '2026-08-01',
         'squat'
@@ -437,7 +447,8 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const analyticsAll = selectTimeRangeAnalytics(
         index,
         defsMap,
-        workouts,
+        workoutMap,
+        coreWorkoutByCycleDayMap,
         'all',
         '2026-08-01',
         'bench'
@@ -449,9 +460,9 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
 
     it('ensures analytics operates over existing FitnessIndex without mutating or rebuilding it', () => {
       const initialIndexReference = index;
-      const analyticsA = selectTimeRangeAnalytics(index, defsMap, workouts, '7d', '2026-08-01', 'squat');
-      const analyticsB = selectTimeRangeAnalytics(index, defsMap, workouts, '30d', '2026-08-01', 'squat');
-      const analyticsC = selectTimeRangeAnalytics(index, defsMap, workouts, 'all', '2026-08-01', 'bench');
+      const analyticsA = selectTimeRangeAnalytics(index, defsMap, workoutMap, coreWorkoutByCycleDayMap, '7d', '2026-08-01', 'squat');
+      const analyticsB = selectTimeRangeAnalytics(index, defsMap, workoutMap, coreWorkoutByCycleDayMap, '30d', '2026-08-01', 'squat');
+      const analyticsC = selectTimeRangeAnalytics(index, defsMap, workoutMap, coreWorkoutByCycleDayMap, 'all', '2026-08-01', 'bench');
 
       // The canonical index reference remains identical and unmutated
       expect(index).toBe(initialIndexReference);

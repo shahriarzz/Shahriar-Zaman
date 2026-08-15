@@ -22,35 +22,22 @@ export interface UseAnalyticsDataParams {
   muscleMetric: MuscleMetric;
   selected1RMExerciseId: string | null;
   currentHeatmapMonth: Date;
-  logs?: Record<string, SessionLog>;
-  workouts?: Workout[];
-  exerciseDefinitions?: ExerciseDefinition[];
-  appState?: AppState | null;
 }
 
 export function useAnalyticsData({
-  logs: propLogs,
-  workouts: propWorkouts,
-  appState: propAppState,
   timeRange,
   muscleMetric,
   selected1RMExerciseId,
   currentHeatmapMonth
 }: UseAnalyticsDataParams) {
-  const fitnessContext = useFitness();
-  const derivedData = useFitnessDerivedData();
-
-  const logs = propLogs ?? fitnessContext.logs;
-  const workouts = propWorkouts ?? fitnessContext.workouts;
-  const appState = propAppState ?? fitnessContext.appState;
-
+  const { appState, logs, workouts } = useFitness();
   const {
     index,
     defsMap,
     workoutMap,
     coreWorkoutByCycleDayMap,
     priorityExercises
-  } = derivedData;
+  } = useFitnessDerivedData();
 
   // Active 1RM selection
   const active1RMExerciseId = selected1RMExerciseId || priorityExercises[0]?.id || '';
@@ -60,12 +47,13 @@ export function useAnalyticsData({
     return selectTimeRangeAnalytics(
       index,
       defsMap,
-      workouts,
+      workoutMap,
+      coreWorkoutByCycleDayMap,
       timeRange,
       appState?.cycleStart,
       active1RMExerciseId
     );
-  }, [index, defsMap, workouts, timeRange, appState?.cycleStart, active1RMExerciseId]);
+  }, [index, defsMap, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, active1RMExerciseId]);
 
   // 2. Heatmap calendar data
   const heatmapData = useCalendarGrid({

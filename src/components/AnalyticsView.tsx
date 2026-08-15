@@ -94,7 +94,7 @@ function getHeatmapIntensity(vol: number, maxVol: number) {
 }
 
 export const AnalyticsView: React.FC = () => {
-  const { logs, workouts, appState, exerciseDefinitions } = useFitness();
+  const { logs, workouts, appState } = useFitness();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>('volume');
   const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(null);
@@ -112,10 +112,6 @@ export const AnalyticsView: React.FC = () => {
     workoutPieData,
     insightsList
   } = useAnalyticsData({
-    logs,
-    workouts,
-    exerciseDefinitions,
-    appState,
     timeRange,
     muscleMetric,
     selected1RMExerciseId,

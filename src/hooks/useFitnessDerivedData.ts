@@ -90,6 +90,11 @@ export function useFitnessDerivedData(): FitnessDerivedData {
     return selectWeightSummary(appState?.weightLog);
   }, [appState?.weightLog]);
 
+  // 7. Canonical Muscle Distribution summary
+  const muscleDistribution = useMemo(() => {
+    return selectMuscleDistribution(index);
+  }, [index]);
+
   // Helper callbacks querying the indexed structures in O(1) time
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
     return resolveExercise(exerciseDefinitionId, defsMap);
@@ -145,7 +150,7 @@ export function useFitnessDerivedData(): FitnessDerivedData {
     streak: index.lifetimeStats.currentStreak,
     longestStreak: index.lifetimeStats.longestStreak,
     personalBests: index.personalBests,
-    muscleDistribution: selectMuscleDistribution(index),
+    muscleDistribution,
     exerciseFrequency: index.frequencyByExercise,
     lifetimeStats: index.lifetimeStats,
     weightSummary,

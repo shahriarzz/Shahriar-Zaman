@@ -130,12 +130,8 @@ export interface FitnessIndex {
  */
 export function buildFitnessIndex(
   logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  exerciseDefinitions?: ExerciseDefinition[] | Map<string, ExerciseDefinition> | null | undefined
+  defsMap: Map<string, ExerciseDefinition>
 ): FitnessIndex {
-  const defsMap = Array.isArray(exerciseDefinitions)
-    ? createExerciseDefinitionMap(exerciseDefinitions)
-    : (exerciseDefinitions || new Map<string, ExerciseDefinition>());
-
   const rawLogs = Array.isArray(logs) ? logs : Object.values(logs || {});
   
   // Validated logs
@@ -454,8 +450,7 @@ export function selectExercise1RMProgression(
 }
 
 export function selectMuscleDistribution(
-  index: FitnessIndex,
-  _defsMap?: Map<string, ExerciseDefinition>
+  index: FitnessIndex
 ): MuscleDistributionStats {
   return {
     volume: index.volumeByMuscle,
@@ -488,11 +483,13 @@ export function selectWeightSummary(weightLog: Record<string, number> | undefine
 
 /**
  * Pure selector for time-windowed analytics aggregation without re-calculating primitives
+ * Consumes existing workoutMap and coreWorkoutByCycleDayMap without rebuilding maps.
  */
 export function selectTimeRangeAnalytics(
   index: FitnessIndex,
   defsMap: Map<string, ExerciseDefinition>,
-  workouts: Workout[] | undefined | null,
+  workoutMap: Map<string, Workout>,
+  coreWorkoutByCycleDayMap: Map<number, Workout>,
   timeRange: '7d' | '30d' | '90d' | 'all',
   cycleStart?: string | null,
   active1RMExerciseId?: string,
@@ -500,16 +497,6 @@ export function selectTimeRangeAnalytics(
 ) {
   const todayStr = format(now, 'yyyy-MM-dd');
   const startOfToday = startOfDay(now);
-
-  // Fast workout lookup maps
-  const workoutMap = new Map<string, Workout>();
-  const coreWorkoutByCycleDayMap = new Map<number, Workout>();
-  (workouts || []).forEach(w => {
-    workoutMap.set(w.id, w);
-    if (w.isCore && typeof w.cycleDay === 'number') {
-      coreWorkoutByCycleDayMap.set(w.cycleDay, w);
-    }
-  });
 
   // Calculate cutoffs
   let cutoffDateStr: string | null = null;
