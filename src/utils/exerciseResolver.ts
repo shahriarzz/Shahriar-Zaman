@@ -61,6 +61,17 @@ export function createExerciseDefinitionMap(defs: ExerciseDefinition[] | undefin
   return map;
 }
 
+export const EMPTY_RESOLVED_EXERCISE: ResolvedExerciseMeta = {
+  id: 'unknown',
+  name: 'Unknown Exercise',
+  target: 'General',
+  category: 'Core',
+  tags: [],
+  equipment: '',
+  instructions: '',
+  isUnknown: true
+};
+
 /**
  * Canonical exercise identity resolver:
  * exerciseDefinitionId -> ExerciseDefinition -> ResolvedExerciseMeta
@@ -90,14 +101,8 @@ export function resolveExercise(
 
   // Explicit, controlled fallback for orphaned/deleted IDs
   return {
-    id: targetId || 'unknown',
-    name: 'Unknown Exercise',
-    target: 'General',
-    category: 'Core',
-    tags: [],
-    equipment: '',
-    instructions: '',
-    isUnknown: true
+    ...EMPTY_RESOLVED_EXERCISE,
+    id: targetId || 'unknown'
   };
 }
 
