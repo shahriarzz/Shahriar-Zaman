@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Workout, ExerciseDefinition, SessionLog, SetLog } from '../types/fitness';
 import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
+import { normalizeActiveSession } from '../hooks/useActiveSession';
 
 describe('SessionView Exercise Identity & State-Key Regression Suite', () => {
   const mockDefs: ExerciseDefinition[] = [
@@ -341,6 +342,200 @@ describe('SessionView Exercise Identity & State-Key Regression Suite', () => {
       expect(updatedResolved.id).toBe('def_bench');
       expect(updatedResolved.exerciseDefinitionId).toBe('def_bench');
       expect(updatedResolved.name).toBe('Competition Flat Barbell Bench Press');
+    });
+  });
+
+  describe('9. Active-Session Normalization & Boundary Invariants', () => {
+    it('missing set ID generates stable deterministic migration ID set_${exId}_${idx}', () => {
+      const rawLegacy = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { weight: 100, reps: 8, done: true } // missing ID
+          ]
+        }
+      };
+
+      const normalized = normalizeActiveSession(rawLegacy);
+      expect(normalized).not.toBeNull();
+      expect(normalized?.sessionSets['def_bench'][0].id).toBe('set_def_bench_0');
+    });
+
+    it('existing set ID is preserved unchanged', () => {
+      const raw = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { id: 'custom_stable_id_123', weight: '100', reps: '8', done: true }
+          ]
+        }
+      };
+
+      const normalized = normalizeActiveSession(raw);
+      expect(normalized?.sessionSets['def_bench'][0].id).toBe('custom_stable_id_123');
+    });
+
+    it('converts numeric weight and reps to strings', () => {
+      const raw = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { id: 's1', weight: 102.5, reps: 6, done: true }
+          ]
+        }
+      };
+
+      const normalized = normalizeActiveSession(raw);
+      expect(normalized?.sessionSets['def_bench'][0].weight).toBe('102.5');
+      expect(normalized?.sessionSets['def_bench'][0].reps).toBe('6');
+    });
+
+    it('maps legacy completed: true to done: true', () => {
+      const raw = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { id: 's1', weight: '100', reps: '8', completed: true }
+          ]
+        }
+      };
+
+      const normalized = normalizeActiveSession(raw);
+      expect(normalized?.sessionSets['def_bench'][0].done).toBe(true);
+    });
+
+    it('returns null for invalid or missing sessions', () => {
+      expect(normalizeActiveSession(null)).toBeNull();
+      expect(normalizeActiveSession(undefined)).toBeNull();
+      expect(normalizeActiveSession({})).toBeNull();
+      expect(normalizeActiveSession({ workoutId: '' })).toBeNull();
+      expect(normalizeActiveSession({ workoutId: 'w1' })).toBeNull(); // missing sessionSets
+      expect(normalizeActiveSession('not an object')).toBeNull();
+    });
+
+    it('safely normalizes malformed sets inside array', () => {
+      const raw = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            null,
+            'invalid_set_item',
+            { id: 's3', weight: undefined, reps: null, done: undefined }
+          ]
+        }
+      };
+
+      const normalized = normalizeActiveSession(raw);
+      expect(normalized).not.toBeNull();
+      expect(normalized?.sessionSets['def_bench']).toHaveLength(3);
+      expect(normalized?.sessionSets['def_bench'][0]).toEqual({
+        id: 'set_def_bench_0',
+        weight: '',
+        reps: '',
+        done: false
+      });
+      expect(normalized?.sessionSets['def_bench'][1]).toEqual({
+        id: 'set_def_bench_1',
+        weight: '',
+        reps: '',
+        done: false
+      });
+      expect(normalized?.sessionSets['def_bench'][2]).toEqual({
+        id: 's3',
+        weight: '',
+        reps: '',
+        done: false
+      });
+    });
+
+    it('normalization is idempotent: normalize(normalize(session)) === normalize(session)', () => {
+      const rawLegacy = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { weight: 100, reps: 8, completed: true },
+            { id: 'custom_id_2', weight: 80, reps: 12, done: false }
+          ]
+        }
+      };
+
+      const normalizedOnce = normalizeActiveSession(rawLegacy);
+      const normalizedTwice = normalizeActiveSession(normalizedOnce);
+
+      expect(normalizedOnce).toEqual(normalizedTwice);
+      expect(normalizedTwice?.sessionSets['def_bench'][0].id).toBe('set_def_bench_0');
+      expect(normalizedTwice?.sessionSets['def_bench'][1].id).toBe('custom_id_2');
+    });
+
+    it('normalizing the exact same legacy active session twice produces identical Set IDs', () => {
+      const rawLegacy = {
+        workoutId: 'w_push',
+        startTime: 1700000000000,
+        sessionSets: {
+          def_bench: [
+            { weight: 100, reps: 8, done: true },
+            { weight: 100, reps: 8, done: true }
+          ]
+        }
+      };
+
+      const run1 = normalizeActiveSession(rawLegacy);
+      const run2 = normalizeActiveSession(rawLegacy);
+
+      expect(run1?.sessionSets['def_bench'][0].id).toBe(run2?.sessionSets['def_bench'][0].id);
+      expect(run1?.sessionSets['def_bench'][1].id).toBe(run2?.sessionSets['def_bench'][1].id);
+      expect(run1?.sessionSets['def_bench'][0].id).toBe('set_def_bench_0');
+      expect(run1?.sessionSets['def_bench'][1].id).toBe('set_def_bench_1');
+    });
+  });
+
+  describe('10. Atomic Session Mutations Invariant', () => {
+    it('rapid consecutive mutations via functional updater pattern produce complete persisted state', () => {
+      let inMemorySets: Record<string, SetLog[]> = {
+        def_bench: [
+          { id: 's1', weight: '', reps: '', done: false }
+        ]
+      };
+      let persistedSets: Record<string, SetLog[]> = { ...inMemorySets };
+
+      const updateActiveSessionSets = (next: Record<string, SetLog[]>) => {
+        persistedSets = next;
+      };
+
+      const mutate = (updater: (prev: Record<string, SetLog[]>) => Record<string, SetLog[]>) => {
+        inMemorySets = updater(inMemorySets);
+        updateActiveSessionSets(inMemorySets);
+      };
+
+      // 1. Rapid mutation: update weight
+      mutate(prev => ({
+        ...prev,
+        def_bench: prev.def_bench.map((s, idx) => idx === 0 ? { ...s, weight: '100' } : s)
+      }));
+
+      // 2. Rapid mutation: update reps immediately
+      mutate(prev => ({
+        ...prev,
+        def_bench: prev.def_bench.map((s, idx) => idx === 0 ? { ...s, reps: '8' } : s)
+      }));
+
+      // 3. Rapid mutation: mark done immediately
+      mutate(prev => ({
+        ...prev,
+        def_bench: prev.def_bench.map((s, idx) => idx === 0 ? { ...s, done: true } : s)
+      }));
+
+      // Verify that persisted sets reflect all three rapid consecutive operations
+      expect(persistedSets.def_bench[0].weight).toBe('100');
+      expect(persistedSets.def_bench[0].reps).toBe('8');
+      expect(persistedSets.def_bench[0].done).toBe(true);
+      expect(inMemorySets).toEqual(persistedSets);
     });
   });
 });

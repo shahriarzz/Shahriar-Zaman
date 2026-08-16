@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { SetLog } from '../types/fitness';
-import { generateId } from '../utils/fitnessHelpers';
 
 export interface ActiveSession {
   workoutId: string;
@@ -8,28 +7,69 @@ export interface ActiveSession {
   sessionSets: Record<string, SetLog[]>;
 }
 
+export type RawActiveSession = {
+  workoutId?: unknown;
+  startTime?: unknown;
+  sessionSets?: Record<string, unknown>;
+};
+
+interface RawSetItem {
+  id?: unknown;
+  weight?: unknown;
+  reps?: unknown;
+  done?: unknown;
+  completed?: unknown;
+}
+
 /**
  * Normalizes an ActiveSession at the persistence/migration boundary.
  * Guarantees deterministic set IDs, valid timestamps, and consistent types.
  */
-export function normalizeActiveSession(raw: any): ActiveSession | null {
-  if (!raw || typeof raw !== 'object' || !raw.workoutId || !raw.sessionSets) return null;
+export function normalizeActiveSession(raw: unknown): ActiveSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const session = raw as RawActiveSession;
+
+  if (typeof session.workoutId !== 'string' && typeof session.workoutId !== 'number') {
+    return null;
+  }
+  const workoutId = String(session.workoutId).trim();
+  if (!workoutId) return null;
+
+  if (!session.sessionSets || typeof session.sessionSets !== 'object' || Array.isArray(session.sessionSets)) {
+    return null;
+  }
+
   const normalizedSets: Record<string, SetLog[]> = {};
   
-  Object.entries(raw.sessionSets).forEach(([exId, sets]) => {
+  for (const [exId, sets] of Object.entries(session.sessionSets)) {
     if (Array.isArray(sets)) {
-      normalizedSets[exId] = sets.map((s: any, idx: number) => ({
-        id: s?.id || `set_${exId}_${idx}_${generateId()}`,
-        weight: typeof s?.weight === 'number' || typeof s?.weight === 'string' ? String(s.weight) : '',
-        reps: typeof s?.reps === 'number' || typeof s?.reps === 'string' ? String(s.reps) : '',
-        done: Boolean(s?.done || s?.completed)
-      }));
+      normalizedSets[exId] = sets.map((item: unknown, idx: number): SetLog => {
+        if (!item || typeof item !== 'object') {
+          return {
+            id: `set_${exId}_${idx}`,
+            weight: '',
+            reps: '',
+            done: false
+          };
+        }
+        const s = item as RawSetItem;
+        const id = typeof s.id === 'string' && s.id.trim() ? s.id : `set_${exId}_${idx}`;
+        const weight = typeof s.weight === 'number' || typeof s.weight === 'string' ? String(s.weight) : '';
+        const reps = typeof s.reps === 'number' || typeof s.reps === 'string' ? String(s.reps) : '';
+        const done = Boolean(s.done ?? s.completed);
+
+        return { id, weight, reps, done };
+      });
     }
-  });
+  }
+
+  const startTime = typeof session.startTime === 'number' && Number.isFinite(session.startTime) && session.startTime > 0
+    ? session.startTime
+    : Date.now();
 
   return {
-    workoutId: String(raw.workoutId),
-    startTime: typeof raw.startTime === 'number' ? raw.startTime : Date.now(),
+    workoutId,
+    startTime,
     sessionSets: normalizedSets
   };
 }

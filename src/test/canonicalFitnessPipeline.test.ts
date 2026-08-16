@@ -24,6 +24,8 @@ import {
   selectLifetimeStats,
   selectPersonalBests,
   selectPersonalBestForExercise,
+  selectExercisePR,
+  isNewPersonalBest,
   selectExerciseHistory,
   selectExercise1RMProgression,
   selectMuscleDistribution,
@@ -528,6 +530,78 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const cleaned = sanitizeSessionLog(raw);
       expect(cleaned.durationMinutes).toBe(0);
       expect(cleaned.sets['ex-1']).toHaveLength(1);
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 10. CANONICAL LOAD PR RULE INVARIANTS & EVALUATION
+  // -------------------------------------------------------------
+  describe('10. Canonical Load PR Rule Invariants & Evaluation', () => {
+    it('computes expected PR from historical sets: 50x8, 50x10, 45x15 -> PR is 50x10', () => {
+      const defMap = createExerciseDefinitionMap([
+        { id: 'ex_bench', name: 'Bench Press', target: 'Chest', equipment: 'Barbell' }
+      ]);
+      const logs: SessionLog[] = [
+        {
+          id: 'log1',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            ex_bench: [
+              { id: 's1', weight: '50', reps: '8', done: true },
+              { id: 's2', weight: '50', reps: '10', done: true },
+              { id: 's3', weight: '45', reps: '15', done: true }
+            ]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs, defMap);
+      const pr = selectExercisePR(index, 'ex_bench');
+      expect(pr).not.toBeNull();
+      expect(pr?.weight).toBe(50);
+      expect(pr?.reps).toBe(10);
+
+      // Verify isNewPersonalBest evaluation against current PR (50x10):
+      // 50 x 9 -> not PR
+      expect(isNewPersonalBest({ weight: 50, reps: 9 }, pr)).toBe(false);
+      // 50 x 10 -> not PR (equal weight and equal reps)
+      expect(isNewPersonalBest({ weight: 50, reps: 10 }, pr)).toBe(false);
+      // 50 x 11 -> PR (equal weight, higher reps)
+      expect(isNewPersonalBest({ weight: 50, reps: 11 }, pr)).toBe(true);
+      // 55 x 5 -> PR (heavier weight)
+      expect(isNewPersonalBest({ weight: 55, reps: 5 }, pr)).toBe(true);
+      // 48 x 20 -> not PR (lighter weight even if higher reps)
+      expect(isNewPersonalBest({ weight: 48, reps: 20 }, pr)).toBe(false);
+    });
+
+    it('resolves heaviest PR among equal weights to the set with maximum reps: 60x5 and 60x8 -> 60x8', () => {
+      const defMap = createExerciseDefinitionMap([
+        { id: 'ex_squat', name: 'Squat', target: 'Quads', equipment: 'Barbell' }
+      ]);
+      const logs: SessionLog[] = [
+        {
+          id: 'log1',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            ex_squat: [
+              { id: 's1', weight: '60', reps: '5', done: true },
+              { id: 's2', weight: '60', reps: '8', done: true }
+            ]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs, defMap);
+      const pr = selectExercisePR(index, 'ex_squat');
+      expect(pr).not.toBeNull();
+      expect(pr?.weight).toBe(60);
+      expect(pr?.reps).toBe(8);
     });
   });
 });

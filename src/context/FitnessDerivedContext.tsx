@@ -43,7 +43,6 @@ export interface FitnessDerivedData {
   getHistoryForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry[];
   getLatestForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry | null;
   getHeaviestForExercise: (exerciseDefinitionId: string) => { weight: number; reps: string; date: string } | null;
-  getPersonalBestForExercise: (exerciseDefinitionId: string) => { weight: number; reps: number; date?: string } | null;
   getBestE1RMForExercise: (exerciseDefinitionId: string) => { e1rm: number; weight: number; reps: string; date: string } | null;
 }
 
@@ -118,16 +117,6 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return entry.heaviestSet;
   }, [index]);
 
-  const getPersonalBestForExercise = useCallback((exerciseDefinitionId: string): { weight: number; reps: number; date?: string } | null => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || !entry.heaviestSet) return null;
-    return {
-      weight: entry.heaviestSet.weight,
-      reps: parseInt(entry.heaviestSet.reps, 10) || 0,
-      date: entry.heaviestSet.date
-    };
-  }, [index]);
-
   const getBestE1RMForExercise = useCallback((exerciseDefinitionId: string) => {
     const entry = index.exerciseIndex.get(exerciseDefinitionId);
     if (!entry || !entry.bestE1RM) return null;
@@ -161,7 +150,6 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getHeaviestForExercise,
-    getPersonalBestForExercise,
     getBestE1RMForExercise
   }), [
     index,
@@ -175,7 +163,6 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getHeaviestForExercise,
-    getPersonalBestForExercise,
     getBestE1RMForExercise
   ]);
 

@@ -348,7 +348,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     clearActiveSession,
     user
   } = useFitness();
-  const { getLatestForExercise, getPersonalBestForExercise, getHistoryForExercise } = useFitnessDerivedData();
+  const { getLatestForExercise, getHeaviestForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -489,11 +489,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const exDefId = ex.exerciseDefinitionId;
       data[exDefId] = {
         lastSession: getLatestForExercise(exDefId),
-        allTimePR: getPersonalBestForExercise(exDefId)
+        allTimePR: getHeaviestForExercise(exDefId)
       };
     });
     return data;
-  }, [activeWorkout, getLatestForExercise, getPersonalBestForExercise]);
+  }, [activeWorkout, getLatestForExercise, getHeaviestForExercise]);
 
   // Today's PRs: Heaviest completed weight + highest reps at that weight compared against prior historical logs
   const todaysPRs = React.useMemo(() => {
@@ -515,7 +515,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const setsAtMax = doneToday.filter(s => (parseFloat(s.weight) || 0) === todayMaxWeight);
       const todayMaxReps = Math.max(...setsAtMax.map(s => parseInt(s.reps, 10) || 0));
 
-      const prevPR = getPersonalBestForExercise(exDefId);
+      const prevPR = getHeaviestForExercise(exDefId);
       const hasHistory = !!prevPR && prevPR.weight > 0;
 
       if (!hasHistory) {
@@ -530,13 +530,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           name: resolvedEx.name,
           weight: todayMaxWeight,
           reps: String(todayMaxReps),
-          isNew: false
+          isNew: true
         });
       }
     });
 
     return prs;
-  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getPersonalBestForExercise]);
+  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getHeaviestForExercise]);
 
   // Unified atomic mutation pathway for sessionSets and activeSession persistence
   const mutateSessionSets = useCallback((
