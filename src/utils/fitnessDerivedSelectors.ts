@@ -1,7 +1,6 @@
 import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, startOfDay, isSameDay, eachDayOfInterval } from 'date-fns';
 import { SessionLog, SetLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
-  calculateVolume,
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
@@ -101,6 +100,7 @@ export interface ExerciseIndexEntry {
   totalVolume: number;
   sessionCount: number;
   maxWeight: number;
+  heaviestSet: { weight: number; reps: string; date: string } | null;
   bestE1RM: PersonalBestRecord | null;
   progression: E1RMProgressionPoint[];
 }
@@ -116,6 +116,8 @@ export interface FitnessIndex {
   distinctDates: string[];
   volumeByDate: Record<string, number>;
   setsByDate: Record<string, number>;
+  totalSetsByDate: Record<string, number>;
+  exerciseMetaById: Map<string, ResolvedExerciseMeta>;
   logsByWorkout: Record<string, SessionLog[]>;
   sessionsByExercise: Record<string, ExerciseSessionHistoryEntry[]>;
   volumeByWorkout: Record<string, number>;
@@ -169,15 +171,23 @@ export function buildFitnessIndex(
   const e1rmHistoryByExercise = new Map<string, E1RMProgressionPoint[]>();
   const weeklyVolumeMap: Record<string, number> = {};
 
+  // Canonical resolution map containing ALL exercise definitions plus any in logs
+  const exerciseMetaById = new Map<string, ResolvedExerciseMeta>();
+  defsMap.forEach((_, defId) => {
+    exerciseMetaById.set(defId, resolveExercise(defId, defsMap));
+  });
+
   // Additional indexed structures populated in single pass
   const volumeByDate: Record<string, number> = {};
   const setsByDate: Record<string, number> = {};
+  const totalSetsByDate: Record<string, number> = {};
   const logsByWorkout: Record<string, SessionLog[]> = {};
   const sessionsByExercise: Record<string, ExerciseSessionHistoryEntry[]> = {};
   const volumeByWorkout: Record<string, number> = {};
   const setsByWorkout: Record<string, number> = {};
   const muscleFrequencyByDate: Record<string, Record<MuscleCategory, number>> = {};
   const maxWeightByExercise = new Map<string, number>();
+  const heaviestSetByExercise = new Map<string, { weight: number; reps: string; date: string }>();
 
   const volumeByMuscle: Record<MuscleCategory, number> = {
     Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
@@ -197,8 +207,7 @@ export function buildFitnessIndex(
 
   // Single pass over ascending logs (chronological order)
   sortedLogsAscending.forEach(log => {
-    const sessionVol = calculateVolume(log);
-    totalLifetimeVolume += sessionVol;
+    let logSessionVol = 0;
 
     if (log.durationMinutes && log.durationMinutes > 0) {
       totalLifetimeMinutes += log.durationMinutes;
@@ -211,22 +220,12 @@ export function buildFitnessIndex(
         logsByDate.set(log.date, []);
       }
       logsByDate.get(log.date)!.push(log);
-      volumeByDate[log.date] = (volumeByDate[log.date] || 0) + sessionVol;
 
       if (!muscleFrequencyByDate[log.date]) {
         muscleFrequencyByDate[log.date] = {
           Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
         };
       }
-
-      // Weekly volume
-      try {
-        const parsedDate = parseISO(log.date);
-        if (isValid(parsedDate)) {
-          const weekStr = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
-          weeklyVolumeMap[weekStr] = (weeklyVolumeMap[weekStr] || 0) + sessionVol;
-        }
-      } catch (_) {}
     }
 
     // Index by workout
@@ -235,13 +234,16 @@ export function buildFitnessIndex(
         logsByWorkout[log.workoutId] = [];
       }
       logsByWorkout[log.workoutId].push(log);
-      volumeByWorkout[log.workoutId] = (volumeByWorkout[log.workoutId] || 0) + sessionVol;
     }
 
-    // Process sets
+    // Process sets in a single pass
     if (log.sets && typeof log.sets === 'object') {
       Object.entries(log.sets).forEach(([exId, setList]) => {
         if (!Array.isArray(setList)) return;
+        if (log.date) {
+          totalSetsByDate[log.date] = (totalSetsByDate[log.date] || 0) + setList.length;
+        }
+
         const doneSets = setList.filter(s => s && s.done);
         if (doneSets.length === 0) return;
 
@@ -253,8 +255,15 @@ export function buildFitnessIndex(
           setsByWorkout[log.workoutId] = (setsByWorkout[log.workoutId] || 0) + doneSets.length;
         }
 
-        const exMeta = resolveExercise(exId, defsMap);
+        let exMeta = exerciseMetaById.get(exId);
+        if (!exMeta) {
+          exMeta = resolveExercise(exId, defsMap);
+          exerciseMetaById.set(exId, exMeta);
+        }
         const normId = exMeta.id;
+        if (!exerciseMetaById.has(normId)) {
+          exerciseMetaById.set(normId, exMeta);
+        }
         const category = exMeta.category;
 
         if (log.date && muscleFrequencyByDate[log.date]) {
@@ -278,6 +287,17 @@ export function buildFitnessIndex(
           const prevExMax = maxWeightByExercise.get(normId) || 0;
           if (w > prevExMax) {
             maxWeightByExercise.set(normId, w);
+          }
+
+          if (w > 0) {
+            const prevHeaviest = heaviestSetByExercise.get(normId);
+            if (!prevHeaviest || w > prevHeaviest.weight) {
+              heaviestSetByExercise.set(normId, {
+                weight: w,
+                reps: s.reps || '0',
+                date: log.date
+              });
+            }
           }
 
           if (w > 0 && r > 0) {
@@ -308,6 +328,9 @@ export function buildFitnessIndex(
           }
           completedSetsByExercise.get(normId)!.push({ date: log.date, set: s, logId: log.id });
         });
+
+        // Accumulate single-pass volume into log session total
+        logSessionVol += exSessionVol;
 
         // Muscle distribution
         volumeByMuscle[category] += exSessionVol;
@@ -362,6 +385,26 @@ export function buildFitnessIndex(
         }
       });
     }
+
+    // Accumulate total lifetime volume and date/workout/week aggregations from calculated logSessionVol
+    totalLifetimeVolume += logSessionVol;
+
+    if (log.date) {
+      volumeByDate[log.date] = (volumeByDate[log.date] || 0) + logSessionVol;
+
+      // Weekly volume
+      try {
+        const parsedDate = parseISO(log.date);
+        if (isValid(parsedDate)) {
+          const weekStr = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
+          weeklyVolumeMap[weekStr] = (weeklyVolumeMap[weekStr] || 0) + logSessionVol;
+        }
+      } catch (_) {}
+    }
+
+    if (log.workoutId) {
+      volumeByWorkout[log.workoutId] = (volumeByWorkout[log.workoutId] || 0) + logSessionVol;
+    }
   });
 
   // Biggest week ever
@@ -409,6 +452,7 @@ export function buildFitnessIndex(
     const bestE1RM = personalBestsMap.get(exId) || null;
     const progression = e1rmHistoryByExercise.get(exId) || [];
     const maxWeight = maxWeightByExercise.get(exId) || 0;
+    const heaviestSet = heaviestSetByExercise.get(exId) || null;
 
     exerciseIndex.set(exId, {
       exerciseId: exId,
@@ -421,6 +465,7 @@ export function buildFitnessIndex(
       totalVolume: freqVal.volume,
       sessionCount: freqVal.count,
       maxWeight,
+      heaviestSet,
       bestE1RM,
       progression
     });
@@ -445,6 +490,8 @@ export function buildFitnessIndex(
     distinctDates,
     volumeByDate,
     setsByDate,
+    totalSetsByDate,
+    exerciseMetaById,
     logsByWorkout,
     sessionsByExercise,
     volumeByWorkout,
@@ -537,7 +584,9 @@ export function selectExerciseFrequency(
   return index.frequencyByExercise;
 }
 
-export function selectWeightSummary(weightLog: Record<string, number> | undefined | null): WeightSummaryData {
+export function selectWeightSummary(
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
+): WeightSummaryData {
   const weightEntries = getSortedWeightEntries(weightLog);
   const currentWeight = weightEntries.length > 0 ? weightEntries[0][1] : '--';
   const recentWeightLogs = weightEntries.slice(0, 5);

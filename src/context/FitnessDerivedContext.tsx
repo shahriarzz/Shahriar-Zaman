@@ -96,9 +96,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   // Helper callbacks querying the indexed structures
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
-    const indexed = index.exerciseIndex.get(exerciseDefinitionId);
-    if (indexed?.resolvedExercise) return indexed.resolvedExercise;
-    return resolveExercise(exerciseDefinitionId, defsMap);
+    return index.exerciseMetaById.get(exerciseDefinitionId) || resolveExercise(exerciseDefinitionId, defsMap);
   }, [index, defsMap]);
 
   const getHistoryForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry[] => {
@@ -115,15 +113,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   const getHeaviestForExercise = useCallback((exerciseDefinitionId: string) => {
     const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || entry.completedSets.length === 0) return null;
-    let heaviest: { weight: number; reps: string; date: string } | null = null;
-    entry.completedSets.forEach(cs => {
-      const w = parseFloat(cs.set.weight) || 0;
-      if (w > 0 && (!heaviest || w > heaviest.weight)) {
-        heaviest = { weight: w, reps: cs.set.reps || '0', date: cs.date };
-      }
-    });
-    return heaviest;
+    if (!entry || !entry.heaviestSet) return null;
+    return entry.heaviestSet;
   }, [index]);
 
   const getBestE1RMForExercise = useCallback((exerciseDefinitionId: string) => {

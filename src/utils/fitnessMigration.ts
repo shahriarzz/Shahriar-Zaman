@@ -135,14 +135,14 @@ export function migrateV1ToV2(raw: {
   let appState: AppState = { cycleStart: dk() };
   if (raw.rawState && typeof raw.rawState === 'object') {
     const cycleStart = typeof raw.rawState.cycleStart === 'string' ? raw.rawState.cycleStart : dk();
-    let weightLog: Record<string, number> = {};
+    let weightLog: Record<string, number | { weight: number; updatedAt: number }> = {};
 
     if (raw.rawState.weightLog && typeof raw.rawState.weightLog === 'object') {
       weightLog = { ...raw.rawState.weightLog };
     } else if (Array.isArray(raw.rawState.bodyWeightLogs)) {
       raw.rawState.bodyWeightLogs.forEach((entry: any) => {
         if (entry && entry.date && typeof entry.weightKg === 'number') {
-          weightLog[entry.date] = entry.weightKg;
+          weightLog[entry.date] = { weight: entry.weightKg, updatedAt: Number(entry.timestamp) || 0 };
         }
       });
     }

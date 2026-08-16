@@ -122,16 +122,19 @@ export function useFitnessLogs({
 
   const logBodyWeight = useCallback(async (date: string, weight: number): Promise<void> => {
     try {
+      const now = Date.now();
       const currentAppState = appStateRef.current;
+      const weightEntry = { weight, updatedAt: now };
       const nextState = { 
         ...currentAppState, 
-        weightLog: { ...(currentAppState.weightLog || {}), [date]: weight }
+        weightLog: { ...(currentAppState.weightLog || {}), [date]: weightEntry },
+        updatedAt: now
       };
       appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
-        await saveAppState(user.uid, { weightLog: nextState.weightLog }, true);
+        await saveAppState(user.uid, { weightLog: nextState.weightLog, updatedAt: now }, true);
       }
     } catch (error) {
       console.error("Failed to log body weight", error);
@@ -145,15 +148,16 @@ export function useFitnessLogs({
 
   const deleteBodyWeight = useCallback(async (date: string): Promise<void> => {
     try {
+      const now = Date.now();
       const currentAppState = appStateRef.current;
       const nextLog = { ...(currentAppState.weightLog || {}) };
       delete nextLog[date];
-      const nextState = { ...currentAppState, weightLog: nextLog };
+      const nextState = { ...currentAppState, weightLog: nextLog, updatedAt: now };
       appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
-        await saveAppState(user.uid, { weightLog: nextLog }, true);
+        await saveAppState(user.uid, { weightLog: nextLog, updatedAt: now }, true);
       }
     } catch (error) {
       console.error("Failed to delete body weight", error);

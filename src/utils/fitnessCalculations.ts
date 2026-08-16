@@ -307,11 +307,32 @@ export function getCycleDayForDate(
   return ((((todayCycleDay - 1 + diffDays) % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
 }
 
+export function normalizeWeightEntry(
+  entry: number | { weight: number; updatedAt?: number } | undefined | null,
+  defaultTimestamp = 0
+): { weight: number; updatedAt: number } | null {
+  if (entry === undefined || entry === null) return null;
+  if (typeof entry === 'number') {
+    return { weight: entry, updatedAt: defaultTimestamp };
+  }
+  if (typeof entry === 'object' && typeof entry.weight === 'number') {
+    return { weight: entry.weight, updatedAt: Number(entry.updatedAt) || defaultTimestamp };
+  }
+  return null;
+}
+
 export function getSortedWeightEntries(
-  weightLog: Record<string, number> | undefined | null
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
 ): [string, number][] {
-  return (Object.entries(weightLog || {}) as [string, number][])
-    .sort((a, b) => b[0].localeCompare(a[0]));
+  if (!weightLog) return [];
+  const entries: [string, number][] = [];
+  Object.entries(weightLog).forEach(([date, val]) => {
+    const norm = normalizeWeightEntry(val);
+    if (norm && !isNaN(norm.weight)) {
+      entries.push([date, norm.weight]);
+    }
+  });
+  return entries.sort((a, b) => b[0].localeCompare(a[0]));
 }
 
 export interface SparklineData {
@@ -324,9 +345,16 @@ export interface SparklineData {
 }
 
 export function getWeightSparklineData(
-  weightLog: Record<string, number> | undefined | null
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
 ): SparklineData | null {
-  const raw = Object.entries(weightLog || {}) as [string, number][];
+  if (!weightLog) return null;
+  const raw: [string, number][] = [];
+  Object.entries(weightLog).forEach(([date, val]) => {
+    const norm = normalizeWeightEntry(val);
+    if (norm && !isNaN(norm.weight)) {
+      raw.push([date, norm.weight]);
+    }
+  });
   if (raw.length <= 1) return null;
   const sorted = [...raw].sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
   const weights = sorted.map(e => e[1]);

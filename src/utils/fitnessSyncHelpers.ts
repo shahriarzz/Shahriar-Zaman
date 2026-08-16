@@ -1,5 +1,6 @@
 import { db, writeBatch, collection, getDocs } from '../lib/firebase';
-import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
+import { ExerciseDefinition, Workout, SessionLog, AppState, WeightLogEntry } from '../types/fitness';
+import { normalizeWeightEntry } from './fitnessCalculations';
 
 // Chunked batch operations helper to prevent Firestore 500-operation limits
 export async function commitBatchOperations<T>(
@@ -326,10 +327,46 @@ export function mergeAppState(
     ? (localState.cycleStart || cloudState.cycleStart)
     : (cloudState.cycleStart || localState.cycleStart);
 
-  const mergedWeight: Record<string, number> = {
-    ...(cloudState.weightLog || {}),
-    ...(localState.weightLog || {})
-  };
+  // Per-entry timestamp merge for weightLog
+  const mergedWeight: Record<string, number | WeightLogEntry> = {};
+  const allDates = new Set([
+    ...Object.keys(localState.weightLog || {}),
+    ...Object.keys(cloudState.weightLog || {})
+  ]);
+
+  let weightNeedsUpload = false;
+
+  allDates.forEach(date => {
+    const localRaw = localState.weightLog?.[date];
+    const cloudRaw = cloudState.weightLog?.[date];
+
+    const localEntry = normalizeWeightEntry(localRaw, localUpdated);
+    const cloudEntry = normalizeWeightEntry(cloudRaw, cloudUpdated);
+
+    if (localEntry && !cloudEntry) {
+      mergedWeight[date] = localRaw !== undefined ? localRaw : localEntry;
+      weightNeedsUpload = true;
+    } else if (!localEntry && cloudEntry) {
+      mergedWeight[date] = cloudRaw !== undefined ? cloudRaw : cloudEntry;
+    } else if (localEntry && cloudEntry) {
+      const lTime = localEntry.updatedAt;
+      const cTime = cloudEntry.updatedAt;
+      if (lTime > cTime) {
+        mergedWeight[date] = localRaw !== undefined ? localRaw : localEntry;
+        weightNeedsUpload = true;
+      } else if (cTime > lTime) {
+        mergedWeight[date] = cloudRaw !== undefined ? cloudRaw : cloudEntry;
+      } else {
+        // Equal timestamps: deterministic comparison (prefer local if content differs)
+        if (localEntry.weight !== cloudEntry.weight) {
+          mergedWeight[date] = localRaw !== undefined ? localRaw : localEntry;
+          weightNeedsUpload = true;
+        } else {
+          mergedWeight[date] = localRaw !== undefined ? localRaw : localEntry;
+        }
+      }
+    }
+  });
 
   const merged: AppState = {
     cycleStart,
@@ -337,7 +374,7 @@ export function mergeAppState(
     updatedAt: Math.max(localUpdated, cloudUpdated)
   };
 
-  const needsUpload = JSON.stringify(merged) !== JSON.stringify(cloudState);
+  const needsUpload = weightNeedsUpload || (localUpdated > cloudUpdated);
 
   return { merged, needsUpload };
 }

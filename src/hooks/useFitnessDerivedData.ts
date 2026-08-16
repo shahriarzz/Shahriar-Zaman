@@ -1,138 +1,15 @@
-import { useContext, useMemo, useCallback } from 'react';
+import { useContext } from 'react';
 import { FitnessDerivedContext, FitnessDerivedData } from '../context/FitnessDerivedContext';
-import { useFitness } from '../context/FitnessContext';
-import {
-  buildFitnessIndex,
-  selectWeightSummary,
-  selectMuscleDistribution
-} from '../utils/fitnessDerivedSelectors';
-import {
-  createExerciseDefinitionMap,
-  resolveExercise,
-  getPriorityExercises,
-  ResolvedExerciseMeta
-} from '../utils/exerciseResolver';
-import { ExerciseSessionHistoryEntry } from '../utils/fitnessDerivedSelectors';
 
 export type { FitnessDerivedData };
 
 /**
- * Lean, high-performance consumer hook backed entirely by the canonical FitnessIndex.
- * Reads from the global FitnessDerivedContext provider when available.
+ * High-performance canonical consumer hook backed entirely by FitnessDerivedContext.
  */
 export function useFitnessDerivedData(): FitnessDerivedData {
   const context = useContext(FitnessDerivedContext);
-  if (context) {
-    return context;
+  if (!context) {
+    throw new Error('useFitnessDerivedData must be used within a FitnessDerivedProvider');
   }
-
-  // Fallback for standalone/isolated test environments outside the provider
-  const fitness = useFitness();
-  const logs = fitness?.logs || {};
-  const workouts = fitness?.workouts || [];
-  const exerciseDefinitions = fitness?.exerciseDefinitions || [];
-  const appState = fitness?.appState;
-
-  const defsMap = useMemo(() => {
-    return createExerciseDefinitionMap(exerciseDefinitions);
-  }, [exerciseDefinitions]);
-
-  const workoutMap = useMemo(() => {
-    const map = new Map();
-    (workouts || []).forEach(w => map.set(w.id, w));
-    return map;
-  }, [workouts]);
-
-  const coreWorkoutByCycleDayMap = useMemo(() => {
-    const map = new Map();
-    (workouts || []).forEach(w => {
-      if (w.isCore && typeof w.cycleDay === 'number') {
-        map.set(w.cycleDay, w);
-      }
-    });
-    return map;
-  }, [workouts]);
-
-  const priorityExercises = useMemo(() => {
-    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
-  }, [exerciseDefinitions, workouts, defsMap]);
-
-  const index = useMemo(() => {
-    return buildFitnessIndex(logs, defsMap);
-  }, [logs, defsMap]);
-
-  const weightSummary = useMemo(() => {
-    return selectWeightSummary(appState?.weightLog);
-  }, [appState?.weightLog]);
-
-  const muscleDistribution = useMemo(() => {
-    return selectMuscleDistribution(index);
-  }, [index]);
-
-  const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
-    const indexed = index.exerciseIndex.get(exerciseDefinitionId);
-    if (indexed?.resolvedExercise) return indexed.resolvedExercise;
-    return resolveExercise(exerciseDefinitionId, defsMap);
-  }, [index, defsMap]);
-
-  const getHistoryForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry[] => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry) return [];
-    return [...entry.sessions].reverse();
-  }, [index]);
-
-  const getLatestForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry | null => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || entry.sessions.length === 0) return null;
-    return entry.sessions[entry.sessions.length - 1];
-  }, [index]);
-
-  const getHeaviestForExercise = useCallback((exerciseDefinitionId: string) => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || entry.completedSets.length === 0) return null;
-    let heaviest: { weight: number; reps: string; date: string } | null = null;
-    entry.completedSets.forEach(cs => {
-      const w = parseFloat(cs.set.weight) || 0;
-      if (w > 0 && (!heaviest || w > heaviest.weight)) {
-        heaviest = { weight: w, reps: cs.set.reps || '0', date: cs.date };
-      }
-    });
-    return heaviest;
-  }, [index]);
-
-  const getBestE1RMForExercise = useCallback((exerciseDefinitionId: string) => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || !entry.bestE1RM) return null;
-    return {
-      e1rm: entry.bestE1RM.maxEpley,
-      weight: entry.bestE1RM.maxWeight,
-      reps: String(entry.bestE1RM.repsAtMax),
-      date: entry.bestE1RM.date
-    };
-  }, [index]);
-
-  return {
-    index,
-    defsMap,
-    workoutMap,
-    coreWorkoutByCycleDayMap,
-    priorityExercises,
-    exerciseIndex: index.exerciseIndex,
-    sortedLogs: index.sortedLogsDescending,
-    totalVolume: index.lifetimeStats.totalVolume,
-    totalSets: index.lifetimeStats.totalSets,
-    sessionCount: index.lifetimeStats.totalSessions,
-    streak: index.lifetimeStats.currentStreak,
-    longestStreak: index.lifetimeStats.longestStreak,
-    personalBests: index.personalBests,
-    muscleDistribution,
-    exerciseFrequency: index.frequencyByExercise,
-    lifetimeStats: index.lifetimeStats,
-    weightSummary,
-    resolveExerciseMeta,
-    getHistoryForExercise,
-    getLatestForExercise,
-    getHeaviestForExercise,
-    getBestE1RMForExercise
-  };
+  return context;
 }
