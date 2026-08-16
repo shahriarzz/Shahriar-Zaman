@@ -291,7 +291,9 @@ export function buildFitnessIndex(
 
           if (w > 0) {
             const prevHeaviest = heaviestSetByExercise.get(normId);
-            if (!prevHeaviest || w > prevHeaviest.weight) {
+            const prevReps = prevHeaviest ? (parseInt(prevHeaviest.reps, 10) || 0) : 0;
+            // Canonical PR Rule: Heaviest weight recorded, and highest reps at that maximum weight
+            if (!prevHeaviest || w > prevHeaviest.weight || (w === prevHeaviest.weight && r > prevReps)) {
               heaviestSetByExercise.set(normId, {
                 weight: w,
                 reps: s.reps || '0',
@@ -548,6 +550,46 @@ export function selectPersonalBestForExercise(
   exerciseDefinitionId: string
 ): PersonalBestRecord | null {
   return index.personalBestsMap.get(exerciseDefinitionId) || null;
+}
+
+export function selectExercisePR(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): { weight: number; reps: number; date?: string } | null {
+  const entry = index.exerciseIndex.get(exerciseDefinitionId);
+  if (!entry || !entry.heaviestSet) return null;
+  return {
+    weight: entry.heaviestSet.weight,
+    reps: parseInt(entry.heaviestSet.reps, 10) || 0,
+    date: entry.heaviestSet.date
+  };
+}
+
+/**
+ * Canonical Personal Best evaluator:
+ * 1. Heaviest completed weight ever recorded for the exercise.
+ * 2. Among sets at that maximum weight, highest reps.
+ * 3. A new PR occurs when:
+ *    - candidate weight > previous weight
+ *    - candidate weight == previous weight AND candidate reps > previous reps
+ * 4. Lower weight is never a PR, regardless of reps.
+ * 5. Equal weight + equal/lower reps is not a PR.
+ */
+export function isNewPersonalBest(
+  candidate: { weight: number; reps: number | string },
+  previous: { weight: number; reps: number | string } | null | undefined
+): boolean {
+  const cWeight = typeof candidate?.weight === 'number' ? candidate.weight : (parseFloat(candidate?.weight) || 0);
+  const cReps = typeof candidate?.reps === 'number' ? candidate.reps : (parseInt(candidate?.reps, 10) || 0);
+  if (cWeight <= 0 || cReps <= 0) return false;
+  if (!previous || previous.weight <= 0) return true;
+
+  const pWeight = typeof previous.weight === 'number' ? previous.weight : (parseFloat(previous.weight as any) || 0);
+  const pReps = typeof previous.reps === 'number' ? previous.reps : (parseInt(previous.reps as any, 10) || 0);
+
+  if (cWeight > pWeight) return true;
+  if (cWeight === pWeight && cReps > pReps) return true;
+  return false;
 }
 
 export function selectExerciseHistory(

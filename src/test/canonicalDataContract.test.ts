@@ -20,7 +20,8 @@ import {
   calculateStreak,
   calculateLongestStreak,
   sanitizeSessionLog,
-  sanitizeSetLog
+  sanitizeSetLog,
+  dk
 } from '../utils/fitnessCalculations';
 import {
   createExerciseDefinitionMap,
@@ -98,9 +99,10 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
   // 2. Session → Analytics consistency
   // -------------------------------------------------------------------------
   it('2. Session → Analytics consistency: session data produces identical volume and stats in Analytics', () => {
+    const today = dk();
     const rawSession = createMockLog({
-      id: 'session_2026_08_14',
-      date: '2026-08-14',
+      id: `session_${today}`,
+      date: today,
       workoutId: 'w_push',
       durationMinutes: 45,
       sets: {

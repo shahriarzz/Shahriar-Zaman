@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
@@ -7,6 +7,7 @@ import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fit
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
 import { sanitizeSessionLog } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
+import { ExerciseSessionHistoryEntry, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -21,10 +22,15 @@ import {
   SEMANTIC_COLORS
 } from './ui';
 
+export interface GhostDataEntry {
+  lastSession: ExerciseSessionHistoryEntry | null;
+  allTimePR: { weight: number; reps: number | string; date?: string } | null;
+}
+
 interface ExerciseCardProps {
   ex: Exercise;
   workoutType: WorkoutType;
-  ghostData: { lastSession: any; allTimePR: any };
+  ghostData?: GhostDataEntry;
   aiAdvice: Record<string, string>;
   loadingAdvice: string | null;
   sessionSets: Record<string, SetLog[]>;
@@ -333,7 +339,6 @@ interface SessionViewProps {
 export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) => {
   const { 
     workouts, 
-    logs, 
     exerciseDefinitions,
     addLog, 
     updateCycleStart,
@@ -343,8 +348,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     clearActiveSession,
     user
   } = useFitness();
-  const { getLatestForExercise, getHeaviestForExercise, getHistoryForExercise } = useFitnessDerivedData();
+  const { getLatestForExercise, getPersonalBestForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
+
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [sessionSets, setSessionSets] = useState<Record<string, SetLog[]>>({});
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -356,9 +363,32 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const [expandedExId, setExpandedExId] = useState<string | null>(null);
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  // Explicit lifecycle ref: prevents background snapshot updates (e.g. logs/workouts) from resetting active sessionSets
+  
+  // Target Workout ID to run
+  const targetWorkoutId = workoutId || selectedWorkoutId || activeSession?.workoutId || null;
+
+  // Storing stable refs to prevent initialization effect from re-running when context state updates
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+
+  const startActiveSessionRef = useRef(startActiveSession);
+  startActiveSessionRef.current = startActiveSession;
+
+  const getLatestForExerciseRef = useRef(getLatestForExercise);
+  getLatestForExerciseRef.current = getLatestForExercise;
+
   const initializedWorkoutIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
+
+  // Synchronize activeWorkout when targetWorkoutId or workouts list changes
+  useEffect(() => {
+    if (!targetWorkoutId) {
+      setActiveWorkout(null);
+      return;
+    }
+    const resolvedWorkout = workouts.find(w => w.id === targetWorkoutId) || null;
+    setActiveWorkout(resolvedWorkout);
+  }, [targetWorkoutId, workouts]);
 
   // Auto-expand first incomplete exercise on load
   useEffect(() => {
@@ -377,44 +407,35 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     };
   }, []);
 
-  // Session Initialization Guard:
-  // Once initialized for a given workoutId, background updates to `logs` or `workouts` will NEVER overwrite current sessionSets.
+  // Session Initialization:
+  // Depends only on targetWorkoutId and workouts.
+  // Never re-runs or reinitializes due to activeSession or activeWorkout changes.
   useEffect(() => {
-    const targetWorkoutId = workoutId || activeWorkout?.id;
     if (!targetWorkoutId) return;
 
-    const wo = workouts.find(w => w.id === targetWorkoutId) || activeWorkout;
+    const wo = workouts.find(w => w.id === targetWorkoutId);
     if (!wo) return;
 
-    if (!activeWorkout || activeWorkout.id !== wo.id) {
-      setActiveWorkout(wo);
-    }
-
-    // Protection: If this workout is already initialized in state, do not overwrite with background snapshots
-    if (isInitializedRef.current && initializedWorkoutIdRef.current === wo.id) {
+    // Protection: If this workout is already initialized in state, do not overwrite
+    if (isInitializedRef.current && initializedWorkoutIdRef.current === targetWorkoutId) {
       return;
     }
 
+    const currentActiveSession = activeSessionRef.current;
+
     // If restoring an active in-flight session
-    if (activeSession && activeSession.workoutId === wo.id) {
-      initializedWorkoutIdRef.current = wo.id;
+    if (currentActiveSession && currentActiveSession.workoutId === targetWorkoutId) {
+      initializedWorkoutIdRef.current = targetWorkoutId;
       isInitializedRef.current = true;
-      setStartTime(activeSession.startTime);
-      setDuration(Math.floor((Date.now() - activeSession.startTime) / 1000));
-      
-      const restoredSets: Record<string, SetLog[]> = {};
-      Object.entries(activeSession.sessionSets).forEach(([exDefId, sets]) => {
-        restoredSets[exDefId] = (sets as SetLog[]).map(s => ({
-          ...s,
-          id: s.id || generateId()
-        }));
-      });
-      setSessionSets(restoredSets);
+      setStartTime(currentActiveSession.startTime);
+      setDuration(Math.floor((Date.now() - currentActiveSession.startTime) / 1000));
+      // Normalized sessionSets consumed directly without generating redundant IDs
+      setSessionSets(currentActiveSession.sessionSets);
       return;
     }
 
     // Otherwise, initialize a fresh session for this workout
-    initializedWorkoutIdRef.current = wo.id;
+    initializedWorkoutIdRef.current = targetWorkoutId;
     isInitializedRef.current = true;
     const sessionStart = Date.now();
     setStartTime(sessionStart);
@@ -424,12 +445,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     wo.exercises.forEach(ex => {
       const exDefId = ex.exerciseDefinitionId;
-      // Fetch latest completed historical session using canonical index
-      const latestHistorical = getLatestForExercise(exDefId);
+      const latestHistorical = getLatestForExerciseRef.current(exDefId);
       const lastExSets = latestHistorical?.sets || null;
 
-      // STEP 6 Invariant: Programmed sets count (ex.sets) determines initial displayed rows.
-      // Prior session performance provides weight/reps guidance for those rows without expanding row count.
+      // Programmed sets count (ex.sets) determines initial displayed rows
       initialSets[exDefId] = Array.from({ length: ex.sets }, (_, idx) => {
         const prevSet = lastExSets?.[idx];
         return {
@@ -442,8 +461,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
 
     setSessionSets(initialSets);
-    startActiveSession(wo.id, initialSets, sessionStart);
-  }, [workoutId, workouts, activeSession, startActiveSession, getLatestForExercise, activeWorkout]);
+    startActiveSessionRef.current(wo.id, initialSets, sessionStart);
+  }, [targetWorkoutId, workouts]);
 
   useEffect(() => {
     let interval: any;
@@ -461,21 +480,22 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }, []);
 
-  // Ghost data & All-Time Heaviest Weight computed via canonical derived index
-  const ghostData = React.useMemo(() => {
-    const data: Record<string, { lastSession: any, allTimePR: any }> = {};
+  // Ghost data & All-Time Heaviest PR computed via canonical derived index (O(exercises in workout) map lookup)
+  const ghostData = React.useMemo<Record<string, GhostDataEntry>>(() => {
+    const data: Record<string, GhostDataEntry> = {};
     if (!activeWorkout) return data;
 
     activeWorkout.exercises.forEach(ex => {
       const exDefId = ex.exerciseDefinitionId;
-      const lastSession = getLatestForExercise(exDefId);
-      const allTimePR = getHeaviestForExercise(exDefId);
-      data[exDefId] = { lastSession, allTimePR };
+      data[exDefId] = {
+        lastSession: getLatestForExercise(exDefId),
+        allTimePR: getPersonalBestForExercise(exDefId)
+      };
     });
     return data;
-  }, [activeWorkout, getLatestForExercise, getHeaviestForExercise]);
+  }, [activeWorkout, getLatestForExercise, getPersonalBestForExercise]);
 
-  // Today's PRs: Heaviest completed weight compared against prior historical logs
+  // Today's PRs: Heaviest completed weight + highest reps at that weight compared against prior historical logs
   const todaysPRs = React.useMemo(() => {
     if (!activeWorkout || !isFinishing) return [];
     const prs: { name: string; weight: number; reps: string; isNew: boolean }[] = [];
@@ -484,38 +504,53 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const exDefId = ex.exerciseDefinitionId;
       const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
       const todaySets = sessionSets[exDefId] || [];
-      const doneToday = todaySets.filter(s => s.done && s.weight);
+      const doneToday = todaySets.filter(s => s.done && parseFloat(s.weight) > 0 && parseInt(s.reps, 10) > 0);
       if (doneToday.length === 0) return;
-      
-      const todayWeights = doneToday.map(s => parseFloat(s.weight) || 0);
-      const todayMax = Math.max(...todayWeights);
-      if (todayMax <= 0) return;
-      
-      const bestTodaySet = doneToday.find(s => (parseFloat(s.weight) || 0) === todayMax);
-      const todayReps = bestTodaySet?.reps || '0';
-      
-      const prevPR = getHeaviestForExercise(exDefId);
-      const hasHistory = !!prevPR;
-      const prevPRWeight = prevPR?.weight || 0;
-      
-      if (!hasHistory || todayMax > prevPRWeight) {
+
+      // 1. Find heaviest weight lifted today
+      const todayMaxWeight = Math.max(...doneToday.map(s => parseFloat(s.weight) || 0));
+      if (todayMaxWeight <= 0) return;
+
+      // 2. Among sets at that max weight, find highest reps
+      const setsAtMax = doneToday.filter(s => (parseFloat(s.weight) || 0) === todayMaxWeight);
+      const todayMaxReps = Math.max(...setsAtMax.map(s => parseInt(s.reps, 10) || 0));
+
+      const prevPR = getPersonalBestForExercise(exDefId);
+      const hasHistory = !!prevPR && prevPR.weight > 0;
+
+      if (!hasHistory) {
         prs.push({
           name: resolvedEx.name,
-          weight: todayMax,
-          reps: todayReps,
-          isNew: !hasHistory
+          weight: todayMaxWeight,
+          reps: String(todayMaxReps),
+          isNew: true
+        });
+      } else if (isNewPersonalBest({ weight: todayMaxWeight, reps: todayMaxReps }, prevPR)) {
+        prs.push({
+          name: resolvedEx.name,
+          weight: todayMaxWeight,
+          reps: String(todayMaxReps),
+          isNew: false
         });
       }
     });
-    
+
     return prs;
-  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getHeaviestForExercise]);
+  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getPersonalBestForExercise]);
+
+  // Unified atomic mutation pathway for sessionSets and activeSession persistence
+  const mutateSessionSets = useCallback((
+    updater: (prev: Record<string, SetLog[]>) => Record<string, SetLog[]>
+  ) => {
+    setSessionSets(prev => {
+      const nextSets = updater(prev);
+      updateActiveSessionSets(nextSets);
+      return nextSets;
+    });
+  }, [updateActiveSessionSets]);
 
   // Resilient set mutation with defensive fallback and input validation
   const updateSet = (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
-    const currentSets = sessionSets[exId] || [];
-    if (setIndex < 0 || setIndex >= currentSets.length) return;
-
     // Input validation & sanitization
     if (typeof value === 'string') {
       if (value.length > 7) return; // Prevent unreasonable input length
@@ -529,39 +564,46 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       }
     }
 
-    const nextSets = {
-      ...sessionSets,
-      [exId]: currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s)
-    };
-    setSessionSets(nextSets);
-    updateActiveSessionSets(nextSets);
+    let isNowDone = false;
 
-    // Auto-advance logic: if a set is marked done, check if the exercise is complete
-    if (field === 'done' && value === true && activeWorkout) {
-      const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
-      if (ex) {
-        const isNowDone = nextSets[exId]?.slice(0, ex.sets).every(s => s.done);
-        if (isNowDone) {
-          // Find the first incomplete exercise
-          const nextIncomplete = activeWorkout.exercises.find(e => 
-            !nextSets[e.exerciseDefinitionId]?.slice(0, e.sets).every(s => s.done)
-          );
-          if (nextIncomplete) {
-            setExpandedExId(nextIncomplete.exerciseDefinitionId);
-          }
+    mutateSessionSets(prev => {
+      const currentSets = prev[exId] || [];
+      if (setIndex < 0 || setIndex >= currentSets.length) return prev;
+      const updatedExSets = currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s);
+      const nextSets = { ...prev, [exId]: updatedExSets };
+
+      if (field === 'done' && value === true && activeWorkout) {
+        const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
+        if (ex) {
+          isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
         }
       }
+
+      return nextSets;
+    });
+
+    // Auto-advance logic: if exercise is completed, expand next incomplete exercise
+    if (isNowDone && activeWorkout) {
+      setSessionSets(current => {
+        const nextIncomplete = activeWorkout.exercises.find(e => 
+          !(current[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
+        );
+        if (nextIncomplete) {
+          setExpandedExId(nextIncomplete.exerciseDefinitionId);
+        }
+        return current;
+      });
     }
   };
 
   const addSet = (exId: string) => {
-    const currentSets = sessionSets[exId] || [];
-    const nextSets = {
-      ...sessionSets,
-      [exId]: [...currentSets, { id: generateId(), weight: '', reps: '', done: false }]
-    };
-    setSessionSets(nextSets);
-    updateActiveSessionSets(nextSets);
+    mutateSessionSets(prev => {
+      const currentSets = prev[exId] || [];
+      return {
+        ...prev,
+        [exId]: [...currentSets, { id: generateId(), weight: '', reps: '', done: false }]
+      };
+    });
   };
 
   const deleteSet = async (exId: string, setIndex: number) => {
@@ -578,12 +620,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       if (!proceed) return;
     }
 
-    const nextSets = {
-      ...sessionSets,
-      [exId]: sets.filter((_, i) => i !== setIndex)
-    };
-    setSessionSets(nextSets);
-    updateActiveSessionSets(nextSets);
+    mutateSessionSets(prev => {
+      const currentSets = prev[exId] || [];
+      if (setIndex < 0 || setIndex >= currentSets.length) return prev;
+      return {
+        ...prev,
+        [exId]: currentSets.filter((_, i) => i !== setIndex)
+      };
+    });
   };
 
   const getAiAdvice = async (ex: Exercise) => {
@@ -793,7 +837,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             key={wo.id ? `wo-${wo.id}-${woIdx}` : `wo-${woIdx}`}
             variant="interactive"
             padding="md"
-            onClick={() => setActiveWorkout(wo)}
+            onClick={() => setSelectedWorkoutId(wo.id)}
             className="text-left cursor-pointer"
           >
             <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>

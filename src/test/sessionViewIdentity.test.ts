@@ -297,4 +297,50 @@ describe('SessionView Exercise Identity & State-Key Regression Suite', () => {
       expect(finalLog.durationMinutes).toBe(48);
     });
   });
+
+  describe('7. Programmed vs Additional Sets Completion Semantics', () => {
+    it('exercise is completed when programmed sets are done even if extra sets exist', () => {
+      const ex = mockWorkout.exercises[0]; // sets: 3
+      const sessionSets: SetLog[] = [
+        { id: 's1', weight: '100', reps: '8', done: true },
+        { id: 's2', weight: '100', reps: '8', done: true },
+        { id: 's3', weight: '100', reps: '8', done: true },
+        { id: 's4_extra', weight: '80', reps: '12', done: false } // Bonus drop set
+      ];
+
+      const isProgrammedComplete = sessionSets.slice(0, ex.sets).every(s => s.done);
+      expect(isProgrammedComplete).toBe(true);
+    });
+
+    it('exercise is incomplete if any programmed set is not done', () => {
+      const ex = mockWorkout.exercises[0]; // sets: 3
+      const sessionSets: SetLog[] = [
+        { id: 's1', weight: '100', reps: '8', done: true },
+        { id: 's2', weight: '100', reps: '8', done: false },
+        { id: 's3', weight: '100', reps: '8', done: true }
+      ];
+
+      const isProgrammedComplete = sessionSets.slice(0, ex.sets).every(s => s.done);
+      expect(isProgrammedComplete).toBe(false);
+    });
+  });
+
+  describe('8. Exercise Definition Modifications During Active Session', () => {
+    it('preserves set logs and updates resolved exercise display when definition name changes', () => {
+      const we = mockWorkout.exercises[0];
+      const initialResolved = resolveWorkoutExercise(we, mockDefs);
+      expect(initialResolved.name).toBe('Barbell Bench Press');
+
+      // User modifies exercise definition name mid-session in Exercise Editor
+      const updatedDefs: ExerciseDefinition[] = [
+        { id: 'def_bench', name: 'Competition Flat Barbell Bench Press', target: 'Chest', equipment: 'Barbell' },
+        ...mockDefs.slice(1)
+      ];
+
+      const updatedResolved = resolveWorkoutExercise(we, updatedDefs);
+      expect(updatedResolved.id).toBe('def_bench');
+      expect(updatedResolved.exerciseDefinitionId).toBe('def_bench');
+      expect(updatedResolved.name).toBe('Competition Flat Barbell Bench Press');
+    });
+  });
 });

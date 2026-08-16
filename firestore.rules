@@ -22,11 +22,6 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Exercise Definitions Sub-collection
-      match /exerciseDefinitions/{exerciseDefId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-
       // Workouts Sub-collection
       match /workouts/{workoutId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
