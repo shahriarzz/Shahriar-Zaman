@@ -39,8 +39,6 @@ export interface RawSetLog {
   warmup?: boolean;
 }
 
-export type RawSetInput = RawSetLog;
-
 export interface RawSessionLogInput {
   id: string;
   workoutId?: string;
