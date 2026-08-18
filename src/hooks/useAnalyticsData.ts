@@ -30,10 +30,9 @@ export function useAnalyticsData({
   selected1RMExerciseId,
   currentHeatmapMonth
 }: UseAnalyticsDataParams) {
-  const { appState, logs, workouts } = useFitness();
+  const { appState } = useFitness();
   const {
     index,
-    defsMap,
     workoutMap,
     coreWorkoutByCycleDayMap,
     priorityExercises
@@ -46,14 +45,13 @@ export function useAnalyticsData({
   const aggregated = useMemo(() => {
     return selectTimeRangeAnalytics(
       index,
-      defsMap,
       workoutMap,
       coreWorkoutByCycleDayMap,
       timeRange,
       appState?.cycleStart,
       active1RMExerciseId
     );
-  }, [index, defsMap, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, active1RMExerciseId]);
+  }, [index, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, active1RMExerciseId]);
 
   // 2. Heatmap calendar data consuming canonical index
   const heatmapData = useCalendarGrid({
@@ -147,7 +145,6 @@ export function useAnalyticsData({
 
   return {
     index,
-    defsMap,
     workoutMap,
     coreWorkoutByCycleDayMap,
     priorityExercises,

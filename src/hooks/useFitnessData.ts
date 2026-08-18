@@ -87,8 +87,6 @@ export function useFitnessData() {
     setWorkoutsState(snapshot.workouts);
     setLogsState(snapshot.logs);
     setAppStateState(snapshot.appState);
-
-    persistFitnessDatabase(snapshot);
   }, []);
 
   // Unified single-point persistence to localStorage

@@ -538,16 +538,24 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     return prs;
   }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getHeaviestForExercise]);
 
-  // Unified atomic mutation pathway for sessionSets and activeSession persistence
+  // Synchronize active session sets to persistent activeSession state safely in an effect
+  const isInitialSyncRef = useRef(true);
+  useEffect(() => {
+    if (isInitialSyncRef.current) {
+      isInitialSyncRef.current = false;
+      return;
+    }
+    if (isInitializedRef.current && Object.keys(sessionSets).length > 0 && !isFinishing) {
+      updateActiveSessionSets(sessionSets);
+    }
+  }, [sessionSets, updateActiveSessionSets, isFinishing]);
+
+  // Unified atomic mutation pathway for sessionSets
   const mutateSessionSets = useCallback((
     updater: (prev: Record<string, SetLog[]>) => Record<string, SetLog[]>
   ) => {
-    setSessionSets(prev => {
-      const nextSets = updater(prev);
-      updateActiveSessionSets(nextSets);
-      return nextSets;
-    });
-  }, [updateActiveSessionSets]);
+    setSessionSets(prev => updater(prev));
+  }, []);
 
   // Resilient set mutation with defensive fallback and input validation
   const updateSet = (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
@@ -564,9 +572,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       }
     }
 
-    let isNowDone = false;
-
-    mutateSessionSets(prev => {
+    setSessionSets(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
       const updatedExSets = currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s);
@@ -575,25 +581,22 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       if (field === 'done' && value === true && activeWorkout) {
         const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
         if (ex) {
-          isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
+          const isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
+          if (isNowDone) {
+            const nextIncomplete = activeWorkout.exercises.find(e => 
+              !(nextSets[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
+            );
+            if (nextIncomplete) {
+              setTimeout(() => {
+                setExpandedExId(nextIncomplete.exerciseDefinitionId);
+              }, 0);
+            }
+          }
         }
       }
 
       return nextSets;
     });
-
-    // Auto-advance logic: if exercise is completed, expand next incomplete exercise
-    if (isNowDone && activeWorkout) {
-      setSessionSets(current => {
-        const nextIncomplete = activeWorkout.exercises.find(e => 
-          !(current[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
-        );
-        if (nextIncomplete) {
-          setExpandedExId(nextIncomplete.exerciseDefinitionId);
-        }
-        return current;
-      });
-    }
   };
 
   const addSet = (exId: string) => {

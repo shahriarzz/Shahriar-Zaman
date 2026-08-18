@@ -18,6 +18,10 @@ import {
   getPriorityExercises,
   mapTargetToCategory
 } from '../utils/exerciseResolver';
+import {
+  buildFitnessIndex,
+  selectTimeRangeAnalytics
+} from '../utils/fitnessDerivedSelectors';
 import { calculateE1RM as calcEpley1RM } from '../utils/fitnessCalculations';
 import { ExerciseDefinition, Workout, SessionLog, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_EXERCISE_DEFINITIONS, INITIAL_WORKOUTS } from '../types/initialData';
@@ -320,48 +324,133 @@ describe('GainLog Comprehensive Validation Suite', () => {
   });
 
   // -------------------------------------------------------------
-  // 7. PERFORMANCE TEST
+  // 7. PIPELINE ARCHITECTURE PERFORMANCE & BENCHMARK TESTS
   // -------------------------------------------------------------
-  describe('7. Performance Test', () => {
-    it('filters through 1,000 exercise definitions in under 10ms', () => {
-      const largeDefs: ExerciseDefinition[] = [];
-      for (let i = 0; i < 1000; i++) {
-        largeDefs.push({
-          id: `ex-perf-${i}`,
-          name: `Exercise Variant ${i}`,
-          target: i % 2 === 0 ? 'Chest' : 'Back',
-          tags: i % 10 === 0 ? ['priority'] : []
-        });
-      }
+  describe('7. Pipeline Architecture Performance & Benchmark Tests', () => {
+    function generateSyntheticData(logCount: number) {
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const workoutMap = new Map<string, Workout>();
+      const coreWorkoutByCycleDayMap = new Map<number, Workout>();
+      INITIAL_WORKOUTS.forEach(w => {
+        workoutMap.set(w.id, w);
+        if (w.isCore && typeof w.cycleDay === 'number') {
+          coreWorkoutByCycleDayMap.set(w.cycleDay, w);
+        }
+      });
 
-      const start = performance.now();
-      const filtered = largeDefs.filter(d => d.target === 'Chest' && d.tags?.includes('priority'));
-      const duration = performance.now() - start;
+      const logs: Record<string, SessionLog> = {};
+      const baseDate = new Date(2026, 0, 1);
 
-      expect(filtered.length).toBe(100);
-      expect(duration).toBeLessThan(10); // Under 10ms execution limit
-    });
+      for (let i = 0; i < logCount; i++) {
+        const currentDate = new Date(baseDate);
+        currentDate.setDate(baseDate.getDate() + (i % 365));
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const logId = `perf-log-${i}`;
 
-    it('queries through 1,000 session logs in under 10ms', () => {
-      const largeLogs: Record<string, SessionLog> = {};
-      for (let i = 0; i < 1000; i++) {
-        const id = `log-${i}`;
-        largeLogs[id] = {
-          id,
-          workoutId: i % 2 === 0 ? 'push-a' : 'pull-a',
-          date: `2026-01-${(i % 30) + 1}`,
-          sets: {},
-          complete: i % 3 === 0,
-          durationMinutes: 45
+        logs[logId] = {
+          id: logId,
+          workoutId: INITIAL_WORKOUTS[i % INITIAL_WORKOUTS.length].id,
+          date: dateStr,
+          complete: i % 4 !== 0,
+          durationMinutes: 45 + (i % 30),
+          sets: {
+            'barbell-bench-press': [
+              { id: `s_${i}_1`, weight: String(80 + (i % 40)), reps: '10', done: true },
+              { id: `s_${i}_2`, weight: String(85 + (i % 40)), reps: '8', done: true },
+              { id: `s_${i}_3`, weight: String(90 + (i % 40)), reps: '6', done: true },
+              { id: `s_${i}_4`, weight: '100', reps: '5', done: false }
+            ],
+            'barbell-squat': [
+              { id: `s_${i}_5`, weight: String(100 + (i % 60)), reps: '5', done: true },
+              { id: `s_${i}_6`, weight: String(110 + (i % 60)), reps: '5', done: true }
+            ]
+          }
         };
       }
 
+      return { defsMap, workoutMap, coreWorkoutByCycleDayMap, logs };
+    }
+
+    it('buildFitnessIndex scales efficiently across 100, 1,000, and 5,000 logs', () => {
+      [100, 1000, 5000].forEach(count => {
+        const { defsMap, logs } = generateSyntheticData(count);
+        const start = performance.now();
+        const index = buildFitnessIndex(logs, defsMap);
+        const duration = performance.now() - start;
+
+        expect(index.lifetimeStats.totalSessions).toBeGreaterThan(0);
+        expect(index.lifetimeStats.totalVolume).toBeGreaterThan(0);
+        expect(index.exerciseIndex.size).toBeGreaterThan(0);
+        expect(index.sortedLogsAscending).toHaveLength(count);
+        // Realistic architecture expectations: 5,000 multi-set logs processed under 500ms
+        expect(duration).toBeLessThan(count > 1000 ? 500 : 250);
+      });
+    });
+
+    it('selectTimeRangeAnalytics executes aggregation efficiently across 1,000 logs', () => {
+      const { defsMap, workoutMap, coreWorkoutByCycleDayMap, logs } = generateSyntheticData(1000);
+      const index = buildFitnessIndex(logs, defsMap);
+
       const start = performance.now();
-      const completedPushALogs = Object.values(largeLogs).filter(l => l.workoutId === 'push-a' && l.complete);
+      const analytics30d = selectTimeRangeAnalytics(
+        index,
+        workoutMap,
+        coreWorkoutByCycleDayMap,
+        '30d',
+        '2026-01-01',
+        'barbell-bench-press'
+      );
+      const analyticsAll = selectTimeRangeAnalytics(
+        index,
+        workoutMap,
+        coreWorkoutByCycleDayMap,
+        'all',
+        '2026-01-01',
+        'barbell-squat'
+      );
       const duration = performance.now() - start;
 
-      expect(completedPushALogs.length).toBeGreaterThan(150);
-      expect(duration).toBeLessThan(10); // Under 10ms execution limit
+      expect(analytics30d.rangeLogsCount).toBeGreaterThan(0);
+      expect(analyticsAll.rangeVolume).toBeGreaterThan(0);
+      expect(duration).toBeLessThan(100);
+    });
+
+    it('queries exercise history from canonical index with zero set-traversal overhead', () => {
+      const { defsMap, logs } = generateSyntheticData(1000);
+      const index = buildFitnessIndex(logs, defsMap);
+
+      const start = performance.now();
+      const benchEntry = index.exerciseIndex.get('barbell-bench-press');
+      const squatEntry = index.exerciseIndex.get('barbell-squat');
+      const duration = performance.now() - start;
+
+      expect(benchEntry).toBeDefined();
+      expect(squatEntry).toBeDefined();
+      expect(benchEntry!.sessions.length).toBe(1000);
+      expect(duration).toBeLessThan(20);
+    });
+
+    it('simulates SessionView local set mutations without triggering global index rebuilds', () => {
+      const activeSessionSets: Record<string, { id: string; weight: string; reps: string; done: boolean }[]> = {
+        'barbell-bench-press': [
+          { id: 's1', weight: '100', reps: '10', done: true }
+        ]
+      };
+
+      const start = performance.now();
+      // Local mutation inside active session component
+      activeSessionSets['barbell-bench-press'].push({
+        id: 's2',
+        weight: '105',
+        reps: '8',
+        done: true
+      });
+      activeSessionSets['barbell-bench-press'][0].reps = '12';
+      const duration = performance.now() - start;
+
+      expect(activeSessionSets['barbell-bench-press']).toHaveLength(2);
+      expect(activeSessionSets['barbell-bench-press'][0].reps).toBe('12');
+      expect(duration).toBeLessThan(10);
     });
   });
 

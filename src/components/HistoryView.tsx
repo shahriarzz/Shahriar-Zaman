@@ -6,7 +6,6 @@ import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
-import { calculateVolume } from '../utils/fitnessCalculations';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -40,7 +39,7 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
   const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
-  const { sortedLogs, defsMap, workoutMap, index } = useFitnessDerivedData();
+  const { sortedLogs, workoutMap, index } = useFitnessDerivedData();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -56,17 +55,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   useEffect(() => {
     if (initialDate) {
       setSearch(initialDate);
-      const matched = Object.entries(logs).find(([_, log]) => (log as SessionLog).date === initialDate);
+      const matched = sortedLogs.find(log => log.date === initialDate);
       if (matched) {
-        setExpandedDate(matched[0]);
+        setExpandedDate(matched.id);
       } else {
         setExpandedDate(initialDate);
       }
     }
-  }, [initialDate, logs]);
-
-  // Map exercise definitions by ID for canonical exercise identity
-  const exerciseDefinitionsById = defsMap;
+  }, [initialDate, sortedLogs]);
 
   // Workouts by ID for workout-level metadata
   const workoutsById = workoutMap;
@@ -98,16 +94,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       const matchesWorkout = workoutName.toLowerCase().includes(lowercaseSearch);
       const matchesId = session.id?.toLowerCase().includes(lowercaseSearch);
       
-      // Also match if any of the completed exercises match the search via canonical ExerciseDefinition
+      // Also match if any of the completed exercises match the search via canonical ExerciseMeta
       const matchesExercises = Object.keys(session.sets).some(exId => {
-        const def = exerciseDefinitionsById.get(exId);
-        const exName = def?.name || 'Unlisted Exercise';
+        const meta = index.exerciseMetaById.get(exId);
+        const exName = meta?.name || 'Unlisted Exercise';
         return exName.toLowerCase().includes(lowercaseSearch);
       });
 
       return matchesDate || matchesWorkout || matchesExercises || matchesId;
     });
-  }, [sessionsList, workoutsById, search, exerciseDefinitionsById]);
+  }, [sessionsList, workoutsById, search, index.exerciseMetaById]);
 
   const clearFilter = () => {
     setSearch('');
@@ -129,8 +125,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       workoutsByType: Record<string, number>; // type -> count of completed runs
     }> = {};
 
-    const allLogs = Object.values(logs) as SessionLog[];
-    const sortedLogsChronological = allLogs.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const sortedLogsChronological = sortedLogs.slice().reverse();
     const runningPRs: Record<string, number> = {};
 
     sortedLogsChronological.forEach(log => {
@@ -157,7 +152,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       const summary = summaries[monthKey];
       summary.sessionsCount += 1;
       summary.totalDuration += log.durationMinutes || 0;
-      summary.totalVolume += calculateVolume(log);
+      summary.totalVolume += (index.volumeByDate[log.date] ?? 0);
 
       const workout = workoutsById.get(log.workoutId);
       if (workout) {
@@ -169,8 +164,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         const doneSets = (sets as SetLog[]).filter(s => s.done);
         if (doneSets.length === 0) return;
 
-        const def = exerciseDefinitionsById.get(exId);
-        const exerciseName = def?.name || 'Unlisted Exercise';
+        const meta = index.exerciseMetaById.get(exId);
+        const exerciseName = meta?.name || 'Unlisted Exercise';
         const weights = doneSets.map(s => parseFloat(s.weight) || 0);
         const logMaxWeight = weights.length > 0 ? Math.max(...weights) : 0;
 
@@ -189,7 +184,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     });
 
     return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [logs, workoutsById, exerciseDefinitionsById]);
+  }, [logs, workoutsById, index]);
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
@@ -205,8 +200,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
     const extremeSets: string[] = [];
     Object.entries(editSessionState.sets).forEach(([exId, sets]) => {
-      const def = exerciseDefinitionsById.get(exId);
-      const exName = def?.name || 'Unlisted Exercise';
+      const meta = index.exerciseMetaById.get(exId);
+      const exName = meta?.name || 'Unlisted Exercise';
       (sets as SetLog[]).forEach((s, idx) => {
         const w = parseFloat(s.weight) || 0;
         const r = parseInt(s.reps) || 0;
@@ -476,7 +471,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
             {filteredSessions.map((session, sIdx) => {
               const workout = workouts.find(w => w.id === session.workoutId);
               const totalSets = Object.values(session.sets).flat().filter((s: any) => s.done).length;
-              const vol = calculateVolume(session);
+              const vol = index.volumeByDate[session.date] ?? 0;
               const color = WORKOUT_COLORS[workout?.type || 'push'];
               const isExpanded = expandedDate === session.id;
 
@@ -641,8 +636,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           {/* Sets list per exercise */}
                           <div className="space-y-6">
                             {Object.entries(editSessionState.sets).map(([exId, sets]) => {
-                              const def = exerciseDefinitionsById.get(exId);
-                              const exName = def?.name || 'Unlisted Exercise';
+                              const meta = index.exerciseMetaById.get(exId);
+                              const exName = meta?.name || 'Unlisted Exercise';
                               return (
                                 <div key={exId} className={cn("border p-4 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                                   <div className="flex items-center gap-2">
@@ -809,8 +804,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                           <div className="space-y-3">
                         {Object.entries(session.sets).map(([exId, sets]) => {
-                          const def = exerciseDefinitionsById.get(exId);
-                          const exerciseName = def?.name || 'Unlisted Exercise';
+                          const meta = index.exerciseMetaById.get(exId);
+                          const exerciseName = meta?.name || 'Unlisted Exercise';
                           const workout = workoutsById.get(session.workoutId);
                           const doneSets = (sets as SetLog[]).filter(s => s.done);
                           if (doneSets.length === 0) return null;
@@ -818,9 +813,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const exKey = `${session.date}_${exId}`;
                           const isSelected = selectedExKey === exKey;
 
-                          // Dynamic PR calculation of all time for this exercise
+                          // Dynamic PR calculation of all time for this exercise from canonical index
                           const historyLogs = (exerciseHistory[exId] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
-                          const prWeight = historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0;
+                          const prWeight = index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0);
                           const oldestPrDate = prWeight > 0 
                             ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date 
                             : null;

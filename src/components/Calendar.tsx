@@ -19,7 +19,6 @@ import {
   getCycleDayForDate,
   WORKOUT_COLORS
 } from '../utils/fitnessHelpers';
-import { calculateVolume } from '../utils/fitnessCalculations';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { haptics } from '../utils/haptics';
 import { useCalendarGrid } from '../hooks/useCalendarGrid';
@@ -649,7 +648,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <Grid cols={3} gap="sm">
                       <StatCard
                         label="Volume"
-                        value={calculateVolume(selectedLog).toLocaleString()}
+                        value={(selectedDetail?.volume ?? (selectedDateStr ? index.volumeByDate[selectedDateStr] ?? 0 : 0)).toLocaleString()}
                         unit="kg"
                         accent="emerald"
                         icon={TrendingUp}

@@ -24,14 +24,46 @@ export function formatDateStr(dateStr: string): string {
   }
 }
 
+export interface RawSetLog {
+  id?: string;
+  weight?: string | number;
+  weightKg?: string | number;
+  reps?: string | number;
+  done?: boolean;
+  completed?: boolean;
+  rpe?: string | number;
+  notes?: string;
+  targetReps?: string | number;
+  targetWeight?: string | number;
+  isWarmup?: boolean;
+  warmup?: boolean;
+}
+
+export type RawSetInput = RawSetLog;
+
+export interface RawSessionLogInput {
+  id: string;
+  workoutId?: string;
+  date?: string;
+  sets?: Record<string, RawSetLog[] | undefined>;
+  complete?: boolean;
+  durationMinutes?: number | string;
+  duration?: number | string;
+  updatedAt?: number;
+}
+
 /**
  * Pure helper to sanitize a single SetLog ensuring valid types and defaults.
+ * Guaranteed 100% deterministic: NEVER generates random IDs under any circumstances.
  */
-export function sanitizeSetLog(set: Partial<SetLog> | null | undefined, fallbackId?: string): SetLog {
-  const id = set?.id || fallbackId || `set_${Math.random().toString(36).substring(2, 9)}`;
-  const weight = typeof set?.weight === 'number' ? String(set.weight) : (set?.weight || '');
-  const reps = typeof set?.reps === 'number' ? String(set.reps) : (set?.reps || '');
-  const done = Boolean(set?.done);
+export function sanitizeSetLog(set: RawSetLog | null | undefined, fallbackId: string = 'set_0'): SetLog {
+  const id = (set?.id && String(set.id).trim().length > 0)
+    ? String(set.id).trim()
+    : (fallbackId && fallbackId.trim().length > 0 ? fallbackId.trim() : 'set_0');
+  const rawWeight = set?.weight !== undefined ? set.weight : (set?.weightKg !== undefined ? set.weightKg : '');
+  const weight = typeof rawWeight === 'number' ? String(rawWeight) : String(rawWeight || '');
+  const reps = typeof set?.reps === 'number' ? String(set.reps) : String(set?.reps || '');
+  const done = Boolean(set?.done ?? set?.completed);
 
   return {
     id,
@@ -43,10 +75,10 @@ export function sanitizeSetLog(set: Partial<SetLog> | null | undefined, fallback
 
 /**
  * Hardens and sanitizes a complete SessionLog according to the GainLog data contract.
+ * Generates deterministic fallback set IDs based on exercise ID + set position.
+ * Guaranteed 100% idempotent: sanitizeSessionLog(log) is byte-equivalent across multiple passes.
  */
-export function sanitizeSessionLog(
-  rawLog: Partial<Omit<SessionLog, 'sets'>> & { id: string; workoutId: string; date: string; sets?: Record<string, any[]> }
-): SessionLog {
+export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
   const sanitizedSets: Record<string, SetLog[]> = {};
 
   if (rawLog.sets && typeof rawLog.sets === 'object') {
@@ -57,15 +89,17 @@ export function sanitizeSessionLog(
     });
   }
 
-  const durationMin = Number(rawLog.durationMinutes);
+  const rawDuration = rawLog.durationMinutes !== undefined ? rawLog.durationMinutes : rawLog.duration;
+  const durationMin = Number(rawDuration);
 
   return {
     id: String(rawLog.id),
-    workoutId: String(rawLog.workoutId),
-    date: String(rawLog.date),
+    workoutId: String(rawLog.workoutId || ''),
+    date: String(rawLog.date || dk()),
     sets: sanitizedSets,
     complete: Boolean(rawLog.complete),
-    durationMinutes: Number.isFinite(durationMin) && durationMin >= 0 ? Math.floor(durationMin) : 0
+    durationMinutes: Number.isFinite(durationMin) && durationMin >= 0 ? Math.floor(durationMin) : 0,
+    ...(rawLog.updatedAt ? { updatedAt: rawLog.updatedAt } : {})
   };
 }
 
@@ -129,27 +163,6 @@ export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[]
 }
 
 /**
- * Canonical general volume calculator (for SessionLog or raw sets record)
- */
-export function calculateVolume(log: SessionLog | { sets?: Record<string, SetLog[]> } | null | undefined): number {
-  if (!log || !log.sets) return 0;
-  let total = 0;
-  Object.values(log.sets).forEach(setsList => {
-    total += calculateSetsVolume(setsList);
-  });
-  return total;
-}
-
-/**
- * Calculates total volume lifted across a collection of logs
- */
-export function calculateTotalWeightLifted(logs: Record<string, SessionLog> | SessionLog[] | null | undefined): number {
-  if (!logs) return 0;
-  const logArray = Array.isArray(logs) ? logs : Object.values(logs);
-  return logArray.reduce((acc, log) => acc + calculateVolume(log), 0);
-}
-
-/**
  * Calculates Estimated 1RM (e1RM) using the standard Epley formula:
  * e1RM = weight * (1 + reps / 30) for reps > 1, or weight for reps === 1.
  * Capped at 30 reps for realism.
@@ -164,81 +177,6 @@ export function calculateE1RM(weight: number | string, reps: number | string): n
   const effectiveReps = Math.min(r, 30);
   const e1rm = w * (1 + effectiveReps / 30);
   return Math.round(e1rm * 10) / 10;
-}
-
-/**
- * Calculates current consecutive workout day streak.
- */
-export function calculateStreak(
-  logs: Record<string, SessionLog> | SessionLog[] | undefined | null,
-  referenceDate: Date = new Date()
-): number {
-  const logArray = Array.isArray(logs) ? logs : Object.values(logs || {});
-  const datesSet = new Set(logArray.map(l => l?.date).filter(Boolean));
-  if (datesSet.size === 0) return 0;
-
-  let streak = 0;
-  const checkDate = new Date(referenceDate);
-
-  const formatDate = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const r = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${r}`;
-  };
-
-  let checkStr = formatDate(checkDate);
-
-  if (!datesSet.has(checkStr)) {
-    checkDate.setDate(checkDate.getDate() - 1);
-    checkStr = formatDate(checkDate);
-    if (!datesSet.has(checkStr)) {
-      return 0;
-    }
-  }
-
-  while (datesSet.has(formatDate(checkDate))) {
-    streak++;
-    checkDate.setDate(checkDate.getDate() - 1);
-  }
-  return streak;
-}
-
-/**
- * Calculates longest consecutive workout day streak across all history.
- */
-export function calculateLongestStreak(
-  logs: Record<string, SessionLog> | SessionLog[] | undefined | null
-): number {
-  const logArray = Array.isArray(logs) ? logs : Object.values(logs || {});
-  const distinctDates = Array.from(new Set(logArray.map(l => l?.date).filter(Boolean) as string[])).sort();
-  if (distinctDates.length === 0) return 0;
-
-  let longestStreak = 0;
-  let tempStreak = 0;
-  let prevDateObj: Date | null = null;
-
-  distinctDates.forEach(dateStr => {
-    const curDateObj = parseISO(dateStr);
-    if (isValid(curDateObj)) {
-      if (!prevDateObj) {
-        tempStreak = 1;
-      } else {
-        const diff = differenceInCalendarDays(curDateObj, prevDateObj);
-        if (diff === 1) {
-          tempStreak++;
-        } else if (diff > 1) {
-          tempStreak = 1;
-        }
-      }
-      if (tempStreak > longestStreak) {
-        longestStreak = tempStreak;
-      }
-      prevDateObj = curDateObj;
-    }
-  });
-
-  return longestStreak;
 }
 
 export function getAdjustedCycleStart(workoutCycleDay: number): string {

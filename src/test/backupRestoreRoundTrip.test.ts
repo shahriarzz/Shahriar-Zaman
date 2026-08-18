@@ -12,7 +12,7 @@ import {
 import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
 import { buildFitnessIndex, selectLifetimeStats, selectPersonalBests, selectSortedLogs } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
-import { calculateVolume } from '../utils/fitnessCalculations';
+import { calculateSetsVolume } from '../utils/fitnessCalculations';
 
 describe('Backup / Restore Round-Trip Regression Test Suite', () => {
   beforeEach(() => {
@@ -237,7 +237,7 @@ describe('Backup / Restore Round-Trip Regression Test Suite', () => {
       expect(restoredLog.workoutId).toBe(origLog.workoutId);
       expect(restoredLog.date).toBe(origLog.date);
       expect(restoredLog.durationMinutes).toBe(origLog.durationMinutes);
-      expect(calculateVolume(restoredLog)).toBe(calculateVolume(origLog));
+      expect(calculateSetsVolume(Object.values(restoredLog.sets).flat())).toBe(calculateSetsVolume(Object.values(origLog.sets).flat()));
 
       Object.entries(origLog.sets).forEach(([exKey, origSetList]) => {
         const restoredSetList = restoredLog.sets[exKey];

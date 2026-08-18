@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ExerciseDefinition, Workout, SessionLog, SetLog } from '../types/fitness';
-import { calculateVolume } from '../utils/fitnessCalculations';
+import { calculateSetsVolume } from '../utils/fitnessCalculations';
 
 describe('History View Canonical Exercise Resolution Suite', () => {
   const mockDefs: ExerciseDefinition[] = [
@@ -557,7 +557,7 @@ describe('History View Canonical Exercise Resolution Suite', () => {
 
       expect(editSessionState.sets['def_bench']).toHaveLength(3);
       expect(editSessionState.sets['def_bench'][0].weight).toBe('107.5');
-      expect(calculateVolume(editSessionState)).toBe(
+      expect(calculateSetsVolume(Object.values(editSessionState.sets).flat())).toBe(
         107.5 * 6 + 105 * 5 + 100 * 8 + 32 * 10
       );
     });
@@ -614,7 +614,7 @@ describe('History View Canonical Exercise Resolution Suite', () => {
         }
         const summary = summaries[monthKey];
         summary.sessionCount += 1;
-        summary.totalVolume += calculateVolume(log);
+        summary.totalVolume += calculateSetsVolume(Object.values(log.sets).flat());
 
         Object.entries(log.sets).forEach(([exId, sets]) => {
           const doneSets = (sets as SetLog[]).filter(s => s.done);

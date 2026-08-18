@@ -4,8 +4,6 @@ import {
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
-  calculateStreak,
-  calculateLongestStreak,
   getSortedLogsDescending,
   getSortedWeightEntries,
   getWeightSparklineData,
@@ -140,11 +138,79 @@ export interface FitnessIndex {
 }
 
 /**
+ * Internal helper to calculate current consecutive workout day streak.
+ */
+function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
+  const datesSet = new Set(logs.map(l => l?.date).filter(Boolean));
+  if (datesSet.size === 0) return 0;
+
+  let streak = 0;
+  const checkDate = new Date(referenceDate);
+
+  const formatDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const r = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${r}`;
+  };
+
+  let checkStr = formatDate(checkDate);
+
+  if (!datesSet.has(checkStr)) {
+    checkDate.setDate(checkDate.getDate() - 1);
+    checkStr = formatDate(checkDate);
+    if (!datesSet.has(checkStr)) {
+      return 0;
+    }
+  }
+
+  while (datesSet.has(formatDate(checkDate))) {
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+  return streak;
+}
+
+/**
+ * Internal helper to calculate longest consecutive workout day streak.
+ */
+function computeLongestStreak(logs: SessionLog[]): number {
+  const distinctDates = Array.from(new Set(logs.map(l => l?.date).filter(Boolean) as string[])).sort();
+  if (distinctDates.length === 0) return 0;
+
+  let longestStreak = 0;
+  let tempStreak = 0;
+  let prevDateObj: Date | null = null;
+
+  distinctDates.forEach(dateStr => {
+    const curDateObj = parseISO(dateStr);
+    if (isValid(curDateObj)) {
+      if (!prevDateObj) {
+        tempStreak = 1;
+      } else {
+        const diff = differenceInCalendarDays(curDateObj, prevDateObj);
+        if (diff === 1) {
+          tempStreak++;
+        } else if (diff > 1) {
+          tempStreak = 1;
+        }
+      }
+      if (tempStreak > longestStreak) {
+        longestStreak = tempStreak;
+      }
+      prevDateObj = curDateObj;
+    }
+  });
+
+  return longestStreak;
+}
+
+/**
  * Builds the canonical FitnessIndex in a single, high-performance O(N) traversal.
  */
 export function buildFitnessIndex(
   logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  defsMap: Map<string, ExerciseDefinition>
+  defsMap: Map<string, ExerciseDefinition> = new Map()
 ): FitnessIndex {
   const rawLogs = Array.isArray(logs) ? logs : Object.values(logs || {});
   
@@ -309,9 +375,10 @@ export function buildFitnessIndex(
               maxSetDetailInSession = `${w}kg × ${r} reps`;
             }
 
-            // All-time personal best check
+            // All-time personal best check (Weight PR: highest weight, then highest reps at that weight)
             const existingPB = personalBestsMap.get(normId);
-            if (!existingPB || epley > existingPB.maxEpley) {
+            const isPB = !existingPB || w > existingPB.maxWeight || (w === existingPB.maxWeight && r > existingPB.repsAtMax);
+            if (isPB) {
               personalBestsMap.set(normId, {
                 exerciseId: normId,
                 exerciseName: exMeta.name,
@@ -479,8 +546,8 @@ export function buildFitnessIndex(
     totalSets: totalLifetimeSets,
     totalMinutes: totalLifetimeMinutes,
     measuredSessionsCount: measuredLifetimeCount,
-    currentStreak: calculateStreak(validLogs),
-    longestStreak: calculateLongestStreak(validLogs),
+    currentStreak: computeCurrentStreak(validLogs),
+    longestStreak: computeLongestStreak(validLogs),
     firstSessionDate: sortedLogsAscending[0]?.date || null,
     lastSessionDate: sortedLogsDescending[0]?.date || null
   };
@@ -648,30 +715,31 @@ export function selectWeightSummary(
  */
 export function selectTimeRangeAnalytics(
   index: FitnessIndex,
-  defsMap: Map<string, ExerciseDefinition>,
   workoutMap: Map<string, Workout>,
   coreWorkoutByCycleDayMap: Map<number, Workout>,
   timeRange: '7d' | '30d' | '90d' | 'all',
   cycleStart?: string | null,
   active1RMExerciseId?: string,
-  now: Date = new Date()
+  now: Date | string = new Date()
 ) {
-  const todayStr = format(now, 'yyyy-MM-dd');
-  const startOfToday = startOfDay(now);
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = isValid(parsedNow) ? parsedNow : new Date();
+  const todayStr = format(validNow, 'yyyy-MM-dd');
+  const startOfToday = startOfDay(validNow);
 
   // Calculate cutoffs
   let cutoffDateStr: string | null = null;
   let priorCutoffDateStr: string | null = null;
 
   if (timeRange === '7d') {
-    cutoffDateStr = format(subDays(now, 6), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(now, 13), 'yyyy-MM-dd');
+    cutoffDateStr = format(subDays(validNow, 6), 'yyyy-MM-dd');
+    priorCutoffDateStr = format(subDays(validNow, 13), 'yyyy-MM-dd');
   } else if (timeRange === '30d') {
-    cutoffDateStr = format(subDays(now, 29), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(now, 59), 'yyyy-MM-dd');
+    cutoffDateStr = format(subDays(validNow, 29), 'yyyy-MM-dd');
+    priorCutoffDateStr = format(subDays(validNow, 59), 'yyyy-MM-dd');
   } else if (timeRange === '90d') {
-    cutoffDateStr = format(subDays(now, 89), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(now, 179), 'yyyy-MM-dd');
+    cutoffDateStr = format(subDays(validNow, 89), 'yyyy-MM-dd');
+    priorCutoffDateStr = format(subDays(validNow, 179), 'yyyy-MM-dd');
   }
 
   const rangeLogs = index.sortedLogsAscending.filter(l => !cutoffDateStr || l.date >= cutoffDateStr);
@@ -760,13 +828,20 @@ export function selectTimeRangeAnalytics(
   const firstLogDate = index.lifetimeStats.firstSessionDate;
   const rangeStartDate = cutoffDateStr
     ? parseISO(cutoffDateStr)
-    : (firstLogDate ? parseISO(firstLogDate) : subDays(now, 30));
+    : (firstLogDate ? parseISO(firstLogDate) : subDays(validNow, 30));
   
-  const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(now, 30);
-  const dayInterval = eachDayOfInterval({
-    start: validRangeStart,
-    end: now
-  });
+  const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(validNow, 30);
+  let intervalStart = validRangeStart;
+  let intervalEnd = validNow;
+  if (intervalStart > intervalEnd) {
+    intervalEnd = intervalStart;
+  }
+  const dayInterval = (isValid(intervalStart) && isValid(intervalEnd))
+    ? eachDayOfInterval({
+        start: intervalStart,
+        end: intervalEnd
+      })
+    : [validNow];
 
   let scheduledCoreWorkouts = 0;
   let completedScheduledCore = 0;

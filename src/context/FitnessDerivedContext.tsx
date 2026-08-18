@@ -16,7 +16,7 @@ import {
 } from '../utils/fitnessDerivedSelectors';
 import {
   createExerciseDefinitionMap,
-  resolveExercise,
+  EMPTY_RESOLVED_EXERCISE,
   getPriorityExercises,
   ResolvedExerciseMeta
 } from '../utils/exerciseResolver';
@@ -96,8 +96,11 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   // Helper callbacks querying the indexed structures
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
-    return index.exerciseMetaById.get(exerciseDefinitionId) || resolveExercise(exerciseDefinitionId, defsMap);
-  }, [index, defsMap]);
+    return index.exerciseMetaById.get(exerciseDefinitionId) || {
+      ...EMPTY_RESOLVED_EXERCISE,
+      id: exerciseDefinitionId || 'unknown'
+    };
+  }, [index]);
 
   const getHistoryForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry[] => {
     const entry = index.exerciseIndex.get(exerciseDefinitionId);

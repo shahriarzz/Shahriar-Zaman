@@ -13,12 +13,9 @@ import {
   selectWeightSummary
 } from '../utils/fitnessDerivedSelectors';
 import {
-  calculateVolume,
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
-  calculateStreak,
-  calculateLongestStreak,
   sanitizeSessionLog,
   sanitizeSetLog,
   dk
@@ -91,7 +88,7 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     expect(sortedLogs[0].date).toBe('2026-08-14');
 
     // Volume in history
-    const historyVolume = calculateVolume(sortedLogs[0]);
+    const historyVolume = calculateSetsVolume(Object.values(sortedLogs[0].sets).flat());
     expect(historyVolume).toBe(1000); // 2 completed sets of 100x5 = 1000kg
   });
 
@@ -465,5 +462,74 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     trackDeletedId('logs', 'log_1');
     const deletedTracker = getDeletedIdsTracker();
     expect(deletedTracker.logs).toContain('log_1');
+  });
+
+  // -------------------------------------------------------------------------
+  // 16. Normalization Idempotence & Byte-Equivalence
+  // -------------------------------------------------------------------------
+  it('16. Normalization Idempotence: normalize(raw) -> normalize(normalized) produces byte-equivalent set IDs and objects', () => {
+    const rawUnsanitizedLog = {
+      id: 'raw_log_1',
+      workoutId: 'w_push',
+      date: '2026-08-15',
+      duration: '45',
+      complete: 1 as any,
+      sets: {
+        'ex_bench': [
+          { weight: 100, reps: 10, done: true }, // missing id
+          { id: 'custom_id_1', weightKg: 105, reps: 8, completed: true },
+          { id: '   ', weight: '110', reps: '5', done: false } // whitespace id
+        ]
+      }
+    };
+
+    const firstPass = sanitizeSessionLog(rawUnsanitizedLog);
+    const secondPass = sanitizeSessionLog(firstPass);
+    const thirdPass = sanitizeSessionLog(secondPass);
+
+    // Verify first pass assigned deterministic IDs
+    expect(firstPass.sets['ex_bench'][0].id).toBe('ex_bench_set_0');
+    expect(firstPass.sets['ex_bench'][1].id).toBe('custom_id_1');
+    expect(firstPass.sets['ex_bench'][2].id).toBe('ex_bench_set_2');
+
+    // Verify subsequent normalizations are byte-equivalent
+    expect(JSON.stringify(secondPass)).toBe(JSON.stringify(firstPass));
+    expect(JSON.stringify(thirdPass)).toBe(JSON.stringify(firstPass));
+    expect(secondPass).toEqual(firstPass);
+    expect(thirdPass).toEqual(firstPass);
+  });
+
+  // -------------------------------------------------------------------------
+  // 17. Exercise Resolution Invariant & Fallback Consistency
+  // -------------------------------------------------------------------------
+  it('17. Exercise Resolution Invariant: unknown IDs resolve canonically without diverging', () => {
+    const emptyDefs = new Map<string, ExerciseDefinition>();
+    const index = buildFitnessIndex({
+      'log_1': {
+        id: 'log_1',
+        workoutId: 'w1',
+        date: '2026-08-10',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          'completely-unknown-ex': [{ id: 's1', weight: '50', reps: '10', done: true }]
+        }
+      }
+    }, emptyDefs);
+
+    // The index automatically creates a safe ResolvedExerciseMeta for unknown exercises found in logs
+    const indexedMeta = index.exerciseMetaById.get('completely-unknown-ex');
+    expect(indexedMeta).toBeDefined();
+    expect(indexedMeta?.id).toBe('completely-unknown-ex');
+    expect(indexedMeta?.category).toBe('Core'); // safe fallback category
+
+    // If an ID is neither in definitions nor in logs, index returns undefined
+    const nonExistentMeta = index.exerciseMetaById.get('never-seen-ex');
+    expect(nonExistentMeta).toBeUndefined();
+
+    // Standalone resolver produces a consistent safe fallback
+    const resolvedStandalone = resolveExercise('never-seen-ex', emptyDefs);
+    expect(resolvedStandalone.id).toBe('never-seen-ex');
+    expect(resolvedStandalone.category).toBe('Core');
   });
 });

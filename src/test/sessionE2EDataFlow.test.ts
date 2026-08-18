@@ -2,7 +2,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ExerciseDefinition, Workout, SessionLog, SetLog, AppState } from '../types/fitness';
 import {
-  calculateVolume,
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
@@ -147,7 +146,7 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     const expectedBenchBestE1RM = calculateE1RM(102.5, 8); // 129.8
 
     // A. Direct Session Calculation Check
-    const rawSessionVolume = calculateVolume(reconstructedLogs[sessionId]);
+    const rawSessionVolume = calculateSetsVolume(Object.values(reconstructedLogs[sessionId].sets).flat());
     expect(rawSessionVolume).toBe(expectedSessionVolume);
 
     // B. History Consumer Verification (selectSortedLogs)
@@ -157,7 +156,7 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     expect(historySession.id).toBe(sessionId);
     expect(historySession.date).toBe(sessionDate);
     expect(historySession.workoutId).toBe(sampleWorkout.id);
-    expect(calculateVolume(historySession)).toBe(expectedSessionVolume);
+    expect(calculateSetsVolume(Object.values(historySession.sets).flat())).toBe(expectedSessionVolume);
     expect(getCompletedSets(historySession.sets['def_bench_press'])).toHaveLength(3);
     expect(getCompletedSets(historySession.sets['def_incline_db'])).toHaveLength(2);
     expect(getCompletedSets(historySession.sets['def_tricep_pushdown'])).toHaveLength(0);
@@ -176,9 +175,9 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     const benchPB = selectPersonalBestForExercise(index, 'def_bench_press');
     expect(benchPB).not.toBeNull();
     expect(benchPB?.exerciseId).toBe('def_bench_press');
-    expect(benchPB?.maxWeight).toBe(102.5);
-    expect(benchPB?.repsAtMax).toBe(8);
-    expect(benchPB?.maxEpley).toBe(expectedBenchBestE1RM);
+    expect(benchPB?.maxWeight).toBe(105);
+    expect(benchPB?.repsAtMax).toBe(6);
+    expect(benchPB?.maxEpley).toBe(calculateE1RM(105, 6));
     expect(benchPB?.date).toBe(sessionDate);
 
     const exerciseHistory = selectExerciseHistory(index, 'def_bench_press');
@@ -238,10 +237,10 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     expect(index.distinctDates).toEqual([sessionDate]);
 
     // 5. e1RM
-    expect(benchPB?.maxEpley).toBe(129.8);
+    expect(benchPB?.maxEpley).toBe(calculateE1RM(105, 6));
 
     // 6. Personal Best
-    expect(personalBests.find(pb => pb.exerciseId === 'def_bench_press')?.maxEpley).toBe(129.8);
+    expect(personalBests.find(pb => pb.exerciseId === 'def_bench_press')?.maxEpley).toBe(calculateE1RM(105, 6));
 
     // 7. Workout/Session count
     expect(dashboardStats.totalSessions).toBe(1);

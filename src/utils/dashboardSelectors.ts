@@ -1,8 +1,6 @@
 // Re-export canonical calculations for dashboard
 export {
   formatDateStr,
-  calculateStreak,
-  calculateTotalWeightLifted,
   getSortedWeightEntries,
   getWeightSparklineData,
   getRelativeTimeString

@@ -1,6 +1,7 @@
 import { Workout, SessionLog, AppState, WorkoutExercise, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { dk, generateId } from './fitnessHelpers';
+import { sanitizeSessionLog } from './fitnessCalculations';
 
 // Extract exercise definitions from workouts if migrating legacy data
 export function extractExerciseDefinitionsFromWorkouts(
@@ -105,28 +106,10 @@ export function migrateV1ToV2(raw: {
   if (raw.rawLogs && typeof raw.rawLogs === 'object') {
     Object.entries(raw.rawLogs).forEach(([id, logVal]: [string, any]) => {
       if (logVal && typeof logVal === 'object') {
-        const cleanSets: Record<string, any> = {};
-        if (logVal.sets && typeof logVal.sets === 'object') {
-          Object.entries(logVal.sets).forEach(([exKey, setList]: [string, any]) => {
-            if (Array.isArray(setList)) {
-              cleanSets[exKey] = setList.map((s: any) => ({
-                id: s.id || generateId(),
-                weight: String(s.weight ?? s.weightKg ?? '0'),
-                reps: String(s.reps ?? '0'),
-                done: Boolean(s.done ?? s.completed)
-              }));
-            }
-          });
-        }
-
-        logs[id] = {
-          id,
-          workoutId: logVal.workoutId || '',
-          date: logVal.date || dk(),
-          sets: cleanSets,
-          complete: Boolean(logVal.complete),
-          durationMinutes: Number(logVal.durationMinutes !== undefined ? logVal.durationMinutes : logVal.duration) || 0
-        };
+        logs[id] = sanitizeSessionLog({
+          ...logVal,
+          id
+        });
       }
     });
   }

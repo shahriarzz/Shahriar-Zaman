@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  calculateStreak,
-  calculateTotalWeightLifted,
   getSortedWeightEntries,
   getWeightSparklineData,
   formatDateStr,
   getRelativeTimeString
 } from '../utils/dashboardSelectors';
+import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import { SessionLog } from '../types/fitness';
 
 describe('Dashboard Architecture & Selectors Suite', () => {
@@ -22,10 +21,10 @@ describe('Dashboard Architecture & Selectors Suite', () => {
     });
   });
 
-  describe('calculateStreak', () => {
+  describe('calculateStreak via Canonical Index', () => {
     it('returns 0 when no logs exist', () => {
-      expect(calculateStreak(null)).toBe(0);
-      expect(calculateStreak({})).toBe(0);
+      expect(buildFitnessIndex(null).lifetimeStats.currentStreak).toBe(0);
+      expect(buildFitnessIndex({}).lifetimeStats.currentStreak).toBe(0);
     });
 
     it('calculates active streak when today is completed', () => {
@@ -40,7 +39,7 @@ describe('Dashboard Architecture & Selectors Suite', () => {
         log2: { id: 'log2', date: dStr(yesterday), workoutId: 'w2', complete: true, durationMinutes: 50, sets: {} }
       };
 
-      expect(calculateStreak(logs, today)).toBe(2);
+      expect(buildFitnessIndex(logs).lifetimeStats.currentStreak).toBe(2);
     });
 
     it('sustains streak if completed yesterday but not yet today', () => {
@@ -57,7 +56,7 @@ describe('Dashboard Architecture & Selectors Suite', () => {
         log2: { id: 'log2', date: dStr(dayBefore), workoutId: 'w2', complete: true, durationMinutes: 60, sets: {} }
       };
 
-      expect(calculateStreak(logs, today)).toBe(2);
+      expect(buildFitnessIndex(logs).lifetimeStats.currentStreak).toBe(2);
     });
 
     it('returns 0 if neither today nor yesterday has a log', () => {
@@ -71,17 +70,17 @@ describe('Dashboard Architecture & Selectors Suite', () => {
         log1: { id: 'log1', date: dStr(threeDaysAgo), workoutId: 'w1', complete: true, durationMinutes: 45, sets: {} }
       };
 
-      expect(calculateStreak(logs, today)).toBe(0);
+      expect(buildFitnessIndex(logs).lifetimeStats.currentStreak).toBe(0);
     });
   });
 
-  describe('calculateTotalWeightLifted', () => {
+  describe('Canonical Total Volume Calculation', () => {
     it('returns 0 on empty logs', () => {
-      expect(calculateTotalWeightLifted(null)).toBe(0);
-      expect(calculateTotalWeightLifted({})).toBe(0);
+      expect(buildFitnessIndex(null).lifetimeStats.totalVolume).toBe(0);
+      expect(buildFitnessIndex({}).lifetimeStats.totalVolume).toBe(0);
     });
 
-    it('sums weight * reps for completed sets only', () => {
+    it('sums weight * reps for completed sets only in canonical index', () => {
       const logs: Record<string, SessionLog> = {
         log1: {
           id: 'log1',
@@ -111,7 +110,8 @@ describe('Dashboard Architecture & Selectors Suite', () => {
         }
       };
 
-      expect(calculateTotalWeightLifted(logs)).toBe(2300);
+      const index = buildFitnessIndex(logs);
+      expect(index.lifetimeStats.totalVolume).toBe(2300);
     });
   });
 

@@ -13,7 +13,6 @@ import {
   selectMuscleDistribution
 } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap, resolveExercise } from '../utils/exerciseResolver';
-import { calculateVolume } from '../utils/fitnessCalculations';
 
 describe('Migration Regression Fixtures Suite (All Supported Legacy Formats)', () => {
 

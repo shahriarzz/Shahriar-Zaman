@@ -6,7 +6,6 @@ import {
   sanitizeSessionLog,
   getSortedLogsDescending,
   getCompletedSets,
-  calculateVolume,
   calculateSetsVolume,
   calculateE1RM
 } from '../utils/fitnessCalculations';
@@ -116,7 +115,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       const benchVolume = calculateSetsVolume(sampleLog.sets['def_bench']);
       expect(benchVolume).toBe(1800); // 1000 + 800, s2 ignored
 
-      const sessionVolume = calculateVolume(sampleLog);
+      const sessionVolume = calculateSetsVolume(Object.values(sampleLog.sets).flat());
       expect(sessionVolume).toBe(1800);
     });
   });
@@ -539,8 +538,8 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       expect(logsState[logId].sets['def_bench']).toHaveLength(4);
       expect(logsState[logId].sets['def_incline']).toHaveLength(2);
 
-      // 6. Verification: Dashboard volume calculation
-      const dashboardTotalVolume = calculateVolume(logsState[logId]);
+      // 6. Verification: Dashboard volume calculation via canonical index
+      const dashboardTotalVolume = buildFitnessIndex([logsState[logId]]).lifetimeStats.totalVolume;
       // Bench: 100*8 + 100*8 + 100*7 + 100*6 = 2900 kg
       // Incline: 30*12 + 30*10 = 660 kg
       // Total = 3560 kg
