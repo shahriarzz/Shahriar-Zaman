@@ -35,7 +35,8 @@ export function useAnalyticsData({
     index,
     workoutMap,
     coreWorkoutByCycleDayMap,
-    priorityExercises
+    priorityExercises,
+    getCycleDayForDate
   } = useFitnessDerivedData();
 
   // Active 1RM selection
@@ -153,6 +154,7 @@ export function useAnalyticsData({
     heatmapData,
     muscleChartData,
     workoutPieData,
-    insightsList
+    insightsList,
+    getCycleDayForDate
   };
 }

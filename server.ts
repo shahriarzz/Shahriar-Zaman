@@ -6,20 +6,102 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
+export interface FirebaseUser {
+  localId: string;
+  email: string;
+  displayName?: string;
+  [key: string]: unknown;
+}
+
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        localId: string;
-        email: string;
-        displayName?: string;
-        [key: string]: any;
-      };
+      user?: FirebaseUser;
     }
   }
 }
 
+interface HistorySetPayload {
+  weight?: string | number;
+  reps?: string | number;
+  done?: boolean;
+  [key: string]: unknown;
+}
+
+interface HistoryItemPayload {
+  date?: string;
+  workoutType?: string;
+  sets?: HistorySetPayload[];
+  [key: string]: unknown;
+}
+
+interface CleanHistorySet {
+  weight: string;
+  reps: string;
+  done: boolean;
+}
+
+interface CleanHistorySession {
+  date: string;
+  workoutType: string;
+  sets: CleanHistorySet[];
+}
+
 dotenv.config();
+
+const CANDIDATE_MODELS = ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-flash-latest'];
+
+function generateRuleBasedAdvice(cleanName: string, cleanReps: string, cleanHistory: CleanHistorySession[]): string {
+  if (cleanHistory.length === 0) {
+    return `Establish a solid baseline for ${cleanName} targeting ${cleanReps || '8–12'} controlled reps. Prioritize strict form and consistent tempo.`;
+  }
+  const lastSession = cleanHistory[0];
+  const lastSets = (lastSession.sets || []).filter(s => s.done);
+  if (lastSets.length > 0) {
+    const topSet = lastSets[0];
+    const topWeight = parseFloat(topSet.weight) || 0;
+    const topReps = parseInt(topSet.reps, 10) || 0;
+    if (topWeight > 0 && topReps >= 8) {
+      return `Strong baseline on ${cleanName} (${topWeight}kg x ${topReps} reps). If you hit your target reps across all sets today, increment by 2.5kg; otherwise focus on explosive concentric tempo.`;
+    } else if (topWeight > 0) {
+      return `For ${cleanName}, keep load at ${topWeight}kg and focus on hitting your full ${cleanReps || 'target'} rep target with controlled 2-3 second eccentrics.`;
+    }
+  }
+  return `Focus on progressive tension on ${cleanName}. Keep a solid core brace, pause briefly at peak contraction, and track every completed set accurately.`;
+}
+
+async function generateAiContentWithTimeout(
+  aiClient: GoogleGenAI,
+  model: string,
+  prompt: string,
+  timeoutMs: number
+): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await aiClient.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        abortSignal: controller.signal
+      }
+    });
+    return response.text?.trim() || '';
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof Error) {
+    return error.name === 'AbortError' || error.message.toLowerCase().includes('aborted') || error.message === 'TIMEOUT';
+  }
+  return false;
+}
 
 async function startServer() {
   const app = express();
@@ -45,12 +127,12 @@ async function startServer() {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       cachedFirebaseApiKey = config.apiKey || '';
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Failed to perform initial firebase config load:", err);
   }
 
   let ai: GoogleGenAI | null = null;
-  const getAiClient = () => {
+  const getAiClient = (): GoogleGenAI => {
     if (!ai) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -78,7 +160,7 @@ async function startServer() {
   });
 
   // Helper wrapper for async Express routes to prevent unhandled promise exceptions
-  const asyncHandler = (fn: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<any>) => 
+  const asyncHandler = (fn: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<unknown>) => 
     (req: express.Request, res: express.Response, next: express.NextFunction) => {
       Promise.resolve(fn(req, res, next)).catch(next);
     };
@@ -106,7 +188,7 @@ async function startServer() {
           apiKey = config.apiKey || '';
           cachedFirebaseApiKey = apiKey;
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.error("Failed to read firebase config in middleware:", e);
       }
     }
@@ -129,14 +211,14 @@ async function startServer() {
         return next();
       }
 
-      const decoded = await response.json() as any;
+      const decoded = await response.json() as { users?: FirebaseUser[] };
       if (decoded.users && decoded.users.length > 0) {
         req.user = decoded.users[0];
       } else {
         req.user = undefined;
       }
       next();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Token verification exception:", err);
       req.user = undefined;
       next();
@@ -149,7 +231,10 @@ async function startServer() {
   });
 
   app.post('/api/fitness/advice', adviceLimiter, verifyFirebaseToken, asyncHandler(async (req, res) => {
-    const { exercise, history } = req.body;
+    const { exercise, history } = req.body as {
+      exercise?: { name?: unknown; reps?: unknown };
+      history?: unknown;
+    };
 
     if (!exercise || typeof exercise !== 'object') {
       return res.status(400).json({ error: 'Invalid or missing exercise object' });
@@ -169,36 +254,36 @@ async function startServer() {
     }
 
     // Sanitize and limit reps representation
-    const cleanReps = String(rawReps).replace(/[^a-zA-Z0-9\s()/\-+]/g, '').trim().substring(0, 50);
+    const cleanReps = String(rawReps ?? '').replace(/[^a-zA-Z0-9\s()/\-+]/g, '').trim().substring(0, 50);
 
     // Validate history payload safely to avoid massive deep nesting or huge text
     if (history !== undefined && !Array.isArray(history)) {
       return res.status(400).json({ error: 'History must be an array' });
     }
 
-    const cleanHistory: any[] = [];
+    const cleanHistory: CleanHistorySession[] = [];
     if (Array.isArray(history)) {
       if (history.length > 5) {
         return res.status(400).json({ error: 'History exceeds safe depth limits' });
       }
 
-      for (const h of history) {
-        if (h && typeof h === 'object') {
-          const cleanSets: any[] = [];
-          if (Array.isArray(h.sets)) {
-            for (const s of h.sets) {
+      for (const item of history as HistoryItemPayload[]) {
+        if (item && typeof item === 'object') {
+          const cleanSets: CleanHistorySet[] = [];
+          if (Array.isArray(item.sets)) {
+            for (const s of item.sets) {
               if (s && typeof s === 'object') {
                 cleanSets.push({
-                  weight: String(s.weight || '').replace(/[^0-9.]/g, '').substring(0, 10),
-                  reps: String(s.reps || '').replace(/[^0-9]/g, '').substring(0, 10),
-                  done: !!s.done
+                  weight: String(s.weight ?? '').replace(/[^0-9.]/g, '').substring(0, 10),
+                  reps: String(s.reps ?? '').replace(/[^0-9]/g, '').substring(0, 10),
+                  done: Boolean(s.done)
                 });
               }
             }
           }
           cleanHistory.push({
-            date: String(h.date || '').substring(0, 20),
-            workoutType: String(h.workoutType || '').substring(0, 20),
+            date: String(item.date ?? '').substring(0, 20),
+            workoutType: String(item.workoutType ?? '').substring(0, 20),
             sets: cleanSets
           });
         }
@@ -218,57 +303,43 @@ async function startServer() {
     `;
 
     try {
-      const aiClient = getAiClient();
-      let response;
-      
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, 12000);
-
-        response = await aiClient.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: prompt,
-          config: {
-            abortSignal: controller.signal
-          } as any
-        });
-        
-        clearTimeout(timeoutId);
-      } catch (firstErr: any) {
-        const isAbort = firstErr?.name === 'AbortError' || firstErr?.message?.includes('aborted');
-        if (isAbort) {
-          throw new Error('TIMEOUT');
-        }
-        
-        console.warn('Primary model (gemini-3.6-flash) failed or high demand. Attempting fallback model (gemini-3.1-flash-lite):', firstErr);
-        
-        const fallbackController = new AbortController();
-        const fallbackTimeoutId = setTimeout(() => {
-          fallbackController.abort();
-        }, 10000);
-
-        response = await aiClient.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: prompt,
-          config: {
-            abortSignal: fallbackController.signal
-          } as any
-        });
-
-        clearTimeout(fallbackTimeoutId);
+      if (!process.env.GEMINI_API_KEY) {
+        // Provide rule-based coaching gracefully if GEMINI_API_KEY is not configured
+        const fallbackAdvice = generateRuleBasedAdvice(cleanName, cleanReps, cleanHistory);
+        return res.json({ suggestion: fallbackAdvice });
       }
 
-      res.json({ suggestion: response.text || "Keep up the intensity! Focus on perfect form." });
-    } catch (error: any) {
-      const isAbort = error?.name === 'AbortError' || error?.message === 'TIMEOUT' || error?.message?.includes('aborted');
-      if (isAbort) {
-        console.error('Gemini Request Timed Out (limit exceeded)');
+      const aiClient = getAiClient();
+      let suggestionText = '';
+      let lastModelError: unknown = null;
+
+      for (const modelName of CANDIDATE_MODELS) {
+        try {
+          suggestionText = await generateAiContentWithTimeout(aiClient, modelName, prompt, 8000);
+          if (suggestionText) {
+            break;
+          }
+        } catch (modelErr: unknown) {
+          lastModelError = modelErr;
+          console.log(`[AI Coaching] Model ${modelName} unavailable, trying next candidate...`);
+        }
+      }
+
+      if (suggestionText) {
+        return res.json({ suggestion: suggestionText });
+      }
+
+      // If all candidate models experienced temporary outages (503/429/timeouts), return intelligent contextual rule-based advice
+      console.log('[AI Coaching] AI models in high demand; serving contextual rule-based coaching.');
+      const coachingFallback = generateRuleBasedAdvice(cleanName, cleanReps, cleanHistory);
+      res.json({ suggestion: coachingFallback });
+    } catch (error: unknown) {
+      if (isAbortError(error)) {
         return res.status(504).json({ error: 'Coaching server request timed out. Please try again soon.' });
       }
-      console.error('Gemini Error or client init error:', error);
-      res.status(500).json({ error: 'Failed to generate advice. Please ensure GEMINI_API_KEY is configured.' });
+      console.log('[AI Coaching] Serving rule-based fallback advice.');
+      const coachingFallback = generateRuleBasedAdvice(cleanName, cleanReps, cleanHistory);
+      res.json({ suggestion: coachingFallback });
     }
   }));
 
@@ -294,10 +365,14 @@ async function startServer() {
   }
 
   // Global Express Error-handling Middleware to guarantee JSON responses
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error("Express Error Handler caught:", err);
-    res.status(err.status || 500).json({ 
-      error: err.message || 'Internal server error occurred.' 
+    const status = (typeof err === 'object' && err !== null && 'status' in err && typeof (err as { status: number }).status === 'number')
+      ? (err as { status: number }).status
+      : 500;
+    const message = err instanceof Error ? err.message : 'Internal server error occurred.';
+    res.status(status).json({ 
+      error: message 
     });
   });
 

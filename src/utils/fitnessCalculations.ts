@@ -194,55 +194,6 @@ export function getCycleDay(cycleStart: string | undefined | null, targetDate: D
   return (((diff % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
 }
 
-export function getNextCycleDayFromLogs(
-  logs: Record<string, SessionLog> | undefined | null,
-  workouts: Workout[] | undefined | null,
-  cycleStart?: string | null
-): number {
-  if (!logs || !workouts || workouts.length === 0) {
-    return getCycleDay(cycleStart || dk());
-  }
-
-  const workoutMap = new Map<string, Workout>();
-  workouts.forEach(w => workoutMap.set(w.id, w));
-
-  const completedCoreLogs = Object.values(logs).filter(log => {
-    if (!log || !log.complete) return false;
-    const wo = workoutMap.get(log.workoutId);
-    return wo && wo.isCore && typeof wo.cycleDay === 'number';
-  });
-
-  if (completedCoreLogs.length === 0) {
-    return getCycleDay(cycleStart || dk());
-  }
-
-  completedCoreLogs.sort((a, b) => {
-    if (a.date !== b.date) {
-      return b.date.localeCompare(a.date);
-    }
-    return (b.id || '').localeCompare(a.id || '');
-  });
-
-  const latestLog = completedCoreLogs[0];
-  const lastWorkout = workoutMap.get(latestLog.workoutId);
-  const lastCycleDay = lastWorkout?.cycleDay || 1;
-
-  return ((lastCycleDay % CYCLE_LENGTH) + 1);
-}
-
-export function getCycleDayForDate(
-  targetDate: Date | string,
-  logs: Record<string, SessionLog> | undefined | null,
-  workouts: Workout[] | undefined | null,
-  cycleStart?: string | null
-): number {
-  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
-  const validTarget = isValid(target) ? target : new Date();
-  const todayCycleDay = getNextCycleDayFromLogs(logs, workouts, cycleStart);
-  const diffDays = differenceInCalendarDays(validTarget, new Date());
-  return ((((todayCycleDay - 1 + diffDays) % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
-}
-
 export function normalizeWeightEntry(
   entry: number | { weight: number; updatedAt?: number } | undefined | null,
   defaultTimestamp = 0

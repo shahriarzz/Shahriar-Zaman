@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { getNextCycleDayFromLogs, dk } from '../utils/fitnessHelpers';
+import { dk } from '../utils/fitnessCalculations';
 import { useCountUp } from './useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
@@ -63,7 +63,9 @@ export function useDashboardData(): DashboardData {
 
   const {
     lifetimeStats,
-    weightSummary: derivedWeightSummary
+    weightSummary: derivedWeightSummary,
+    nextCycleDay: currentCycleDay,
+    coreWorkoutByCycleDayMap
   } = useFitnessDerivedData();
 
   // 1. Hero Date String
@@ -72,13 +74,9 @@ export function useDashboardData(): DashboardData {
   }, []);
 
   // 2. Cycle & Today's Workout
-  const currentCycleDay = React.useMemo(() => {
-    return getNextCycleDayFromLogs(logs, workouts, appState?.cycleStart);
-  }, [logs, workouts, appState?.cycleStart]);
-
   const todayWorkout = React.useMemo(() => {
-    return (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
-  }, [workouts, currentCycleDay]);
+    return coreWorkoutByCycleDayMap.get(currentCycleDay) || (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
+  }, [coreWorkoutByCycleDayMap, workouts, currentCycleDay]);
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;

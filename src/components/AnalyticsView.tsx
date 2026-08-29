@@ -35,8 +35,7 @@ import {
   subMonths,
   isSameMonth
 } from 'date-fns';
-import { useFitness } from '../context/FitnessContext';
-import { WORKOUT_COLORS, getCycleDayForDate } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
 import { cn } from '../lib/utils';
@@ -94,7 +93,6 @@ function getHeatmapIntensity(vol: number, maxVol: number) {
 }
 
 export const AnalyticsView: React.FC = () => {
-  const { logs, workouts, appState } = useFitness();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>('volume');
   const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(null);
@@ -110,7 +108,8 @@ export const AnalyticsView: React.FC = () => {
     heatmapData,
     muscleChartData,
     workoutPieData,
-    insightsList
+    insightsList,
+    getCycleDayForDate
   } = useAnalyticsData({
     timeRange,
     muscleMetric,
@@ -279,7 +278,7 @@ export const AnalyticsView: React.FC = () => {
                 const detail = heatmapData.dayDetailMap[dateStr];
                 const intensity = getHeatmapIntensity(vol, heatmapData.maxDayVol);
 
-                const cycleDay = getCycleDayForDate(day, logs, workouts, appState?.cycleStart);
+                const cycleDay = getCycleDayForDate(day);
                 const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
 
                 let tooltipText = `${dateStr}`;

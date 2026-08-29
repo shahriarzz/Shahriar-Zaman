@@ -63,7 +63,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const prevIsDoneRef = useRef(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [flashingSets, setFlashingSets] = useState<Set<number>>(new Set());
-  const timeoutsRef = useRef<any[]>([]);
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     return () => {
@@ -73,7 +73,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   }, []);
 
   useEffect(() => {
-    let timer: any;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     if (isDone && !prevIsDoneRef.current) {
       setJustCompleted(true);
       timer = setTimeout(() => setJustCompleted(false), 450);
@@ -465,13 +465,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   }, [targetWorkoutId, workouts]);
 
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (startTime && !isFinishing) {
       interval = setInterval(() => {
         setDuration(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [startTime, isFinishing]);
 
   const formatTime = React.useCallback((seconds: number) => {
@@ -701,12 +703,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
       const data = await response.json();
       setAiAdvice(prev => ({ ...prev, [exDefId]: data.suggestion || "No advice provided. Stick to the program!" }));
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         // Ignored, request was aborted
         return;
       }
-      console.error('AI Coaching advice service notice:', error?.message || error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('AI Coaching advice service notice:', errorMessage);
       
       // Selectively present detailed server/Gemini errors or guide user if missing config
       let humanMsg = "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!";

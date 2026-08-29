@@ -6,8 +6,6 @@ import {
   calculateE1RM,
   getCompletedSets,
   getCycleDay,
-  getNextCycleDayFromLogs,
-  getCycleDayForDate,
   getSortedWeightEntries,
   getWeightSparklineData,
   sanitizeSetLog,
@@ -21,6 +19,9 @@ import {
   selectPersonalBests,
   selectPersonalBestForExercise,
   selectExercisePR,
+  selectExerciseBestE1RM,
+  selectNextCycleDay,
+  selectCycleDayForDate,
   isNewPersonalBest,
   selectExerciseHistory,
   selectExercise1RMProgression,
@@ -188,9 +189,9 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(bench?.sessions).toHaveLength(2);
       expect(bench?.sessionCount).toBe(2);
       expect(bench?.maxWeight).toBe(110);
-      expect(bench?.bestE1RM?.maxEpley).toBe(110);
-      expect(bench?.bestE1RM?.maxWeight).toBe(110);
-      expect(bench?.bestE1RM?.repsAtMax).toBe(1);
+      expect(bench?.bestE1RM?.maxEpley).toBe(116.7);
+      expect(bench?.bestE1RM?.maxWeight).toBe(100);
+      expect(bench?.bestE1RM?.repsAtMax).toBe(5);
       expect(bench?.latestSession?.date).toBe('2026-08-08');
     });
 
@@ -434,7 +435,8 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
         coreWorkoutByCycleDayMap,
         '7d',
         '2026-08-01',
-        'squat'
+        'squat',
+        '2026-08-14'
       );
 
       expect(analytics7d.rangeLogsCount).toBe(1);
@@ -449,7 +451,8 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
         coreWorkoutByCycleDayMap,
         'all',
         '2026-08-01',
-        'bench'
+        'bench',
+        '2026-08-14'
       );
 
       expect(analyticsAll.rangeLogsCount).toBe(2);
@@ -458,9 +461,9 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
 
     it('ensures analytics operates over existing FitnessIndex without mutating or rebuilding it', () => {
       const initialIndexReference = index;
-      const analyticsA = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, '7d', '2026-08-01', 'squat');
-      const analyticsB = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, '30d', '2026-08-01', 'squat');
-      const analyticsC = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, 'all', '2026-08-01', 'bench');
+      const analyticsA = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, '7d', '2026-08-01', 'squat', '2026-08-14');
+      const analyticsB = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, '30d', '2026-08-01', 'squat', '2026-08-14');
+      const analyticsC = selectTimeRangeAnalytics(index, workoutMap, coreWorkoutByCycleDayMap, 'all', '2026-08-01', 'bench', '2026-08-14');
 
       // The canonical index reference remains identical and unmutated
       expect(index).toBe(initialIndexReference);
@@ -637,6 +640,82 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(pr).not.toBeNull();
       expect(pr?.weight).toBe(60);
       expect(pr?.reps).toBe(8);
+    });
+
+    it('proves Weight PR and Best e1RM cannot overwrite each other (50x5 vs 52.5x1 regression)', () => {
+      const defMap = createExerciseDefinitionMap([
+        { id: 'ex_press', name: 'Overhead Press', target: 'Shoulders', equipment: 'Barbell' }
+      ]);
+      const logs: SessionLog[] = [
+        {
+          id: 'log1',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            ex_press: [
+              { id: 's1', weight: '50', reps: '5', done: true } // e1RM = 50 * (1 + 5/30) = 58.3
+            ]
+          }
+        },
+        {
+          id: 'log2',
+          workoutId: 'w1',
+          date: '2026-08-05',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            ex_press: [
+              { id: 's2', weight: '52.5', reps: '1', done: true } // e1RM = 52.5 * (1 + 1/30) = 54.3 (or 52.5 for 1 rep = 52.5)
+            ]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs, defMap);
+      
+      // Weight PR: 52.5 x 1 wins (highest weight)
+      const weightPR = selectExercisePR(index, 'ex_press');
+      expect(weightPR?.weight).toBe(52.5);
+      expect(weightPR?.reps).toBe(1);
+
+      // Best e1RM: 50 x 5 wins (e1RM = 58.3 > 52.5)
+      const bestE1RM = selectExerciseBestE1RM(index, 'ex_press');
+      expect(bestE1RM?.maxEpley).toBe(58.3);
+      expect(bestE1RM?.maxWeight).toBe(50);
+      expect(bestE1RM?.repsAtMax).toBe(5);
+
+      // ExerciseIndex entry contains both independently
+      const entry = index.exerciseIndex.get('ex_press');
+      expect(entry?.maxWeight).toBe(52.5);
+      expect(entry?.bestE1RM?.maxEpley).toBe(58.3);
+      expect(entry?.bestE1RM?.maxWeight).toBe(50);
+      expect(entry?.bestE1RM?.repsAtMax).toBe(5);
+    });
+
+    it('calculates cycle day correctly using canonical selectNextCycleDay and selectCycleDayForDate', () => {
+      const workouts: Workout[] = [
+        { id: 'w1', name: 'Push', badge: 'Push', type: 'push', isCore: true, cycleDay: 1, exercises: [] },
+        { id: 'w2', name: 'Pull', badge: 'Pull', type: 'pull', isCore: true, cycleDay: 2, exercises: [] },
+        { id: 'w3', name: 'Legs', badge: 'Legs', type: 'lower', isCore: true, cycleDay: 3, exercises: [] },
+        { id: 'w4', name: 'Rest', badge: 'Rest', type: 'rest', isCore: true, cycleDay: 4, exercises: [] }
+      ];
+      const workoutMap = new Map<string, Workout>();
+      workouts.forEach(w => workoutMap.set(w.id, w));
+
+      const logs: SessionLog[] = [
+        { id: 'l1', workoutId: 'w1', date: '2026-08-10', complete: true, durationMinutes: 45, sets: {} }
+      ];
+      const index = buildFitnessIndex(logs);
+
+      // After completed day 1, next cycle day is 2
+      const nextDay = selectNextCycleDay(index, workoutMap, '2026-08-01');
+      expect(nextDay).toBe(2);
+
+      // Same day should be 2
+      const sameDayCycle = selectCycleDayForDate(new Date(), index, workoutMap, '2026-08-01');
+      expect(sameDayCycle).toBe(2);
     });
   });
 });

@@ -5,6 +5,8 @@ import {
   buildFitnessIndex,
   selectWeightSummary,
   selectMuscleDistribution,
+  selectNextCycleDay,
+  selectCycleDayForDate,
   FitnessIndex,
   ExerciseIndexEntry,
   PersonalBestRecord,
@@ -39,6 +41,8 @@ export interface FitnessDerivedData {
   exerciseFrequency: ExerciseFrequencyStat[];
   lifetimeStats: LifetimeStats;
   weightSummary: WeightSummaryData;
+  nextCycleDay: number;
+  getCycleDayForDate: (targetDate: Date | string) => number;
   resolveExerciseMeta: (exerciseDefinitionId: string) => ResolvedExerciseMeta;
   getHistoryForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry[];
   getLatestForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry | null;
@@ -94,6 +98,15 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return selectMuscleDistribution(index);
   }, [index]);
 
+  // 8. Canonical Cycle Day Calculations
+  const nextCycleDay = useMemo(() => {
+    return selectNextCycleDay(index, workoutMap, appState?.cycleStart);
+  }, [index, workoutMap, appState?.cycleStart]);
+
+  const getCycleDayForDate = useCallback((targetDate: Date | string): number => {
+    return selectCycleDayForDate(targetDate, index, workoutMap, appState?.cycleStart);
+  }, [index, workoutMap, appState?.cycleStart]);
+
   // Helper callbacks querying the indexed structures
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
     return index.exerciseMetaById.get(exerciseDefinitionId) || {
@@ -125,8 +138,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     if (!entry || !entry.bestE1RM) return null;
     return {
       e1rm: entry.bestE1RM.maxEpley,
-      weight: entry.bestE1RM.maxWeight,
-      reps: String(entry.bestE1RM.repsAtMax),
+      weight: entry.bestE1RM.weight,
+      reps: String(entry.bestE1RM.reps),
       date: entry.bestE1RM.date
     };
   }, [index]);
@@ -149,6 +162,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     exerciseFrequency: index.frequencyByExercise,
     lifetimeStats: index.lifetimeStats,
     weightSummary,
+    nextCycleDay,
+    getCycleDayForDate,
     resolveExerciseMeta,
     getHistoryForExercise,
     getLatestForExercise,
@@ -162,6 +177,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     priorityExercises,
     muscleDistribution,
     weightSummary,
+    nextCycleDay,
+    getCycleDayForDate,
     resolveExerciseMeta,
     getHistoryForExercise,
     getLatestForExercise,

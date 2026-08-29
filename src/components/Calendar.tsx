@@ -16,7 +16,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
-  getCycleDayForDate,
   WORKOUT_COLORS
 } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
@@ -40,8 +39,8 @@ interface CalendarProps {
 }
 
 export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
-  const { logs, workouts, appState } = useFitness();
-  const { index, workoutMap, coreWorkoutByCycleDayMap, resolveExerciseMeta } = useFitnessDerivedData();
+  const { workouts } = useFitness();
+  const { index, workoutMap, coreWorkoutByCycleDayMap, getCycleDayForDate, resolveExerciseMeta } = useFitnessDerivedData();
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -90,7 +89,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     const isFuture = isAfter(startOfDay(date), startOfDay(today));
 
     // Cycle day anchored to last completed workout (matching Dashboard)
-    const cycleDay = getCycleDayForDate(date, logs, workouts, appState?.cycleStart);
+    const cycleDay = getCycleDayForDate(date);
     const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
 
     if (log) {
@@ -147,7 +146,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const selectedDetail = selectedDateStr ? dayDetailMap[selectedDateStr] : null;
 
   const selectedCycleDay = selectedDate
-    ? getCycleDayForDate(selectedDate, logs, workouts, appState?.cycleStart)
+    ? getCycleDayForDate(selectedDate)
     : null;
   const expectedWoForSelected = selectedCycleDay !== null
     ? coreWorkoutByCycleDayMap.get(selectedCycleDay)

@@ -8,9 +8,7 @@ export {
   dk,
   formatDateStr,
   getAdjustedCycleStart,
-  getCycleDay,
-  getNextCycleDayFromLogs,
-  getCycleDayForDate
+  getCycleDay
 } from './fitnessCalculations';
 
 export {

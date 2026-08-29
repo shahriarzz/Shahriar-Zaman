@@ -8,6 +8,7 @@ import {
   getSortedWeightEntries,
   getWeightSparklineData,
   getCycleDay,
+  dk,
   SparklineData
 } from './fitnessCalculations';
 
@@ -20,6 +21,8 @@ import {
   ResolvedExerciseMeta
 } from './exerciseResolver';
 
+export const CYCLE_LENGTH = 8;
+
 export interface PersonalBestRecord {
   exerciseId: string;
   exerciseName: string;
@@ -28,6 +31,17 @@ export interface PersonalBestRecord {
   maxEpley: number;
   date: string;
   category: MuscleCategory;
+}
+
+export interface BestE1RMRecord {
+  exerciseId: string;
+  maxEpley: number;
+  weight: number;
+  reps: number;
+  date: string;
+  setDetail: string;
+  maxWeight?: number;
+  repsAtMax?: number;
 }
 
 export interface ExerciseFrequencyStat {
@@ -99,7 +113,7 @@ export interface ExerciseIndexEntry {
   sessionCount: number;
   maxWeight: number;
   heaviestSet: { weight: number; reps: string; date: string } | null;
-  bestE1RM: PersonalBestRecord | null;
+  bestE1RM: BestE1RMRecord | null;
   progression: E1RMProgressionPoint[];
 }
 
@@ -234,6 +248,7 @@ export function buildFitnessIndex(
   const volumeByExercise = new Map<string, number>();
   const exerciseCountsMap = new Map<string, { count: number; volume: number; name: string; category: MuscleCategory; resolvedMeta: ResolvedExerciseMeta }>();
   const personalBestsMap = new Map<string, PersonalBestRecord>();
+  const bestE1RMByExercise = new Map<string, BestE1RMRecord>();
   const e1rmHistoryByExercise = new Map<string, E1RMProgressionPoint[]>();
   const weeklyVolumeMap: Record<string, number> = {};
 
@@ -375,7 +390,7 @@ export function buildFitnessIndex(
               maxSetDetailInSession = `${w}kg × ${r} reps`;
             }
 
-            // All-time personal best check (Weight PR: highest weight, then highest reps at that weight)
+            // 1. All-time personal best check (Weight PR: highest weight, then highest reps at that weight)
             const existingPB = personalBestsMap.get(normId);
             const isPB = !existingPB || w > existingPB.maxWeight || (w === existingPB.maxWeight && r > existingPB.repsAtMax);
             if (isPB) {
@@ -387,6 +402,21 @@ export function buildFitnessIndex(
                 maxEpley: epley,
                 date: log.date,
                 category
+              });
+            }
+
+            // 2. All-time best e1RM check (highest calculated Epley 1RM across all completed sets)
+            const existingBestE1RM = bestE1RMByExercise.get(normId);
+            if (!existingBestE1RM || epley > existingBestE1RM.maxEpley) {
+              bestE1RMByExercise.set(normId, {
+                exerciseId: normId,
+                maxEpley: epley,
+                weight: w,
+                reps: r,
+                date: log.date,
+                setDetail: `${w}kg × ${r} reps`,
+                maxWeight: w,
+                repsAtMax: r
               });
             }
           }
@@ -518,7 +548,7 @@ export function buildFitnessIndex(
     const sessions = [...ascendingSessions].reverse();
     const latestSession = sessions[0] || null;
     const completedSets = completedSetsByExercise.get(exId) || [];
-    const bestE1RM = personalBestsMap.get(exId) || null;
+    const bestE1RM = bestE1RMByExercise.get(exId) || null;
     const progression = e1rmHistoryByExercise.get(exId) || [];
     const maxWeight = maxWeightByExercise.get(exId) || 0;
     const heaviestSet = heaviestSetByExercise.get(exId) || null;
@@ -632,6 +662,64 @@ export function selectExercisePR(
   };
 }
 
+export function selectExerciseBestE1RM(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): BestE1RMRecord | null {
+  const entry = index.exerciseIndex.get(exerciseDefinitionId);
+  return entry?.bestE1RM || null;
+}
+
+export function selectNextCycleDay(
+  index: FitnessIndex | undefined | null,
+  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  cycleStart?: string | null
+): number {
+  if (!index || !index.sortedLogsDescending || !workoutMap) {
+    return getCycleDay(cycleStart || dk());
+  }
+
+  const map = Array.isArray(workoutMap)
+    ? new Map(workoutMap.map(w => [w.id, w]))
+    : workoutMap;
+
+  if (map.size === 0) {
+    return getCycleDay(cycleStart || dk());
+  }
+
+  // Find the most recent completed log for a core workout from the descending indexed logs
+  const latestCoreLog = index.sortedLogsDescending.find(log => {
+    if (!log || !log.complete) return false;
+    const wo = map.get(log.workoutId);
+    return wo && wo.isCore && typeof wo.cycleDay === 'number';
+  });
+
+  if (!latestCoreLog) {
+    return getCycleDay(cycleStart || dk());
+  }
+
+  const lastWorkout = map.get(latestCoreLog.workoutId);
+  const lastCycleDay = lastWorkout?.cycleDay || 1;
+
+  return ((lastCycleDay % CYCLE_LENGTH) + 1);
+}
+
+export function selectCycleDayForDate(
+  targetDate: Date | string,
+  index: FitnessIndex | undefined | null,
+  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  cycleStart?: string | null,
+  now: Date | string = new Date()
+): number {
+  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validTarget = isValid(target) ? target : new Date();
+  const validNow = isValid(parsedNow) ? parsedNow : new Date();
+  const todayCycleDay = selectNextCycleDay(index, workoutMap, cycleStart);
+  const diffDays = differenceInCalendarDays(validTarget, validNow);
+  return ((((todayCycleDay - 1 + diffDays) % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
+}
+
 /**
  * Canonical Personal Best evaluator:
  * 1. Heaviest completed weight ever recorded for the exercise.
@@ -644,15 +732,16 @@ export function selectExercisePR(
  */
 export function isNewPersonalBest(
   candidate: { weight: number; reps: number | string },
-  previous: { weight: number; reps: number | string } | null | undefined
+  previous: { weight: number | string; reps: number | string } | null | undefined
 ): boolean {
-  const cWeight = typeof candidate?.weight === 'number' ? candidate.weight : (parseFloat(candidate?.weight) || 0);
-  const cReps = typeof candidate?.reps === 'number' ? candidate.reps : (parseInt(candidate?.reps, 10) || 0);
+  const cWeight = typeof candidate?.weight === 'number' ? candidate.weight : (parseFloat(String(candidate?.weight)) || 0);
+  const cReps = typeof candidate?.reps === 'number' ? candidate.reps : (parseInt(String(candidate?.reps), 10) || 0);
   if (cWeight <= 0 || cReps <= 0) return false;
-  if (!previous || previous.weight <= 0) return true;
+  if (!previous) return true;
 
-  const pWeight = typeof previous.weight === 'number' ? previous.weight : (parseFloat(previous.weight as any) || 0);
-  const pReps = typeof previous.reps === 'number' ? previous.reps : (parseInt(previous.reps as any, 10) || 0);
+  const pWeight = typeof previous.weight === 'number' ? previous.weight : (parseFloat(String(previous.weight)) || 0);
+  const pReps = typeof previous.reps === 'number' ? previous.reps : (parseInt(String(previous.reps), 10) || 0);
+  if (pWeight <= 0) return true;
 
   if (cWeight > pWeight) return true;
   if (cWeight === pWeight && cReps > pReps) return true;
