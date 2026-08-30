@@ -323,7 +323,7 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     expect(resolved).toBeDefined();
     expect(resolved.id).toBe(deletedDefId);
     expect(resolved.name).toBe('Unknown Exercise');
-    expect(resolved.category).toBe('Core');
+    expect(resolved.category).toBe('Uncategorized');
 
     const logWithDeletedEx = createMockLog({
       id: 'log_orphan',
@@ -521,7 +521,7 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     const indexedMeta = index.exerciseMetaById.get('completely-unknown-ex');
     expect(indexedMeta).toBeDefined();
     expect(indexedMeta?.id).toBe('completely-unknown-ex');
-    expect(indexedMeta?.category).toBe('Core'); // safe fallback category
+    expect(indexedMeta?.category).toBe('Uncategorized'); // safe fallback category
 
     // If an ID is neither in definitions nor in logs, index returns undefined
     const nonExistentMeta = index.exerciseMetaById.get('never-seen-ex');
@@ -530,6 +530,6 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     // Standalone resolver produces a consistent safe fallback
     const resolvedStandalone = resolveExercise('never-seen-ex', emptyDefs);
     expect(resolvedStandalone.id).toBe('never-seen-ex');
-    expect(resolvedStandalone.category).toBe('Core');
+    expect(resolvedStandalone.category).toBe('Uncategorized');
   });
 });

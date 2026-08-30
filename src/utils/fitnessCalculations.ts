@@ -102,6 +102,17 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
 }
 
 /**
+ * Single canonical predicate determining if a SessionLog is a completed workout session.
+ * Used consistently across all analytics, adherence, streaks, frequencies, and lifetime summaries.
+ */
+export function isCompletedSession(log: Partial<SessionLog> | null | undefined): boolean {
+  return Boolean(log && log.complete === true);
+}
+
+/** Alias for isCompletedSession */
+export const isCompletedLog = isCompletedSession;
+
+/**
  * Canonical sorting rule for historical SessionLogs:
  * Primary: Date descending (newest date first)
  * Secondary: ID descending

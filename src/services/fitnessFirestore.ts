@@ -7,7 +7,8 @@ import {
   getDocs, 
   collection, 
   deleteDoc, 
-  onSnapshot
+  onSnapshot,
+  writeBatch
 } from '../lib/firebase';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import { commitBatchOperations } from '../utils/fitnessSyncHelpers';
@@ -33,10 +34,44 @@ export async function deleteExerciseDefinition(uid: string, id: string): Promise
   await deleteDoc(ref);
 }
 
+/**
+ * Atomically deletes an exercise definition and updates affected workouts in a single batch operation.
+ */
+export async function deleteExerciseDefinitionWithWorkouts(
+  uid: string, 
+  defId: string, 
+  updatedWorkouts: Workout[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  const defRef = doc(db, 'users', uid, 'exerciseDefinitions', defId);
+  batch.delete(defRef);
+
+  const workoutsCol = collection(db, 'users', uid, 'workouts');
+  updatedWorkouts.forEach(wo => {
+    batch.set(doc(workoutsCol, wo.id), {
+      ...wo,
+      exercises: wo.exercises || []
+    });
+  });
+
+  await batch.commit();
+}
+
 export async function getExerciseDefinitions(uid: string): Promise<ExerciseDefinition[]> {
   const colRef = collection(db, 'users', uid, 'exerciseDefinitions');
   const snap = await getDocs(colRef);
-  return snap.docs.map(d => d.data() as ExerciseDefinition);
+  return snap.docs.map(d => {
+    const raw = d.data() as any;
+    return {
+      id: d.id,
+      name: raw.name || '',
+      target: raw.target || 'General',
+      equipment: raw.equipment || '',
+      instructions: raw.instructions || '',
+      tags: Array.isArray(raw.tags) ? raw.tags : [],
+      updatedAt: Number(raw.updatedAt) || 0
+    };
+  });
 }
 
 export function subscribeExerciseDefinitions(
@@ -80,7 +115,21 @@ export async function deleteWorkout(uid: string, id: string): Promise<void> {
 export async function getWorkouts(uid: string): Promise<Workout[]> {
   const colRef = collection(db, 'users', uid, 'workouts');
   const snap = await getDocs(colRef);
-  return snap.docs.map(d => d.data() as Workout);
+  return snap.docs.map(d => {
+    const raw = d.data() as any;
+    return {
+      id: d.id,
+      name: raw.name || '',
+      badge: raw.badge || '',
+      type: raw.type || 'custom',
+      exercises: Array.isArray(raw.exercises) ? raw.exercises : [],
+      cardio: raw.cardio || null,
+      cycleDay: raw.cycleDay !== undefined ? raw.cycleDay : null,
+      isCore: !!raw.isCore,
+      restNotes: Array.isArray(raw.restNotes) ? raw.restNotes : [],
+      updatedAt: Number(raw.updatedAt) || 0
+    };
+  });
 }
 
 export function subscribeWorkouts(
@@ -137,7 +186,8 @@ export async function getLogs(uid: string): Promise<Record<string, SessionLog>> 
       date: raw.date,
       sets: raw.sets || {},
       complete: !!raw.complete,
-      durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0
+      durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0,
+      updatedAt: Number(raw.updatedAt) || 0
     };
   });
   return result;

@@ -82,7 +82,6 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     return (exerciseDefinitions || []).map(def => ({
       id: def.id,
       exerciseDefinitionId: def.id,
-      exerciseId: def.id,
       name: def.name,
       target: def.target,
       equipment: def.equipment,

@@ -10,6 +10,8 @@ import {
   FitnessIndex,
   ExerciseIndexEntry,
   PersonalBestRecord,
+  WeightPRRecord,
+  E1RMPRRecord,
   MuscleDistributionStats,
   ExerciseFrequencyStat,
   LifetimeStats,
@@ -37,6 +39,8 @@ export interface FitnessDerivedData {
   streak: number;
   longestStreak: number;
   personalBests: PersonalBestRecord[];
+  weightPRs: WeightPRRecord[];
+  e1RMPRs: E1RMPRRecord[];
   muscleDistribution: MuscleDistributionStats;
   exerciseFrequency: ExerciseFrequencyStat[];
   lifetimeStats: LifetimeStats;
@@ -46,6 +50,8 @@ export interface FitnessDerivedData {
   resolveExerciseMeta: (exerciseDefinitionId: string) => ResolvedExerciseMeta;
   getHistoryForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry[];
   getLatestForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry | null;
+  getWeightPRForExercise: (exerciseDefinitionId: string) => WeightPRRecord | null;
+  getE1RMPRForExercise: (exerciseDefinitionId: string) => E1RMPRRecord | null;
   getHeaviestForExercise: (exerciseDefinitionId: string) => { weight: number; reps: string; date: string } | null;
   getBestE1RMForExercise: (exerciseDefinitionId: string) => { e1rm: number; weight: number; reps: string; date: string } | null;
 }
@@ -118,13 +124,21 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   const getHistoryForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry[] => {
     const entry = index.exerciseIndex.get(exerciseDefinitionId);
     if (!entry) return [];
-    return [...entry.sessions].reverse();
+    return [...entry.sessions];
   }, [index]);
 
   const getLatestForExercise = useCallback((exerciseDefinitionId: string): ExerciseSessionHistoryEntry | null => {
     const entry = index.exerciseIndex.get(exerciseDefinitionId);
     if (!entry || entry.sessions.length === 0) return null;
-    return entry.sessions[entry.sessions.length - 1];
+    return entry.sessions[0];
+  }, [index]);
+
+  const getWeightPRForExercise = useCallback((exerciseDefinitionId: string): WeightPRRecord | null => {
+    return index.weightPRsMap.get(exerciseDefinitionId) || null;
+  }, [index]);
+
+  const getE1RMPRForExercise = useCallback((exerciseDefinitionId: string): E1RMPRRecord | null => {
+    return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
   }, [index]);
 
   const getHeaviestForExercise = useCallback((exerciseDefinitionId: string) => {
@@ -158,6 +172,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     streak: index.lifetimeStats.currentStreak,
     longestStreak: index.lifetimeStats.longestStreak,
     personalBests: index.personalBests,
+    weightPRs: index.weightPRs,
+    e1RMPRs: index.e1RMPRs,
     muscleDistribution,
     exerciseFrequency: index.frequencyByExercise,
     lifetimeStats: index.lifetimeStats,
@@ -167,6 +183,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     resolveExerciseMeta,
     getHistoryForExercise,
     getLatestForExercise,
+    getWeightPRForExercise,
+    getE1RMPRForExercise,
     getHeaviestForExercise,
     getBestE1RMForExercise
   }), [
@@ -182,6 +200,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     resolveExerciseMeta,
     getHistoryForExercise,
     getLatestForExercise,
+    getWeightPRForExercise,
+    getE1RMPRForExercise,
     getHeaviestForExercise,
     getBestE1RMForExercise
   ]);

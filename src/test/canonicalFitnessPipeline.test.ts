@@ -19,6 +19,8 @@ import {
   selectPersonalBests,
   selectPersonalBestForExercise,
   selectExercisePR,
+  selectExerciseWeightPR,
+  selectExerciseE1RMPR,
   selectExerciseBestE1RM,
   selectNextCycleDay,
   selectCycleDayForDate,
@@ -354,7 +356,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(meta.id).toBe('deleted_or_missing_id');
       expect(meta.name).toBe('Unknown Exercise');
       expect(meta.isUnknown).toBe(true);
-      expect(meta.category).toBe('Core');
+      expect(meta.category).toBe('Uncategorized');
     });
 
     it('indexes logs with orphaned exercise IDs without crashing or generating fake exercises', () => {
@@ -716,6 +718,106 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       // Same day should be 2
       const sameDayCycle = selectCycleDayForDate(new Date(), index, workoutMap, '2026-08-01');
       expect(sameDayCycle).toBe(2);
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 11. REGRESSION: HISTORY DIRECTION, PR SEPARATION & METRICS
+  // -------------------------------------------------------------
+  describe('11. Regression Tests for History Direction & Metric Consistency', () => {
+    it('proves latest session is newest session and not oldest session', () => {
+      const defMap = createExerciseDefinitionMap([
+        { id: 'ex_curl', name: 'Bicep Curl', target: 'Biceps', equipment: 'Dumbbell' }
+      ]);
+      const logs: SessionLog[] = [
+        {
+          id: 'log_oldest',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            ex_curl: [{ id: 's1', weight: '12', reps: '10', done: true }]
+          }
+        },
+        {
+          id: 'log_middle',
+          workoutId: 'w1',
+          date: '2026-08-05',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            ex_curl: [{ id: 's2', weight: '14', reps: '10', done: true }]
+          }
+        },
+        {
+          id: 'log_newest',
+          workoutId: 'w1',
+          date: '2026-08-10',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            ex_curl: [{ id: 's3', weight: '16', reps: '8', done: true }]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs, defMap);
+      const entry = index.exerciseIndex.get('ex_curl');
+      expect(entry).toBeDefined();
+
+      // entry.sessions must be ordered newest -> oldest
+      expect(entry?.sessions).toHaveLength(3);
+      expect(entry?.sessions[0].date).toBe('2026-08-10');
+      expect(entry?.sessions[0].logId).toBe('log_newest');
+      expect(entry?.sessions[1].date).toBe('2026-08-05');
+      expect(entry?.sessions[2].date).toBe('2026-08-01');
+      expect(entry?.sessions[2].logId).toBe('log_oldest');
+
+      // latestSession must equal the newest session (entry.sessions[0]), NOT the oldest
+      expect(entry?.latestSession?.date).toBe('2026-08-10');
+      expect(entry?.latestSession?.logId).toBe('log_newest');
+      expect(entry?.latestSession?.date).not.toBe('2026-08-01');
+
+      // selectExerciseHistory returns newest-first
+      const history = selectExerciseHistory(index, 'ex_curl');
+      expect(history[0].date).toBe('2026-08-10');
+      expect(history[history.length - 1].date).toBe('2026-08-01');
+    });
+
+    it('handles empty exercise history safely returning empty array or null', () => {
+      const index = buildFitnessIndex([]);
+      expect(index.exerciseIndex.get('non_existent')).toBeUndefined();
+      expect(selectExerciseHistory(index, 'non_existent')).toEqual([]);
+      expect(selectExercisePR(index, 'non_existent')).toBeNull();
+      expect(selectExerciseWeightPR(index, 'non_existent')).toBeNull();
+      expect(selectExerciseE1RMPR(index, 'non_existent')).toBeNull();
+    });
+
+    it('tracks plannedSetsByDate vs completedSetsByDate independently', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_plan_vs_done',
+          workoutId: 'w1',
+          date: '2026-08-12',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            ex1: [
+              { id: 's1', weight: '100', reps: '10', done: true },
+              { id: 's2', weight: '100', reps: '10', done: false },
+              { id: 's3', weight: '100', reps: '10', done: true },
+              { id: 's4', weight: '100', reps: '10', done: false }
+            ]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+      expect(index.plannedSetsByDate['2026-08-12']).toBe(4);
+      expect(index.completedSetsByDate['2026-08-12']).toBe(2);
+      expect(index.setsByDate['2026-08-12']).toBe(2); // backward compatible alias to completedSets
+      expect(index.totalSetsByDate['2026-08-12']).toBe(4); // backward compatible alias to plannedSets
     });
   });
 });

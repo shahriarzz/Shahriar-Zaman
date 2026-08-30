@@ -169,7 +169,7 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
 
     // 4. Dashboard Consumer Check: Totals, streak, session count
     const stats = selectLifetimeStats(index);
-    expect(stats.totalSessions).toBe(4);
+    expect(stats.totalSessions).toBe(3);
     // Volumes: log1 = (100*8+100*6 + 14*12) = (800+600+168)=1568
     // log2 = (140*5 + 150*5) = (700+750) = 1450
     // log3 = (100*10 + 105*4) = (1000+420) = 1420

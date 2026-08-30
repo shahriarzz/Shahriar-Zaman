@@ -3,7 +3,12 @@ import { User } from 'firebase/auth';
 import { ExerciseDefinition, Workout } from '../types/fitness';
 import { generateId } from '../utils/fitnessHelpers';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
-import { saveExerciseDefinition, deleteExerciseDefinition as deleteExerciseDefFirestore, saveWorkoutsBatch } from '../services/fitnessFirestore';
+import { 
+  saveExerciseDefinition, 
+  deleteExerciseDefinition as deleteExerciseDefFirestore, 
+  deleteExerciseDefinitionWithWorkouts,
+  saveWorkoutsBatch 
+} from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
 interface UseFitnessExercisesProps {
@@ -55,6 +60,7 @@ export function useFitnessExercises({
       nextDefs = [...currentDefs, newDef];
     }
 
+    exerciseDefsRef.current = nextDefs;
     setExerciseDefinitions(nextDefs);
 
     if (user) {
@@ -75,6 +81,7 @@ export function useFitnessExercises({
     const currentDefs = exerciseDefsRef.current;
     const nextDefs = currentDefs.map(d => d.id === def.id ? def : d);
 
+    exerciseDefsRef.current = nextDefs;
     setExerciseDefinitions(nextDefs);
 
     if (user) {
@@ -96,11 +103,13 @@ export function useFitnessExercises({
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.map(w => ({
       ...w,
-      exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== id)
+      exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || (e as any).exerciseId) !== id)
     }));
 
     trackDeletedId('defs', id);
 
+    exerciseDefsRef.current = nextDefs;
+    workoutsRef.current = nextWorkouts;
     setExerciseDefinitions(nextDefs);
     setWorkouts(nextWorkouts);
 
@@ -108,9 +117,8 @@ export function useFitnessExercises({
 
     if (user) {
       try {
-        await deleteExerciseDefFirestore(user.uid, id);
+        await deleteExerciseDefinitionWithWorkouts(user.uid, id, nextWorkouts);
         removeDeletedId('defs', id);
-        await saveWorkoutsBatch(user.uid, nextWorkouts);
       } catch (e) {
         console.error("Failed to sync deletions to cloud", e);
         handleFirestoreError(e, OperationType.DELETE, `users/${user.uid}/exerciseDefinitions/${id}`);

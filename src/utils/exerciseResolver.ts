@@ -1,7 +1,7 @@
 import { ExerciseDefinition, Workout, WorkoutExercise, Exercise } from '../types/fitness';
 import { generateId } from './generateId';
 
-export const MUSCLE_CATEGORIES = [
+export const STANDARD_MUSCLE_CATEGORIES = [
   'Chest',
   'Shoulders',
   'Back',
@@ -12,14 +12,21 @@ export const MUSCLE_CATEGORIES = [
   'Core'
 ] as const;
 
+export const MUSCLE_CATEGORIES = [
+  ...STANDARD_MUSCLE_CATEGORIES,
+  'Uncategorized'
+] as const;
+
 export type MuscleCategory = typeof MUSCLE_CATEGORIES[number];
 
 /**
- * Deliberate non-overlapping muscle category mapping based on target string
+ * Deliberate non-overlapping muscle category mapping based on target string.
+ * Explicitly preserves Core for genuine core exercises and maps missing/unrecognized targets to 'Uncategorized'.
  */
 export function mapTargetToCategory(targetStr: string | null | undefined): MuscleCategory {
-  if (!targetStr) return 'Core';
-  const t = targetStr.toLowerCase();
+  if (!targetStr || typeof targetStr !== 'string') return 'Uncategorized';
+  const t = targetStr.trim().toLowerCase();
+  if (!t || t === 'general' || t === 'unknown' || t === 'unlisted') return 'Uncategorized';
 
   if (t.includes('tricep')) return 'Triceps';
   if (t.includes('bicep')) return 'Biceps';
@@ -30,9 +37,9 @@ export function mapTargetToCategory(targetStr: string | null | undefined): Muscl
   if (t.includes('shoulder') || t.includes('delt') || t.includes('trap')) return 'Shoulders';
   if (t.includes('back') || t.includes('lat') || t.includes('rhomboid') || t.includes('erector') || t.includes('spine')) return 'Back';
   if (t.includes('quad') || t.includes('hamstring') || t.includes('glute') || t.includes('calf') || t.includes('calves') || t.includes('leg') || t.includes('thigh') || t.includes('adductor')) return 'Legs';
-  if (t.includes('core') || t.includes('ab') || t.includes('oblique')) return 'Core';
+  if (t.includes('core') || t.includes('ab') || t.includes('oblique') || t.includes('plank')) return 'Core';
 
-  return 'Core';
+  return 'Uncategorized';
 }
 
 export interface ResolvedExerciseMeta {
@@ -65,7 +72,7 @@ export const EMPTY_RESOLVED_EXERCISE: ResolvedExerciseMeta = {
   id: 'unknown',
   name: 'Unknown Exercise',
   target: 'General',
-  category: 'Core',
+  category: 'Uncategorized',
   tags: [],
   equipment: '',
   instructions: '',

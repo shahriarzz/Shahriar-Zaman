@@ -8,6 +8,7 @@ import {
   getSortedWeightEntries,
   getWeightSparklineData,
   getCycleDay,
+  isCompletedSession,
   dk,
   SparklineData
 } from './fitnessCalculations';
@@ -22,6 +23,26 @@ import {
 } from './exerciseResolver';
 
 export const CYCLE_LENGTH = 8;
+
+export interface WeightPRRecord {
+  exerciseId: string;
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  date: string;
+  category: MuscleCategory;
+}
+
+export interface E1RMPRRecord {
+  exerciseId: string;
+  exerciseName: string;
+  maxEpley: number;
+  weight: number;
+  reps: number;
+  date: string;
+  setDetail: string;
+  category: MuscleCategory;
+}
 
 export interface PersonalBestRecord {
   exerciseId: string;
@@ -112,6 +133,9 @@ export interface ExerciseIndexEntry {
   totalVolume: number;
   sessionCount: number;
   maxWeight: number;
+  weightPR: WeightPRRecord | null;
+  e1RMPR: E1RMPRRecord | null;
+  // Backward-compatible properties
   heaviestSet: { weight: number; reps: string; date: string } | null;
   bestE1RM: BestE1RMRecord | null;
   progression: E1RMProgressionPoint[];
@@ -127,6 +151,8 @@ export interface FitnessIndex {
   logsByDate: Map<string, SessionLog[]>;
   distinctDates: string[];
   volumeByDate: Record<string, number>;
+  completedSetsByDate: Record<string, number>;
+  plannedSetsByDate: Record<string, number>;
   setsByDate: Record<string, number>;
   totalSetsByDate: Record<string, number>;
   exerciseMetaById: Map<string, ResolvedExerciseMeta>;
@@ -143,6 +169,10 @@ export interface FitnessIndex {
   setsByMuscle: Record<MuscleCategory, number>;
   frequencyByMuscle: Record<MuscleCategory, number>;
   frequencyByExercise: ExerciseFrequencyStat[];
+  weightPRsMap: Map<string, WeightPRRecord>;
+  weightPRs: WeightPRRecord[];
+  e1RMPRsMap: Map<string, E1RMPRRecord>;
+  e1RMPRs: E1RMPRRecord[];
   personalBests: PersonalBestRecord[];
   personalBestsMap: Map<string, PersonalBestRecord>;
   e1rmHistoryByExercise: Map<string, E1RMProgressionPoint[]>;
@@ -153,9 +183,11 @@ export interface FitnessIndex {
 
 /**
  * Internal helper to calculate current consecutive workout day streak.
+ * Only counts completed workouts (isCompletedSession invariant).
  */
 function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
-  const datesSet = new Set(logs.map(l => l?.date).filter(Boolean));
+  const completedLogs = logs.filter(isCompletedSession);
+  const datesSet = new Set(completedLogs.map(l => l?.date).filter(Boolean));
   if (datesSet.size === 0) return 0;
 
   let streak = 0;
@@ -187,9 +219,11 @@ function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date
 
 /**
  * Internal helper to calculate longest consecutive workout day streak.
+ * Only counts completed workouts (isCompletedSession invariant).
  */
 function computeLongestStreak(logs: SessionLog[]): number {
-  const distinctDates = Array.from(new Set(logs.map(l => l?.date).filter(Boolean) as string[])).sort();
+  const completedLogs = logs.filter(isCompletedSession);
+  const distinctDates = Array.from(new Set(completedLogs.map(l => l?.date).filter(Boolean) as string[])).sort();
   if (distinctDates.length === 0) return 0;
 
   let longestStreak = 0;
@@ -242,11 +276,19 @@ export function buildFitnessIndex(
 
   const sortedLogsAscending = [...sortedLogsDescending].reverse();
 
+  // Completed logs subset for canonical completion invariants
+  const completedLogsDescending = sortedLogsDescending.filter(isCompletedSession);
+  const completedLogsAscending = sortedLogsAscending.filter(isCompletedSession);
+
   const logsByDate = new Map<string, SessionLog[]>();
   const historyByExercise = new Map<string, ExerciseSessionHistoryEntry[]>();
   const completedSetsByExercise = new Map<string, { date: string; set: SetLog; logId: string }[]>();
   const volumeByExercise = new Map<string, number>();
   const exerciseCountsMap = new Map<string, { count: number; volume: number; name: string; category: MuscleCategory; resolvedMeta: ResolvedExerciseMeta }>();
+  
+  // Independent PR maps
+  const weightPRsMap = new Map<string, WeightPRRecord>();
+  const e1RMPRsMap = new Map<string, E1RMPRRecord>();
   const personalBestsMap = new Map<string, PersonalBestRecord>();
   const bestE1RMByExercise = new Map<string, BestE1RMRecord>();
   const e1rmHistoryByExercise = new Map<string, E1RMProgressionPoint[]>();
@@ -260,8 +302,8 @@ export function buildFitnessIndex(
 
   // Additional indexed structures populated in single pass
   const volumeByDate: Record<string, number> = {};
-  const setsByDate: Record<string, number> = {};
-  const totalSetsByDate: Record<string, number> = {};
+  const completedSetsByDate: Record<string, number> = {};
+  const plannedSetsByDate: Record<string, number> = {};
   const logsByWorkout: Record<string, SessionLog[]> = {};
   const sessionsByExercise: Record<string, ExerciseSessionHistoryEntry[]> = {};
   const volumeByWorkout: Record<string, number> = {};
@@ -270,16 +312,16 @@ export function buildFitnessIndex(
   const maxWeightByExercise = new Map<string, number>();
   const heaviestSetByExercise = new Map<string, { weight: number; reps: string; date: string }>();
 
-  const volumeByMuscle: Record<MuscleCategory, number> = {
-    Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
-  };
-  const setsByMuscle: Record<MuscleCategory, number> = {
-    Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
-  };
-  const muscleOccurrence: Record<MuscleCategory, Set<string>> = {
-    Chest: new Set(), Shoulders: new Set(), Back: new Set(), Biceps: new Set(), Triceps: new Set(),
-    Forearms: new Set(), Legs: new Set(), Core: new Set()
-  };
+  // Initialize muscle aggregations with all categories including Uncategorized
+  const volumeByMuscle: Record<MuscleCategory, number> = {} as any;
+  const setsByMuscle: Record<MuscleCategory, number> = {} as any;
+  const muscleOccurrence: Record<MuscleCategory, Set<string>> = {} as any;
+
+  MUSCLE_CATEGORIES.forEach(cat => {
+    volumeByMuscle[cat] = 0;
+    setsByMuscle[cat] = 0;
+    muscleOccurrence[cat] = new Set();
+  });
 
   let totalLifetimeVolume = 0;
   let totalLifetimeSets = 0;
@@ -303,9 +345,10 @@ export function buildFitnessIndex(
       logsByDate.get(log.date)!.push(log);
 
       if (!muscleFrequencyByDate[log.date]) {
-        muscleFrequencyByDate[log.date] = {
-          Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
-        };
+        muscleFrequencyByDate[log.date] = {} as any;
+        MUSCLE_CATEGORIES.forEach(cat => {
+          muscleFrequencyByDate[log.date][cat] = 0;
+        });
       }
     }
 
@@ -322,7 +365,7 @@ export function buildFitnessIndex(
       Object.entries(log.sets).forEach(([exId, setList]) => {
         if (!Array.isArray(setList)) return;
         if (log.date) {
-          totalSetsByDate[log.date] = (totalSetsByDate[log.date] || 0) + setList.length;
+          plannedSetsByDate[log.date] = (plannedSetsByDate[log.date] || 0) + setList.length;
         }
 
         const doneSets = setList.filter(s => s && s.done);
@@ -330,7 +373,7 @@ export function buildFitnessIndex(
 
         totalLifetimeSets += doneSets.length;
         if (log.date) {
-          setsByDate[log.date] = (setsByDate[log.date] || 0) + doneSets.length;
+          completedSetsByDate[log.date] = (completedSetsByDate[log.date] || 0) + doneSets.length;
         }
         if (log.workoutId) {
           setsByWorkout[log.workoutId] = (setsByWorkout[log.workoutId] || 0) + doneSets.length;
@@ -381,6 +424,20 @@ export function buildFitnessIndex(
                 date: log.date
               });
             }
+
+            // Independent Weight PR tracking
+            const existingWeightPR = weightPRsMap.get(normId);
+            const isWeightPR = !existingWeightPR || w > existingWeightPR.weight || (w === existingWeightPR.weight && r > existingWeightPR.reps);
+            if (isWeightPR) {
+              weightPRsMap.set(normId, {
+                exerciseId: normId,
+                exerciseName: exMeta.name,
+                weight: w,
+                reps: r,
+                date: log.date,
+                category
+              });
+            }
           }
 
           if (w > 0 && r > 0) {
@@ -390,7 +447,23 @@ export function buildFitnessIndex(
               maxSetDetailInSession = `${w}kg × ${r} reps`;
             }
 
-            // 1. All-time personal best check (Weight PR: highest weight, then highest reps at that weight)
+            // Independent e1RM PR tracking
+            const existingE1RMPR = e1RMPRsMap.get(normId);
+            const isE1RMPR = !existingE1RMPR || epley > existingE1RMPR.maxEpley;
+            if (isE1RMPR) {
+              e1RMPRsMap.set(normId, {
+                exerciseId: normId,
+                exerciseName: exMeta.name,
+                maxEpley: epley,
+                weight: w,
+                reps: r,
+                date: log.date,
+                setDetail: `${w}kg × ${r} reps`,
+                category
+              });
+            }
+
+            // All-time personal best check (Weight PR with Epley record for legacy PB views)
             const existingPB = personalBestsMap.get(normId);
             const isPB = !existingPB || w > existingPB.maxWeight || (w === existingPB.maxWeight && r > existingPB.repsAtMax);
             if (isPB) {
@@ -405,7 +478,7 @@ export function buildFitnessIndex(
               });
             }
 
-            // 2. All-time best e1RM check (highest calculated Epley 1RM across all completed sets)
+            // Legacy best e1RM tracking
             const existingBestE1RM = bestE1RMByExercise.get(normId);
             if (!existingBestE1RM || epley > existingBestE1RM.maxEpley) {
               bestE1RMByExercise.set(normId, {
@@ -432,8 +505,8 @@ export function buildFitnessIndex(
         logSessionVol += exSessionVol;
 
         // Muscle distribution
-        volumeByMuscle[category] += exSessionVol;
-        setsByMuscle[category] += doneSets.length;
+        volumeByMuscle[category] = (volumeByMuscle[category] || 0) + exSessionVol;
+        setsByMuscle[category] = (setsByMuscle[category] || 0) + doneSets.length;
         muscleOccurrence[category].add(log.id);
 
         // Exercise volume total
@@ -523,20 +596,16 @@ export function buildFitnessIndex(
     category: val.category
   })).sort((a, b) => b.count - a.count || b.volume - a.volume);
 
-  // Personal bests list sorted descending by max estimated 1RM
+  // PR lists sorted descending
+  const weightPRs = Array.from(weightPRsMap.values()).sort((a, b) => b.weight - a.weight);
+  const e1RMPRs = Array.from(e1RMPRsMap.values()).sort((a, b) => b.maxEpley - a.maxEpley);
   const personalBests = Array.from(personalBestsMap.values()).sort((a, b) => b.maxEpley - a.maxEpley);
 
   // Frequency by muscle
-  const frequencyByMuscle: Record<MuscleCategory, number> = {
-    Chest: muscleOccurrence.Chest.size,
-    Shoulders: muscleOccurrence.Shoulders.size,
-    Back: muscleOccurrence.Back.size,
-    Biceps: muscleOccurrence.Biceps.size,
-    Triceps: muscleOccurrence.Triceps.size,
-    Forearms: muscleOccurrence.Forearms.size,
-    Legs: muscleOccurrence.Legs.size,
-    Core: muscleOccurrence.Core.size
-  };
+  const frequencyByMuscle: Record<MuscleCategory, number> = {} as any;
+  MUSCLE_CATEGORIES.forEach(cat => {
+    frequencyByMuscle[cat] = muscleOccurrence[cat]?.size || 0;
+  });
 
   const distinctDates = Array.from(new Set(sortedLogsAscending.map(l => l.date))).sort();
 
@@ -548,6 +617,8 @@ export function buildFitnessIndex(
     const sessions = [...ascendingSessions].reverse();
     const latestSession = sessions[0] || null;
     const completedSets = completedSetsByExercise.get(exId) || [];
+    const weightPR = weightPRsMap.get(exId) || null;
+    const e1RMPR = e1RMPRsMap.get(exId) || null;
     const bestE1RM = bestE1RMByExercise.get(exId) || null;
     const progression = e1rmHistoryByExercise.get(exId) || [];
     const maxWeight = maxWeightByExercise.get(exId) || 0;
@@ -564,6 +635,8 @@ export function buildFitnessIndex(
       totalVolume: freqVal.volume,
       sessionCount: freqVal.count,
       maxWeight,
+      weightPR,
+      e1RMPR,
       heaviestSet,
       bestE1RM,
       progression
@@ -571,15 +644,15 @@ export function buildFitnessIndex(
   });
 
   const lifetimeStats: LifetimeStats = {
-    totalSessions: sortedLogsDescending.length,
+    totalSessions: completedLogsDescending.length,
     totalVolume: totalLifetimeVolume,
     totalSets: totalLifetimeSets,
     totalMinutes: totalLifetimeMinutes,
     measuredSessionsCount: measuredLifetimeCount,
-    currentStreak: computeCurrentStreak(validLogs),
-    longestStreak: computeLongestStreak(validLogs),
-    firstSessionDate: sortedLogsAscending[0]?.date || null,
-    lastSessionDate: sortedLogsDescending[0]?.date || null
+    currentStreak: computeCurrentStreak(completedLogsDescending),
+    longestStreak: computeLongestStreak(completedLogsDescending),
+    firstSessionDate: completedLogsAscending[0]?.date || null,
+    lastSessionDate: completedLogsDescending[0]?.date || null
   };
 
   return {
@@ -588,8 +661,10 @@ export function buildFitnessIndex(
     logsByDate,
     distinctDates,
     volumeByDate,
-    setsByDate,
-    totalSetsByDate,
+    completedSetsByDate,
+    plannedSetsByDate,
+    setsByDate: completedSetsByDate,
+    totalSetsByDate: plannedSetsByDate,
     exerciseMetaById,
     logsByWorkout,
     sessionsByExercise,
@@ -604,6 +679,10 @@ export function buildFitnessIndex(
     setsByMuscle,
     frequencyByMuscle,
     frequencyByExercise,
+    weightPRsMap,
+    weightPRs,
+    e1RMPRsMap,
+    e1RMPRs,
     personalBests,
     personalBestsMap,
     e1rmHistoryByExercise,
@@ -649,6 +728,20 @@ export function selectPersonalBestForExercise(
   return index.personalBestsMap.get(exerciseDefinitionId) || null;
 }
 
+export function selectExerciseWeightPR(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): WeightPRRecord | null {
+  return index.weightPRsMap.get(exerciseDefinitionId) || null;
+}
+
+export function selectExerciseE1RMPR(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): E1RMPRRecord | null {
+  return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
+}
+
 export function selectExercisePR(
   index: FitnessIndex,
   exerciseDefinitionId: string
@@ -689,7 +782,7 @@ export function selectNextCycleDay(
 
   // Find the most recent completed log for a core workout from the descending indexed logs
   const latestCoreLog = index.sortedLogsDescending.find(log => {
-    if (!log || !log.complete) return false;
+    if (!isCompletedSession(log)) return false;
     const wo = map.get(log.workoutId);
     return wo && wo.isCore && typeof wo.cycleDay === 'number';
   });
@@ -831,8 +924,9 @@ export function selectTimeRangeAnalytics(
     priorCutoffDateStr = format(subDays(validNow, 179), 'yyyy-MM-dd');
   }
 
-  const rangeLogs = index.sortedLogsAscending.filter(l => !cutoffDateStr || l.date >= cutoffDateStr);
-  const priorLogs = index.sortedLogsAscending.filter(l => {
+  // Canonical completion filter for analytics
+  const rangeLogs = index.sortedLogsAscending.filter(isCompletedSession).filter(l => !cutoffDateStr || l.date >= cutoffDateStr);
+  const priorLogs = index.sortedLogsAscending.filter(isCompletedSession).filter(l => {
     if (!cutoffDateStr || !priorCutoffDateStr) return false;
     return l.date >= priorCutoffDateStr && l.date < cutoffDateStr;
   });
@@ -859,16 +953,15 @@ export function selectTimeRangeAnalytics(
   }
 
   // Muscle group and exercise breakdown within the time range aggregated from indexed structures
-  const rangeMuscleVolume: Record<MuscleCategory, number> = {
-    Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
-  };
-  const rangeMuscleSets: Record<MuscleCategory, number> = {
-    Chest: 0, Shoulders: 0, Back: 0, Biceps: 0, Triceps: 0, Forearms: 0, Legs: 0, Core: 0
-  };
-  const rangeMuscleFrequency: Record<MuscleCategory, Set<string>> = {
-    Chest: new Set(), Shoulders: new Set(), Back: new Set(), Biceps: new Set(), Triceps: new Set(),
-    Forearms: new Set(), Legs: new Set(), Core: new Set()
-  };
+  const rangeMuscleVolume: Record<MuscleCategory, number> = {} as any;
+  const rangeMuscleSets: Record<MuscleCategory, number> = {} as any;
+  const rangeMuscleFrequency: Record<MuscleCategory, Set<string>> = {} as any;
+
+  MUSCLE_CATEGORIES.forEach(cat => {
+    rangeMuscleVolume[cat] = 0;
+    rangeMuscleSets[cat] = 0;
+    rangeMuscleFrequency[cat] = new Set();
+  });
 
   const exerciseSessionCounts: Record<string, { name: string; count: number; volume: number }> = {};
   const workoutTypeDistribution: Record<string, number> = {};
@@ -903,8 +996,8 @@ export function selectTimeRangeAnalytics(
       rangeMuscleFrequency[category]?.add(sess.logId);
     });
 
-    rangeMuscleVolume[category] += exRangeVol;
-    rangeMuscleSets[category] += exRangeSets;
+    rangeMuscleVolume[category] = (rangeMuscleVolume[category] || 0) + exRangeVol;
+    rangeMuscleSets[category] = (rangeMuscleSets[category] || 0) + exRangeSets;
 
     exerciseSessionCounts[normId] = {
       name: entry.name,
@@ -947,8 +1040,8 @@ export function selectTimeRangeAnalytics(
     const cycleDay = getCycleDay(cycleStart, dayDate);
     const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
     const dayLogs = index.logsByDate.get(dateStr) || [];
-    const dayVolume = index.volumeByDate[dateStr] || 0;
-    const hasCompletedWorkout = dayLogs.some(l => l.complete) || dayVolume > 0;
+    // Strict adherence invariant: completion is solely determined by isCompletedSession
+    const hasCompletedWorkout = dayLogs.some(isCompletedSession);
 
     const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
     const isScheduledRest = expectedWo && expectedWo.type === 'rest';
@@ -985,7 +1078,7 @@ export function selectTimeRangeAnalytics(
   // Active 1RM Trend
   const active1RMTrend = active1RMExerciseId ? (index.e1rmHistoryByExercise.get(active1RMExerciseId) || []) : [];
 
-  // Days since last workout
+  // Days since last workout (computed strictly from last completed session date)
   let daysSinceLast = 0;
   if (index.lifetimeStats.lastSessionDate) {
     const parsedLast = parseISO(index.lifetimeStats.lastSessionDate);
@@ -994,14 +1087,15 @@ export function selectTimeRangeAnalytics(
     }
   }
 
-  // Average training gap
+  // Average training gap across completed workouts
   let avgGapDays = 0;
-  if (index.sortedLogsAscending.length > 1) {
+  const completedAscending = index.sortedLogsAscending.filter(isCompletedSession);
+  if (completedAscending.length > 1) {
     let totalGaps = 0;
     let validGapsCount = 0;
-    for (let i = 1; i < index.sortedLogsAscending.length; i++) {
-      const d1 = parseISO(index.sortedLogsAscending[i - 1].date);
-      const d2 = parseISO(index.sortedLogsAscending[i].date);
+    for (let i = 1; i < completedAscending.length; i++) {
+      const d1 = parseISO(completedAscending[i - 1].date);
+      const d2 = parseISO(completedAscending[i].date);
       if (isValid(d1) && isValid(d2)) {
         const diff = Math.max(0, differenceInCalendarDays(d2, d1));
         totalGaps += diff;

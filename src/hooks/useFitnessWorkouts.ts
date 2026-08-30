@@ -34,6 +34,7 @@ export function useFitnessWorkouts({
       const rawNext = typeof w === 'function' ? w(currentWorkouts) : w;
       const { workouts: migrated } = extractExerciseDefinitionsFromWorkouts(rawNext);
 
+      workoutsRef.current = migrated;
       setWorkoutsState(migrated);
       pushAutoBackup(migrated, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
 
@@ -61,7 +62,7 @@ export function useFitnessWorkouts({
 
     // Prevent duplicate assignment
     const exists = (targetW.exercises || []).some(
-      e => (e.exerciseDefinitionId || e.exerciseId) === exerciseDefId
+      e => (e.exerciseDefinitionId || (e as any).exerciseId) === exerciseDefId
     );
     if (exists) return;
 
@@ -84,6 +85,7 @@ export function useFitnessWorkouts({
       return w;
     });
 
+    workoutsRef.current = nextWorkouts;
     setWorkoutsState(nextWorkouts);
 
     if (user) {
@@ -107,12 +109,13 @@ export function useFitnessWorkouts({
       if (w.id === workoutId) {
         return {
           ...w,
-          exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || e.exerciseId) !== exerciseDefId)
+          exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || (e as any).exerciseId) !== exerciseDefId)
         };
       }
       return w;
     });
 
+    workoutsRef.current = nextWorkouts;
     setWorkoutsState(nextWorkouts);
 
     if (user) {
@@ -141,12 +144,12 @@ export function useFitnessWorkouts({
         return {
           ...w,
           exercises: (w.exercises || []).map(e => {
-            if ((e.exerciseDefinitionId || e.exerciseId) === exerciseDefId) {
+            if ((e.exerciseDefinitionId || (e as any).exerciseId) === exerciseDefId) {
+              const { exerciseId: _, ...restEx } = e as any;
               return {
-                ...e,
+                ...restEx,
                 ...programming,
-                exerciseDefinitionId: exerciseDefId,
-                exerciseId: exerciseDefId
+                exerciseDefinitionId: exerciseDefId
               };
             }
             return e;
@@ -156,6 +159,7 @@ export function useFitnessWorkouts({
       return w;
     });
 
+    workoutsRef.current = nextWorkouts;
     setWorkoutsState(nextWorkouts);
 
     if (user) {
@@ -179,6 +183,7 @@ export function useFitnessWorkouts({
 
     trackDeletedId('workouts', workoutId);
 
+    workoutsRef.current = nextWorkouts;
     setWorkoutsState(nextWorkouts);
 
     if (user) {
