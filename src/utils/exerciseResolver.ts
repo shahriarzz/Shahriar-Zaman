@@ -114,23 +114,24 @@ export function resolveExercise(
 }
 
 /**
- * Resolves a WorkoutExercise programming entry with its canonical ExerciseDefinition
+ * Resolves a WorkoutExercise programming entry with its canonical ExerciseDefinition.
+ * Runtime canonical identity is strictly exerciseDefinitionId.
  */
 export function resolveWorkoutExercise(
-  we: WorkoutExercise | any,
+  we: WorkoutExercise,
   definitionsOrMap: ExerciseDefinition[] | Map<string, ExerciseDefinition> = []
 ): Exercise {
   const defsMap = Array.isArray(definitionsOrMap)
     ? createExerciseDefinitionMap(definitionsOrMap)
     : definitionsOrMap;
 
-  const defId = we.exerciseDefinitionId || we.exerciseId || we.id;
+  const defId = we.exerciseDefinitionId;
   const meta = resolveExercise(defId, defsMap);
 
   return {
     id: meta.id || generateId(),
     exerciseDefinitionId: meta.id,
-    name: meta.isUnknown && we.name ? we.name : meta.name,
+    name: meta.isUnknown && (we as any).name ? (we as any).name : meta.name,
     target: meta.target,
     equipment: meta.equipment,
     instructions: meta.instructions,

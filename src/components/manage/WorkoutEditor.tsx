@@ -467,7 +467,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
           ) : (
             workout.exercises.map((ex, index) => {
               const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
-              const exId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
+              const exId = ex.exerciseDefinitionId;
               const isExpanded = expandedExIds.has(exId);
               const isFirst = index === 0;
               const isLast = index === workout.exercises.length - 1;

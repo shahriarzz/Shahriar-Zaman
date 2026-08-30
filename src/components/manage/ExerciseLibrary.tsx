@@ -42,7 +42,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
   const libraryItems: LibraryItem[] = useMemo(() => {
     return (exerciseDefinitions || []).map(def => {
       const usedWorkouts = workouts.filter(wo =>
-        (wo.exercises || []).some(ex => (ex.exerciseDefinitionId || ex.exerciseId) === def.id)
+        (wo.exercises || []).some(ex => ex.exerciseDefinitionId === def.id)
       ).map(wo => ({ id: wo.id, name: wo.name }));
 
       return {

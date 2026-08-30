@@ -4,6 +4,45 @@ import { dk, generateId } from './fitnessHelpers';
 import { sanitizeSessionLog } from './fitnessCalculations';
 
 // Extract exercise definitions from workouts if migrating legacy data
+export function canonicalizeWorkoutExercise(
+  rawEx: any,
+  fallbackDefMap?: Map<string, ExerciseDefinition>,
+  nameToIdMap?: Map<string, string>
+): WorkoutExercise {
+  if (!rawEx || typeof rawEx !== 'object') {
+    return {
+      exerciseDefinitionId: `ex-${generateId()}`,
+      sets: 3,
+      reps: '10–12',
+      rest: '90s',
+      note: '',
+      tags: []
+    };
+  }
+
+  let defId = rawEx.exerciseDefinitionId || rawEx.exerciseId || rawEx.id;
+
+  if (rawEx.name && nameToIdMap && (!defId || (fallbackDefMap && !fallbackDefMap.has(defId)))) {
+    const lowerName = String(rawEx.name).trim().toLowerCase();
+    if (nameToIdMap.has(lowerName)) {
+      defId = nameToIdMap.get(lowerName)!;
+    }
+  }
+
+  if (!defId) {
+    defId = `ex-${generateId()}`;
+  }
+
+  return {
+    exerciseDefinitionId: defId,
+    sets: typeof rawEx.sets === 'number' && rawEx.sets > 0 ? rawEx.sets : 3,
+    reps: String(rawEx.reps || '10–12'),
+    rest: String(rawEx.rest || '90s'),
+    note: String(rawEx.note || ''),
+    tags: Array.isArray(rawEx.tags) ? rawEx.tags : []
+  };
+}
+
 export function extractExerciseDefinitionsFromWorkouts(
   rawWorkouts: any[],
   existingDefs?: ExerciseDefinition[]
@@ -25,19 +64,8 @@ export function extractExerciseDefinitionsFromWorkouts(
 
   const migratedWorkouts: Workout[] = (rawWorkouts || []).map(w => {
     const migratedExercises: WorkoutExercise[] = (w.exercises || []).map((ex: any) => {
-      let defId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
-
-      // If no explicit ID or if ID not in defMap, check if name matches an existing definition
-      if (ex.name && (!defId || !defMap.has(defId))) {
-        const lowerName = ex.name.trim().toLowerCase();
-        if (nameToIdMap.has(lowerName)) {
-          defId = nameToIdMap.get(lowerName)!;
-        }
-      }
-
-      if (!defId) {
-        defId = `ex-${generateId()}`;
-      }
+      const canonicalEx = canonicalizeWorkoutExercise(ex, defMap, nameToIdMap);
+      const defId = canonicalEx.exerciseDefinitionId;
 
       if (!defMap.has(defId)) {
         const defName = ex.name?.trim() || 'Exercise';
@@ -53,14 +81,7 @@ export function extractExerciseDefinitionsFromWorkouts(
         nameToIdMap.set(defName.toLowerCase(), defId);
       }
 
-      return {
-        exerciseDefinitionId: defId,
-        sets: typeof ex.sets === 'number' ? ex.sets : 3,
-        reps: ex.reps || '10–12',
-        rest: ex.rest || '90s',
-        note: ex.note || '',
-        tags: Array.isArray(ex.tags) ? ex.tags : []
-      };
+      return canonicalEx;
     });
 
     return {
@@ -210,10 +231,8 @@ export function validateAndSanitizeFitnessData(parsed: any): {
 
   const sanitizedWorkouts: Workout[] = migrated.workouts.map(w => {
     const sanitizedExercises: WorkoutExercise[] = (w.exercises || []).map((ex: any) => {
-      let defId = ex.exerciseDefinitionId || ex.exerciseId || ex.id;
-      if (!defId) {
-        defId = `ex-${generateId()}`;
-      }
+      const canonicalEx = canonicalizeWorkoutExercise(ex, defMap);
+      const defId = canonicalEx.exerciseDefinitionId;
 
       // If definition missing from defMap, auto-create fallback definition to prevent orphan references
       if (!defMap.has(defId)) {
@@ -228,14 +247,7 @@ export function validateAndSanitizeFitnessData(parsed: any): {
         defMap.set(defId, fallbackDef);
       }
 
-      return {
-        exerciseDefinitionId: defId,
-        sets: typeof ex.sets === 'number' && ex.sets > 0 ? ex.sets : 3,
-        reps: String(ex.reps || '10–12'),
-        rest: String(ex.rest || '90s'),
-        note: String(ex.note || ''),
-        tags: Array.isArray(ex.tags) ? ex.tags : []
-      };
+      return canonicalEx;
     });
 
     return {

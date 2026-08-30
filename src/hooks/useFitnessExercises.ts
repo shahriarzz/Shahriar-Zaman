@@ -103,7 +103,7 @@ export function useFitnessExercises({
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.map(w => ({
       ...w,
-      exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || (e as any).exerciseId) !== id)
+      exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== id)
     }));
 
     trackDeletedId('defs', id);

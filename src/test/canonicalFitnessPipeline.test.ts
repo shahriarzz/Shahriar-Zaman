@@ -819,5 +819,116 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(index.setsByDate['2026-08-12']).toBe(2); // backward compatible alias to completedSets
       expect(index.totalSetsByDate['2026-08-12']).toBe(4); // backward compatible alias to plannedSets
     });
+
+    it('volumeByDate obeys the completed-session invariant (1,000kg completed vs 10,000kg incomplete)', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_completed',
+          workoutId: 'w1',
+          date: '2026-08-15',
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            ex1: [{ id: 's1', weight: '100', reps: '10', done: true }] // 1,000 kg
+          }
+        },
+        {
+          id: 'log_incomplete',
+          workoutId: 'w1',
+          date: '2026-08-16',
+          complete: false,
+          durationMinutes: 30,
+          sets: {
+            ex1: [{ id: 's2', weight: '1000', reps: '10', done: true }] // 10,000 kg unfinalized
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+      expect(index.volumeByDate['2026-08-15']).toBe(1000);
+      expect(index.volumeByDate['2026-08-16']).toBeUndefined();
+      expect(index.lifetimeStats.totalVolume).toBe(1000);
+
+      const analytics = selectTimeRangeAnalytics(
+        index,
+        new Map(),
+        new Map(),
+        'all',
+        '2026-08-01',
+        'ex1'
+      );
+      expect(analytics.rangeVolume).toBe(1000);
+      expect(analytics.rangeLogsCount).toBe(1);
+    });
+
+    it('independently resolves WeightPRRecord vs E1RMPRRecord (100x5 e1RM 116.7 vs 110x1 e1RM 110)', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_rep_pr',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            ex_bench: [{ id: 's1', weight: '100', reps: '5', done: true }] // 100x5 -> e1RM 116.7
+          }
+        },
+        {
+          id: 'log_weight_pr',
+          workoutId: 'w1',
+          date: '2026-08-10',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            ex_bench: [{ id: 's2', weight: '110', reps: '1', done: true }] // 110x1 -> e1RM 110
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+
+      // Weight PR must be 110kg x 1
+      const weightPR = selectExerciseWeightPR(index, 'ex_bench');
+      expect(weightPR).toBeDefined();
+      expect(weightPR?.weight).toBe(110);
+      expect(weightPR?.reps).toBe(1);
+      expect(weightPR?.date).toBe('2026-08-10');
+
+      // Best e1RM PR must be 116.7 from the 100kg x 5 session
+      const e1rmPR = selectExerciseE1RMPR(index, 'ex_bench');
+      expect(e1rmPR).toBeDefined();
+      expect(e1rmPR?.maxEpley).toBe(calculateE1RM(100, 5)); // 116.7
+      expect(e1rmPR?.weight).toBe(100);
+      expect(e1rmPR?.reps).toBe(5);
+      expect(e1rmPR?.date).toBe('2026-08-01');
+
+      // Canonical Map lookups
+      expect(index.weightPRsMap.get('ex_bench')?.weight).toBe(110);
+      expect(index.e1RMPRsMap.get('ex_bench')?.maxEpley).toBe(calculateE1RM(100, 5));
+    });
+
+    it('assigns Uncategorized to orphan/unknown exercises and does not contaminate other muscle groups', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_orphan',
+          workoutId: 'w1',
+          date: '2026-08-20',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            unknown_mystery_ex: [{ id: 's1', weight: '50', reps: '10', done: true }] // 500 kg
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+      const muscleDist = selectMuscleDistribution(index);
+      
+      expect(muscleDist.volume.Uncategorized).toBe(500);
+      expect(muscleDist.sets.Uncategorized).toBe(1);
+      expect(muscleDist.volume.Chest).toBe(0);
+      expect(muscleDist.volume.Back).toBe(0);
+      expect(muscleDist.volume.Core).toBe(0);
+    });
   });
 });

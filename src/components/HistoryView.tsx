@@ -7,6 +7,7 @@ import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
+import { isCompletedSession } from '../utils/fitnessCalculations';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -125,7 +126,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       workoutsByType: Record<string, number>; // type -> count of completed runs
     }> = {};
 
-    const sortedLogsChronological = sortedLogs.slice().reverse();
+    const sortedLogsChronological = sortedLogs.slice().reverse().filter(isCompletedSession);
     const runningPRs: Record<string, number> = {};
 
     sortedLogsChronological.forEach(log => {

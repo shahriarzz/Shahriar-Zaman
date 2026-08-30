@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   extractExerciseDefinitionsFromWorkouts,
   migrateV1ToV2,
-  validateAndSanitizeFitnessData
+  validateAndSanitizeFitnessData,
+  canonicalizeWorkoutExercise
 } from '../utils/fitnessMigration';
 import {
   buildFitnessIndex,
@@ -376,5 +377,77 @@ describe('Migration Regression Fixtures Suite (All Supported Legacy Formats)', (
     expect(validateAndSanitizeFitnessData("invalid string").success).toBe(false);
     expect(validateAndSanitizeFitnessData([]).success).toBe(false);
     expect(validateAndSanitizeFitnessData({ randomKey: 123 }).success).toBe(false);
+  });
+
+  describe('canonicalizeWorkoutExercise boundary normalization', () => {
+    it('1. leaves canonical workout exercise intact with exerciseDefinitionId', () => {
+      const canonicalInput = {
+        exerciseDefinitionId: 'def_db_bench',
+        sets: 4,
+        reps: '8-10',
+        rest: '120s',
+        note: 'Control tempo',
+        tags: ['compound']
+      };
+      const result = canonicalizeWorkoutExercise(canonicalInput);
+      expect(result.exerciseDefinitionId).toBe('def_db_bench');
+      expect(result.sets).toBe(4);
+      expect(result.reps).toBe('8-10');
+      expect((result as any).exerciseId).toBeUndefined();
+      expect((result as any).id).toBeUndefined();
+    });
+
+    it('2. converts legacy exerciseId to exerciseDefinitionId and removes exerciseId', () => {
+      const legacyInput = {
+        exerciseId: 'legacy_tricep_pushdown',
+        sets: 3,
+        reps: '12-15',
+        rest: '60s'
+      };
+      const result = canonicalizeWorkoutExercise(legacyInput);
+      expect(result.exerciseDefinitionId).toBe('legacy_tricep_pushdown');
+      expect((result as any).exerciseId).toBeUndefined();
+      expect(result.sets).toBe(3);
+    });
+
+    it('3. handles malformed object with only id at migration boundary', () => {
+      const malformedInput = {
+        id: 'malformed_id_only',
+        sets: 5,
+        reps: '5'
+      };
+      const result = canonicalizeWorkoutExercise(malformedInput);
+      expect(result.exerciseDefinitionId).toBe('malformed_id_only');
+      expect((result as any).exerciseId).toBeUndefined();
+      expect(result.sets).toBe(5);
+    });
+
+    it('4. after migration, all workout exercises contain exerciseDefinitionId and NO exerciseId', () => {
+      const mixedWorkoutPayload = {
+        schemaVersion: 1,
+        workouts: [
+          {
+            id: 'w_test',
+            name: 'Mixed Test',
+            exercises: [
+              { exerciseDefinitionId: 'def_1', sets: 3, reps: '10' },
+              { exerciseId: 'def_2', sets: 4, reps: '8' },
+              { id: 'def_3', sets: 3, reps: '12' }
+            ]
+          }
+        ]
+      };
+      const res = validateAndSanitizeFitnessData(mixedWorkoutPayload);
+      expect(res.success).toBe(true);
+      const exercises = res.data!.workouts[0].exercises;
+      exercises.forEach(ex => {
+        expect(ex.exerciseDefinitionId).toBeDefined();
+        expect(typeof ex.exerciseDefinitionId).toBe('string');
+        expect((ex as any).exerciseId).toBeUndefined();
+      });
+      expect(exercises[0].exerciseDefinitionId).toBe('def_1');
+      expect(exercises[1].exerciseDefinitionId).toBe('def_2');
+      expect(exercises[2].exerciseDefinitionId).toBe('def_3');
+    });
   });
 });

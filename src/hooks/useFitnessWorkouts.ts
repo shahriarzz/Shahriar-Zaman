@@ -62,7 +62,7 @@ export function useFitnessWorkouts({
 
     // Prevent duplicate assignment
     const exists = (targetW.exercises || []).some(
-      e => (e.exerciseDefinitionId || (e as any).exerciseId) === exerciseDefId
+      e => e.exerciseDefinitionId === exerciseDefId
     );
     if (exists) return;
 
@@ -109,7 +109,7 @@ export function useFitnessWorkouts({
       if (w.id === workoutId) {
         return {
           ...w,
-          exercises: (w.exercises || []).filter(e => (e.exerciseDefinitionId || (e as any).exerciseId) !== exerciseDefId)
+          exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== exerciseDefId)
         };
       }
       return w;
@@ -144,10 +144,9 @@ export function useFitnessWorkouts({
         return {
           ...w,
           exercises: (w.exercises || []).map(e => {
-            if ((e.exerciseDefinitionId || (e as any).exerciseId) === exerciseDefId) {
-              const { exerciseId: _, ...restEx } = e as any;
+            if (e.exerciseDefinitionId === exerciseDefId) {
               return {
-                ...restEx,
+                ...e,
                 ...programming,
                 exerciseDefinitionId: exerciseDefId
               };

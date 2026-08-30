@@ -98,8 +98,8 @@ export function useCalendarGrid({
       });
 
       const dayVol = volMap[dateStr] || 0;
-      const doneSets = index.setsByDate[dateStr] || 0;
-      const totalSets = index.totalSetsByDate ? (index.totalSetsByDate[dateStr] || doneSets) : doneSets;
+      const doneSets = index.completedSetsByDate[dateStr] || 0;
+      const totalSets = index.plannedSetsByDate ? (index.plannedSetsByDate[dateStr] || doneSets) : doneSets;
 
       detailMap[dateStr] = {
         workoutNames,

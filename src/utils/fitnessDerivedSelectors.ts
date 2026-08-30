@@ -331,13 +331,14 @@ export function buildFitnessIndex(
   // Single pass over ascending logs (chronological order)
   sortedLogsAscending.forEach(log => {
     let logSessionVol = 0;
+    const isCompleted = isCompletedSession(log);
 
-    if (log.durationMinutes && log.durationMinutes > 0) {
+    if (isCompleted && log.durationMinutes && log.durationMinutes > 0) {
       totalLifetimeMinutes += log.durationMinutes;
       measuredLifetimeCount++;
     }
 
-    // Index by date
+    // Index by date (all logs for calendar/session lookup)
     if (log.date) {
       if (!logsByDate.has(log.date)) {
         logsByDate.set(log.date, []);
@@ -352,7 +353,7 @@ export function buildFitnessIndex(
       }
     }
 
-    // Index by workout
+    // Index by workout (all logs for calendar/session lookup)
     if (log.workoutId) {
       if (!logsByWorkout[log.workoutId]) {
         logsByWorkout[log.workoutId] = [];
@@ -368,17 +369,6 @@ export function buildFitnessIndex(
           plannedSetsByDate[log.date] = (plannedSetsByDate[log.date] || 0) + setList.length;
         }
 
-        const doneSets = setList.filter(s => s && s.done);
-        if (doneSets.length === 0) return;
-
-        totalLifetimeSets += doneSets.length;
-        if (log.date) {
-          completedSetsByDate[log.date] = (completedSetsByDate[log.date] || 0) + doneSets.length;
-        }
-        if (log.workoutId) {
-          setsByWorkout[log.workoutId] = (setsByWorkout[log.workoutId] || 0) + doneSets.length;
-        }
-
         let exMeta = exerciseMetaById.get(exId);
         if (!exMeta) {
           exMeta = resolveExercise(exId, defsMap);
@@ -389,6 +379,20 @@ export function buildFitnessIndex(
           exerciseMetaById.set(normId, exMeta);
         }
         const category = exMeta.category;
+
+        // Canonical Invariant: Only completed sessions contribute to training analytics
+        if (!isCompleted) return;
+
+        const doneSets = setList.filter(s => s && s.done);
+        if (doneSets.length === 0) return;
+
+        totalLifetimeSets += doneSets.length;
+        if (log.date) {
+          completedSetsByDate[log.date] = (completedSetsByDate[log.date] || 0) + doneSets.length;
+        }
+        if (log.workoutId) {
+          setsByWorkout[log.workoutId] = (setsByWorkout[log.workoutId] || 0) + doneSets.length;
+        }
 
         if (log.date && muscleFrequencyByDate[log.date]) {
           muscleFrequencyByDate[log.date][category] = (muscleFrequencyByDate[log.date][category] || 0) + 1;
@@ -558,24 +562,26 @@ export function buildFitnessIndex(
       });
     }
 
-    // Accumulate total lifetime volume and date/workout/week aggregations from calculated logSessionVol
-    totalLifetimeVolume += logSessionVol;
+    // Accumulate total lifetime volume and date/workout/week aggregations only for completed sessions
+    if (isCompleted) {
+      totalLifetimeVolume += logSessionVol;
 
-    if (log.date) {
-      volumeByDate[log.date] = (volumeByDate[log.date] || 0) + logSessionVol;
+      if (log.date && logSessionVol > 0) {
+        volumeByDate[log.date] = (volumeByDate[log.date] || 0) + logSessionVol;
 
-      // Weekly volume
-      try {
-        const parsedDate = parseISO(log.date);
-        if (isValid(parsedDate)) {
-          const weekStr = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
-          weeklyVolumeMap[weekStr] = (weeklyVolumeMap[weekStr] || 0) + logSessionVol;
-        }
-      } catch (_) {}
-    }
+        // Weekly volume
+        try {
+          const parsedDate = parseISO(log.date);
+          if (isValid(parsedDate)) {
+            const weekStr = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
+            weeklyVolumeMap[weekStr] = (weeklyVolumeMap[weekStr] || 0) + logSessionVol;
+          }
+        } catch (_) {}
+      }
 
-    if (log.workoutId) {
-      volumeByWorkout[log.workoutId] = (volumeByWorkout[log.workoutId] || 0) + logSessionVol;
+      if (log.workoutId) {
+        volumeByWorkout[log.workoutId] = (volumeByWorkout[log.workoutId] || 0) + logSessionVol;
+      }
     }
   });
 

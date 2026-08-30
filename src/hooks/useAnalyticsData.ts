@@ -101,8 +101,9 @@ export function useAnalyticsData({
       return ['No completed training logs in this window. Complete a session to generate performance analytics.'];
     }
 
-    // Top muscle volume
+    // Top muscle volume (exclude Uncategorized from muscle focus insights)
     const topMuscle = (Object.entries(aggregated.rangeMuscleVolume) as [MuscleCategory, number][])
+      .filter(([cat]) => cat !== 'Uncategorized')
       .sort((a, b) => b[1] - a[1])[0];
     if (topMuscle && topMuscle[1] > 0 && aggregated.rangeVolume > 0) {
       const pct = Math.round((topMuscle[1] / aggregated.rangeVolume) * 100);

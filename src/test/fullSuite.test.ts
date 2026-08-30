@@ -426,7 +426,7 @@ describe('GainLog Comprehensive Validation Suite', () => {
 
       expect(benchEntry).toBeDefined();
       expect(squatEntry).toBeDefined();
-      expect(benchEntry!.sessions.length).toBe(1000);
+      expect(benchEntry!.sessions.length).toBe(750); // 750 completed sessions
       expect(duration).toBeLessThan(20);
     });
 

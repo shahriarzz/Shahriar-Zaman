@@ -109,7 +109,8 @@ export const AnalyticsView: React.FC = () => {
     muscleChartData,
     workoutPieData,
     insightsList,
-    getCycleDayForDate
+    getCycleDayForDate,
+    index
   } = useAnalyticsData({
     timeRange,
     muscleMetric,
@@ -618,7 +619,7 @@ export const AnalyticsView: React.FC = () => {
                       {rec.maxWeight}kg × {rec.repsAtMax}
                     </div>
                     <div className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
-                      Est. 1RM ~{rec.maxEpley}kg
+                      Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseId)?.maxEpley ?? rec.maxEpley}kg
                     </div>
                   </div>
                 </Card>
