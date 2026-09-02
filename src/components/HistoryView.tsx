@@ -44,7 +44,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [selectedExKey, setSelectedExKey] = useState<string | null>(null); // Format: "YYYY-MM-DD_exerciseId"
+  const [selectedExKey, setSelectedExKey] = useState<string | null>(null); // Format: "YYYY-MM-DD_exerciseDefinitionId"
   
   // Custom states for Month-End reports and secure inline log editing
   const [editingLogId, setEditingLogId] = useState<string | null>(null);

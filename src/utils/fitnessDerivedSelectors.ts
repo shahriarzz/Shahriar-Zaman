@@ -24,7 +24,13 @@ import {
 
 export const CYCLE_LENGTH = 8;
 
+/**
+ * Canonical Weight PR Representation.
+ * Represents all-time heaviest successful lift (weight in kg and performed reps).
+ */
 export interface WeightPRRecord {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   exerciseName: string;
   weight: number;
@@ -33,7 +39,13 @@ export interface WeightPRRecord {
   category: MuscleCategory;
 }
 
+/**
+ * Canonical Estimated 1RM (e1RM) PR Representation.
+ * Represents all-time highest calculated 1RM (Epley formula: weight * (1 + reps/30)).
+ */
 export interface E1RMPRRecord {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   exerciseName: string;
   maxEpley: number;
@@ -44,17 +56,31 @@ export interface E1RMPRRecord {
   category: MuscleCategory;
 }
 
+/**
+ * @deprecated Legacy PersonalBestRecord is deprecated. Use WeightPRRecord for weight PRs or E1RMPRRecord for estimated 1RM PRs.
+ */
 export interface PersonalBestRecord {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   exerciseName: string;
+  /** Canonical weight PR weight */
+  weight: number;
+  /** Canonical weight PR reps */
+  reps: number;
+  /** @deprecated Legacy alias for weight */
   maxWeight: number;
+  /** @deprecated Legacy alias for reps */
   repsAtMax: number;
-  maxEpley: number;
+  /** @deprecated Do not rely on maxEpley on a Weight PR record. Use E1RMPRRecord or selectExerciseE1RMPR instead. */
+  maxEpley?: number;
   date: string;
   category: MuscleCategory;
 }
 
 export interface BestE1RMRecord {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   maxEpley: number;
   weight: number;
@@ -66,6 +92,8 @@ export interface BestE1RMRecord {
 }
 
 export interface ExerciseFrequencyStat {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   name: string;
   count: number;
@@ -121,12 +149,17 @@ export interface E1RMProgressionPoint {
 
 /**
  * Reusable single-exercise indexed entry constructed in the canonical pass.
+ * INVARIANT: `sessions` is strictly ordered NEWEST -> OLDEST (descending by session date).
+ * `latestSession` is always `sessions[0]`.
  */
 export interface ExerciseIndexEntry {
+  exerciseDefinitionId: string;
+  /** @deprecated Legacy alias. Use exerciseDefinitionId */
   exerciseId: string;
   name: string;
   category: MuscleCategory;
   resolvedExercise: ResolvedExerciseMeta;
+  /** Ordered newest to oldest (descending by session date) */
   sessions: ExerciseSessionHistoryEntry[];
   latestSession: ExerciseSessionHistoryEntry | null;
   completedSets: { date: string; set: SetLog; logId: string }[];
@@ -144,6 +177,11 @@ export interface ExerciseIndexEntry {
 /**
  * High-performance canonical index of fitness data.
  * Constructed in a single O(N) pass over session logs.
+ *
+ * Sets Accounting Semantics:
+ * - `completedSetsByDate`: Total performed (done: true) sets from verified completed sessions only.
+ * - `plannedSetsByDate`: Total programmed or logged set rows on this date across all sessions (including incomplete sessions).
+ * - `setsByDate` & `totalSetsByDate`: Deprecated backward-compatibility aliases.
  */
 export interface FitnessIndex {
   sortedLogsDescending: SessionLog[];
@@ -151,9 +189,13 @@ export interface FitnessIndex {
   logsByDate: Map<string, SessionLog[]>;
   distinctDates: string[];
   volumeByDate: Record<string, number>;
+  /** Total performed (done: true) sets from verified completed sessions */
   completedSetsByDate: Record<string, number>;
+  /** Total programmed/logged set rows on this date across all sessions (including incomplete) */
   plannedSetsByDate: Record<string, number>;
+  /** @deprecated Legacy alias. Use completedSetsByDate instead */
   setsByDate: Record<string, number>;
+  /** @deprecated Legacy alias. Use plannedSetsByDate instead */
   totalSetsByDate: Record<string, number>;
   exerciseMetaById: Map<string, ResolvedExerciseMeta>;
   logsByWorkout: Record<string, SessionLog[]>;
@@ -173,7 +215,9 @@ export interface FitnessIndex {
   weightPRs: WeightPRRecord[];
   e1RMPRsMap: Map<string, E1RMPRRecord>;
   e1RMPRs: E1RMPRRecord[];
+  /** @deprecated Use weightPRs or e1RMPRs */
   personalBests: PersonalBestRecord[];
+  /** @deprecated Use weightPRsMap or e1RMPRsMap */
   personalBestsMap: Map<string, PersonalBestRecord>;
   e1rmHistoryByExercise: Map<string, E1RMProgressionPoint[]>;
   lifetimeStats: LifetimeStats;
@@ -434,6 +478,7 @@ export function buildFitnessIndex(
             const isWeightPR = !existingWeightPR || w > existingWeightPR.weight || (w === existingWeightPR.weight && r > existingWeightPR.reps);
             if (isWeightPR) {
               weightPRsMap.set(normId, {
+                exerciseDefinitionId: normId,
                 exerciseId: normId,
                 exerciseName: exMeta.name,
                 weight: w,
@@ -456,6 +501,7 @@ export function buildFitnessIndex(
             const isE1RMPR = !existingE1RMPR || epley > existingE1RMPR.maxEpley;
             if (isE1RMPR) {
               e1RMPRsMap.set(normId, {
+                exerciseDefinitionId: normId,
                 exerciseId: normId,
                 exerciseName: exMeta.name,
                 maxEpley: epley,
@@ -469,11 +515,14 @@ export function buildFitnessIndex(
 
             // All-time personal best check (Weight PR with Epley record for legacy PB views)
             const existingPB = personalBestsMap.get(normId);
-            const isPB = !existingPB || w > existingPB.maxWeight || (w === existingPB.maxWeight && r > existingPB.repsAtMax);
+            const isPB = !existingPB || w > (existingPB.weight ?? existingPB.maxWeight) || (w === (existingPB.weight ?? existingPB.maxWeight) && r > (existingPB.reps ?? existingPB.repsAtMax));
             if (isPB) {
               personalBestsMap.set(normId, {
+                exerciseDefinitionId: normId,
                 exerciseId: normId,
                 exerciseName: exMeta.name,
+                weight: w,
+                reps: r,
                 maxWeight: w,
                 repsAtMax: r,
                 maxEpley: epley,
@@ -486,6 +535,7 @@ export function buildFitnessIndex(
             const existingBestE1RM = bestE1RMByExercise.get(normId);
             if (!existingBestE1RM || epley > existingBestE1RM.maxEpley) {
               bestE1RMByExercise.set(normId, {
+                exerciseDefinitionId: normId,
                 exerciseId: normId,
                 maxEpley: epley,
                 weight: w,
@@ -595,6 +645,7 @@ export function buildFitnessIndex(
 
   // Frequency array sorted descending
   const frequencyByExercise: ExerciseFrequencyStat[] = Array.from(exerciseCountsMap.entries()).map(([id, val]) => ({
+    exerciseDefinitionId: id,
     exerciseId: id,
     name: val.name,
     count: val.count,
@@ -603,9 +654,10 @@ export function buildFitnessIndex(
   })).sort((a, b) => b.count - a.count || b.volume - a.volume);
 
   // PR lists sorted descending
-  const weightPRs = Array.from(weightPRsMap.values()).sort((a, b) => b.weight - a.weight);
+  const weightPRs = Array.from(weightPRsMap.values()).sort((a, b) => b.weight - a.weight || b.reps - a.reps);
   const e1RMPRs = Array.from(e1RMPRsMap.values()).sort((a, b) => b.maxEpley - a.maxEpley);
-  const personalBests = Array.from(personalBestsMap.values()).sort((a, b) => b.maxEpley - a.maxEpley);
+  // personalBests is sorted by weight (descending) and reps (descending) - NOT maxEpley
+  const personalBests = Array.from(personalBestsMap.values()).sort((a, b) => (b.weight ?? b.maxWeight) - (a.weight ?? a.maxWeight) || (b.reps ?? b.repsAtMax) - (a.reps ?? a.repsAtMax));
 
   // Frequency by muscle
   const frequencyByMuscle: Record<MuscleCategory, number> = {} as any;
@@ -631,6 +683,7 @@ export function buildFitnessIndex(
     const heaviestSet = heaviestSetByExercise.get(exId) || null;
 
     exerciseIndex.set(exId, {
+      exerciseDefinitionId: exId,
       exerciseId: exId,
       name: freqVal.name,
       category: freqVal.category,
@@ -721,12 +774,30 @@ export function selectLifetimeStats(
   return index.lifetimeStats;
 }
 
+export function selectWeightPRs(
+  index: FitnessIndex
+): WeightPRRecord[] {
+  return index.weightPRs;
+}
+
+export function selectE1RMPRs(
+  index: FitnessIndex
+): E1RMPRRecord[] {
+  return index.e1RMPRs;
+}
+
+/**
+ * @deprecated Use selectWeightPRs or selectE1RMPRs instead.
+ */
 export function selectPersonalBests(
   index: FitnessIndex
 ): PersonalBestRecord[] {
   return index.personalBests;
 }
 
+/**
+ * @deprecated Use selectExerciseWeightPR or selectExerciseE1RMPR instead.
+ */
 export function selectPersonalBestForExercise(
   index: FitnessIndex,
   exerciseDefinitionId: string
@@ -746,6 +817,31 @@ export function selectExerciseE1RMPR(
   exerciseDefinitionId: string
 ): E1RMPRRecord | null {
   return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
+}
+
+/**
+ * Canonical Exercise History Selection:
+ * Returns exercise session history entries ordered NEWEST -> OLDEST (descending by session date).
+ */
+export function selectHistoryForExercise(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): ExerciseSessionHistoryEntry[] {
+  const entry = index.exerciseIndex.get(exerciseDefinitionId);
+  return entry ? [...entry.sessions] : [];
+}
+
+/**
+ * Canonical Latest Exercise Session Selection:
+ * Returns the most recent completed session entry for the exercise, or null.
+ */
+export function selectLatestForExercise(
+  index: FitnessIndex,
+  exerciseDefinitionId: string
+): ExerciseSessionHistoryEntry | null {
+  const entry = index.exerciseIndex.get(exerciseDefinitionId);
+  if (!entry || entry.sessions.length === 0) return null;
+  return entry.sessions[0];
 }
 
 export function selectExercisePR(
@@ -1136,7 +1232,7 @@ export function selectTimeRangeAnalytics(
     longestStreak: index.lifetimeStats.longestStreak,
     avgDuration,
     biggestWeek: index.biggestWeek,
-    recordsList: index.personalBests,
+    recordsList: index.weightPRs,
     rangeMuscleVolume,
     rangeMuscleSets,
     rangeMuscleFrequency,

@@ -21,6 +21,10 @@ import {
   selectExercisePR,
   selectExerciseWeightPR,
   selectExerciseE1RMPR,
+  selectWeightPRs,
+  selectE1RMPRs,
+  selectHistoryForExercise,
+  selectLatestForExercise,
   selectExerciseBestE1RM,
   selectNextCycleDay,
   selectCycleDayForDate,
@@ -929,6 +933,311 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(muscleDist.volume.Chest).toBe(0);
       expect(muscleDist.volume.Back).toBe(0);
       expect(muscleDist.volume.Core).toBe(0);
+    });
+
+    // -------------------------------------------------------------
+    // P1: CANONICAL PR RECORD INTEGRITY & DISAMBIGUATION
+    // -------------------------------------------------------------
+    it('P1: enforces WeightPRRecord and E1RMPRRecord canonical models, sorting personalBests by weight rather than maxEpley', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_squat_heavy',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            // Squat: 140kg x 1 -> e1RM 140
+            ex_squat: [{ id: 's1', weight: '140', reps: '1', done: true }],
+            // Bench: 100kg x 5 -> e1RM 116.7
+            ex_bench: [{ id: 's2', weight: '100', reps: '5', done: true }]
+          }
+        },
+        {
+          id: 'log_squat_reps',
+          workoutId: 'w1',
+          date: '2026-08-05',
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            // Squat: 120kg x 10 -> e1RM 160 (higher e1RM, but lower weight than 140kg)
+            ex_squat: [{ id: 's3', weight: '120', reps: '10', done: true }],
+            // Bench: 110kg x 1 -> e1RM 110 (higher weight, but lower e1RM than 116.7)
+            ex_bench: [{ id: 's4', weight: '110', reps: '1', done: true }]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+
+      // 1. Weight PRs canonical records
+      const weightPRs = selectWeightPRs(index);
+      expect(weightPRs).toHaveLength(2);
+      // Sorted descending by weight (140kg squat, then 110kg bench)
+      expect(weightPRs[0].exerciseDefinitionId).toBe('ex_squat');
+      expect(weightPRs[0].weight).toBe(140);
+      expect(weightPRs[0].reps).toBe(1);
+      expect(weightPRs[1].exerciseDefinitionId).toBe('ex_bench');
+      expect(weightPRs[1].weight).toBe(110);
+      expect(weightPRs[1].reps).toBe(1);
+
+      // 2. E1RM PRs canonical records
+      const e1rmPRs = selectE1RMPRs(index);
+      expect(e1rmPRs).toHaveLength(2);
+      // Sorted descending by maxEpley (160kg squat, then 116.7kg bench)
+      expect(e1rmPRs[0].exerciseDefinitionId).toBe('ex_squat');
+      expect(e1rmPRs[0].maxEpley).toBe(160);
+      expect(e1rmPRs[0].weight).toBe(120);
+      expect(e1rmPRs[0].reps).toBe(10);
+      expect(e1rmPRs[1].exerciseDefinitionId).toBe('ex_bench');
+      expect(e1rmPRs[1].maxEpley).toBe(calculateE1RM(100, 5));
+
+      // 3. Legacy personalBests is sorted by weight (140kg then 110kg) - NOT maxEpley!
+      const legacyPBs = selectPersonalBests(index);
+      expect(legacyPBs[0].exerciseDefinitionId).toBe('ex_squat');
+      expect(legacyPBs[0].maxWeight).toBe(140);
+      expect(legacyPBs[1].exerciseDefinitionId).toBe('ex_bench');
+      expect(legacyPBs[1].maxWeight).toBe(110);
+    });
+
+    // -------------------------------------------------------------
+    // P2: RUNTIME IDENTITY & WORKOUT CREATION INVARIANT
+    // -------------------------------------------------------------
+    it('P2: freshly created and resolved runtime workout objects only contain exerciseDefinitionId and not exerciseId', () => {
+      const defs: ExerciseDefinition[] = [
+        { id: 'def_incline', name: 'Incline Bench Press', target: 'Upper Chest' }
+      ];
+
+      // Newly constructed workout exercise
+      const runtimeWorkoutExercise = {
+        exerciseDefinitionId: 'def_incline',
+        sets: 4,
+        reps: '8–10',
+        rest: '90s',
+        note: 'Control eccentric',
+        tags: []
+      };
+
+      // Assert runtime object does not have legacy exerciseId property
+      expect('exerciseId' in runtimeWorkoutExercise).toBe(false);
+      expect((runtimeWorkoutExercise as any).exerciseId).toBeUndefined();
+
+      // Resolved workout exercise
+      const resolved = resolveWorkoutExercise(runtimeWorkoutExercise, defs);
+      expect(resolved.exerciseDefinitionId).toBe('def_incline');
+      expect(resolved.name).toBe('Incline Bench Press');
+      expect(resolved.target).toBe('Upper Chest');
+      expect('exerciseId' in resolved).toBe(false);
+    });
+
+    // -------------------------------------------------------------
+    // P4: EXERCISE HISTORY ORDERING INVARIANT (NEWEST-FIRST)
+    // -------------------------------------------------------------
+    it('P4: enforces newest-first history ordering: sessions[0] === latestSession and getHistoryForExercise()[0] === getLatestForExercise()', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_aug_01',
+          workoutId: 'w1',
+          date: '2026-08-01',
+          complete: true,
+          durationMinutes: 40,
+          sets: {
+            def_bench: [{ id: 's1', weight: '80', reps: '10', done: true }]
+          }
+        },
+        {
+          id: 'log_aug_10',
+          workoutId: 'w1',
+          date: '2026-08-10',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            def_bench: [{ id: 's2', weight: '85', reps: '10', done: true }]
+          }
+        },
+        {
+          id: 'log_aug_20',
+          workoutId: 'w1',
+          date: '2026-08-20',
+          complete: true,
+          durationMinutes: 50,
+          sets: {
+            def_bench: [{ id: 's3', weight: '90', reps: '10', done: true }]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+      const entry = index.exerciseIndex.get('def_bench')!;
+
+      expect(entry).toBeDefined();
+      expect(entry.sessions).toHaveLength(3);
+      // Newest first: 2026-08-20, then 2026-08-10, then 2026-08-01
+      expect(entry.sessions[0].date).toBe('2026-08-20');
+      expect(entry.sessions[1].date).toBe('2026-08-10');
+      expect(entry.sessions[2].date).toBe('2026-08-01');
+
+      // Invariant: sessions[0] === latestSession
+      expect(entry.sessions[0]).toBe(entry.latestSession);
+
+      // Invariant: selectHistoryForExercise(index, id)[0] === selectLatestForExercise(index, id)
+      const history = selectHistoryForExercise(index, 'def_bench');
+      const latest = selectLatestForExercise(index, 'def_bench');
+      expect(history[0]).toEqual(latest);
+      expect(latest?.date).toBe('2026-08-20');
+    });
+
+    // -------------------------------------------------------------
+    // P5: PLANNED VS COMPLETED SETS SEMANTICS
+    // -------------------------------------------------------------
+    it('P5: plannedSetsByDate intentionally preserves programmed sets from incomplete sessions, while completedSetsByDate includes only completed sessions', () => {
+      const logs: SessionLog[] = [
+        {
+          id: 'log_completed',
+          workoutId: 'w1',
+          date: '2026-08-15',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            def_bench: [
+              { id: 's1', weight: '100', reps: '10', done: true },
+              { id: 's2', weight: '100', reps: '10', done: true },
+              { id: 's3', weight: '100', reps: '10', done: false }
+            ]
+          }
+        },
+        {
+          id: 'log_incomplete_planned',
+          workoutId: 'w2',
+          date: '2026-08-15',
+          complete: false,
+          durationMinutes: 0,
+          sets: {
+            def_squat: [
+              { id: 's4', weight: '120', reps: '8', done: false },
+              { id: 's5', weight: '120', reps: '8', done: false },
+              { id: 's6', weight: '120', reps: '8', done: false }
+            ]
+          }
+        }
+      ];
+
+      const index = buildFitnessIndex(logs);
+
+      // plannedSetsByDate includes all 3 bench set rows + 3 squat set rows = 6 planned sets
+      expect(index.plannedSetsByDate['2026-08-15']).toBe(6);
+      // completedSetsByDate only includes the 2 done sets from the completed session
+      expect(index.completedSetsByDate['2026-08-15']).toBe(2);
+
+      // Deprecated aliases mirror the canonical counterparts
+      expect(index.setsByDate['2026-08-15']).toBe(2);
+      expect(index.totalSetsByDate['2026-08-15']).toBe(6);
+    });
+
+    // -------------------------------------------------------------
+    // P6: ANALYTICS-SAFE INDEX COMPREHENSIVE REGRESSION SUITE
+    // -------------------------------------------------------------
+    it('P6: Analytics-Safe Index fixture: incomplete session contributes zero to all analytics metrics while remaining intact in raw history', () => {
+      const defs: ExerciseDefinition[] = [
+        { id: 'def_bench', name: 'Barbell Bench Press', target: 'Chest' },
+        { id: 'def_squat', name: 'Barbell Back Squat', target: 'Legs' }
+      ];
+
+      const defsMap = createExerciseDefinitionMap(defs);
+
+      // Session A: Completed session (100kg x 10 done)
+      const sessionCompleted: SessionLog = {
+        id: 'session_completed_1',
+        workoutId: 'w_push',
+        date: '2026-08-10',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          def_bench: [{ id: 's1', weight: '100', reps: '10', done: true }] // 1,000kg vol, e1RM 133.3
+        }
+      };
+
+      // Session B: Incomplete session (1000kg x 10 done, plus 2x 500kg x 10 squats done)
+      const sessionIncomplete: SessionLog = {
+        id: 'session_incomplete_2',
+        workoutId: 'w_heavy',
+        date: '2026-08-11',
+        complete: false,
+        durationMinutes: 120,
+        sets: {
+          def_bench: [{ id: 's2', weight: '1000', reps: '10', done: true }], // 10,000kg vol (incomplete!)
+          def_squat: [
+            { id: 's3', weight: '500', reps: '10', done: true }, // 5,000kg vol
+            { id: 's4', weight: '500', reps: '10', done: true }  // 5,000kg vol
+          ]
+        }
+      };
+
+      const index = buildFitnessIndex([sessionCompleted, sessionIncomplete], defsMap);
+
+      // 1. Lifetime volume: exactly 1,000kg (not 21,000kg)
+      expect(index.lifetimeStats.totalVolume).toBe(1000);
+
+      // 2. Lifetime sets: exactly 1 set (not 4)
+      expect(index.lifetimeStats.totalSets).toBe(1);
+
+      // 3. Duration totals: exactly 45 minutes (not 165 minutes)
+      expect(index.lifetimeStats.totalMinutes).toBe(45);
+
+      // 4. Measured sessions count: exactly 1 (not 2)
+      expect(index.lifetimeStats.measuredSessionsCount).toBe(1);
+      expect(index.lifetimeStats.totalSessions).toBe(1);
+
+      // 5. Volume by date: '2026-08-10' has 1,000kg, '2026-08-11' has 0 / undefined
+      expect(index.volumeByDate['2026-08-10']).toBe(1000);
+      expect(index.volumeByDate['2026-08-11']).toBeUndefined();
+
+      // 6. Completed sets by date
+      expect(index.completedSetsByDate['2026-08-10']).toBe(1);
+      expect(index.completedSetsByDate['2026-08-11']).toBeUndefined();
+
+      // 7. Weekly volume: only contains the 1,000kg
+      const totalWeeklyVol = Object.values(index.weeklyVolumeMap).reduce((a, b) => a + b, 0);
+      expect(totalWeeklyVol).toBe(1000);
+
+      // 8. Volume by exercise: Bench = 1,000kg, Squat = 0 / undefined
+      expect(index.volumeByExercise.get('def_bench')).toBe(1000);
+      expect(index.volumeByExercise.get('def_squat')).toBeUndefined();
+
+      // 9. Volume by muscle: Chest = 1,000kg, Legs = 0
+      expect(index.volumeByMuscle.Chest).toBe(1000);
+      expect(index.volumeByMuscle.Legs).toBe(0);
+
+      // 10. Sets by muscle: Chest = 1, Legs = 0
+      expect(index.setsByMuscle.Chest).toBe(1);
+      expect(index.setsByMuscle.Legs).toBe(0);
+
+      // 11. Exercise frequency: Bench has 1 session, Squat is not in frequency
+      expect(index.frequencyByExercise).toHaveLength(1);
+      expect(index.frequencyByExercise[0].exerciseDefinitionId).toBe('def_bench');
+      expect(index.frequencyByExercise[0].count).toBe(1);
+
+      // 12. Weight PR: Bench is 100kg (NOT 1000kg), Squat has no PR
+      const benchWeightPR = selectExerciseWeightPR(index, 'def_bench');
+      expect(benchWeightPR?.weight).toBe(100);
+      expect(benchWeightPR?.reps).toBe(10);
+      expect(selectExerciseWeightPR(index, 'def_squat')).toBeNull();
+
+      // 13. e1RM PR: Bench is 133.3 (NOT 1333.3), Squat has no e1RM PR
+      const benchE1RM = selectExerciseE1RMPR(index, 'def_bench');
+      expect(benchE1RM?.maxEpley).toBe(calculateE1RM(100, 10)); // 133.3
+      expect(selectExerciseE1RMPR(index, 'def_squat')).toBeNull();
+
+      // 14. e1RM history: Bench has exactly 1 progression point, Squat has none
+      const benchProgression = index.e1rmHistoryByExercise.get('def_bench') || [];
+      expect(benchProgression).toHaveLength(1);
+      expect(benchProgression[0].epley1RM).toBe(calculateE1RM(100, 10));
+      expect(index.e1rmHistoryByExercise.get('def_squat')).toBeUndefined();
+
+      // 15. Raw / Recovery structures: Incomplete session is preserved completely for session recovery
+      expect(index.sortedLogsDescending).toHaveLength(2);
+      expect(index.logsByDate.get('2026-08-11')?.[0].id).toBe('session_incomplete_2');
+      expect(index.logsByWorkout['w_heavy']?.[0].id).toBe('session_incomplete_2');
     });
   });
 });

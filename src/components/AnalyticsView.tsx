@@ -616,10 +616,10 @@ export const AnalyticsView: React.FC = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-sm font-black font-mono text-orange-400">
-                      {rec.maxWeight}kg × {rec.repsAtMax}
+                      {rec.weight ?? (rec as any).maxWeight}kg × {rec.reps ?? (rec as any).repsAtMax}
                     </div>
                     <div className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
-                      Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseId)?.maxEpley ?? rec.maxEpley}kg
+                      Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseDefinitionId || rec.exerciseId)?.maxEpley ?? (rec as any).maxEpley ?? Math.round((rec.weight || 0) * (1 + (rec.reps || 1) / 30) * 10) / 10}kg
                     </div>
                   </div>
                 </Card>
