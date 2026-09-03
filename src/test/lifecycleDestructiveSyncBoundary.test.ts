@@ -11,8 +11,7 @@ import {
 import {
   buildFitnessIndex,
   selectLifetimeStats,
-  selectPersonalBests,
-  selectPersonalBestForExercise,
+  selectExerciseWeightPR,
   selectExerciseHistory,
   selectSortedLogs,
   selectMuscleDistribution,
@@ -128,9 +127,9 @@ describe('Step 9 — Regression and Reliability Hardening Test Suite', () => {
     expect(resolvedIncline.name).toBe('Incline Dumbbell Press');
 
     // Verify Analytics Contract
-    const inclinePB = selectPersonalBestForExercise(index, 'def_incline_db');
-    expect(inclinePB?.maxWeight).toBe(34);
-    expect(inclinePB?.repsAtMax).toBe(9);
+    const inclinePB = selectExerciseWeightPR(index, 'def_incline_db');
+    expect(inclinePB?.weight).toBe(34);
+    expect(inclinePB?.reps).toBe(9);
   });
 
   // 9.3 Destructive-Operation Tests (delete exercise, delete workout, delete session, delete set)
@@ -391,10 +390,10 @@ describe('Step 9 — Regression and Reliability Hardening Test Suite', () => {
     expect(sorted[0].date).toBe('2026-08-02');
     expect(sorted[3].date).toBe('2026-07-31');
 
-    // Personal best should reflect the highest weight across all sessions (105kg)
-    const pb = selectPersonalBestForExercise(index, 'bench');
-    expect(pb?.maxWeight).toBe(105);
-    expect(pb?.repsAtMax).toBe(3);
+    // Weight PR should reflect the highest weight across all sessions (105kg)
+    const pb = selectExerciseWeightPR(index, 'bench');
+    expect(pb?.weight).toBe(105);
+    expect(pb?.reps).toBe(3);
     expect(pb?.date).toBe('2026-08-01');
   });
 });

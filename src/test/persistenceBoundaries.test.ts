@@ -19,7 +19,8 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
+  selectWeightPRs,
+  selectE1RMPRs,
   selectWeightSummary
 } from '../utils/fitnessDerivedSelectors';
 import {
@@ -180,7 +181,7 @@ describe('Persistence Boundaries Test Suite (Transitions & Failure Recovery)', (
     let logs: Record<string, SessionLog> = { [sessionId]: originalLog };
     let index = buildFitnessIndex(logs, defsMap);
     expect(selectLifetimeStats(index).totalVolume).toBe(600);
-    expect(selectPersonalBests(index)[0].maxWeight).toBe(120);
+    expect(selectWeightPRs(index)[0].weight).toBe(120);
 
     // User edits the historical session to 160kg x 5
     const updatedLog: SessionLog = {
@@ -199,9 +200,10 @@ describe('Persistence Boundaries Test Suite (Transitions & Failure Recovery)', (
     const reloadedIndex = buildFitnessIndex(reloaded, defsMap);
 
     expect(selectLifetimeStats(reloadedIndex).totalVolume).toBe(800);
-    const pb = selectPersonalBests(reloadedIndex)[0];
-    expect(pb.maxWeight).toBe(160);
-    expect(pb.maxEpley).toBe(calculateE1RM(160, 5));
+    const weightPR = selectWeightPRs(reloadedIndex)[0];
+    expect(weightPR.weight).toBe(160);
+    const e1rmPR = selectE1RMPRs(reloadedIndex)[0];
+    expect(e1rmPR.maxEpley).toBe(calculateE1RM(160, 5));
   });
 
   // 5. Transition: Deleting historical data cleanly removes records and registers deletion tracker

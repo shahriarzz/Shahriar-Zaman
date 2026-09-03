@@ -10,7 +10,8 @@ import {
 import {
   buildFitnessIndex,
   selectLifetimeStats,
-  selectPersonalBests,
+  selectWeightPRs,
+  selectE1RMPRs,
   selectMuscleDistribution,
   selectExerciseFrequency,
   selectExercise1RMProgression,
@@ -161,7 +162,8 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
 
         const t0 = performance.now();
         const lifetime = selectLifetimeStats(index);
-        const pbs = selectPersonalBests(index);
+        const weightPRs = selectWeightPRs(index);
+        const e1rmPRs = selectE1RMPRs(index);
         const muscleDist = selectMuscleDistribution(index);
         const freq = selectExerciseFrequency(index);
         const bench1RM = selectExercise1RMProgression(index, 'bench');
@@ -171,7 +173,8 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         console.log(`[PERF BENCHMARK] Canonical Selectors (${count} logs): ${durationMs.toFixed(2)} ms`);
 
         expect(lifetime.totalSessions).toBe(count);
-        expect(pbs.length).toBeGreaterThan(0);
+        expect(weightPRs.length).toBeGreaterThan(0);
+        expect(e1rmPRs.length).toBeGreaterThan(0);
         expect(muscleDist.totalVolume).toBeGreaterThan(0);
         expect(freq.length).toBeGreaterThan(0);
         expect(bench1RM.length).toBeGreaterThan(0);

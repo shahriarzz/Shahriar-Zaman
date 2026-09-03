@@ -19,8 +19,9 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
-  selectPersonalBestForExercise,
+  selectWeightPRs,
+  selectExerciseWeightPR,
+  selectExerciseE1RMPR,
   selectExerciseHistory,
   selectMuscleDistribution,
   selectExerciseFrequency,
@@ -133,10 +134,10 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     const index = buildFitnessIndex(fixtureLogs, defsMap);
 
     // 1. SessionView Consumer Check: Ghost/PR resolution
-    const benchPB = selectPersonalBestForExercise(index, 'ex_bench');
+    const benchPB = selectExerciseWeightPR(index, 'ex_bench');
     expect(benchPB).not.toBeNull();
-    expect(benchPB?.maxWeight).toBe(105);
-    expect(benchPB?.repsAtMax).toBe(4);
+    expect(benchPB?.weight).toBe(105);
+    expect(benchPB?.reps).toBe(4);
 
     const benchHistory = selectExerciseHistory(index, 'ex_bench');
     expect(benchHistory).toHaveLength(2); // From log_1 and log_3
@@ -156,13 +157,14 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     expect(benchE1rm).toHaveLength(2);
     expect(benchE1rm[0].date).toBe('2026-08-01');
     expect(benchE1rm[1].date).toBe('2026-08-05');
-    const expectedBenchBestE1RM = calculateE1RM(105, 4); // 119 for the 105kg x 4 PR set
-    expect(benchPB?.maxEpley).toBeCloseTo(expectedBenchBestE1RM, 1);
+    const benchE1RMPR = selectExerciseE1RMPR(index, 'ex_bench');
+    const expectedBenchBestE1RM = calculateE1RM(100, 10); // 133.3 for the 100kg x 10 PR set
+    expect(benchE1RMPR?.maxEpley).toBeCloseTo(expectedBenchBestE1RM, 1);
 
     const freq = selectExerciseFrequency(index);
-    const benchFreq = freq.find(f => f.exerciseId === 'ex_bench');
-    const squatFreq = freq.find(f => f.exerciseId === 'ex_squat');
-    const curlFreq = freq.find(f => f.exerciseId === 'ex_curl');
+    const benchFreq = freq.find(f => f.exerciseDefinitionId === 'ex_bench');
+    const squatFreq = freq.find(f => f.exerciseDefinitionId === 'ex_squat');
+    const curlFreq = freq.find(f => f.exerciseDefinitionId === 'ex_curl');
     expect(benchFreq?.count).toBe(2);
     expect(squatFreq?.count).toBe(1);
     expect(curlFreq?.count).toBe(1);
@@ -207,10 +209,10 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     };
 
     const index1 = buildFitnessIndex(logs1, defsMap);
-    const pb1 = selectPersonalBestForExercise(index1, 'ex_test_pr');
+    const pb1 = selectExerciseWeightPR(index1, 'ex_test_pr');
     expect(pb1).not.toBeNull();
-    expect(pb1?.maxWeight).toBe(50);
-    expect(pb1?.repsAtMax).toBe(8);
+    expect(pb1?.weight).toBe(50);
+    expect(pb1?.reps).toBe(8);
 
     // Also test that 47.5kg x 15 set does NOT replace the 50kg PR
     const logs2: Record<string, SessionLog> = {
@@ -229,9 +231,9 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     };
 
     const index2 = buildFitnessIndex(logs2, defsMap);
-    const pb2 = selectPersonalBestForExercise(index2, 'ex_test_pr');
-    expect(pb2?.maxWeight).toBe(50);
-    expect(pb2?.repsAtMax).toBe(8);
+    const pb2 = selectExerciseWeightPR(index2, 'ex_test_pr');
+    expect(pb2?.weight).toBe(50);
+    expect(pb2?.reps).toBe(8);
   });
 
   // 6.3 Exercise Identity Regression (Renaming an exercise definition)
@@ -299,7 +301,7 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     expect(Number.isNaN(stats.totalVolume)).toBe(false);
 
     // Personal bests
-    const pbs = selectPersonalBests(index);
+    const pbs = selectWeightPRs(index);
     expect(pbs).toEqual([]);
 
     // Muscle distribution
@@ -346,8 +348,8 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
 
     let index = buildFitnessIndex(logs, defsMap);
     expect(selectLifetimeStats(index).totalVolume).toBe(500);
-    expect(selectPersonalBestForExercise(index, 'ex_mutation_test')?.maxWeight).toBe(100);
-    expect(selectPersonalBestForExercise(index, 'ex_mutation_test')?.repsAtMax).toBe(5);
+    expect(selectExerciseWeightPR(index, 'ex_mutation_test')?.weight).toBe(100);
+    expect(selectExerciseWeightPR(index, 'ex_mutation_test')?.reps).toBe(5);
 
     // Step 2: Edit weight (100kg -> 120kg)
     logs = {
@@ -360,7 +362,7 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     };
     index = buildFitnessIndex(logs, defsMap);
     expect(selectLifetimeStats(index).totalVolume).toBe(600);
-    expect(selectPersonalBestForExercise(index, 'ex_mutation_test')?.maxWeight).toBe(120);
+    expect(selectExerciseWeightPR(index, 'ex_mutation_test')?.weight).toBe(120);
 
     // Step 3: Edit reps (5 reps -> 8 reps)
     logs = {
@@ -373,7 +375,7 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     };
     index = buildFitnessIndex(logs, defsMap);
     expect(selectLifetimeStats(index).totalVolume).toBe(960);
-    expect(selectPersonalBestForExercise(index, 'ex_mutation_test')?.repsAtMax).toBe(8);
+    expect(selectExerciseWeightPR(index, 'ex_mutation_test')?.reps).toBe(8);
 
     // Step 4: Delete set
     logs = {
@@ -387,6 +389,6 @@ describe('Cross-Tab Contract & Regression Test Suite (Step 6)', () => {
     index = buildFitnessIndex(logs, defsMap);
     expect(selectLifetimeStats(index).totalVolume).toBe(0);
     expect(selectLifetimeStats(index).totalSets).toBe(0);
-    expect(selectPersonalBestForExercise(index, 'ex_mutation_test')).toBeNull();
+    expect(selectExerciseWeightPR(index, 'ex_mutation_test')).toBeNull();
   });
 });

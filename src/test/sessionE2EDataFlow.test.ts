@@ -14,8 +14,9 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
-  selectPersonalBestForExercise,
+  selectWeightPRs,
+  selectExerciseWeightPR,
+  selectExerciseE1RMPR,
   selectExerciseHistory,
   selectMuscleDistribution,
   selectExerciseFrequency
@@ -170,15 +171,16 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     expect(dashboardStats.lastSessionDate).toBe(sessionDate);
     expect(dashboardStats.firstSessionDate).toBe(sessionDate);
 
-    // D. Analytics Consumer Verification (selectPersonalBests, selectMuscleDistribution, selectExerciseFrequency)
-    const personalBests = selectPersonalBests(index);
-    const benchPB = selectPersonalBestForExercise(index, 'def_bench_press');
-    expect(benchPB).not.toBeNull();
-    expect(benchPB?.exerciseId).toBe('def_bench_press');
-    expect(benchPB?.maxWeight).toBe(105);
-    expect(benchPB?.repsAtMax).toBe(6);
-    expect(benchPB?.maxEpley).toBe(calculateE1RM(105, 6));
-    expect(benchPB?.date).toBe(sessionDate);
+    // D. Analytics Consumer Verification (selectWeightPRs, selectExerciseWeightPR, selectMuscleDistribution, selectExerciseFrequency)
+    const weightPRs = selectWeightPRs(index);
+    const benchWeightPR = selectExerciseWeightPR(index, 'def_bench_press');
+    const benchE1RMPR = selectExerciseE1RMPR(index, 'def_bench_press');
+    expect(benchWeightPR).not.toBeNull();
+    expect(benchWeightPR?.exerciseDefinitionId).toBe('def_bench_press');
+    expect(benchWeightPR?.weight).toBe(105);
+    expect(benchWeightPR?.reps).toBe(6);
+    expect(benchWeightPR?.date).toBe(sessionDate);
+    expect(benchE1RMPR?.maxEpley).toBe(calculateE1RM(102.5, 8));
 
     const exerciseHistory = selectExerciseHistory(index, 'def_bench_press');
     expect(exerciseHistory).toHaveLength(1);
@@ -192,11 +194,10 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     expect(muscleDist.sets.Chest).toBe(5);
 
     const exerciseFreq = selectExerciseFrequency(index);
-    const benchFreq = exerciseFreq.find(e => e.exerciseId === 'def_bench_press');
-    const inclineFreq = exerciseFreq.find(e => e.exerciseId === 'def_incline_db');
+    const benchFreq = exerciseFreq.find(e => e.exerciseDefinitionId === 'def_bench_press');
+    const inclineFreq = exerciseFreq.find(e => e.exerciseDefinitionId === 'def_incline_db');
     expect(benchFreq).toEqual({
       exerciseDefinitionId: 'def_bench_press',
-      exerciseId: 'def_bench_press',
       name: 'Barbell Bench Press',
       category: 'Chest',
       count: 1,
@@ -204,7 +205,6 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     });
     expect(inclineFreq).toEqual({
       exerciseDefinitionId: 'def_incline_db',
-      exerciseId: 'def_incline_db',
       name: 'Incline Dumbbell Press',
       category: 'Chest',
       count: 1,
@@ -239,10 +239,10 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     expect(index.distinctDates).toEqual([sessionDate]);
 
     // 5. e1RM
-    expect(benchPB?.maxEpley).toBe(calculateE1RM(105, 6));
+    expect(benchE1RMPR?.maxEpley).toBe(calculateE1RM(102.5, 8));
 
-    // 6. Personal Best
-    expect(personalBests.find(pb => pb.exerciseId === 'def_bench_press')?.maxEpley).toBe(calculateE1RM(105, 6));
+    // 6. Weight PR
+    expect(weightPRs.find(pr => pr.exerciseDefinitionId === 'def_bench_press')?.weight).toBe(105);
 
     // 7. Workout/Session count
     expect(dashboardStats.totalSessions).toBe(1);

@@ -10,7 +10,7 @@ import {
   WeightLogEntry
 } from '../types/fitness';
 import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
-import { buildFitnessIndex, selectLifetimeStats, selectPersonalBests, selectSortedLogs } from '../utils/fitnessDerivedSelectors';
+import { buildFitnessIndex, selectLifetimeStats, selectWeightPRs, selectE1RMPRs, selectSortedLogs } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
 import { calculateSetsVolume } from '../utils/fitnessCalculations';
 
@@ -169,7 +169,8 @@ describe('Backup / Restore Round-Trip Regression Test Suite', () => {
     const originalDefsMap = createExerciseDefinitionMap(originalDefs);
     const originalIndex = buildFitnessIndex(originalLogs, originalDefsMap);
     const originalLifetimeStats = selectLifetimeStats(originalIndex);
-    const originalPBs = selectPersonalBests(originalIndex);
+    const originalWeightPRs = selectWeightPRs(originalIndex);
+    const originalE1RMPRs = selectE1RMPRs(originalIndex);
     const originalSortedLogs = selectSortedLogs(originalIndex);
 
     // 2. CLEAR / REPLACE ALL LOCAL STATE TO EMPTY
@@ -260,7 +261,8 @@ describe('Backup / Restore Round-Trip Regression Test Suite', () => {
     const restoredDefsMap = createExerciseDefinitionMap(restoredData.exerciseDefinitions);
     const restoredIndex = buildFitnessIndex(restoredData.logs, restoredDefsMap);
     const restoredLifetimeStats = selectLifetimeStats(restoredIndex);
-    const restoredPBs = selectPersonalBests(restoredIndex);
+    const restoredWeightPRs = selectWeightPRs(restoredIndex);
+    const restoredE1RMPRs = selectE1RMPRs(restoredIndex);
     const restoredSortedLogs = selectSortedLogs(restoredIndex);
 
     expect(restoredLifetimeStats.totalSessions).toBe(originalLifetimeStats.totalSessions);
@@ -268,13 +270,19 @@ describe('Backup / Restore Round-Trip Regression Test Suite', () => {
     expect(restoredLifetimeStats.totalSets).toBe(originalLifetimeStats.totalSets);
     expect(restoredLifetimeStats.totalMinutes).toBe(originalLifetimeStats.totalMinutes);
 
-    expect(restoredPBs).toHaveLength(originalPBs.length);
-    originalPBs.forEach(origPB => {
-      const matchedPB = restoredPBs.find(p => p.exerciseId === origPB.exerciseId);
-      expect(matchedPB).toBeDefined();
-      expect(matchedPB?.maxEpley).toBe(origPB.maxEpley);
-      expect(matchedPB?.maxWeight).toBe(origPB.maxWeight);
-      expect(matchedPB?.repsAtMax).toBe(origPB.repsAtMax);
+    expect(restoredWeightPRs).toHaveLength(originalWeightPRs.length);
+    originalWeightPRs.forEach(origPR => {
+      const matchedPR = restoredWeightPRs.find(p => p.exerciseDefinitionId === origPR.exerciseDefinitionId);
+      expect(matchedPR).toBeDefined();
+      expect(matchedPR?.weight).toBe(origPR.weight);
+      expect(matchedPR?.reps).toBe(origPR.reps);
+    });
+
+    expect(restoredE1RMPRs).toHaveLength(originalE1RMPRs.length);
+    originalE1RMPRs.forEach(origPR => {
+      const matchedPR = restoredE1RMPRs.find(p => p.exerciseDefinitionId === origPR.exerciseDefinitionId);
+      expect(matchedPR).toBeDefined();
+      expect(matchedPR?.maxEpley).toBe(origPR.maxEpley);
     });
 
     expect(restoredSortedLogs.map(l => l.id)).toEqual(originalSortedLogs.map(l => l.id));

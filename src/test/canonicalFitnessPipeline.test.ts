@@ -16,8 +16,6 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
-  selectPersonalBestForExercise,
   selectExercisePR,
   selectExerciseWeightPR,
   selectExerciseE1RMPR,
@@ -251,22 +249,30 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
 
     const index = buildFitnessIndex(logs, defsMap);
 
-    it('selects personal bests sorted descending by estimated 1RM', () => {
-      const pbs = selectPersonalBests(index);
-      expect(pbs).toHaveLength(2);
-      expect(pbs[0].exerciseId).toBe('d2'); // Squat e1RM 163.3
-      expect(pbs[1].exerciseId).toBe('d1'); // Bench e1RM 133.3
+    it('selects weight PRs and e1RM PRs correctly', () => {
+      const weightPrs = selectWeightPRs(index);
+      expect(weightPrs).toHaveLength(2);
+      expect(weightPrs[0].exerciseDefinitionId).toBe('d2'); // Squat 140kg
+      expect(weightPrs[0].weight).toBe(140);
+      expect(weightPrs[1].exerciseDefinitionId).toBe('d1'); // Bench 105kg
+      expect(weightPrs[1].weight).toBe(105);
+
+      const e1rmPrs = selectE1RMPRs(index);
+      expect(e1rmPrs).toHaveLength(2);
+      expect(e1rmPrs[0].exerciseDefinitionId).toBe('d2'); // Squat e1RM 163.3
+      expect(e1rmPrs[1].exerciseDefinitionId).toBe('d1'); // Bench e1RM 133.3
     });
 
-    it('selects personal best for specific exercise', () => {
-      const squatPB = selectPersonalBestForExercise(index, 'd2');
-      expect(squatPB?.maxEpley).toBe(163.3);
-      expect(squatPB?.maxWeight).toBe(140);
+    it('selects PRs for specific exercise', () => {
+      const squatWeightPR = selectExerciseWeightPR(index, 'd2');
+      expect(squatWeightPR?.weight).toBe(140);
+      const squatE1RM = selectExerciseE1RMPR(index, 'd2');
+      expect(squatE1RM?.maxEpley).toBe(163.3);
     });
 
     it('selects exercise frequency ranking correctly', () => {
       const freq = selectExerciseFrequency(index);
-      expect(freq[0].exerciseId).toBe('d1'); // Bench in 2 sessions
+      expect(freq[0].exerciseDefinitionId).toBe('d1'); // Bench in 2 sessions
       expect(freq[0].count).toBe(2);
       expect(freq[0].volume).toBe(1840);
     });
@@ -820,8 +826,6 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const index = buildFitnessIndex(logs);
       expect(index.plannedSetsByDate['2026-08-12']).toBe(4);
       expect(index.completedSetsByDate['2026-08-12']).toBe(2);
-      expect(index.setsByDate['2026-08-12']).toBe(2); // backward compatible alias to completedSets
-      expect(index.totalSetsByDate['2026-08-12']).toBe(4); // backward compatible alias to plannedSets
     });
 
     it('volumeByDate obeys the completed-session invariant (1,000kg completed vs 10,000kg incomplete)', () => {
@@ -938,7 +942,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
     // -------------------------------------------------------------
     // P1: CANONICAL PR RECORD INTEGRITY & DISAMBIGUATION
     // -------------------------------------------------------------
-    it('P1: enforces WeightPRRecord and E1RMPRRecord canonical models, sorting personalBests by weight rather than maxEpley', () => {
+    it('P1: enforces WeightPRRecord and E1RMPRRecord canonical models, sorting weightPRs by weight rather than maxEpley', () => {
       const logs: SessionLog[] = [
         {
           id: 'log_squat_heavy',
@@ -992,12 +996,14 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(e1rmPRs[1].exerciseDefinitionId).toBe('ex_bench');
       expect(e1rmPRs[1].maxEpley).toBe(calculateE1RM(100, 5));
 
-      // 3. Legacy personalBests is sorted by weight (140kg then 110kg) - NOT maxEpley!
-      const legacyPBs = selectPersonalBests(index);
-      expect(legacyPBs[0].exerciseDefinitionId).toBe('ex_squat');
-      expect(legacyPBs[0].maxWeight).toBe(140);
-      expect(legacyPBs[1].exerciseDefinitionId).toBe('ex_bench');
-      expect(legacyPBs[1].maxWeight).toBe(110);
+      // 3. Per-exercise PR selectors
+      const squatWeightPR = selectExerciseWeightPR(index, 'ex_squat');
+      expect(squatWeightPR?.weight).toBe(140);
+      expect(squatWeightPR?.reps).toBe(1);
+      const squatE1RMPR = selectExerciseE1RMPR(index, 'ex_squat');
+      expect(squatE1RMPR?.maxEpley).toBe(160);
+      expect(squatE1RMPR?.weight).toBe(120);
+      expect(squatE1RMPR?.reps).toBe(10);
     });
 
     // -------------------------------------------------------------
@@ -1128,10 +1134,6 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(index.plannedSetsByDate['2026-08-15']).toBe(6);
       // completedSetsByDate only includes the 2 done sets from the completed session
       expect(index.completedSetsByDate['2026-08-15']).toBe(2);
-
-      // Deprecated aliases mirror the canonical counterparts
-      expect(index.setsByDate['2026-08-15']).toBe(2);
-      expect(index.totalSetsByDate['2026-08-15']).toBe(6);
     });
 
     // -------------------------------------------------------------

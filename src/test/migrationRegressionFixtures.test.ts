@@ -10,7 +10,7 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
+  selectWeightPRs,
   selectMuscleDistribution
 } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap, resolveExercise } from '../utils/exerciseResolver';
@@ -299,7 +299,7 @@ describe('Migration Regression Fixtures Suite (All Supported Legacy Formats)', (
     // (85*8 + 85*8 + 90*6) + (70*10) = (680 + 680 + 540) + 700 = 1900 + 700 = 2600
     expect(stats.totalVolume).toBe(2600);
     expect(stats.totalSets).toBe(4);
-    expect(selectPersonalBests(index)[0].exerciseId).toBe('legacy_ex_incline_bench');
+    expect(selectWeightPRs(index)[0].exerciseDefinitionId).toBe('legacy_ex_incline_bench');
   });
 
   it('Fixture B: Correctly normalizes legacy exerciseId properties to exerciseDefinitionId and preserves names', () => {

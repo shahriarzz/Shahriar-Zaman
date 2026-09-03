@@ -9,7 +9,6 @@ import {
   selectCycleDayForDate,
   FitnessIndex,
   ExerciseIndexEntry,
-  PersonalBestRecord,
   WeightPRRecord,
   E1RMPRRecord,
   MuscleDistributionStats,
@@ -38,7 +37,6 @@ export interface FitnessDerivedData {
   sessionCount: number;
   streak: number;
   longestStreak: number;
-  personalBests: PersonalBestRecord[];
   weightPRs: WeightPRRecord[];
   e1RMPRs: E1RMPRRecord[];
   muscleDistribution: MuscleDistributionStats;
@@ -171,7 +169,6 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     sessionCount: index.lifetimeStats.totalSessions,
     streak: index.lifetimeStats.currentStreak,
     longestStreak: index.lifetimeStats.longestStreak,
-    personalBests: index.personalBests,
     weightPRs: index.weightPRs,
     e1RMPRs: index.e1RMPRs,
     muscleDistribution,

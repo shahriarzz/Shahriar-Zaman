@@ -59,20 +59,33 @@ This application implements a strict, centralized single source of truth archite
 - **`buildFitnessIndex(logs, defsMap)`**:
   - Produces `FitnessIndex`:
     - `sortedLogsDescending`: Chronologically ordered array of completed `SessionLog`s.
-    - `exerciseIndex`: `Map<string, ExerciseIndexEntry>` containing per-exercise sessions, heaviest sets, best e1RM, and total volume.
+    - `exerciseIndex`: `Map<string, ExerciseIndexEntry>` containing per-exercise sessions, heaviest sets, best e1RM, total volume, and canonical PR records.
     - `exerciseMetaById`: `Map<string, ResolvedExerciseMeta>` cached exercise identity.
-    - `personalBests`: Sorted array of all-time PRs (prioritizing `Weight > Reps`).
+    - `weightPRs` (`WeightPRRecord[]`): All-time heaviest successful lift per exercise (weight, reps, date).
+    - `e1RMPRs` (`E1RMPRRecord[]`): All-time highest estimated 1RM per exercise (Epley formula: weight * (1 + reps/30)).
+    - `completedSetsByDate`: Performed sets (`done: true`) from verified completed sessions only.
+    - `plannedSetsByDate`: Programmed or logged set rows on this date across all sessions, including incomplete sessions.
     - `lifetimeStats`: Aggregated volume, set count, session count, and consecutive day streak.
     - `distinctDates`: Sorted unique training dates for streak analysis.
     - `volumeByDate`: O(1) date-to-volume map.
 - **Pure Selectors**:
   - `selectLifetimeStats(index)`
-  - `selectPersonalBests(index)`
-  - `selectPersonalBestForExercise(index, exerciseId)`
+  - `selectWeightPRs(index)`
+  - `selectE1RMPRs(index)`
+  - `selectExerciseWeightPR(index, exerciseDefinitionId)`
+  - `selectExerciseE1RMPR(index, exerciseDefinitionId)`
   - `selectMuscleDistribution(index)`
   - `selectExerciseFrequency(index)`
-  - `selectTimeRangeAnalytics(index, defsMap, workoutsMap, coreMap, range, cycleStart, active1RMId)`
-  - `selectExercise1RMProgression(index, exerciseId)`
+  - `selectHistoryForExercise(index, exerciseDefinitionId)`
+  - `selectLatestForExercise(index, exerciseDefinitionId)`
+  - `selectTimeRangeAnalytics(index, workoutsMap, coreMap, range, cycleStart, active1RMId, now)`
+- **Exercise Identifier Invariant**:
+  - Runtime/canonical data strictly uses `exerciseDefinitionId`.
+  - Legacy `exerciseId` is constrained strictly to migration/compatibility boundaries (e.g. importing legacy V1 backups or schema migration).
+- **PR Models Semantic Separation**:
+  - Weight PR (`WeightPRRecord`): Represents highest actual absolute weight lifted, broken down by reps.
+  - e1RM PR (`E1RMPRRecord`): Represents highest calculated theoretical 1RM via Epley formula.
+  - Legacy `PersonalBestRecord`, `selectPersonalBests()`, and `selectPersonalBestForExercise()` have been retired.
 
 ### 2.4 Synchronization & Offline Conflict Handling (`src/utils/fitnessSyncHelpers.ts`)
 - **Conflict Resolution**: Per-record `updatedAt` timestamps with deterministic tie-breakers.

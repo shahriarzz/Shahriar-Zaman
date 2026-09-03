@@ -11,7 +11,6 @@ import {
 } from '../utils/fitnessCalculations';
 import {
   buildFitnessIndex,
-  selectPersonalBests,
   selectExerciseHistory
 } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';

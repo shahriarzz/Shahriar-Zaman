@@ -4,8 +4,8 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectPersonalBests,
-  selectPersonalBestForExercise,
+  selectExerciseWeightPR,
+  selectExerciseE1RMPR,
   selectExerciseHistory,
   selectExercise1RMProgression,
   selectMuscleDistribution,
@@ -144,15 +144,15 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     expect(exerciseHistory).toHaveLength(1);
     expect(exerciseHistory[0].sets).toHaveLength(1);
     expect(index.volumeByExercise.get('def_bench')).toBe(640);
-    const pb = selectPersonalBestForExercise(index, 'def_bench');
+    const pb = selectExerciseWeightPR(index, 'def_bench');
     expect(pb?.exerciseName).toBe('Barbell Bench Press');
     expect(pb?.category).toBe('Chest');
   });
 
   // -------------------------------------------------------------------------
-  // 4. PB calculation
+  // 4. PR calculation
   // -------------------------------------------------------------------------
-  it('4. PB calculation: calculates personal bests across multiple sessions with highest e1RM', () => {
+  it('4. PR calculation: calculates weight PR and e1RM PR across multiple sessions', () => {
     const logs: SessionLog[] = [
       createMockLog({
         id: 'log1',
@@ -173,12 +173,15 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     ];
 
     const index = buildFitnessIndex(logs, defsMap);
-    const benchPB = selectPersonalBestForExercise(index, 'def_bench');
-    expect(benchPB).toBeDefined();
-    expect(benchPB?.maxWeight).toBe(110);
-    expect(benchPB?.repsAtMax).toBe(3);
-    expect(benchPB?.maxEpley).toBe(121);
-    expect(benchPB?.date).toBe('2026-08-10');
+    const benchWeightPR = selectExerciseWeightPR(index, 'def_bench');
+    expect(benchWeightPR).toBeDefined();
+    expect(benchWeightPR?.weight).toBe(110);
+    expect(benchWeightPR?.reps).toBe(3);
+    expect(benchWeightPR?.date).toBe('2026-08-10');
+
+    const benchE1RMPR = selectExerciseE1RMPR(index, 'def_bench');
+    expect(benchE1RMPR?.maxEpley).toBe(121);
+    expect(benchE1RMPR?.date).toBe('2026-08-10');
   });
 
   // -------------------------------------------------------------------------
@@ -269,9 +272,9 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     const frequency = selectExerciseFrequency(index);
 
     expect(frequency).toHaveLength(2);
-    expect(frequency[0].exerciseId).toBe('def_bench');
+    expect(frequency[0].exerciseDefinitionId).toBe('def_bench');
     expect(frequency[0].count).toBe(2);
-    expect(frequency[1].exerciseId).toBe('def_curl');
+    expect(frequency[1].exerciseDefinitionId).toBe('def_curl');
     expect(frequency[1].count).toBe(1);
   });
 
@@ -382,8 +385,8 @@ describe('Canonical Fitness Derived Data Contract Suite (15 Critical Invariants)
     const index = buildFitnessIndex([log], defsMap);
     expect(index.lifetimeStats.totalSets).toBe(1);
     expect(index.lifetimeStats.totalVolume).toBe(500);
-    const pb = selectPersonalBestForExercise(index, 'def_bench');
-    expect(pb?.maxWeight).toBe(100); // 200 was ignored because done: false
+    const pb = selectExerciseWeightPR(index, 'def_bench');
+    expect(pb?.weight).toBe(100); // 200 was ignored because done: false
   });
 
   // -------------------------------------------------------------------------
