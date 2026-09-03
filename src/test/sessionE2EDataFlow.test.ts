@@ -195,6 +195,7 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
     const benchFreq = exerciseFreq.find(e => e.exerciseId === 'def_bench_press');
     const inclineFreq = exerciseFreq.find(e => e.exerciseId === 'def_incline_db');
     expect(benchFreq).toEqual({
+      exerciseDefinitionId: 'def_bench_press',
       exerciseId: 'def_bench_press',
       name: 'Barbell Bench Press',
       category: 'Chest',
@@ -202,6 +203,7 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
       volume: 2250
     });
     expect(inclineFreq).toEqual({
+      exerciseDefinitionId: 'def_incline_db',
       exerciseId: 'def_incline_db',
       name: 'Incline Dumbbell Press',
       category: 'Chest',

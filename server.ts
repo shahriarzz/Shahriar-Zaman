@@ -2,7 +2,6 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
@@ -226,7 +225,7 @@ async function startServer() {
   });
 
   // API Routes
-  app.get('/api/health', (req, res) => {
+  app.get(['/api/health', '/health'], (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
@@ -351,16 +350,25 @@ async function startServer() {
 
   // Vite middleware setup
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // In production, server.cjs runs from /app/dist or /app
+    const distPath = fs.existsSync(path.join(process.cwd(), 'dist'))
+      ? path.join(process.cwd(), 'dist')
+      : __dirname;
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Application index.html not found.');
+      }
     });
   }
 
