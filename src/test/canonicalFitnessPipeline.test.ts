@@ -16,14 +16,12 @@ import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
-  selectExercisePR,
   selectExerciseWeightPR,
   selectExerciseE1RMPR,
   selectWeightPRs,
   selectE1RMPRs,
   selectHistoryForExercise,
   selectLatestForExercise,
-  selectExerciseBestE1RM,
   selectNextCycleDay,
   selectCycleDayForDate,
   isNewPersonalBest,
@@ -194,9 +192,11 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       expect(bench?.sessions).toHaveLength(2);
       expect(bench?.sessionCount).toBe(2);
       expect(bench?.maxWeight).toBe(110);
-      expect(bench?.bestE1RM?.maxEpley).toBe(116.7);
-      expect(bench?.bestE1RM?.maxWeight).toBe(100);
-      expect(bench?.bestE1RM?.repsAtMax).toBe(5);
+      expect(bench?.weightPR?.weight).toBe(110);
+      expect(bench?.weightPR?.reps).toBe(1);
+      expect(bench?.e1RMPR?.maxEpley).toBe(116.7);
+      expect(bench?.e1RMPR?.weight).toBe(100);
+      expect(bench?.e1RMPR?.reps).toBe(5);
       expect(bench?.latestSession?.date).toBe('2026-08-08');
     });
 
@@ -610,7 +610,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       ];
 
       const index = buildFitnessIndex(logs, defMap);
-      const pr = selectExercisePR(index, 'ex_bench');
+      const pr = selectExerciseWeightPR(index, 'ex_bench');
       expect(pr).not.toBeNull();
       expect(pr?.weight).toBe(50);
       expect(pr?.reps).toBe(10);
@@ -649,7 +649,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       ];
 
       const index = buildFitnessIndex(logs, defMap);
-      const pr = selectExercisePR(index, 'ex_squat');
+      const pr = selectExerciseWeightPR(index, 'ex_squat');
       expect(pr).not.toBeNull();
       expect(pr?.weight).toBe(60);
       expect(pr?.reps).toBe(8);
@@ -689,22 +689,24 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const index = buildFitnessIndex(logs, defMap);
       
       // Weight PR: 52.5 x 1 wins (highest weight)
-      const weightPR = selectExercisePR(index, 'ex_press');
+      const weightPR = selectExerciseWeightPR(index, 'ex_press');
       expect(weightPR?.weight).toBe(52.5);
       expect(weightPR?.reps).toBe(1);
 
       // Best e1RM: 50 x 5 wins (e1RM = 58.3 > 52.5)
-      const bestE1RM = selectExerciseBestE1RM(index, 'ex_press');
-      expect(bestE1RM?.maxEpley).toBe(58.3);
-      expect(bestE1RM?.maxWeight).toBe(50);
-      expect(bestE1RM?.repsAtMax).toBe(5);
+      const e1rmPR = selectExerciseE1RMPR(index, 'ex_press');
+      expect(e1rmPR?.maxEpley).toBe(58.3);
+      expect(e1rmPR?.weight).toBe(50);
+      expect(e1rmPR?.reps).toBe(5);
 
       // ExerciseIndex entry contains both independently
       const entry = index.exerciseIndex.get('ex_press');
       expect(entry?.maxWeight).toBe(52.5);
-      expect(entry?.bestE1RM?.maxEpley).toBe(58.3);
-      expect(entry?.bestE1RM?.maxWeight).toBe(50);
-      expect(entry?.bestE1RM?.repsAtMax).toBe(5);
+      expect(entry?.weightPR?.weight).toBe(52.5);
+      expect(entry?.weightPR?.reps).toBe(1);
+      expect(entry?.e1RMPR?.maxEpley).toBe(58.3);
+      expect(entry?.e1RMPR?.weight).toBe(50);
+      expect(entry?.e1RMPR?.reps).toBe(5);
     });
 
     it('calculates cycle day correctly using canonical selectNextCycleDay and selectCycleDayForDate', () => {
@@ -800,15 +802,17 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const index = buildFitnessIndex([]);
       expect(index.exerciseIndex.get('non_existent')).toBeUndefined();
       expect(selectExerciseHistory(index, 'non_existent')).toEqual([]);
-      expect(selectExercisePR(index, 'non_existent')).toBeNull();
       expect(selectExerciseWeightPR(index, 'non_existent')).toBeNull();
       expect(selectExerciseE1RMPR(index, 'non_existent')).toBeNull();
     });
 
-    it('tracks plannedSetsByDate vs completedSetsByDate independently', () => {
+    it('tracks plannedSetsByDate vs completedSetsByDate independently with incomplete sessions', () => {
+      // Completed session: 3 planned, 3 completed
+      // Incomplete session: 4 planned, 2 done
+      // Combined date: plannedSetsByDate = 7, completedSetsByDate = 3 (only completed sessions count)
       const logs: SessionLog[] = [
         {
-          id: 'log_plan_vs_done',
+          id: 'log_completed',
           workoutId: 'w1',
           date: '2026-08-12',
           complete: true,
@@ -816,17 +820,31 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
           sets: {
             ex1: [
               { id: 's1', weight: '100', reps: '10', done: true },
-              { id: 's2', weight: '100', reps: '10', done: false },
-              { id: 's3', weight: '100', reps: '10', done: true },
-              { id: 's4', weight: '100', reps: '10', done: false }
+              { id: 's2', weight: '100', reps: '10', done: true },
+              { id: 's3', weight: '100', reps: '10', done: true }
+            ]
+          }
+        },
+        {
+          id: 'log_incomplete',
+          workoutId: 'w2',
+          date: '2026-08-12',
+          complete: false,
+          durationMinutes: 20,
+          sets: {
+            ex2: [
+              { id: 's4', weight: '80', reps: '8', done: true },
+              { id: 's5', weight: '80', reps: '8', done: true },
+              { id: 's6', weight: '80', reps: '8', done: false },
+              { id: 's7', weight: '80', reps: '8', done: false }
             ]
           }
         }
       ];
 
       const index = buildFitnessIndex(logs);
-      expect(index.plannedSetsByDate['2026-08-12']).toBe(4);
-      expect(index.completedSetsByDate['2026-08-12']).toBe(2);
+      expect(index.plannedSetsByDate['2026-08-12']).toBe(7);
+      expect(index.completedSetsByDate['2026-08-12']).toBe(3);
     });
 
     it('volumeByDate obeys the completed-session invariant (1,000kg completed vs 10,000kg incomplete)', () => {

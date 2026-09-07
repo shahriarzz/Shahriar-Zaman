@@ -99,14 +99,14 @@ export function useCalendarGrid({
 
       const dayVol = volMap[dateStr] || 0;
       const doneSets = index.completedSetsByDate[dateStr] || 0;
-      const totalSets = index.plannedSetsByDate[dateStr] ?? doneSets;
+      const totalSets = index.plannedSetsByDate[dateStr] || 0;
 
       detailMap[dateStr] = {
         workoutNames,
         workoutIds,
         volume: dayVol,
         doneSets,
-        totalSets: Math.max(totalSets, doneSets),
+        totalSets,
         isComplete,
         logs: logsForDate
       };

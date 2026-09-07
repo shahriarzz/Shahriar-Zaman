@@ -7,7 +7,7 @@ import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fit
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
 import { sanitizeSessionLog } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
-import { ExerciseSessionHistoryEntry, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
+import { ExerciseSessionHistoryEntry, WeightPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -24,7 +24,7 @@ import {
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
-  allTimePR: { weight: number; reps: number | string; date?: string } | null;
+  allTimePR: WeightPRRecord | null;
 }
 
 interface ExerciseCardProps {
@@ -348,7 +348,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     clearActiveSession,
     user
   } = useFitness();
-  const { getLatestForExercise, getHeaviestForExercise, getHistoryForExercise } = useFitnessDerivedData();
+  const { getLatestForExercise, getWeightPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -482,7 +482,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }, []);
 
-  // Ghost data & All-Time Heaviest PR computed via canonical derived index (O(exercises in workout) map lookup)
+  // Ghost data & All-Time Weight PR computed via canonical derived index (O(exercises in workout) map lookup)
   const ghostData = React.useMemo<Record<string, GhostDataEntry>>(() => {
     const data: Record<string, GhostDataEntry> = {};
     if (!activeWorkout) return data;
@@ -491,11 +491,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const exDefId = ex.exerciseDefinitionId;
       data[exDefId] = {
         lastSession: getLatestForExercise(exDefId),
-        allTimePR: getHeaviestForExercise(exDefId)
+        allTimePR: getWeightPRForExercise(exDefId)
       };
     });
     return data;
-  }, [activeWorkout, getLatestForExercise, getHeaviestForExercise]);
+  }, [activeWorkout, getLatestForExercise, getWeightPRForExercise]);
 
   // Today's PRs: Heaviest completed weight + highest reps at that weight compared against prior historical logs
   const todaysPRs = React.useMemo(() => {
@@ -517,7 +517,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const setsAtMax = doneToday.filter(s => (parseFloat(s.weight) || 0) === todayMaxWeight);
       const todayMaxReps = Math.max(...setsAtMax.map(s => parseInt(s.reps, 10) || 0));
 
-      const prevPR = getHeaviestForExercise(exDefId);
+      const prevPR = getWeightPRForExercise(exDefId);
       const hasHistory = !!prevPR && prevPR.weight > 0;
 
       if (!hasHistory) {
@@ -538,7 +538,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
 
     return prs;
-  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getHeaviestForExercise]);
+  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getWeightPRForExercise]);
 
   // Synchronize active session sets to persistent activeSession state safely in an effect
   const isInitialSyncRef = useRef(true);

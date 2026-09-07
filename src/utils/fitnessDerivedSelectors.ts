@@ -52,16 +52,6 @@ export interface E1RMPRRecord {
   category: MuscleCategory;
 }
 
-export interface BestE1RMRecord {
-  exerciseDefinitionId: string;
-  maxEpley: number;
-  weight: number;
-  reps: number;
-  date: string;
-  setDetail: string;
-  maxWeight?: number;
-  repsAtMax?: number;
-}
 
 export interface ExerciseFrequencyStat {
   exerciseDefinitionId: string;
@@ -140,9 +130,6 @@ export interface ExerciseIndexEntry {
   maxWeight: number;
   weightPR: WeightPRRecord | null;
   e1RMPR: E1RMPRRecord | null;
-  // Backward-compatible properties
-  heaviestSet: { weight: number; reps: string; date: string } | null;
-  bestE1RM: BestE1RMRecord | null;
   progression: E1RMProgressionPoint[];
 }
 
@@ -296,7 +283,6 @@ export function buildFitnessIndex(
   // Independent PR maps
   const weightPRsMap = new Map<string, WeightPRRecord>();
   const e1RMPRsMap = new Map<string, E1RMPRRecord>();
-  const bestE1RMByExercise = new Map<string, BestE1RMRecord>();
   const e1rmHistoryByExercise = new Map<string, E1RMProgressionPoint[]>();
   const weeklyVolumeMap: Record<string, number> = {};
 
@@ -316,7 +302,6 @@ export function buildFitnessIndex(
   const setsByWorkout: Record<string, number> = {};
   const muscleFrequencyByDate: Record<string, Record<MuscleCategory, number>> = {};
   const maxWeightByExercise = new Map<string, number>();
-  const heaviestSetByExercise = new Map<string, { weight: number; reps: string; date: string }>();
 
   // Initialize muscle aggregations with all categories including Uncategorized
   const volumeByMuscle: Record<MuscleCategory, number> = {} as any;
@@ -424,17 +409,6 @@ export function buildFitnessIndex(
           }
 
           if (w > 0) {
-            const prevHeaviest = heaviestSetByExercise.get(normId);
-            const prevReps = prevHeaviest ? (parseInt(prevHeaviest.reps, 10) || 0) : 0;
-            // Canonical PR Rule: Heaviest weight recorded, and highest reps at that maximum weight
-            if (!prevHeaviest || w > prevHeaviest.weight || (w === prevHeaviest.weight && r > prevReps)) {
-              heaviestSetByExercise.set(normId, {
-                weight: w,
-                reps: s.reps || '0',
-                date: log.date
-              });
-            }
-
             // Independent Weight PR tracking
             const existingWeightPR = weightPRsMap.get(normId);
             const isWeightPR = !existingWeightPR || w > existingWeightPR.weight || (w === existingWeightPR.weight && r > existingWeightPR.reps);
@@ -470,21 +444,6 @@ export function buildFitnessIndex(
                 date: log.date,
                 setDetail: `${w}kg × ${r} reps`,
                 category
-              });
-            }
-
-            // Legacy best e1RM tracking
-            const existingBestE1RM = bestE1RMByExercise.get(normId);
-            if (!existingBestE1RM || epley > existingBestE1RM.maxEpley) {
-              bestE1RMByExercise.set(normId, {
-                exerciseDefinitionId: normId,
-                maxEpley: epley,
-                weight: w,
-                reps: r,
-                date: log.date,
-                setDetail: `${w}kg × ${r} reps`,
-                maxWeight: w,
-                repsAtMax: r
               });
             }
           }
@@ -615,10 +574,8 @@ export function buildFitnessIndex(
     const completedSets = completedSetsByExercise.get(exId) || [];
     const weightPR = weightPRsMap.get(exId) || null;
     const e1RMPR = e1RMPRsMap.get(exId) || null;
-    const bestE1RM = bestE1RMByExercise.get(exId) || null;
     const progression = e1rmHistoryByExercise.get(exId) || [];
     const maxWeight = maxWeightByExercise.get(exId) || 0;
-    const heaviestSet = heaviestSetByExercise.get(exId) || null;
 
     exerciseIndex.set(exId, {
       exerciseDefinitionId: exId,
@@ -633,8 +590,6 @@ export function buildFitnessIndex(
       maxWeight,
       weightPR,
       e1RMPR,
-      heaviestSet,
-      bestE1RM,
       progression
     });
   });
@@ -758,26 +713,6 @@ export function selectLatestForExercise(
   return entry.sessions[0];
 }
 
-export function selectExercisePR(
-  index: FitnessIndex,
-  exerciseDefinitionId: string
-): { weight: number; reps: number; date?: string } | null {
-  const entry = index.exerciseIndex.get(exerciseDefinitionId);
-  if (!entry || !entry.heaviestSet) return null;
-  return {
-    weight: entry.heaviestSet.weight,
-    reps: parseInt(entry.heaviestSet.reps, 10) || 0,
-    date: entry.heaviestSet.date
-  };
-}
-
-export function selectExerciseBestE1RM(
-  index: FitnessIndex,
-  exerciseDefinitionId: string
-): BestE1RMRecord | null {
-  const entry = index.exerciseIndex.get(exerciseDefinitionId);
-  return entry?.bestE1RM || null;
-}
 
 export function selectNextCycleDay(
   index: FitnessIndex | undefined | null,

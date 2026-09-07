@@ -63,10 +63,11 @@ This application implements a strict, centralized single source of truth archite
 - **PR Semantics**:
   - `WeightPRRecord`: Represents highest actual weight successfully lifted (`weight`, `reps`, `date`, `category`).
   - `E1RMPRRecord`: Represents highest calculated Epley estimated 1RM (`maxEpley`, `weight`, `reps`, `date`, `category`).
-  - Legacy `PersonalBestRecord`, `selectPersonalBests()`, and `selectPersonalBestForExercise()` are completely retired.
+  - Legacy `PersonalBestRecord`, `selectPersonalBests()`, `selectPersonalBestForExercise()`, `heaviestSet`, `bestE1RM`, `BestE1RMRecord`, `getHeaviestForExercise()`, and `getBestE1RMForExercise()` are completely removed.
 - **Set Accounting**:
   - `completedSetsByDate`: Performed sets (`done: true`) from verified completed sessions only.
   - `plannedSetsByDate`: Programmed/logged set rows on this date across all sessions, including incomplete sessions.
+  - Set accounting uses these canonical fields directly without fallback substitution or Math.max.
   - Legacy `setsByDate` and `totalSetsByDate` aliases are completely removed.
 - **History Ordering**:
   - Exercise session history is strictly newest-first (`sessions[0] = newest`, `sessions[n] = oldest`).
@@ -79,7 +80,7 @@ This application implements a strict, centralized single source of truth archite
 - **`buildFitnessIndex(logs, defsMap)`**:
   - Produces `FitnessIndex`:
     - `sortedLogsDescending`: Chronologically ordered array of completed `SessionLog`s.
-    - `exerciseIndex`: `Map<string, ExerciseIndexEntry>` containing per-exercise sessions, heaviest sets, best e1RM, total volume, and canonical PR records.
+    - `exerciseIndex`: `Map<string, ExerciseIndexEntry>` containing per-exercise sessions, total volume, max weight, and canonical PR records (`weightPR`, `e1RMPR`).
     - `exerciseMetaById`: `Map<string, ResolvedExerciseMeta>` cached exercise identity.
     - `weightPRs` (`WeightPRRecord[]`): All-time heaviest successful lift per exercise (weight, reps, date).
     - `e1RMPRs` (`E1RMPRRecord[]`): All-time highest estimated 1RM per exercise (Epley formula: weight * (1 + reps/30)).

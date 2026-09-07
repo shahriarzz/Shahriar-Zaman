@@ -50,8 +50,6 @@ export interface FitnessDerivedData {
   getLatestForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry | null;
   getWeightPRForExercise: (exerciseDefinitionId: string) => WeightPRRecord | null;
   getE1RMPRForExercise: (exerciseDefinitionId: string) => E1RMPRRecord | null;
-  getHeaviestForExercise: (exerciseDefinitionId: string) => { weight: number; reps: string; date: string } | null;
-  getBestE1RMForExercise: (exerciseDefinitionId: string) => { e1rm: number; weight: number; reps: string; date: string } | null;
 }
 
 export const FitnessDerivedContext = createContext<FitnessDerivedData | null>(null);
@@ -139,23 +137,6 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
   }, [index]);
 
-  const getHeaviestForExercise = useCallback((exerciseDefinitionId: string) => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || !entry.heaviestSet) return null;
-    return entry.heaviestSet;
-  }, [index]);
-
-  const getBestE1RMForExercise = useCallback((exerciseDefinitionId: string) => {
-    const entry = index.exerciseIndex.get(exerciseDefinitionId);
-    if (!entry || !entry.bestE1RM) return null;
-    return {
-      e1rm: entry.bestE1RM.maxEpley,
-      weight: entry.bestE1RM.weight,
-      reps: String(entry.bestE1RM.reps),
-      date: entry.bestE1RM.date
-    };
-  }, [index]);
-
   const value: FitnessDerivedData = useMemo(() => ({
     index,
     defsMap,
@@ -181,9 +162,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getWeightPRForExercise,
-    getE1RMPRForExercise,
-    getHeaviestForExercise,
-    getBestE1RMForExercise
+    getE1RMPRForExercise
   }), [
     index,
     defsMap,
@@ -198,9 +177,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getWeightPRForExercise,
-    getE1RMPRForExercise,
-    getHeaviestForExercise,
-    getBestE1RMForExercise
+    getE1RMPRForExercise
   ]);
 
   return (

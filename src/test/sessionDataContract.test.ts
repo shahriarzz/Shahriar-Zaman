@@ -363,11 +363,13 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
 
       // All-time heaviest PR
       expect(benchEntry?.maxWeight).toBe(110);
-      expect(benchEntry?.bestE1RM?.maxWeight).toBe(110);
-      expect(benchEntry?.bestE1RM?.repsAtMax).toBe(5);
+      expect(benchEntry?.weightPR?.weight).toBe(110);
+      expect(benchEntry?.weightPR?.reps).toBe(5);
 
       // All-time best e1RM: 110 * (1 + 5/30) = 128.3 vs 100 * (1 + 8/30) = 126.7
-      expect(benchEntry?.bestE1RM?.maxEpley).toBe(128.3);
+      expect(benchEntry?.e1RMPR?.maxEpley).toBe(128.3);
+      expect(benchEntry?.e1RMPR?.weight).toBe(110);
+      expect(benchEntry?.e1RMPR?.reps).toBe(5);
     });
   });
 
@@ -556,10 +558,14 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
       const benchMeta = index.exerciseIndex.get('def_bench');
 
       expect(benchMeta?.maxWeight).toBe(100);
-      expect(benchMeta?.bestE1RM?.date).toBe('2026-08-13');
+      expect(benchMeta?.weightPR?.weight).toBe(100);
+      expect(benchMeta?.weightPR?.reps).toBe(8);
+      expect(benchMeta?.e1RMPR?.date).toBe('2026-08-13');
 
       // 100 * (1 + 8/30) = 126.7
-      expect(benchMeta?.bestE1RM?.maxEpley).toBe(126.7);
+      expect(benchMeta?.e1RMPR?.maxEpley).toBe(126.7);
+      expect(benchMeta?.e1RMPR?.weight).toBe(100);
+      expect(benchMeta?.e1RMPR?.reps).toBe(8);
 
       // 9. Verification: Next session ghost data sees this exact session
       expect(benchMeta?.latestSession?.date).toBe('2026-08-13');
