@@ -20,6 +20,8 @@ export function canonicalizeWorkoutExercise(
     };
   }
 
+  // Legacy V1 compatibility only.
+  // Canonical runtime identifier is exerciseDefinitionId.
   let defId = rawEx.exerciseDefinitionId || rawEx.exerciseId || rawEx.id;
 
   if (rawEx.name && nameToIdMap && (!defId || (fallbackDefMap && !fallbackDefMap.has(defId)))) {

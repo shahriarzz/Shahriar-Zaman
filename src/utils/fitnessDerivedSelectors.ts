@@ -119,7 +119,11 @@ export interface E1RMProgressionPoint {
 
 /**
  * Reusable single-exercise indexed entry constructed in the canonical pass.
- * INVARIANT: `sessions` is strictly ordered NEWEST -> OLDEST (descending by session date).
+ * INVARIANT: The canonical exercise history must always be:
+ * sessions[0] = newest
+ * sessions[1] = next newest
+ * ...
+ * sessions[n] = oldest
  * `latestSession` is always `sessions[0]`.
  */
 export interface ExerciseIndexEntry {
@@ -127,7 +131,7 @@ export interface ExerciseIndexEntry {
   name: string;
   category: MuscleCategory;
   resolvedExercise: ResolvedExerciseMeta;
-  /** Ordered newest to oldest (descending by session date) */
+  /** Ordered newest to oldest: sessions[0] = newest, sessions[n] = oldest */
   sessions: ExerciseSessionHistoryEntry[];
   latestSession: ExerciseSessionHistoryEntry | null;
   completedSets: { date: string; set: SetLog; logId: string }[];

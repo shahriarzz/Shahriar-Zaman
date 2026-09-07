@@ -56,6 +56,26 @@ This application implements a strict, centralized single source of truth archite
   - `useFitnessBackups`: Automated rolling backups and manual JSON snapshot import/export.
 
 ### 2.3 Derived Canonical Index & Selectors (`src/utils/fitnessDerivedSelectors.ts` & `src/context/FitnessDerivedContext.tsx`)
+
+#### Canonical Model & Guarantees
+- **Exercise Identity**:
+  `exerciseDefinitionId` is the only canonical runtime exercise identifier across logs, sets, history, analytics, PRs, frequency, and UI.
+- **PR Semantics**:
+  - `WeightPRRecord`: Represents highest actual weight successfully lifted (`weight`, `reps`, `date`, `category`).
+  - `E1RMPRRecord`: Represents highest calculated Epley estimated 1RM (`maxEpley`, `weight`, `reps`, `date`, `category`).
+  - Legacy `PersonalBestRecord`, `selectPersonalBests()`, and `selectPersonalBestForExercise()` are completely retired.
+- **Set Accounting**:
+  - `completedSetsByDate`: Performed sets (`done: true`) from verified completed sessions only.
+  - `plannedSetsByDate`: Programmed/logged set rows on this date across all sessions, including incomplete sessions.
+  - Legacy `setsByDate` and `totalSetsByDate` aliases are completely removed.
+- **History Ordering**:
+  - Exercise session history is strictly newest-first (`sessions[0] = newest`, `sessions[n] = oldest`).
+  - `sessions[0]` is always the latest session.
+  - `getLatestForExercise()` and `selectLatestForExercise()` return `sessions[0]`.
+- **Completion Invariant**:
+  - `isCompletedSession(log)` (`log.complete === true`) is the sole canonical predicate for completed workout analytics (volume, streaks, PRs, frequency).
+  - Incomplete sessions remain available in raw logs for draft recovery and planning, but contribute zero to performance analytics.
+
 - **`buildFitnessIndex(logs, defsMap)`**:
   - Produces `FitnessIndex`:
     - `sortedLogsDescending`: Chronologically ordered array of completed `SessionLog`s.
@@ -79,13 +99,6 @@ This application implements a strict, centralized single source of truth archite
   - `selectHistoryForExercise(index, exerciseDefinitionId)`
   - `selectLatestForExercise(index, exerciseDefinitionId)`
   - `selectTimeRangeAnalytics(index, workoutsMap, coreMap, range, cycleStart, active1RMId, now)`
-- **Exercise Identifier Invariant**:
-  - Runtime/canonical data strictly uses `exerciseDefinitionId`.
-  - Legacy `exerciseId` is constrained strictly to migration/compatibility boundaries (e.g. importing legacy V1 backups or schema migration).
-- **PR Models Semantic Separation**:
-  - Weight PR (`WeightPRRecord`): Represents highest actual absolute weight lifted, broken down by reps.
-  - e1RM PR (`E1RMPRRecord`): Represents highest calculated theoretical 1RM via Epley formula.
-  - Legacy `PersonalBestRecord`, `selectPersonalBests()`, and `selectPersonalBestForExercise()` have been retired.
 
 ### 2.4 Synchronization & Offline Conflict Handling (`src/utils/fitnessSyncHelpers.ts`)
 - **Conflict Resolution**: Per-record `updatedAt` timestamps with deterministic tie-breakers.
