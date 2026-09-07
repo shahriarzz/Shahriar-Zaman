@@ -38,6 +38,7 @@ import {
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
+import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -101,6 +102,13 @@ export const AnalyticsView: React.FC = () => {
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
 
   const {
+    trainingStreak,
+    adherenceInsight,
+    performanceScore,
+    strengthTrend
+  } = useFitnessDerivedData();
+
+  const {
     coreWorkoutByCycleDayMap,
     priorityExercises,
     active1RMExerciseId,
@@ -157,40 +165,27 @@ export const AnalyticsView: React.FC = () => {
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
       <Grid cols={2} colsLg={4} gap="md">
-        {/* Streak: Current vs Best */}
+        {/* 1. Training Streak */}
         <StatCard
           label="Training Streak"
-          value={aggregated.currentStreak}
-          unit="days"
+          value={trainingStreak.currentStreak}
+          unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
           icon={<Flame size={16} />}
           accent="orange"
           sublabel="Current active streak"
-          trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {aggregated.longestStreak}d</span>}
+          trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
         />
 
-        {/* Scheduled Core Workouts */}
-        <StatCard
-          label="Core Workouts"
-          value={`${aggregated.completedScheduledCore}/${aggregated.scheduledCoreWorkouts}`}
-          icon={<CalendarIcon size={16} />}
-          accent="emerald"
-          sublabel={
-            aggregated.isTodayCorePending
-              ? `${aggregated.missedPastCoreDays} skipped · Today pending`
-              : `${aggregated.missedPastCoreDays} skipped · ${aggregated.scheduledRestDays} rest`
-          }
-        />
-
-        {/* Scheduled Adherence Rate */}
+        {/* 2. Adherence Rate */}
         <StatCard
           label="Adherence Rate"
-          value={`${aggregated.adherencePct}%`}
+          value={`${adherenceInsight.percent}%`}
           icon={<Activity size={16} />}
           accent="emerald"
-          sublabel={aggregated.bonusCompletedSessions > 0 ? `+${aggregated.bonusCompletedSessions} bonus sessions` : 'Scheduled core adherence'}
+          sublabel={`${adherenceInsight.completedScheduled} / ${adherenceInsight.scheduledCoreWorkouts} scheduled`}
         />
 
-        {/* Window Volume with Period-over-Period Trend */}
+        {/* 3. Window Volume with Period-over-Period Trend */}
         <StatCard
           label="Window Volume"
           value={(aggregated.rangeVolume / 1000).toFixed(1)}
@@ -216,6 +211,28 @@ export const AnalyticsView: React.FC = () => {
                 {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
               </span>
             ) : undefined
+          }
+        />
+
+        {/* 4. Performance Score */}
+        <StatCard
+          label="Performance Score"
+          value={performanceScore.score}
+          sublabel={performanceScore.status}
+          icon={<Award size={16} />}
+          accent={performanceScore.status === 'Excellent' || performanceScore.status === 'Strong' ? 'emerald' : performanceScore.status === 'Good' ? 'amber' : 'rose'}
+          statusIndicator={{
+            label: performanceScore.status,
+            color: performanceScore.status === 'Excellent' || performanceScore.status === 'Strong' ? 'emerald' : performanceScore.status === 'Good' ? 'amber' : 'rose'
+          }}
+          trend={
+            strengthTrend.percentChange !== null ? (
+              <span className={cn("font-bold text-xs", strengthTrend.percentChange >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                Strength {strengthTrend.percentChange >= 0 ? `+${strengthTrend.percentChange.toFixed(1)}%` : `${strengthTrend.percentChange.toFixed(1)}%`}
+              </span>
+            ) : (
+              <span className="text-zinc-500 text-xs font-mono">Building baseline</span>
+            )
           }
         />
       </Grid>

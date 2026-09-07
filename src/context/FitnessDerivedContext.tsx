@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useCallback } from 'react';
+import { format, subDays } from 'date-fns';
 import { useFitness } from './FitnessContext';
 import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
@@ -23,6 +24,18 @@ import {
   getPriorityExercises,
   ResolvedExerciseMeta
 } from '../utils/exerciseResolver';
+import {
+  calculateTrainingStreak,
+  calculateTrainingFrequency,
+  calculateAdherence,
+  calculateStrengthTrend,
+  calculatePerformanceScore,
+  StreakInsight,
+  TrainingFrequencyInsight,
+  AdherenceInsight,
+  StrengthTrendInsight,
+  PerformanceScoreInsight
+} from '../utils/trainingIntelligence';
 
 export interface FitnessDerivedData {
   index: FitnessIndex;
@@ -37,6 +50,11 @@ export interface FitnessDerivedData {
   sessionCount: number;
   streak: number;
   longestStreak: number;
+  trainingStreak: StreakInsight;
+  trainingFrequency: TrainingFrequencyInsight;
+  strengthTrend: StrengthTrendInsight;
+  adherenceInsight: AdherenceInsight;
+  performanceScore: PerformanceScoreInsight;
   weightPRs: WeightPRRecord[];
   e1RMPRs: E1RMPRRecord[];
   muscleDistribution: MuscleDistributionStats;
@@ -109,6 +127,70 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return selectCycleDayForDate(targetDate, index, workoutMap, appState?.cycleStart);
   }, [index, workoutMap, appState?.cycleStart]);
 
+  // 9. Canonical Training Intelligence Calculations
+  const now = useMemo(() => new Date(), []);
+  const todayStr = useMemo(() => format(now, 'yyyy-MM-dd'), [now]);
+
+  const trainingStreak = useMemo(() => {
+    return calculateTrainingStreak({
+      index,
+      coreWorkoutByCycleDayMap,
+      cycleStart: appState?.cycleStart,
+      now
+    });
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, now]);
+
+  const trainingFrequency = useMemo(() => {
+    return calculateTrainingFrequency({
+      index,
+      now,
+      windowDays: 28
+    });
+  }, [index, now]);
+
+  const adherenceInsight = useMemo(() => {
+    return calculateAdherence({
+      index,
+      coreWorkoutByCycleDayMap,
+      cycleStart: appState?.cycleStart,
+      now
+    });
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, now]);
+
+  const strengthTrend = useMemo(() => {
+    const currentEndStr = todayStr;
+    const currentStartStr = format(subDays(now, 29), 'yyyy-MM-dd');
+    const comparisonEndStr = format(subDays(now, 30), 'yyyy-MM-dd');
+    const comparisonStartStr = format(subDays(now, 59), 'yyyy-MM-dd');
+
+    return calculateStrengthTrend({
+      index,
+      currentRange: { start: currentStartStr, end: currentEndStr },
+      comparisonRange: { start: comparisonStartStr, end: comparisonEndStr }
+    });
+  }, [index, now, todayStr]);
+
+  const performanceScore = useMemo(() => {
+    const start28Str = format(subDays(now, 27), 'yyyy-MM-dd');
+    let sumCompleted = 0;
+    let sumPlanned = 0;
+    Object.entries(index.plannedSetsByDate).forEach(([d, p]) => {
+      if (d >= start28Str && d <= todayStr) {
+        sumPlanned += (typeof p === 'number' ? p : Number(p) || 0);
+        sumCompleted += (index.completedSetsByDate[d] || 0);
+      }
+    });
+    const completionRate = sumPlanned > 0 ? sumCompleted / sumPlanned : undefined;
+
+    return calculatePerformanceScore({
+      adherence: adherenceInsight,
+      completionRate,
+      strengthTrend,
+      index,
+      now
+    });
+  }, [adherenceInsight, strengthTrend, index, now, todayStr]);
+
   // Helper callbacks querying the indexed structures
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
     return index.exerciseMetaById.get(exerciseDefinitionId) || {
@@ -148,8 +230,13 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     totalVolume: index.lifetimeStats.totalVolume,
     totalSets: index.lifetimeStats.totalSets,
     sessionCount: index.lifetimeStats.totalSessions,
-    streak: index.lifetimeStats.currentStreak,
-    longestStreak: index.lifetimeStats.longestStreak,
+    streak: trainingStreak.currentStreak,
+    longestStreak: trainingStreak.longestStreak,
+    trainingStreak,
+    trainingFrequency,
+    strengthTrend,
+    adherenceInsight,
+    performanceScore,
     weightPRs: index.weightPRs,
     e1RMPRs: index.e1RMPRs,
     muscleDistribution,
@@ -169,6 +256,11 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     workoutMap,
     coreWorkoutByCycleDayMap,
     priorityExercises,
+    trainingStreak,
+    trainingFrequency,
+    strengthTrend,
+    adherenceInsight,
+    performanceScore,
     muscleDistribution,
     weightSummary,
     nextCycleDay,

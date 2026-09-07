@@ -158,26 +158,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const isSelectedDateToday = selectedDate ? isSameDay(selectedDate, new Date()) : false;
   const isSelectedDatePast = selectedDate && !isSelectedDateToday && !isSelectedDateFuture;
 
-  // Compute completed / total sets for selected log
-  const selectedDoneSets = useMemo(() => {
-    if (!selectedLog || !selectedLog.sets) return 0;
-    let done = 0;
-    Object.values(selectedLog.sets).forEach(sList => {
-      (sList as SetLog[]).forEach(s => {
-        if (s && s.done) done++;
-      });
-    });
-    return done;
-  }, [selectedLog]);
-
-  const selectedTotalSets = useMemo(() => {
-    if (!selectedLog || !selectedLog.sets) return 0;
-    let total = 0;
-    Object.values(selectedLog.sets).forEach(sList => {
-      total += (sList as SetLog[]).length;
-    });
-    return total;
-  }, [selectedLog]);
+  // Canonical completed / planned sets and volume for selected date from index
+  const selectedDoneSets = selectedDateStr ? (index.completedSetsByDate[selectedDateStr] ?? 0) : 0;
+  const selectedPlannedSets = selectedDateStr ? (index.plannedSetsByDate[selectedDateStr] ?? 0) : 0;
+  const selectedDayVolume = selectedDateStr ? (index.volumeByDate[selectedDateStr] ?? 0) : 0;
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 items-start">
@@ -367,7 +351,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         label={
                           selectedLog.complete
                             ? 'COMPLETED SESSION'
-                            : `PARTIAL (${selectedDoneSets}/${selectedTotalSets} SETS)`
+                            : `PARTIAL (${selectedDoneSets}/${selectedPlannedSets || selectedDoneSets} SETS)`
                         }
                         color={selectedLog.complete ? 'emerald' : 'zinc'}
                         variant="subtle"
@@ -647,7 +631,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <Grid cols={3} gap="sm">
                       <StatCard
                         label="Volume"
-                        value={(selectedDetail?.volume ?? (selectedDateStr ? index.volumeByDate[selectedDateStr] ?? 0 : 0)).toLocaleString()}
+                        value={selectedDayVolume.toLocaleString()}
                         unit="kg"
                         accent="emerald"
                         icon={TrendingUp}
@@ -663,7 +647,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       />
                       <StatCard
                         label="Sets Done"
-                        value={`${selectedDoneSets}/${selectedTotalSets}`}
+                        value={selectedPlannedSets > 0 ? `${selectedDoneSets}/${selectedPlannedSets}` : `${selectedDoneSets}`}
                         accent="zinc"
                         icon={CheckCircle2}
                         size="standard"

@@ -5,7 +5,7 @@ import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
-import { sanitizeSessionLog } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
@@ -738,14 +738,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
   // Calculate volume: only done === true sets count as completed training volume
   const calculateVolumeLocal = () => {
-    return (Object.values(sessionSets).flat() as SetLog[]).reduce((total: number, s: SetLog) => {
-      if (s.done && s.weight && s.reps) {
-        const weightVal = parseFloat(s.weight) || 0;
-        const repsVal = parseInt(s.reps, 10) || 0;
-        return total + (weightVal * repsVal);
-      }
-      return total;
-    }, 0);
+    return calculateSetsVolume(Object.values(sessionSets).flat() as SetLog[]);
   };
 
   // STEP 3: Transactional session completion flow

@@ -32,6 +32,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   const {
     heroDateStr,
     stats,
+    trainingStreak,
+    trainingFrequency,
+    strengthTrend,
     unfinishedSession,
     todayWorkout,
     currentCycleDay,
@@ -78,29 +81,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Stats Grid */}
       <Grid cols={2} colsMd={4} gap="md">
         <StatCard
-          label="Day Streak"
-          value={stats.streakCount.toString()}
+          label="Streak"
+          value={`${trainingStreak.currentStreak} ${trainingStreak.currentStreak === 1 ? 'day' : 'days'}`}
+          sublabel={`Best: ${trainingStreak.longestStreak}`}
           accent="orange"
           icon={TrendingUp}
           size="standard"
         />
         <StatCard
-          label="Sessions"
-          value={stats.animatedSessions.toString()}
+          label="Training Frequency"
+          value={`${trainingFrequency.sessionsPerWeek.toFixed(1)} / week`}
+          sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
           accent="emerald"
           icon={CalendarIcon}
           size="standard"
         />
         <StatCard
-          label="Cycles"
-          value={stats.animatedCycles.toString()}
-          accent="zinc"
-          icon={Repeat}
+          label="Strength Trend"
+          value={strengthTrend.percentChange !== null ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}%` : '—'}
+          sublabel={strengthTrend.percentChange !== null ? '30-day' : 'Building baseline'}
+          isUnavailable={strengthTrend.percentChange === null}
+          accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
+          icon={Dumbbell}
           size="standard"
         />
         <StatCard
-          label="kg Lifted"
-          value={stats.formattedWeightLifted}
+          label="Total kg Lifted"
+          value={`${stats.formattedWeightLifted} kg`}
+          sublabel="Lifetime"
           accent="emerald"
           icon={Trophy}
           size="standard"

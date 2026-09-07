@@ -7,6 +7,11 @@ import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
 import { getRelativeTimeString } from '../utils/dashboardSelectors';
 import { SparklineData } from '../utils/fitnessDerivedSelectors';
+import {
+  StreakInsight,
+  TrainingFrequencyInsight,
+  StrengthTrendInsight
+} from '../utils/trainingIntelligence';
 
 export interface DashboardStats {
   streakCount: number;
@@ -37,6 +42,9 @@ export interface WeightSummary {
 export interface DashboardData {
   heroDateStr: string;
   stats: DashboardStats;
+  trainingStreak: StreakInsight;
+  trainingFrequency: TrainingFrequencyInsight;
+  strengthTrend: StrengthTrendInsight;
   unfinishedSession: UnfinishedSessionInfo | null;
   todayWorkout: Workout | undefined;
   currentCycleDay: number;
@@ -65,7 +73,10 @@ export function useDashboardData(): DashboardData {
     lifetimeStats,
     weightSummary: derivedWeightSummary,
     nextCycleDay: currentCycleDay,
-    coreWorkoutByCycleDayMap
+    coreWorkoutByCycleDayMap,
+    trainingStreak,
+    trainingFrequency,
+    strengthTrend
   } = useFitnessDerivedData();
 
   // 1. Hero Date String
@@ -80,7 +91,7 @@ export function useDashboardData(): DashboardData {
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;
-  const streakCount = lifetimeStats.currentStreak;
+  const streakCount = trainingStreak.currentStreak;
   const sessionsCount = lifetimeStats.totalSessions;
   const cyclesCount = Math.floor(sessionsCount / 8);
 
@@ -147,6 +158,9 @@ export function useDashboardData(): DashboardData {
   return {
     heroDateStr,
     stats,
+    trainingStreak,
+    trainingFrequency,
+    strengthTrend,
     unfinishedSession,
     todayWorkout,
     currentCycleDay,

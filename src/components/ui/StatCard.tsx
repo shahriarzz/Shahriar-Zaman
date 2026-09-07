@@ -17,7 +17,15 @@ export interface StatCardProps {
   colorOverride?: string;
   accentStyle?: CardProps['accentStyle'];
   sublabel?: string;
+  secondaryComparison?: React.ReactNode;
   trend?: React.ReactNode;
+  trendDirection?: 'positive' | 'negative' | 'neutral';
+  isUnavailable?: boolean;
+  unavailableLabel?: string;
+  statusIndicator?: {
+    label: string;
+    color?: SemanticColor;
+  };
   size?: 'standard' | 'hero';
   className?: string;
 }
@@ -36,16 +44,30 @@ export const StatCard: React.FC<StatCardProps> = ({
   colorOverride,
   accentStyle,
   sublabel,
+  secondaryComparison,
   trend,
+  trendDirection,
+  isUnavailable = false,
+  unavailableLabel,
+  statusIndicator,
   size = 'standard',
   className
 }) => {
   const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || '#10b981';
+  const effectiveUnavailable = isUnavailable || value === '—' || value === '-';
+
+  const trendColorClass = trendDirection === 'positive'
+    ? 'text-emerald-400'
+    : trendDirection === 'negative'
+      ? 'text-rose-400'
+      : trendDirection === 'neutral'
+        ? 'text-zinc-400'
+        : '';
 
   return (
     <Card
       variant="standard"
-      accent={accent}
+      accent={effectiveUnavailable ? 'zinc' : accent}
       colorOverride={colorOverride}
       accentStyle={accentStyle}
       padding={size === 'hero' ? 'section' : 'standard'}
@@ -55,8 +77,8 @@ export const StatCard: React.FC<StatCardProps> = ({
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
             {icon && (
-              <span className="shrink-0 flex items-center" style={{ color: accentHex }}>
-                {renderIcon(icon, { size: 16, style: { color: accentHex } })}
+              <span className="shrink-0 flex items-center" style={{ color: effectiveUnavailable ? '#71717a' : accentHex }}>
+                {renderIcon(icon, { size: 16, style: { color: effectiveUnavailable ? '#71717a' : accentHex } })}
               </span>
             )}
             <span className={cn(TYPOGRAPHY.label, "truncate")}>
@@ -64,18 +86,35 @@ export const StatCard: React.FC<StatCardProps> = ({
             </span>
           </div>
 
-          {trend && (
-            <div className="shrink-0">
-              {trend}
-            </div>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {statusIndicator && (
+              <span className={cn(
+                "text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-zinc-800 bg-zinc-900/80",
+                statusIndicator.color === 'emerald' && "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+                statusIndicator.color === 'orange' && "text-orange-400 border-orange-500/30 bg-orange-500/10",
+                statusIndicator.color === 'amber' && "text-amber-400 border-amber-500/30 bg-amber-500/10",
+                statusIndicator.color === 'rose' && "text-rose-400 border-rose-500/30 bg-rose-500/10",
+                (!statusIndicator.color || statusIndicator.color === 'zinc') && "text-zinc-400 border-zinc-700/40"
+              )}>
+                {statusIndicator.label}
+              </span>
+            )}
+            {trend && (
+              <div className={cn("shrink-0 text-xs font-mono", trendColorClass)}>
+                {trend}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-baseline gap-1 mt-1">
-          <span className={STAT_NUMBER_VARIANTS[size]}>
+          <span className={cn(
+            STAT_NUMBER_VARIANTS[size],
+            effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
+          )}>
             {typeof value === 'number' ? value.toLocaleString() : value}
           </span>
-          {unit && (
+          {unit && !effectiveUnavailable && (
             <span className={TYPOGRAPHY.unit}>
               {unit}
             </span>
@@ -83,10 +122,24 @@ export const StatCard: React.FC<StatCardProps> = ({
         </div>
       </div>
 
-      {sublabel && (
-        <p className="font-mono text-[10px] text-zinc-500 mt-2 truncate">
-          {sublabel}
-        </p>
+      {(secondaryComparison || sublabel || unavailableLabel) && (
+        <div className="space-y-0.5 mt-2">
+          {secondaryComparison && (
+            <div className="font-mono text-xs text-zinc-300 truncate">
+              {secondaryComparison}
+            </div>
+          )}
+          {sublabel && (
+            <p className="font-mono text-[10px] text-zinc-500 truncate">
+              {sublabel}
+            </p>
+          )}
+          {effectiveUnavailable && unavailableLabel && !sublabel && (
+            <p className="font-mono text-[10px] text-zinc-500 truncate">
+              {unavailableLabel}
+            </p>
+          )}
+        </div>
       )}
     </Card>
   );

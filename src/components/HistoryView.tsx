@@ -7,7 +7,7 @@ import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
-import { isCompletedSession } from '../utils/fitnessCalculations';
+import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -153,7 +153,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       const summary = summaries[monthKey];
       summary.sessionsCount += 1;
       summary.totalDuration += log.durationMinutes || 0;
-      summary.totalVolume += (index.volumeByDate[log.date] ?? 0);
+      summary.totalVolume += calculateSetsVolume(getCompletedSets(log));
 
       const workout = workoutsById.get(log.workoutId);
       if (workout) {
@@ -174,14 +174,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           if (!summary.peakLifts[exId] || logMaxWeight > summary.peakLifts[exId].weight) {
             summary.peakLifts[exId] = { exerciseName, weight: logMaxWeight };
           }
-
-          const prevPR = runningPRs[exId] || 0;
-          if (logMaxWeight > prevPR) {
-            summary.prCount += 1;
-            runningPRs[exId] = logMaxWeight;
-          }
         }
       });
+    });
+
+    // Populate canonical PR counts per month from index.weightPRs
+    Object.values(summaries).forEach(summary => {
+      summary.prCount = (index.weightPRs || []).filter(pr => pr.date.startsWith(summary.monthKey)).length;
     });
 
     return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
@@ -471,10 +470,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           <div className="space-y-3">
             {filteredSessions.map((session, sIdx) => {
               const workout = workouts.find(w => w.id === session.workoutId);
-              const totalSets = Object.values(session.sets).flat().filter((s: any) => s.done).length;
-              const vol = index.volumeByDate[session.date] ?? 0;
+              const totalSets = getCompletedSets(session).length;
+              const vol = calculateSetsVolume(getCompletedSets(session));
               const color = WORKOUT_COLORS[workout?.type || 'push'];
               const isExpanded = expandedDate === session.id;
+              const sessionPRs = (index.weightPRs || []).filter(pr => pr.date === session.date);
 
               return (
                 <Card
@@ -504,7 +504,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       <h3 className={cn(TYPOGRAPHY.titleSection, "text-white font-black leading-[0.9] tracking-wider")}>
                         {workout?.name || 'Custom Protocol'}
                       </h3>
-                      <div className="flex flex-wrap gap-3 text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                      <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 uppercase tracking-wider">
                         <div className="flex items-center gap-1">
                           <Clock size={13} className="text-zinc-500 shrink-0" /> {session.durationMinutes || 0} min
                         </div>
@@ -517,6 +517,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             <div>·</div>
                             <div>
                               Volume: <span className="text-emerald-400 font-bold">{vol.toLocaleString()}kg</span>
+                            </div>
+                          </>
+                        )}
+                        {sessionPRs.length > 0 && (
+                          <>
+                            <div>·</div>
+                            <div className="flex items-center gap-1 text-orange-400 font-bold">
+                              <Trophy size={12} className="shrink-0 text-orange-400" />
+                              <span>{sessionPRs.length} PR{sessionPRs.length > 1 ? 's' : ''}</span>
                             </div>
                           </>
                         )}
@@ -814,12 +823,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const exKey = `${session.date}_${exId}`;
                           const isSelected = selectedExKey === exKey;
 
-                          // Dynamic PR calculation of all time for this exercise from canonical index
+                          // Canonical PR calculation from index
                           const historyLogs = (exerciseHistory[exId] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
-                          const prWeight = index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0);
-                          const oldestPrDate = prWeight > 0 
-                            ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date 
-                            : null;
+                          const canonicalPR = index.exerciseIndex.get(exId)?.weightPR;
+                          const prWeight = canonicalPR?.weight ?? (index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0));
+                          const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);
+                          const isSessionPR = (index.weightPRs || []).some(pr => pr.exerciseDefinitionId === exId && pr.date === session.date);
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
                           const exColor = WORKOUT_COLORS[workout?.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
 
@@ -845,8 +854,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       {exerciseName}
                                     </h4>
                                   </div>
-                                  <div className="flex flex-wrap gap-2 text-[10px] text-zinc-400 font-mono uppercase tracking-wider">
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-400 font-mono uppercase tracking-wider">
                                     <span>{doneSets.length} sets logged</span>
+                                    {isSessionPR && (
+                                      <span className="text-orange-400 font-bold flex items-center gap-1">
+                                        <Trophy size={10} className="shrink-0" /> PR SET
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -888,7 +902,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             borderColor: `${exColor}40`
                                           }}
                                         >
-                                          Lifetime PR: {prWeight}kg
+                                          Lifetime PR: {prWeight}kg{canonicalPR?.reps ? ` × ${canonicalPR.reps}` : ''}
                                         </div>
                                       )}
                                     </div>
