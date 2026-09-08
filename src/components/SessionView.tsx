@@ -864,20 +864,25 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         <Grid cols={2} gap="md">
           <StatCard
             label="Duration"
-            value={`${Math.floor(duration / 60)}m`}
+            value={Math.floor(duration / 60)}
+            unit="min"
             accent="blue"
             size="hero"
           />
           <StatCard
             label="Sets Done"
-            value={`${completedLiveSets} / ${programmedLiveSets}`}
+            value={`${completedLiveSets}/${programmedLiveSets}`}
             accent="orange"
             size="hero"
           />
           <StatCard
             label="Total Volume Lifted"
-            value={calculateVolumeLocal().toLocaleString()}
-            unit="kg"
+            value={
+              calculateVolumeLocal() >= 1000
+                ? (calculateVolumeLocal() / 1000).toFixed(1)
+                : calculateVolumeLocal().toLocaleString()
+            }
+            unit={calculateVolumeLocal() >= 1000 ? 'k kg' : 'kg'}
             accent="emerald"
             size="hero"
             className="col-span-2"
@@ -998,7 +1003,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         />
         <StatCard
           label="Sets Done"
-          value={`${completedLiveSets} / ${programmedLiveSets}`}
+          value={`${completedLiveSets}/${programmedLiveSets}`}
           accent="orange"
           icon={Dumbbell}
         />

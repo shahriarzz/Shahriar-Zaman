@@ -71,71 +71,113 @@ export const StatCard: React.FC<StatCardProps> = ({
       colorOverride={colorOverride}
       accentStyle={accentStyle}
       padding={size === 'hero' ? 'section' : 'standard'}
-      className={cn("flex flex-col justify-between", className)}
+      className={cn(
+        "flex h-full min-w-0 flex-col overflow-hidden",
+        className
+      )}
     >
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {icon && (
-              <span className="shrink-0 flex items-center" style={{ color: effectiveUnavailable ? '#71717a' : accentHex }}>
-                {renderIcon(icon, { size: 16, style: { color: effectiveUnavailable ? '#71717a' : accentHex } })}
-              </span>
-            )}
-            <span className={cn(TYPOGRAPHY.label, "truncate")}>
-              {label}
+      <div className="min-w-0">
+        {/* Header */}
+        <div className="flex min-w-0 items-center gap-2 mb-2">
+          {icon && (
+            <span
+              className="shrink-0 flex items-center"
+              style={{
+                color: effectiveUnavailable ? '#71717a' : accentHex
+              }}
+            >
+              {renderIcon(icon, {
+                size: 16,
+                style: {
+                  color: effectiveUnavailable ? '#71717a' : accentHex
+                }
+              })}
             </span>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 shrink-0">
-            {statusIndicator && (
-              <span className={cn(
-                "text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-zinc-800 bg-zinc-900/80",
-                statusIndicator.color === 'emerald' && "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-                statusIndicator.color === 'orange' && "text-orange-400 border-orange-500/30 bg-orange-500/10",
-                statusIndicator.color === 'amber' && "text-amber-400 border-amber-500/30 bg-amber-500/10",
-                statusIndicator.color === 'rose' && "text-rose-400 border-rose-500/30 bg-rose-500/10",
-                (!statusIndicator.color || statusIndicator.color === 'zinc') && "text-zinc-400 border-zinc-700/40"
-              )}>
-                {statusIndicator.label}
-              </span>
-            )}
-            {trend && (
-              <div className={cn("shrink-0 text-xs font-mono", trendColorClass)}>
-                {trend}
-              </div>
-            )}
-          </div>
+          <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
+            {label}
+          </span>
         </div>
 
-        <div className="flex items-baseline gap-1 mt-1">
-          <span className={cn(
-            STAT_NUMBER_VARIANTS[size],
-            effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
-          )}>
+        {/* Value */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5 mt-1">
+          <span
+            className={cn(
+              STAT_NUMBER_VARIANTS[size],
+              "min-w-0 max-w-full break-words tabular-nums",
+              effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
+            )}
+          >
             {typeof value === 'number' ? value.toLocaleString() : value}
           </span>
+
           {unit && !effectiveUnavailable && (
-            <span className={TYPOGRAPHY.unit}>
+            <span className={cn(TYPOGRAPHY.unit, "shrink-0")}>
               {unit}
             </span>
           )}
         </div>
       </div>
 
-      {(secondaryComparison || sublabel || unavailableLabel) && (
-        <div className="space-y-0.5 mt-2">
+      {/* Footer */}
+      {(secondaryComparison || sublabel || unavailableLabel || statusIndicator || trend) && (
+        <div className="mt-3 min-w-0 space-y-1">
           {secondaryComparison && (
-            <div className="font-mono text-xs text-zinc-300 truncate">
+            <div className="min-w-0 break-words font-mono text-xs text-zinc-300">
               {secondaryComparison}
             </div>
           )}
-          {sublabel && (
-            <p className="font-mono text-[10px] text-zinc-500 truncate">
-              {sublabel}
-            </p>
+
+          {(sublabel || statusIndicator || trend) && (
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              {sublabel ? (
+                <p className="min-w-0 flex-1 break-words font-mono text-[10px] leading-tight text-zinc-500">
+                  {sublabel}
+                </p>
+              ) : (
+                <span />
+              )}
+
+              {(statusIndicator || trend) && (
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                  {statusIndicator && (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
+                        statusIndicator.color === 'emerald' &&
+                          "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+                        statusIndicator.color === 'orange' &&
+                          "text-orange-400 border-orange-500/30 bg-orange-500/10",
+                        statusIndicator.color === 'amber' &&
+                          "text-amber-400 border-amber-500/30 bg-amber-500/10",
+                        statusIndicator.color === 'rose' &&
+                          "text-rose-400 border-rose-500/30 bg-rose-500/10",
+                        (!statusIndicator.color || statusIndicator.color === 'zinc') &&
+                          "text-zinc-400 border-zinc-700/40"
+                      )}
+                    >
+                      {statusIndicator.label}
+                    </span>
+                  )}
+
+                  {trend && (
+                    <div
+                      className={cn(
+                        "shrink-0 font-mono text-xs",
+                        trendColorClass
+                      )}
+                    >
+                      {trend}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
+
           {effectiveUnavailable && unavailableLabel && !sublabel && (
-            <p className="font-mono text-[10px] text-zinc-500 truncate">
+            <p className="min-w-0 break-words font-mono text-[10px] leading-tight text-zinc-500">
               {unavailableLabel}
             </p>
           )}

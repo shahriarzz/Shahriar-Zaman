@@ -172,31 +172,36 @@ export const AnalyticsView: React.FC = () => {
           unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
           icon={<Flame size={16} />}
           accent="orange"
-          sublabel="Current active streak"
+          sublabel="Current scheduled streak"
           trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
         />
 
         {/* 2. Adherence Rate */}
         <StatCard
           label="Adherence Rate"
-          value={`${adherenceInsight.percent}%`}
+          value={adherenceInsight.percent}
+          unit="%"
           icon={<Activity size={16} />}
           accent="emerald"
           sublabel={
             adherenceInsight.pendingScheduledWorkouts > 0
-              ? `${adherenceInsight.completedScheduled} / ${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending (28d)`
-              : `${adherenceInsight.completedScheduled} / ${adherenceInsight.evaluatedScheduledWorkouts} evaluated (28d)`
+              ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
+              : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
           }
         />
 
         {/* 3. Window Volume with Period-over-Period Trend */}
         <StatCard
           label="Window Volume"
-          value={(aggregated.rangeVolume / 1000).toFixed(1)}
-          unit="k kg"
+          value={
+            aggregated.rangeVolume >= 1000
+              ? (aggregated.rangeVolume / 1000).toFixed(1)
+              : aggregated.rangeVolume.toLocaleString()
+          }
+          unit={aggregated.rangeVolume >= 1000 ? 'k kg' : 'kg'}
           icon={<Dumbbell size={16} />}
           accent="emerald"
-          sublabel={`Window: ${timeRange.toUpperCase()}`}
+          sublabel={`${timeRange.toUpperCase()} completed volume`}
           trend={
             aggregated.volumePeriodChangePct !== null ? (
               <span
@@ -222,7 +227,7 @@ export const AnalyticsView: React.FC = () => {
         <StatCard
           label="Performance Score"
           value={performanceScore.score !== null ? performanceScore.score : '—'}
-          sublabel={performanceScore.score !== null ? `${performanceScore.status} (28d)` : 'Building baseline (28d)'}
+          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28d` : 'Building baseline'}
           icon={<Award size={16} />}
           accent={
             performanceScore.score === null
@@ -481,8 +486,9 @@ export const AnalyticsView: React.FC = () => {
           <Grid cols={1} colsMd={2} gap="md">
             <StatCard
               label="Average Session Length"
-              value={aggregated.avgDuration > 0 ? aggregated.avgDuration : '--'}
-              unit={aggregated.avgDuration > 0 ? 'minutes' : ''}
+              value={aggregated.avgDuration > 0 ? aggregated.avgDuration : '—'}
+              unit={aggregated.avgDuration > 0 ? 'min' : undefined}
+              isUnavailable={aggregated.avgDuration <= 0}
               icon={<Clock size={20} />}
               accent="emerald"
               sublabel={aggregated.avgDuration > 0 ? 'Measured duration' : 'No duration recorded'}
@@ -751,10 +757,21 @@ export const AnalyticsView: React.FC = () => {
         <Grid cols={1} colsMd={3} gap="md">
           <StatCard
             label="Last Session"
-            value={aggregated.daysSinceLast === 0 ? 'Today' : `${aggregated.daysSinceLast}`}
-            unit={aggregated.daysSinceLast === 0 ? '' : 'd ago'}
+            value={
+              !aggregated.firstLogDate
+                ? '—'
+                : aggregated.daysSinceLast === 0
+                ? 'Today'
+                : aggregated.daysSinceLast
+            }
+            unit={
+              !aggregated.firstLogDate || aggregated.daysSinceLast === 0
+                ? undefined
+                : 'd ago'
+            }
+            isUnavailable={!aggregated.firstLogDate}
             accent="zinc"
-            sublabel="Last recorded workout"
+            sublabel={!aggregated.firstLogDate ? 'No sessions recorded' : 'Last recorded workout'}
           />
           <StatCard
             label="Average Training Gap"

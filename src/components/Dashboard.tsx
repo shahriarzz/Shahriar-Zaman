@@ -82,15 +82,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       <Grid cols={2} colsMd={4} gap="md">
         <StatCard
           label="Streak"
-          value={`${trainingStreak.currentStreak} ${trainingStreak.currentStreak === 1 ? 'day' : 'days'}`}
-          sublabel={`Best: ${trainingStreak.longestStreak}`}
+          value={trainingStreak.currentStreak}
+          unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
+          sublabel={`Best: ${trainingStreak.longestStreak}d`}
           accent="orange"
           icon={TrendingUp}
           size="standard"
         />
         <StatCard
           label="Training Frequency"
-          value={`${trainingFrequency.sessionsPerWeek.toFixed(1)} / week`}
+          value={trainingFrequency.sessionsPerWeek.toFixed(1)}
+          unit="/ week"
           sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
           accent="emerald"
           icon={CalendarIcon}
@@ -98,8 +100,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         />
         <StatCard
           label="Strength Trend"
-          value={strengthTrend.percentChange !== null ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}%` : '—'}
-          sublabel={strengthTrend.percentChange !== null ? '30-day' : 'Building baseline'}
+          value={
+            strengthTrend.percentChange !== null
+              ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}`
+              : '—'
+          }
+          unit={strengthTrend.percentChange !== null ? '%' : undefined}
+          sublabel={
+            strengthTrend.percentChange !== null
+              ? '30-day vs previous 30d'
+              : 'Building baseline'
+          }
           isUnavailable={strengthTrend.percentChange === null}
           accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
           icon={Dumbbell}
@@ -107,7 +118,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         />
         <StatCard
           label="Total kg Lifted"
-          value={`${stats.formattedWeightLifted} kg`}
+          value={stats.formattedWeightLifted}
+          unit="kg"
           sublabel="Lifetime"
           accent="emerald"
           icon={Trophy}

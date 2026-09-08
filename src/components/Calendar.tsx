@@ -631,8 +631,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <Grid cols={3} gap="sm">
                       <StatCard
                         label="Volume"
-                        value={selectedDayVolume.toLocaleString()}
-                        unit="kg"
+                        value={
+                          selectedDayVolume >= 1000
+                            ? (selectedDayVolume / 1000).toFixed(1)
+                            : selectedDayVolume.toLocaleString()
+                        }
+                        unit={selectedDayVolume >= 1000 ? 'k kg' : 'kg'}
                         accent="emerald"
                         icon={TrendingUp}
                         size="standard"
@@ -647,7 +651,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       />
                       <StatCard
                         label="Sets Done"
-                        value={selectedPlannedSets > 0 ? `${selectedDoneSets}/${selectedPlannedSets}` : `${selectedDoneSets}`}
+                        value={`${selectedDoneSets}/${selectedPlannedSets || selectedDoneSets}`}
                         accent="zinc"
                         icon={CheckCircle2}
                         size="standard"

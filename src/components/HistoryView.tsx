@@ -469,8 +469,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <Grid cols={2} colsMd={4} gap="md">
                       <StatCard
                         label="Sessions"
-                        value={selectedReport.sessionsCount.toString()}
-                        unit="runs"
+                        value={currentSessions}
+                        unit="sessions"
                         accent="zinc"
                         trend={sessionsTrendText}
                         trendDirection={sessionsTrendDir}
@@ -478,15 +478,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       />
                       <StatCard
                         label="Volume"
-                        value={selectedReport.totalVolume >= 1000 ? `${(selectedReport.totalVolume / 1000).toFixed(1)}k` : Math.round(selectedReport.totalVolume).toString()}
-                        unit="kg"
+                        value={
+                          currentVolume >= 1000
+                            ? (currentVolume / 1000).toFixed(1)
+                            : currentVolume.toLocaleString()
+                        }
+                        unit={currentVolume >= 1000 ? 'k kg' : 'kg'}
                         accent="emerald"
                         trend={volumeTrendText}
                         trendDirection={volumeTrendDir}
                       />
                       <StatCard
-                        label="PR Benchmarks"
-                        value={currentMonthPRs.length.toString()}
+                        label="PRs"
+                        value={currentMonthPRs.length}
                         unit="PRs"
                         accent="amber"
                         icon={Trophy}
@@ -496,12 +500,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       />
                       <StatCard
                         label="Strength Trend"
-                        value={monthlyStrengthTrend.comparableExercises > 0 && strengthChange !== null ? `${strengthChange > 0 ? '+' : ''}${strengthChange}%` : 'N/A'}
+                        value={
+                          monthlyStrengthTrend.percentChange !== null
+                            ? `${monthlyStrengthTrend.percentChange >= 0 ? '+' : ''}${monthlyStrengthTrend.percentChange.toFixed(1)}`
+                            : '—'
+                        }
+                        unit={monthlyStrengthTrend.percentChange !== null ? '%' : undefined}
                         accent="indigo"
                         icon={Sparkles}
                         trend={strengthTrendText}
                         trendDirection={strengthTrendDir}
-                        isUnavailable={monthlyStrengthTrend.comparableExercises === 0}
+                        isUnavailable={monthlyStrengthTrend.percentChange === null}
                         unavailableLabel="No Overlap"
                         sublabel={
                           monthlyStrengthTrend.comparableExercises > 0
