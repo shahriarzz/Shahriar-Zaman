@@ -6,7 +6,9 @@ import {
   calculateAdherence,
   calculateStrengthTrend,
   calculatePerformanceScore,
-  calculatePREvents
+  calculatePREvents,
+  selectVolumeForRange,
+  median
 } from '../utils/trainingIntelligence';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
@@ -307,17 +309,25 @@ describe('Training Intelligence Canonical Invariants Suite', () => {
 
     const emptyIndex = buildFitnessIndex([], defsMap);
 
-    // High completion rate (1.0) with intentional reduced volume (deload)
+    // High completion rate (1.0) with consistency
     const perf = calculatePerformanceScore({
       adherence: adherenceMock,
-      completionRate: 1.0, // High completion
-      strengthTrend: { percentChange: 0, confidence: 'medium', comparableExercises: 2, currentValue: 100, previousValue: 100, exerciseBreakdown: [] },
+      completionRate: 1.0,
+      strengthTrend: {
+        percentChange: 0,
+        confidence: 'medium',
+        comparableExercises: 2,
+        currentValue: 100,
+        previousValue: 100,
+        medianCurrentE1RM: 100,
+        medianPreviousE1RM: 100,
+        exerciseBreakdown: []
+      },
       index: emptyIndex,
-      now: testNow,
-      isDeload: true
+      now: testNow
     });
 
-    // Score remains strong despite volume fluctuations due to deload protection
+    // Score remains strong despite volume fluctuations due to high completion rate
     expect(perf.score).toBeGreaterThanOrEqual(80);
     expect(perf.status === 'Strong' || perf.status === 'Excellent').toBe(true);
   });
@@ -369,5 +379,232 @@ describe('Training Intelligence Canonical Invariants Suite', () => {
 
     expect(freq.completedSessions).toBe(3);
     expect(freq.sessionsPerWeek).toBeCloseTo((3 / 28) * 7, 1);
+  });
+
+  // 8. Regression test: Empty/New-user dataset must never produce "0 / Struggling"
+  it('returns score: null and status: "Unavailable" for empty datasets instead of "0 / Struggling"', () => {
+    const testNow = new Date(2026, 7, 1, 12, 0, 0);
+    const emptyIndex = buildFitnessIndex([], defsMap);
+
+    const adherence = calculateAdherence({
+      index: emptyIndex,
+      coreWorkoutByCycleDayMap,
+      cycleStart: '2026-08-01',
+      startDate: '2026-08-01',
+      endDate: '2026-08-01',
+      now: testNow
+    });
+
+    const perf = calculatePerformanceScore({
+      adherence,
+      index: emptyIndex,
+      now: testNow
+    });
+
+    expect(perf.score).toBeNull();
+    expect(perf.status).toBe('Unavailable');
+    expect(perf.confidence).toBe('low');
+  });
+
+  // 9. Regression test: Adherence UI denominator (8 completed + today's pending -> 100%, denominator = 8)
+  it('correctly calculates adherence when 8 past workouts completed and today is pending (100% adherence, 8 evaluated)', () => {
+    // Cycle starts on 2026-08-01. Over 9 days: 8 past days have completed core workouts, day 9 (today) is scheduled but pending
+    const testNow = new Date(2026, 7, 9, 9, 0, 0); // 2026-08-09 morning
+    const eightDayWorkoutMap = new Map<number, Workout>();
+    for (let day = 1; day <= 8; day++) {
+      eightDayWorkoutMap.set(day, {
+        id: `wo_day_${day}`,
+        name: `Day ${day} Routine`,
+        type: 'push',
+        badge: `Day ${day}`,
+        cycleDay: day,
+        isCore: true,
+        exercises: [{ exerciseDefinitionId: 'bench', sets: 3, reps: '10' }]
+      });
+    }
+
+    const logs: SessionLog[] = [];
+    const dates = [
+      '2026-08-01', '2026-08-02', '2026-08-03',
+      '2026-08-04', '2026-08-05', '2026-08-06',
+      '2026-08-07', '2026-08-08'
+    ];
+    dates.forEach((date, i) => {
+      logs.push(createTestLog({
+        id: `log_${date}`,
+        workoutId: `wo_day_${i + 1}`,
+        date,
+        complete: true,
+        sets: { bench: [{ id: 's1', weight: '80', reps: '10', done: true }] }
+      }));
+    });
+
+    const index = buildFitnessIndex(logs, defsMap);
+    const adherence = calculateAdherence({
+      index,
+      coreWorkoutByCycleDayMap: eightDayWorkoutMap,
+      cycleStart: '2026-08-01',
+      startDate: '2026-08-01',
+      endDate: '2026-08-09',
+      now: testNow
+    });
+
+    expect(adherence.completedScheduled).toBe(8);
+    expect(adherence.evaluatedScheduledWorkouts).toBe(8);
+    expect(adherence.scheduledCoreWorkouts).toBe(9); // Includes today
+    expect(adherence.pendingScheduledWorkouts).toBe(1);
+    expect(adherence.isTodayPending).toBe(true);
+    expect(adherence.percent).toBe(100);
+  });
+
+  // 10. Regression test: Pre-cycleStart streak fallback resets on gap days
+  it('resets streak on gap days prior to cycleStart without fabricating continuous streak', () => {
+    const cycleStart = '2026-08-10';
+    const testNow = new Date(2026, 7, 10, 8, 0, 0); // 2026-08-10 before workout
+
+    // User logged on 2026-08-06 and 2026-08-07, but rest/gap on 2026-08-08 and 2026-08-09
+    const logs: SessionLog[] = [
+      createTestLog({
+        id: 'l1',
+        workoutId: 'wo_custom',
+        date: '2026-08-06',
+        complete: true,
+        sets: { bench: [{ id: 's1', weight: '80', reps: '10', done: true }] }
+      }),
+      createTestLog({
+        id: 'l2',
+        workoutId: 'wo_custom',
+        date: '2026-08-07',
+        complete: true,
+        sets: { bench: [{ id: 's2', weight: '80', reps: '10', done: true }] }
+      })
+    ];
+
+    const index = buildFitnessIndex(logs, defsMap);
+    const streak = calculateTrainingStreak({
+      index,
+      coreWorkoutByCycleDayMap,
+      cycleStart,
+      now: testNow
+    });
+
+    // Since there was a gap on 08-08 and 08-09 before cycleStart, currentStreak must reset to 0
+    expect(streak.currentStreak).toBe(0);
+    // Longest streak from the 2 contiguous days (08-06 and 08-07)
+    expect(streak.longestStreak).toBe(2);
+  });
+
+  // 11. Regression test: Performance vs Previous (Component 4) 28-day window & 90-day comparison restriction
+  it('Component 4 includes latest session within 28 days and excludes sessions older than 28 days or gaps > 90 days', () => {
+    const testNow = new Date(2026, 7, 28, 12, 0, 0); // 2026-08-28
+
+    // Exercise 1: Session 10 days ago (2026-08-18) and previous 20 days ago (2026-08-08) -> Valid!
+    // Exercise 2: Session 40 days ago (2026-07-19) -> Excluded from 28d window!
+    // Exercise 3: Session 10 days ago (2026-08-18) but previous 120 days ago (2026-04-20) -> Gap > 90d, excluded!
+    const logs: SessionLog[] = [
+      createTestLog({
+        id: 'ex1_prev',
+        workoutId: 'wo_push',
+        date: '2026-08-08',
+        complete: true,
+        sets: { bench: [{ id: 's1', weight: '100', reps: '5', done: true }] }
+      }),
+      createTestLog({
+        id: 'ex1_latest',
+        workoutId: 'wo_push',
+        date: '2026-08-18',
+        complete: true,
+        sets: { bench: [{ id: 's2', weight: '105', reps: '5', done: true }] }
+      }),
+      createTestLog({
+        id: 'ex2_old',
+        workoutId: 'wo_legs',
+        date: '2026-07-19',
+        complete: true,
+        sets: { squat: [{ id: 's3', weight: '120', reps: '5', done: true }] }
+      }),
+      createTestLog({
+        id: 'ex3_ancient_prev',
+        workoutId: 'wo_pull',
+        date: '2026-04-20',
+        complete: true,
+        sets: { deadlift: [{ id: 's4', weight: '140', reps: '5', done: true }] }
+      }),
+      createTestLog({
+        id: 'ex3_latest',
+        workoutId: 'wo_pull',
+        date: '2026-08-18',
+        complete: true,
+        sets: { deadlift: [{ id: 's5', weight: '145', reps: '5', done: true }] }
+      })
+    ];
+
+    const index = buildFitnessIndex(logs, defsMap);
+    const adherenceMock = {
+      rate: 1.0,
+      percent: 100,
+      completedScheduled: 2,
+      scheduledCoreWorkouts: 2,
+      evaluatedScheduledWorkouts: 2,
+      pendingScheduledWorkouts: 0,
+      missedPastCoreDays: 0,
+      scheduledRestDays: 0,
+      bonusCompletedSessions: 0,
+      isTodayPending: false
+    };
+
+    const perf = calculatePerformanceScore({
+      adherence: adherenceMock,
+      index,
+      now: testNow
+    });
+
+    // Exercise 1 is evaluated (+5% e1RM), exercise 2 is ignored (outside 28d), exercise 3 is ignored (gap > 90d)
+    expect(perf.components.performanceVsPrevious).toBeDefined();
+    expect(perf.components.performanceVsPrevious?.score).toBeGreaterThan(70);
+  });
+
+  // 12. Regression test: median helper correctness
+  it('correctly calculates median for odd, even, and empty arrays', () => {
+    expect(median([])).toBe(0);
+    expect(median([10])).toBe(10);
+    expect(median([10, 20, 30])).toBe(20);
+    expect(median([30, 10, 20])).toBe(20); // handles unsorted input
+    expect(median([10, 20, 30, 40])).toBe(25); // even count: average of middle two
+    expect(median([40, 10, 20, 30])).toBe(25);
+  });
+
+  // 13. Regression test: History monthly volume equals selectVolumeForRange
+  it('canonical selectVolumeForRange accurately sums volume for a calendar month', () => {
+    const logs: SessionLog[] = [
+      createTestLog({
+        id: 'l1',
+        workoutId: 'wo_push',
+        date: '2026-08-05',
+        complete: true,
+        sets: { bench: [{ id: 's1', weight: '100', reps: '10', done: true }] } // 1000 kg
+      }),
+      createTestLog({
+        id: 'l2',
+        workoutId: 'wo_legs',
+        date: '2026-08-20',
+        complete: true,
+        sets: { squat: [{ id: 's2', weight: '150', reps: '10', done: true }] } // 1500 kg
+      }),
+      createTestLog({
+        id: 'l3_next_month',
+        workoutId: 'wo_pull',
+        date: '2026-09-01',
+        complete: true,
+        sets: { deadlift: [{ id: 's3', weight: '200', reps: '5', done: true }] } // 1000 kg
+      })
+    ];
+
+    const index = buildFitnessIndex(logs, defsMap);
+    const augustVolume = selectVolumeForRange(index, '2026-08-01', '2026-08-31');
+    expect(augustVolume).toBe(2500);
+
+    const septemberVolume = selectVolumeForRange(index, '2026-09-01', '2026-09-30');
+    expect(septemberVolume).toBe(1000);
   });
 });

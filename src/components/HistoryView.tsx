@@ -8,7 +8,6 @@ import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
-import { calculateStrengthTrend } from '../utils/trainingIntelligence';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -41,7 +40,7 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
   const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
-  const { sortedLogs, workoutMap, index, prEvents } = useFitnessDerivedData();
+  const { sortedLogs, workoutMap, index, prEvents, getStrengthTrendForRange, getVolumeForRange } = useFitnessDerivedData();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -154,7 +153,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       const summary = summaries[monthKey];
       summary.sessionsCount += 1;
       summary.totalDuration += log.durationMinutes || 0;
-      summary.totalVolume += calculateSetsVolume(getCompletedSets(log));
 
       const workout = workoutsById.get(log.workoutId);
       if (workout) {
@@ -179,13 +177,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       });
     });
 
-    // Populate canonical PR counts per month from canonical prEvents
+    // Populate canonical monthly volume from canonical range volume selector and PR counts
     Object.values(summaries).forEach(summary => {
+      const [year, month] = summary.monthKey.split('-').map(Number);
+      const lastDayOfCurMonth = new Date(year, month, 0).getDate();
+      const monthStart = `${summary.monthKey}-01`;
+      const monthEnd = `${summary.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
+      summary.totalVolume = getVolumeForRange(monthStart, monthEnd);
       summary.prCount = (prEvents || []).filter(pr => pr.monthKey === summary.monthKey).length;
     });
 
     return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [logs, workoutsById, index, prEvents]);
+  }, [sortedLogs, workoutsById, index, prEvents, getVolumeForRange]);
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
@@ -363,29 +366,48 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
                 const prevMonthDate = new Date(curYear, curMonth - 2, 1);
                 const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+                const prevMonthName = prevMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
+
+                // Distinguish between no previous tracked month and previous month with zero completed workouts
+                const earliestMonthKey = monthlySummaries.length > 0
+                  ? monthlySummaries[monthlySummaries.length - 1].monthKey
+                  : selectedReport.monthKey;
+                const hasEarlierHistory = prevMonthKey >= earliestMonthKey;
 
                 // 1. Sessions comparison
                 const currentSessions = selectedReport.sessionsCount;
                 let sessionsTrendText = 'First recorded month';
                 let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                let sessionsSublabel: string | undefined = undefined;
+
                 if (prevReport) {
                   const sDiff = currentSessions - prevReport.sessionsCount;
                   sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
                   sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
+                  sessionsSublabel = `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}`;
+                } else if (hasEarlierHistory) {
+                  sessionsTrendText = currentSessions > 0 ? `+${currentSessions} vs prev month` : `Equal vs prev month`;
+                  sessionsTrendDir = currentSessions > 0 ? 'positive' : 'neutral';
+                  sessionsSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
                 }
 
                 // 2. Volume comparison
                 const currentVolume = selectedReport.totalVolume;
                 let volumeTrendText = 'First recorded month';
                 let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+
                 if (prevReport && prevReport.totalVolume > 0) {
                   const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
                   const roundedVPct = Math.round(vPct * 10) / 10;
                   volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
                   volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
                 } else if (prevReport) {
-                  volumeTrendText = 'Equal vs prev month';
+                  volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
+                  volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
+                } else if (hasEarlierHistory) {
+                  volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
+                  volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
                 }
 
                 // 3. PRs comparison
@@ -393,10 +415,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
                 let prTrendText = 'First recorded month';
                 let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                let prSublabel: string | undefined = undefined;
+
                 if (prevReport) {
                   const prDiff = currentMonthPRs.length - prevMonthPRs.length;
                   prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
                   prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
+                  prSublabel = `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}`;
+                } else if (hasEarlierHistory) {
+                  prTrendText = currentMonthPRs.length > 0 ? `+${currentMonthPRs.length} vs prev month` : `Equal vs prev month`;
+                  prTrendDir = currentMonthPRs.length > 0 ? 'positive' : 'neutral';
+                  prSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
                 }
 
                 // 4. Strength Trend (Current month vs immediately preceding month)
@@ -408,18 +437,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 const prevStart = `${prevMonthKey}-01`;
                 const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
 
-                const monthlyStrengthTrend = calculateStrengthTrend({
-                  index,
-                  currentRange: { start: curStart, end: curEnd },
-                  comparisonRange: { start: prevStart, end: prevEnd }
-                });
+                const monthlyStrengthTrend = getStrengthTrendForRange(
+                  { start: curStart, end: curEnd },
+                  { start: prevStart, end: prevEnd }
+                );
 
                 const strengthChange = monthlyStrengthTrend.percentChange;
                 const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
                   ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
                   : undefined;
                 const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
-                  strengthChange > 0 ? 'positive' : strengthChange < 0 ? 'negative' : 'neutral';
+                  strengthChange !== null && strengthChange > 0 ? 'positive' : strengthChange !== null && strengthChange < 0 ? 'negative' : 'neutral';
 
                 const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
 
@@ -446,7 +474,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         accent="zinc"
                         trend={sessionsTrendText}
                         trendDirection={sessionsTrendDir}
-                        sublabel={prevReport ? `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}` : undefined}
+                        sublabel={sessionsSublabel}
                       />
                       <StatCard
                         label="Volume"
@@ -464,18 +492,24 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         icon={Trophy}
                         trend={prTrendText}
                         trendDirection={prTrendDir}
-                        sublabel={prevReport ? `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}` : undefined}
+                        sublabel={prSublabel}
                       />
                       <StatCard
                         label="Strength Trend"
-                        value={monthlyStrengthTrend.comparableExercises > 0 ? `${strengthChange > 0 ? '+' : ''}${strengthChange}%` : 'N/A'}
+                        value={monthlyStrengthTrend.comparableExercises > 0 && strengthChange !== null ? `${strengthChange > 0 ? '+' : ''}${strengthChange}%` : 'N/A'}
                         accent="indigo"
                         icon={Sparkles}
                         trend={strengthTrendText}
                         trendDirection={strengthTrendDir}
                         isUnavailable={monthlyStrengthTrend.comparableExercises === 0}
                         unavailableLabel="No Overlap"
-                        sublabel={monthlyStrengthTrend.comparableExercises > 0 ? `Confidence: ${monthlyStrengthTrend.confidence}` : 'No matching lifts vs prev'}
+                        sublabel={
+                          monthlyStrengthTrend.comparableExercises > 0
+                            ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                            : hasEarlierHistory
+                            ? 'No matching lifts vs prev'
+                            : 'First recorded month'
+                        }
                       />
                     </Grid>
 

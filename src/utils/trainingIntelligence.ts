@@ -57,6 +57,21 @@ export interface PREvent {
   isE1RMPR: boolean;
 }
 
+/**
+ * Calculates the exact median of a numbers array.
+ * Odd count -> exact middle value.
+ * Even count -> average of the two middle values.
+ * Empty array -> 0.
+ */
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 export interface ExerciseStrengthTrendBreakdown {
   exerciseDefinitionId: string;
   exerciseName: string;
@@ -67,14 +82,20 @@ export interface ExerciseStrengthTrendBreakdown {
 
 export interface StrengthTrendInsight {
   percentChange: number | null;
+  /** Median current best e1RM across comparable exercises (not a single athlete e1RM) */
   currentValue: number | null;
+  /** Median previous best e1RM across comparable exercises (not a single athlete e1RM) */
   previousValue: number | null;
+  /** Explicit alias for currentValue */
+  medianCurrentE1RM?: number | null;
+  /** Explicit alias for previousValue */
+  medianPreviousE1RM?: number | null;
   comparableExercises: number;
   confidence: 'high' | 'medium' | 'low';
   exerciseBreakdown: ExerciseStrengthTrendBreakdown[];
 }
 
-export type PerformanceScoreStatus = 'Excellent' | 'Strong' | 'Good' | 'Needs attention' | 'Struggling';
+export type PerformanceScoreStatus = 'Excellent' | 'Strong' | 'Good' | 'Needs attention' | 'Struggling' | 'Unavailable';
 
 export interface PerformanceScoreComponent {
   score: number | null;
@@ -83,7 +104,7 @@ export interface PerformanceScoreComponent {
 }
 
 export interface PerformanceScoreInsight {
-  score: number;
+  score: number | null;
   status: PerformanceScoreStatus;
   components: {
     adherence: PerformanceScoreComponent;
@@ -207,8 +228,8 @@ export function calculateTrainingStreak({
         // Bonus workouts on rest/unscheduled days do not extend scheduled streak.
       }
     } else {
-      // Historical boundary: Prior to active cycleStart, preserve known completed sessions
-      // without falsely projecting current cycle days into the past.
+      // Historical boundary: Prior to active cycleStart, verifiable scheduled cycle is unavailable.
+      // Do not fabricate scheduled streak continuity across rest or gap days.
       const hasCompleted = dayLogs.some(isCompletedSession);
       if (hasCompleted) {
         currentStreak++;
@@ -219,6 +240,11 @@ export function calculateTrainingStreak({
         if (currentStreak > longestStreak) {
           longestStreak = currentStreak;
         }
+      } else {
+        // Any gap day prior to cycleStart without an established schedule breaks continuity
+        currentStreak = 0;
+        tempStreakStart = null;
+        tempStreakEnd = null;
       }
     }
   });
@@ -502,23 +528,12 @@ export function calculateStrengthTrend({
     };
   }
 
-  const sortedChanges = exerciseBreakdown.map(e => e.percentChange).sort((a, b) => a - b);
-  const mid = Math.floor(sortedChanges.length / 2);
-  const medianChange = sortedChanges.length % 2 !== 0
-    ? sortedChanges[mid]
-    : (sortedChanges[mid - 1] + sortedChanges[mid]) / 2;
+  const medianChange = median(exerciseBreakdown.map(e => e.percentChange));
+  const medianCurrent = median(exerciseBreakdown.map(e => e.currentBestE1RM));
+  const medianPrevious = median(exerciseBreakdown.map(e => e.previousBestE1RM));
 
-  const sortedCurrent = exerciseBreakdown.map(e => e.currentBestE1RM).sort((a, b) => a - b);
-  const midCurr = Math.floor(sortedCurrent.length / 2);
-  const medianCurrent = sortedCurrent.length % 2 !== 0
-    ? sortedCurrent[midCurr]
-    : (sortedCurrent[midCurr - 1] + sortedCurrent[midCurr]) / 2;
-
-  const sortedPrevious = exerciseBreakdown.map(e => e.previousBestE1RM).sort((a, b) => a - b);
-  const midPrev = Math.floor(sortedPrevious.length / 2);
-  const medianPrevious = sortedPrevious.length % 2 !== 0
-    ? sortedPrevious[midPrev]
-    : (sortedPrevious[midPrev - 1] + sortedPrevious[midPrev]) / 2;
+  const currentValue = Math.round(medianCurrent * 10) / 10;
+  const previousValue = Math.round(medianPrevious * 10) / 10;
 
   let confidence: 'high' | 'medium' | 'low' = 'low';
   if (exerciseBreakdown.length === 1) {
@@ -531,8 +546,10 @@ export function calculateStrengthTrend({
 
   return {
     percentChange: Math.round(medianChange * 10) / 10,
-    currentValue: Math.round(medianCurrent * 10) / 10,
-    previousValue: Math.round(medianPrevious * 10) / 10,
+    currentValue,
+    previousValue,
+    medianCurrentE1RM: currentValue,
+    medianPreviousE1RM: previousValue,
     comparableExercises: exerciseBreakdown.length,
     confidence,
     exerciseBreakdown
@@ -546,10 +563,9 @@ export function calculateStrengthTrend({
 export interface CalculatePerformanceScoreOptions {
   adherence: AdherenceInsight;
   completionRate?: number; // completed sets / planned sets in window
-  strengthTrend: StrengthTrendInsight;
+  strengthTrend?: StrengthTrendInsight;
   index: FitnessIndex;
   now?: Date | string;
-  isDeload?: boolean;
 }
 
 /**
@@ -565,8 +581,7 @@ export function calculatePerformanceScore({
   completionRate,
   strengthTrend,
   index,
-  now = new Date(),
-  isDeload = false
+  now = new Date()
 }: CalculatePerformanceScoreOptions): PerformanceScoreInsight {
   const primaryFactors: string[] = [];
 
@@ -594,8 +609,8 @@ export function calculatePerformanceScore({
 
   // Component 3: Strength progression (weight 0.30)
   let strengthScore: number | null = null;
-  const strengthAvailable = strengthTrend.percentChange !== null;
-  if (strengthAvailable && strengthTrend.percentChange !== null) {
+  const strengthAvailable = strengthTrend?.percentChange !== null && strengthTrend?.percentChange !== undefined;
+  if (strengthAvailable && strengthTrend && strengthTrend.percentChange !== null) {
     const baseline = 75;
     const scaled = baseline + (strengthTrend.percentChange * 5);
     strengthScore = Math.min(100, Math.max(0, Math.round(scaled)));
@@ -609,13 +624,29 @@ export function calculatePerformanceScore({
   }
 
   // Component 4: Performance vs previous sessions (weight 0.15)
+  // Restrict to exercises whose latest session occurred within the 28-day window
   let performanceScoreVal: number | null = null;
   let performanceAvailable = false;
   const recentRatios: number[] = [];
+
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = isValid(parsedNow) ? startOfDay(parsedNow) : startOfDay(new Date());
+  const cutoff28DaysStr = format(subDays(validNow, 28), 'yyyy-MM-dd');
+  // Reasonable comparison window (90 days / 1 quarter) for the immediately preceding session
+  const maxPrecedingAgeDaysStr = format(subDays(validNow, 90), 'yyyy-MM-dd');
+
   index.exerciseIndex.forEach(entry => {
     if (entry.sessions.length >= 2) {
       const s0 = entry.sessions[0];
       const s1 = entry.sessions[1];
+      // Latest session must be within the 28-day evaluation window
+      if (s0.date < cutoff28DaysStr) {
+        return;
+      }
+      // Immediately preceding session must be within the reasonable comparison window
+      if (s1.date < maxPrecedingAgeDaysStr) {
+        return;
+      }
       if (s0.maxE1RM > 0 && s1.maxE1RM > 0) {
         recentRatios.push(s0.maxE1RM / s1.maxE1RM);
       }
@@ -624,8 +655,7 @@ export function calculatePerformanceScore({
 
   if (recentRatios.length > 0) {
     performanceAvailable = true;
-    const sortedRatios = recentRatios.sort((a, b) => a - b);
-    const medianRatio = sortedRatios[Math.floor(sortedRatios.length / 2)];
+    const medianRatio = median(recentRatios);
     if (medianRatio >= 1.05) performanceScoreVal = 95;
     else if (medianRatio >= 1.0) performanceScoreVal = 85;
     else if (medianRatio >= 0.95) performanceScoreVal = 75;
@@ -636,30 +666,24 @@ export function calculatePerformanceScore({
   // Component 5: Volume consistency (weight 0.15)
   let volumeScore: number | null = null;
   let volumeAvailable = false;
-  if (isDeload) {
+  const weeklyVols = Object.values(index.weeklyVolumeMap).filter(v => v > 0);
+  if (weeklyVols.length >= 2) {
     volumeAvailable = true;
-    volumeScore = 90; // Deload protection
-    primaryFactors.push('Deload protocol active: volume target adjusted');
-  } else {
-    const weeklyVols = Object.values(index.weeklyVolumeMap).filter(v => v > 0);
-    if (weeklyVols.length >= 2) {
-      volumeAvailable = true;
-      const recent4 = weeklyVols.slice(-4);
-      const minV = Math.min(...recent4);
-      const maxV = Math.max(...recent4);
-      const ratio = maxV > 0 ? minV / maxV : 0;
-      if (ratio >= 0.7) {
-        volumeScore = 90;
-      } else if (ratio >= 0.5) {
-        volumeScore = 75;
-      } else {
-        // Neutral baseline when volume consistency cannot distinguish intentional reduction (taper/deload) from poor consistency
-        const isHighConsistency = (adherenceAvailable && (adherenceScore || 0) >= 80) || (completionAvailable && (completionScore || 0) >= 80);
-        volumeScore = isHighConsistency ? 75 : 60;
-      }
-      if (volumeScore >= 80) {
-        primaryFactors.push('Consistent weekly volume load');
-      }
+    const recent4 = weeklyVols.slice(-4);
+    const minV = Math.min(...recent4);
+    const maxV = Math.max(...recent4);
+    const ratio = maxV > 0 ? minV / maxV : 0;
+    if (ratio >= 0.7) {
+      volumeScore = 90;
+    } else if (ratio >= 0.5) {
+      volumeScore = 75;
+    } else {
+      // Neutral baseline when volume consistency cannot distinguish intentional reduction (taper/deload) from poor consistency
+      const isHighConsistency = (adherenceAvailable && (adherenceScore || 0) >= 80) || (completionAvailable && (completionScore || 0) >= 80);
+      volumeScore = isHighConsistency ? 75 : 60;
+    }
+    if (volumeScore >= 80) {
+      primaryFactors.push('Consistent weekly volume load');
     }
   }
 
@@ -673,9 +697,25 @@ export function calculatePerformanceScore({
 
   const availableWeights = rawComponents.filter(c => c.available && c.score !== null);
   const sumWeights = availableWeights.reduce((sum, c) => sum + c.weight, 0);
-  const weightedSum = availableWeights.reduce((sum, c) => sum + (c.score! * c.weight), 0);
 
-  const finalScore = sumWeights > 0 ? Math.round(weightedSum / sumWeights) : 0;
+  if (sumWeights === 0) {
+    return {
+      score: null,
+      status: 'Unavailable',
+      components: {
+        adherence: { score: adherenceScore, weight: 0.25, available: adherenceAvailable },
+        completion: { score: completionScore, weight: 0.15, available: completionAvailable },
+        strengthProgression: { score: strengthScore, weight: 0.30, available: strengthAvailable },
+        performanceVsPrevious: { score: performanceScoreVal, weight: 0.15, available: performanceAvailable },
+        volumeConsistency: { score: volumeScore, weight: 0.15, available: volumeAvailable }
+      },
+      confidence: 'low',
+      primaryFactors: ['Insufficient baseline data for scoring']
+    };
+  }
+
+  const weightedSum = availableWeights.reduce((sum, c) => sum + (c.score! * c.weight), 0);
+  const finalScore = Math.round(weightedSum / sumWeights);
 
   let status: PerformanceScoreStatus;
   if (finalScore >= 90) status = 'Excellent';

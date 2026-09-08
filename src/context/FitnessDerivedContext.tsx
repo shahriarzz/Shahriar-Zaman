@@ -31,12 +31,14 @@ import {
   calculateStrengthTrend,
   calculatePerformanceScore,
   calculatePREvents,
+  selectVolumeForRange,
   StreakInsight,
   TrainingFrequencyInsight,
   AdherenceInsight,
   StrengthTrendInsight,
   PerformanceScoreInsight,
-  PREvent
+  PREvent,
+  DateRange
 } from '../utils/trainingIntelligence';
 
 export interface FitnessDerivedData {
@@ -71,6 +73,8 @@ export interface FitnessDerivedData {
   getLatestForExercise: (exerciseDefinitionId: string) => ExerciseSessionHistoryEntry | null;
   getWeightPRForExercise: (exerciseDefinitionId: string) => WeightPRRecord | null;
   getE1RMPRForExercise: (exerciseDefinitionId: string) => E1RMPRRecord | null;
+  getStrengthTrendForRange: (currentRange: DateRange, comparisonRange: DateRange) => StrengthTrendInsight;
+  getVolumeForRange: (startDate: Date | string, endDate: Date | string) => number;
 }
 
 export const FitnessDerivedContext = createContext<FitnessDerivedData | null>(null);
@@ -270,6 +274,14 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
   }, [index]);
 
+  const getStrengthTrendForRange = useCallback((currentRange: DateRange, comparisonRange: DateRange): StrengthTrendInsight => {
+    return calculateStrengthTrend({ index, currentRange, comparisonRange });
+  }, [index]);
+
+  const getVolumeForRange = useCallback((startDate: Date | string, endDate: Date | string): number => {
+    return selectVolumeForRange(index, startDate, endDate);
+  }, [index]);
+
   const prEvents = useMemo(() => {
     return calculatePREvents(index);
   }, [index]);
@@ -305,7 +317,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getWeightPRForExercise,
-    getE1RMPRForExercise
+    getE1RMPRForExercise,
+    getStrengthTrendForRange,
+    getVolumeForRange
   }), [
     index,
     defsMap,
@@ -326,7 +340,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getHistoryForExercise,
     getLatestForExercise,
     getWeightPRForExercise,
-    getE1RMPRForExercise
+    getE1RMPRForExercise,
+    getStrengthTrendForRange,
+    getVolumeForRange
   ]);
 
   return (

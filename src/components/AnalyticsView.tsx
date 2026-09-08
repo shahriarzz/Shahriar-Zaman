@@ -182,7 +182,11 @@ export const AnalyticsView: React.FC = () => {
           value={`${adherenceInsight.percent}%`}
           icon={<Activity size={16} />}
           accent="emerald"
-          sublabel={`${adherenceInsight.completedScheduled} / ${adherenceInsight.scheduledCoreWorkouts} scheduled (28d)`}
+          sublabel={
+            adherenceInsight.pendingScheduledWorkouts > 0
+              ? `${adherenceInsight.completedScheduled} / ${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending (28d)`
+              : `${adherenceInsight.completedScheduled} / ${adherenceInsight.evaluatedScheduledWorkouts} evaluated (28d)`
+          }
         />
 
         {/* 3. Window Volume with Period-over-Period Trend */}
@@ -217,14 +221,34 @@ export const AnalyticsView: React.FC = () => {
         {/* 4. Performance Score */}
         <StatCard
           label="Performance Score"
-          value={performanceScore.score}
-          sublabel={`${performanceScore.status} (28d)`}
+          value={performanceScore.score !== null ? performanceScore.score : '—'}
+          sublabel={performanceScore.score !== null ? `${performanceScore.status} (28d)` : 'Building baseline (28d)'}
           icon={<Award size={16} />}
-          accent={performanceScore.status === 'Excellent' || performanceScore.status === 'Strong' ? 'emerald' : performanceScore.status === 'Good' ? 'amber' : 'rose'}
-          statusIndicator={{
-            label: performanceScore.status,
-            color: performanceScore.status === 'Excellent' || performanceScore.status === 'Strong' ? 'emerald' : performanceScore.status === 'Good' ? 'amber' : 'rose'
-          }}
+          accent={
+            performanceScore.score === null
+              ? 'zinc'
+              : performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
+              ? 'emerald'
+              : performanceScore.status === 'Good'
+              ? 'amber'
+              : 'rose'
+          }
+          statusIndicator={
+            performanceScore.score !== null
+              ? {
+                  label: performanceScore.status,
+                  color:
+                    performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
+                      ? 'emerald'
+                      : performanceScore.status === 'Good'
+                      ? 'amber'
+                      : 'rose'
+                }
+              : {
+                  label: 'Unavailable',
+                  color: 'zinc'
+                }
+          }
           trend={
             strengthTrend.percentChange !== null ? (
               <span className={cn("font-bold text-xs", strengthTrend.percentChange >= 0 ? "text-emerald-400" : "text-rose-400")}>
