@@ -8,6 +8,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
+import { calculateStrengthTrend } from '../utils/trainingIntelligence';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
@@ -40,7 +41,7 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
   const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
-  const { sortedLogs, workoutMap, index } = useFitnessDerivedData();
+  const { sortedLogs, workoutMap, index, prEvents } = useFitnessDerivedData();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -178,13 +179,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       });
     });
 
-    // Populate canonical PR counts per month from index.weightPRs
+    // Populate canonical PR counts per month from canonical prEvents
     Object.values(summaries).forEach(summary => {
-      summary.prCount = (index.weightPRs || []).filter(pr => pr.date.startsWith(summary.monthKey)).length;
+      summary.prCount = (prEvents || []).filter(pr => pr.monthKey === summary.monthKey).length;
     });
 
     return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [logs, workoutsById, index]);
+  }, [logs, workoutsById, index, prEvents]);
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
@@ -359,7 +360,74 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 const selectedReport = monthlySummaries.find(m => m.monthKey === activeMonthTab);
                 if (!selectedReport) return null;
 
+                const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
+                const prevMonthDate = new Date(curYear, curMonth - 2, 1);
+                const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+                const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
+
+                // 1. Sessions comparison
+                const currentSessions = selectedReport.sessionsCount;
+                let sessionsTrendText = 'First recorded month';
+                let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                if (prevReport) {
+                  const sDiff = currentSessions - prevReport.sessionsCount;
+                  sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
+                  sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
+                }
+
+                // 2. Volume comparison
+                const currentVolume = selectedReport.totalVolume;
+                let volumeTrendText = 'First recorded month';
+                let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                if (prevReport && prevReport.totalVolume > 0) {
+                  const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
+                  const roundedVPct = Math.round(vPct * 10) / 10;
+                  volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
+                  volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
+                } else if (prevReport) {
+                  volumeTrendText = 'Equal vs prev month';
+                }
+
+                // 3. PRs comparison
+                const currentMonthPRs = (prEvents || []).filter(e => e.monthKey === selectedReport.monthKey);
+                const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
+                let prTrendText = 'First recorded month';
+                let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                if (prevReport) {
+                  const prDiff = currentMonthPRs.length - prevMonthPRs.length;
+                  prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
+                  prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
+                }
+
+                // 4. Strength Trend (Current month vs immediately preceding month)
+                const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
+                const curStart = `${selectedReport.monthKey}-01`;
+                const curEnd = `${selectedReport.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
+
+                const lastDayOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
+                const prevStart = `${prevMonthKey}-01`;
+                const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
+
+                const monthlyStrengthTrend = calculateStrengthTrend({
+                  index,
+                  currentRange: { start: curStart, end: curEnd },
+                  comparisonRange: { start: prevStart, end: prevEnd }
+                });
+
+                const strengthChange = monthlyStrengthTrend.percentChange;
+                const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
+                  ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
+                  : undefined;
+                const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
+                  strengthChange > 0 ? 'positive' : strengthChange < 0 ? 'negative' : 'neutral';
+
                 const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
+
+                const durationHours = Math.floor(selectedReport.totalDuration / 60);
+                const durationMins = selectedReport.totalDuration % 60;
+                const avgDuration = selectedReport.sessionsCount > 0
+                  ? Math.round(selectedReport.totalDuration / selectedReport.sessionsCount)
+                  : 0;
 
                 return (
                   <motion.div
@@ -369,34 +437,62 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     transition={{ duration: 0.25 }}
                     className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
                   >
-                    {/* Summary Grid */}
+                    {/* Summary Grid: Sessions, Volume, PRs, Strength Trend */}
                     <Grid cols={2} colsMd={4} gap="md">
                       <StatCard
-                        label="Completed Workouts"
+                        label="Sessions"
                         value={selectedReport.sessionsCount.toString()}
                         unit="runs"
                         accent="zinc"
+                        trend={sessionsTrendText}
+                        trendDirection={sessionsTrendDir}
+                        sublabel={prevReport ? `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}` : undefined}
                       />
                       <StatCard
-                        label="Total Volume"
-                        value={selectedReport.totalVolume.toLocaleString()}
+                        label="Volume"
+                        value={selectedReport.totalVolume >= 1000 ? `${(selectedReport.totalVolume / 1000).toFixed(1)}k` : Math.round(selectedReport.totalVolume).toString()}
                         unit="kg"
                         accent="emerald"
-                      />
-                      <StatCard
-                        label="Total Duration"
-                        value={selectedReport.totalDuration.toString()}
-                        unit="min"
-                        accent="orange"
+                        trend={volumeTrendText}
+                        trendDirection={volumeTrendDir}
                       />
                       <StatCard
                         label="PR Benchmarks"
-                        value={selectedReport.prCount.toString()}
+                        value={currentMonthPRs.length.toString()}
                         unit="PRs"
                         accent="amber"
                         icon={Trophy}
+                        trend={prTrendText}
+                        trendDirection={prTrendDir}
+                        sublabel={prevReport ? `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}` : undefined}
+                      />
+                      <StatCard
+                        label="Strength Trend"
+                        value={monthlyStrengthTrend.comparableExercises > 0 ? `${strengthChange > 0 ? '+' : ''}${strengthChange}%` : 'N/A'}
+                        accent="indigo"
+                        icon={Sparkles}
+                        trend={strengthTrendText}
+                        trendDirection={strengthTrendDir}
+                        isUnavailable={monthlyStrengthTrend.comparableExercises === 0}
+                        unavailableLabel="No Overlap"
+                        sublabel={monthlyStrengthTrend.comparableExercises > 0 ? `Confidence: ${monthlyStrengthTrend.confidence}` : 'No matching lifts vs prev'}
                       />
                     </Grid>
+
+                    {/* Preserved Training Duration & Pacing details */}
+                    <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 rounded-xl border text-xs font-mono", SURFACE.subtle, BORDER.standard)}>
+                      <div className="flex items-center gap-2 text-zinc-300">
+                        <Clock size={15} className="text-orange-400" />
+                        <span>Total Time Trained:</span>
+                        <span className="font-bold text-white">
+                          {durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`} ({selectedReport.totalDuration} mins)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-zinc-400">
+                        <span>Average Session Duration:</span>
+                        <span className="font-bold text-zinc-200">{avgDuration} mins</span>
+                      </div>
+                    </div>
 
                     {/* Routine split and Peaks */}
                     <Grid cols={1} colsMd={2} gap="lg" className="pt-2 border-t border-zinc-900">

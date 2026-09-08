@@ -36,10 +36,25 @@ export interface AdherenceInsight {
   percent: number;
   completedScheduled: number;
   scheduledCoreWorkouts: number;
+  evaluatedScheduledWorkouts: number;
+  pendingScheduledWorkouts: number;
   missedPastCoreDays: number;
   scheduledRestDays: number;
   bonusCompletedSessions: number;
   isTodayPending: boolean;
+}
+
+export interface PREvent {
+  id: string;
+  exerciseDefinitionId: string;
+  exerciseName: string;
+  date: string;
+  monthKey: string;
+  weight: number;
+  reps: number;
+  e1rm: number;
+  isWeightPR: boolean;
+  isE1RMPR: boolean;
 }
 
 export interface ExerciseStrengthTrendBreakdown {
@@ -156,13 +171,45 @@ export function calculateTrainingStreak({
     const isToday = isSameDay(dayDate, validNow) || dateStr === todayStr;
     const isPast = dayDate < validNow && !isToday;
 
-    const cycleDay = getCycleDay(cycleStart, dayDate);
-    const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
-    const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
+    const isWithinActiveSchedule = !cycleStart || dateStr >= cycleStart;
     const dayLogs = index.logsByDate.get(dateStr) || [];
-    const hasCompleted = dayLogs.some(isCompletedSession);
 
-    if (isScheduledCore) {
+    if (isWithinActiveSchedule) {
+      const cycleDay = getCycleDay(cycleStart, dayDate);
+      const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+      const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
+      const hasCompletedExpected = isScheduledCore
+        ? dayLogs.some(l => isCompletedSession(l) && l.workoutId === expectedWo.id)
+        : false;
+
+      if (isScheduledCore) {
+        if (hasCompletedExpected) {
+          currentStreak++;
+          if (!tempStreakStart) {
+            tempStreakStart = dateStr;
+          }
+          tempStreakEnd = dateStr;
+          if (currentStreak > longestStreak) {
+            longestStreak = currentStreak;
+          }
+        } else {
+          if (isPast) {
+            // Skipped scheduled workout breaks streak
+            currentStreak = 0;
+            tempStreakStart = null;
+            tempStreakEnd = null;
+          } else if (isToday) {
+            // Current-day workout not yet completed -> does not prematurely break streak
+          }
+        }
+      } else {
+        // Programmed rest day or unscheduled day is neutral.
+        // Bonus workouts on rest/unscheduled days do not extend scheduled streak.
+      }
+    } else {
+      // Historical boundary: Prior to active cycleStart, preserve known completed sessions
+      // without falsely projecting current cycle days into the past.
+      const hasCompleted = dayLogs.some(isCompletedSession);
       if (hasCompleted) {
         currentStreak++;
         if (!tempStreakStart) {
@@ -172,19 +219,7 @@ export function calculateTrainingStreak({
         if (currentStreak > longestStreak) {
           longestStreak = currentStreak;
         }
-      } else {
-        if (isPast) {
-          // Skipped scheduled workout breaks streak
-          currentStreak = 0;
-          tempStreakStart = null;
-          tempStreakEnd = null;
-        } else if (isToday) {
-          // Current-day workout not yet completed -> does not prematurely break streak
-        }
       }
-    } else {
-      // Programmed rest day or unscheduled day is neutral.
-      // Bonus workouts on rest/unscheduled days do not extend scheduled streak.
     }
   });
 
@@ -306,43 +341,57 @@ export function calculateAdherence({
     const isToday = isSameDay(dayDate, validNow) || dateStr === todayStr;
     const isPast = dayDate < validNow && !isToday;
 
-    const cycleDay = getCycleDay(cycleStart, dayDate);
-    const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+    const isWithinActiveSchedule = !cycleStart || dateStr >= cycleStart;
     const dayLogs = index.logsByDate.get(dateStr) || [];
-    const hasCompleted = dayLogs.some(isCompletedSession);
+    const completedLogs = dayLogs.filter(isCompletedSession);
 
-    const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
-    const isScheduledRest = expectedWo && expectedWo.type === 'rest';
+    if (isWithinActiveSchedule) {
+      const cycleDay = getCycleDay(cycleStart, dayDate);
+      const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+      const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
+      const isScheduledRest = expectedWo && expectedWo.type === 'rest';
 
-    if (isScheduledCore) {
-      if (hasCompleted) {
-        completedScheduled++;
-      } else if (isPast) {
-        missedPastCoreDays++;
-      } else if (isToday) {
-        isTodayPending = true;
-      }
-    } else if (isScheduledRest) {
-      scheduledRestDays++;
-      if (hasCompleted) {
-        bonusCompletedSessions++;
+      const hasCompletedExpected = isScheduledCore
+        ? completedLogs.some(l => l.workoutId === expectedWo.id)
+        : false;
+
+      if (isScheduledCore) {
+        if (hasCompletedExpected) {
+          completedScheduled++;
+        } else if (isPast) {
+          missedPastCoreDays++;
+        } else if (isToday) {
+          isTodayPending = true;
+        }
+
+        // Additional completed sessions on a scheduled core day (or alternate workout completed instead of scheduled)
+        const bonusOnScheduledDay = completedLogs.filter(l => l.workoutId !== expectedWo.id);
+        bonusCompletedSessions += bonusOnScheduledDay.length;
+      } else if (isScheduledRest) {
+        scheduledRestDays++;
+        bonusCompletedSessions += completedLogs.length;
+      } else {
+        bonusCompletedSessions += completedLogs.length;
       }
     } else {
-      if (hasCompleted) {
-        bonusCompletedSessions++;
-      }
+      // Historical boundary: Prior to active cycleStart, preserve known completed sessions as bonus/unassigned
+      // without fabricating missed core workouts where schedule cannot be established.
+      bonusCompletedSessions += completedLogs.length;
     }
   });
 
-  const totalEvaluatedOpportunities = completedScheduled + missedPastCoreDays;
-  const rate = totalEvaluatedOpportunities > 0 ? completedScheduled / totalEvaluatedOpportunities : 1;
-  const percent = Math.min(100, Math.round(rate * 100));
+  const evaluatedScheduledWorkouts = completedScheduled + missedPastCoreDays;
+  const pendingScheduledWorkouts = isTodayPending ? 1 : 0;
+  const rate = evaluatedScheduledWorkouts > 0 ? completedScheduled / evaluatedScheduledWorkouts : 0;
+  const percent = evaluatedScheduledWorkouts > 0 ? Math.min(100, Math.round(rate * 100)) : 0;
 
   return {
     rate,
     percent,
     completedScheduled,
-    scheduledCoreWorkouts: totalEvaluatedOpportunities + (isTodayPending ? 1 : 0),
+    scheduledCoreWorkouts: evaluatedScheduledWorkouts + pendingScheduledWorkouts,
+    evaluatedScheduledWorkouts,
+    pendingScheduledWorkouts,
     missedPastCoreDays,
     scheduledRestDays,
     bonusCompletedSessions,
@@ -459,16 +508,31 @@ export function calculateStrengthTrend({
     ? sortedChanges[mid]
     : (sortedChanges[mid - 1] + sortedChanges[mid]) / 2;
 
-  const currentAvg = exerciseBreakdown.reduce((sum, e) => sum + e.currentBestE1RM, 0) / exerciseBreakdown.length;
-  const previousAvg = exerciseBreakdown.reduce((sum, e) => sum + e.previousBestE1RM, 0) / exerciseBreakdown.length;
+  const sortedCurrent = exerciseBreakdown.map(e => e.currentBestE1RM).sort((a, b) => a - b);
+  const midCurr = Math.floor(sortedCurrent.length / 2);
+  const medianCurrent = sortedCurrent.length % 2 !== 0
+    ? sortedCurrent[midCurr]
+    : (sortedCurrent[midCurr - 1] + sortedCurrent[midCurr]) / 2;
 
-  const confidence: 'high' | 'medium' | 'low' =
-    exerciseBreakdown.length >= 3 ? 'high' : exerciseBreakdown.length >= 1 ? 'medium' : 'low';
+  const sortedPrevious = exerciseBreakdown.map(e => e.previousBestE1RM).sort((a, b) => a - b);
+  const midPrev = Math.floor(sortedPrevious.length / 2);
+  const medianPrevious = sortedPrevious.length % 2 !== 0
+    ? sortedPrevious[midPrev]
+    : (sortedPrevious[midPrev - 1] + sortedPrevious[midPrev]) / 2;
+
+  let confidence: 'high' | 'medium' | 'low' = 'low';
+  if (exerciseBreakdown.length === 1) {
+    confidence = 'low';
+  } else if (exerciseBreakdown.length === 2) {
+    confidence = 'medium';
+  } else if (exerciseBreakdown.length >= 3) {
+    confidence = 'high';
+  }
 
   return {
     percentChange: Math.round(medianChange * 10) / 10,
-    currentValue: Math.round(currentAvg * 10) / 10,
-    previousValue: Math.round(previousAvg * 10) / 10,
+    currentValue: Math.round(medianCurrent * 10) / 10,
+    previousValue: Math.round(medianPrevious * 10) / 10,
     comparableExercises: exerciseBreakdown.length,
     confidence,
     exerciseBreakdown
@@ -508,7 +572,7 @@ export function calculatePerformanceScore({
 
   // Component 1: Adherence (weight 0.25)
   let adherenceScore: number | null = null;
-  const adherenceAvailable = adherence.scheduledCoreWorkouts > 0;
+  const adherenceAvailable = adherence.evaluatedScheduledWorkouts > 0;
   if (adherenceAvailable) {
     adherenceScore = Math.min(100, Math.max(0, adherence.percent));
     if (adherenceScore >= 90) {
@@ -584,9 +648,15 @@ export function calculatePerformanceScore({
       const minV = Math.min(...recent4);
       const maxV = Math.max(...recent4);
       const ratio = maxV > 0 ? minV / maxV : 0;
-      if (ratio >= 0.7) volumeScore = 90;
-      else if (ratio >= 0.5) volumeScore = 75;
-      else volumeScore = 60;
+      if (ratio >= 0.7) {
+        volumeScore = 90;
+      } else if (ratio >= 0.5) {
+        volumeScore = 75;
+      } else {
+        // Neutral baseline when volume consistency cannot distinguish intentional reduction (taper/deload) from poor consistency
+        const isHighConsistency = (adherenceAvailable && (adherenceScore || 0) >= 80) || (completionAvailable && (completionScore || 0) >= 80);
+        volumeScore = isHighConsistency ? 75 : 60;
+      }
       if (volumeScore >= 80) {
         primaryFactors.push('Consistent weekly volume load');
       }
@@ -630,4 +700,66 @@ export function calculatePerformanceScore({
     confidence,
     primaryFactors
   };
+}
+
+// ----------------------------------------------------------------------------
+// 7. Canonical PR Events
+// ----------------------------------------------------------------------------
+
+/**
+ * Calculates canonical PR events across session history.
+ * Invariant: A single completed set that simultaneously establishes a Weight PR and e1RM PR
+ * counts as ONE user-visible PR event.
+ */
+export function calculatePREvents(index: FitnessIndex): PREvent[] {
+  const prEvents: PREvent[] = [];
+  const runningMaxWeight = new Map<string, number>();
+  const runningMaxE1RM = new Map<string, number>();
+
+  // Process chronologically across verified completed sessions
+  const chronologicalLogs = index.sortedLogsAscending.filter(isCompletedSession);
+
+  chronologicalLogs.forEach(log => {
+    const monthKey = log.date.substring(0, 7);
+    Object.entries(log.sets).forEach(([exId, sets]) => {
+      const meta = index.exerciseMetaById.get(exId);
+      const exName = meta?.name || 'Exercise';
+
+      (sets as SetLog[]).forEach((set, sIdx) => {
+        if (!set.done) return;
+        const w = parseFloat(set.weight) || 0;
+        const r = parseInt(set.reps, 10) || 0;
+        if (w <= 0 || r <= 0) return;
+
+        const effectiveReps = Math.min(r, 30);
+        const e1rm = r === 1 ? w : Math.round(w * (1 + effectiveReps / 30) * 10) / 10;
+
+        const prevMaxW = runningMaxWeight.get(exId) || 0;
+        const prevMaxE1 = runningMaxE1RM.get(exId) || 0;
+
+        const isWeightPR = w > prevMaxW;
+        const isE1RMPR = e1rm > prevMaxE1;
+
+        if (isWeightPR || isE1RMPR) {
+          prEvents.push({
+            id: `${log.id}_${exId}_${sIdx}`,
+            exerciseDefinitionId: exId,
+            exerciseName: exName,
+            date: log.date,
+            monthKey,
+            weight: w,
+            reps: r,
+            e1rm,
+            isWeightPR,
+            isE1RMPR
+          });
+
+          if (isWeightPR) runningMaxWeight.set(exId, w);
+          if (isE1RMPR) runningMaxE1RM.set(exId, e1rm);
+        }
+      });
+    });
+  });
+
+  return prEvents;
 }

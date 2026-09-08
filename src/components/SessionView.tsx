@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2, Dumbbell } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
@@ -813,6 +813,9 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     }
   };
 
+  const completedLiveSets = (Object.values(sessionSets) as SetLog[][]).reduce((sum, sets) => sum + (sets || []).filter(s => s.done).length, 0);
+  const programmedLiveSets = activeWorkout ? activeWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0) : 0;
+
   const handleExitAttempt = async () => {
     const proceed = await confirm({
       title: 'Abandon Active Session?',
@@ -867,7 +870,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           />
           <StatCard
             label="Sets Done"
-            value={(Object.values(sessionSets).flat() as SetLog[]).filter(s => s.done).length}
+            value={`${completedLiveSets} / ${programmedLiveSets}`}
             accent="orange"
             size="hero"
           />
@@ -984,6 +987,22 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </Button>
         </div>
       </header>
+
+      {/* Live Session Horizontal Two-Card Stats */}
+      <Grid cols={2} gap="md">
+        <StatCard
+          label="Elapsed Time"
+          value={formatTime(duration)}
+          accent="blue"
+          icon={Clock}
+        />
+        <StatCard
+          label="Sets Done"
+          value={`${completedLiveSets} / ${programmedLiveSets}`}
+          accent="orange"
+          icon={Dumbbell}
+        />
+      </Grid>
 
       {/* Exercises List */}
       <Stack spacing="lg">

@@ -30,11 +30,13 @@ import {
   calculateAdherence,
   calculateStrengthTrend,
   calculatePerformanceScore,
+  calculatePREvents,
   StreakInsight,
   TrainingFrequencyInsight,
   AdherenceInsight,
   StrengthTrendInsight,
-  PerformanceScoreInsight
+  PerformanceScoreInsight,
+  PREvent
 } from '../utils/trainingIntelligence';
 
 export interface FitnessDerivedData {
@@ -57,6 +59,7 @@ export interface FitnessDerivedData {
   performanceScore: PerformanceScoreInsight;
   weightPRs: WeightPRRecord[];
   e1RMPRs: E1RMPRRecord[];
+  prEvents: PREvent[];
   muscleDistribution: MuscleDistributionStats;
   exerciseFrequency: ExerciseFrequencyStat[];
   lifetimeStats: LifetimeStats;
@@ -128,50 +131,98 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [index, workoutMap, appState?.cycleStart]);
 
   // 9. Canonical Training Intelligence Calculations
-  const now = useMemo(() => new Date(), []);
-  const todayStr = useMemo(() => format(now, 'yyyy-MM-dd'), [now]);
+  const [currentDate, setCurrentDate] = React.useState<Date>(() => new Date());
+
+  React.useEffect(() => {
+    // Check and update if calendar day has changed
+    const checkDayChange = () => {
+      const latest = new Date();
+      setCurrentDate(prev => {
+        if (format(latest, 'yyyy-MM-dd') !== format(prev, 'yyyy-MM-dd')) {
+          return latest;
+        }
+        return prev;
+      });
+    };
+
+    // 1. Window focus & visibility listener
+    const onVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkDayChange();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', onVisibilityOrFocus);
+      window.addEventListener('focus', onVisibilityOrFocus);
+    }
+
+    // 2. Midnight scheduler: calculate ms until next midnight + 1 second
+    let timerId: NodeJS.Timeout | null = null;
+    const scheduleNextMidnight = () => {
+      const current = new Date();
+      const nextMidnight = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1, 0, 0, 1);
+      const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - current.getTime());
+
+      timerId = setTimeout(() => {
+        checkDayChange();
+        scheduleNextMidnight();
+      }, msUntilMidnight);
+    };
+
+    scheduleNextMidnight();
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('visibilitychange', onVisibilityOrFocus);
+        window.removeEventListener('focus', onVisibilityOrFocus);
+      }
+      if (timerId) clearTimeout(timerId);
+    };
+  }, []);
+
+  const todayStr = useMemo(() => format(currentDate, 'yyyy-MM-dd'), [currentDate]);
 
   const trainingStreak = useMemo(() => {
     return calculateTrainingStreak({
       index,
       coreWorkoutByCycleDayMap,
       cycleStart: appState?.cycleStart,
-      now
+      now: currentDate
     });
-  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, now]);
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate]);
 
   const trainingFrequency = useMemo(() => {
     return calculateTrainingFrequency({
       index,
-      now,
+      now: currentDate,
       windowDays: 28
     });
-  }, [index, now]);
+  }, [index, currentDate]);
 
   const adherenceInsight = useMemo(() => {
     return calculateAdherence({
       index,
       coreWorkoutByCycleDayMap,
       cycleStart: appState?.cycleStart,
-      now
+      now: currentDate
     });
-  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, now]);
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate]);
 
   const strengthTrend = useMemo(() => {
     const currentEndStr = todayStr;
-    const currentStartStr = format(subDays(now, 29), 'yyyy-MM-dd');
-    const comparisonEndStr = format(subDays(now, 30), 'yyyy-MM-dd');
-    const comparisonStartStr = format(subDays(now, 59), 'yyyy-MM-dd');
+    const currentStartStr = format(subDays(currentDate, 29), 'yyyy-MM-dd');
+    const comparisonEndStr = format(subDays(currentDate, 30), 'yyyy-MM-dd');
+    const comparisonStartStr = format(subDays(currentDate, 59), 'yyyy-MM-dd');
 
     return calculateStrengthTrend({
       index,
       currentRange: { start: currentStartStr, end: currentEndStr },
       comparisonRange: { start: comparisonStartStr, end: comparisonEndStr }
     });
-  }, [index, now, todayStr]);
+  }, [index, currentDate, todayStr]);
 
   const performanceScore = useMemo(() => {
-    const start28Str = format(subDays(now, 27), 'yyyy-MM-dd');
+    const start28Str = format(subDays(currentDate, 27), 'yyyy-MM-dd');
     let sumCompleted = 0;
     let sumPlanned = 0;
     Object.entries(index.plannedSetsByDate).forEach(([d, p]) => {
@@ -187,9 +238,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
       completionRate,
       strengthTrend,
       index,
-      now
+      now: currentDate
     });
-  }, [adherenceInsight, strengthTrend, index, now, todayStr]);
+  }, [adherenceInsight, strengthTrend, index, currentDate, todayStr]);
 
   // Helper callbacks querying the indexed structures
   const resolveExerciseMeta = useCallback((exerciseDefinitionId: string): ResolvedExerciseMeta => {
@@ -219,6 +270,10 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return index.e1RMPRsMap.get(exerciseDefinitionId) || null;
   }, [index]);
 
+  const prEvents = useMemo(() => {
+    return calculatePREvents(index);
+  }, [index]);
+
   const value: FitnessDerivedData = useMemo(() => ({
     index,
     defsMap,
@@ -239,6 +294,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     performanceScore,
     weightPRs: index.weightPRs,
     e1RMPRs: index.e1RMPRs,
+    prEvents,
     muscleDistribution,
     exerciseFrequency: index.frequencyByExercise,
     lifetimeStats: index.lifetimeStats,
@@ -261,6 +317,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     strengthTrend,
     adherenceInsight,
     performanceScore,
+    prEvents,
     muscleDistribution,
     weightSummary,
     nextCycleDay,

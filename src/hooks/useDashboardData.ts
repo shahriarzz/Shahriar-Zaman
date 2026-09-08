@@ -14,11 +14,6 @@ import {
 } from '../utils/trainingIntelligence';
 
 export interface DashboardStats {
-  streakCount: number;
-  sessionsCount: number;
-  animatedSessions: number;
-  cyclesCount: number;
-  animatedCycles: number;
   totalWeight: number;
   animatedWeight: number;
   formattedWeightLifted: string;
@@ -91,12 +86,6 @@ export function useDashboardData(): DashboardData {
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;
-  const streakCount = trainingStreak.currentStreak;
-  const sessionsCount = lifetimeStats.totalSessions;
-  const cyclesCount = Math.floor(sessionsCount / 8);
-
-  const animatedSessions = useCountUp(sessionsCount);
-  const animatedCycles = useCountUp(cyclesCount);
   const animatedWeight = useCountUp(Math.round(totalWeight));
 
   const formattedWeightLifted = React.useMemo(() => {
@@ -104,11 +93,6 @@ export function useDashboardData(): DashboardData {
   }, [animatedWeight]);
 
   const stats: DashboardStats = {
-    streakCount,
-    sessionsCount,
-    animatedSessions,
-    cyclesCount,
-    animatedCycles,
     totalWeight,
     animatedWeight,
     formattedWeightLifted
