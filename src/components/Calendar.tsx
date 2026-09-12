@@ -16,7 +16,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
-  WORKOUT_COLORS
+  WORKOUT_COLORS,
+  formatCompactWeight
 } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { haptics } from '../utils/haptics';
@@ -631,12 +632,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <Grid cols={3} gap="sm">
                       <StatCard
                         label="Volume"
-                        value={
-                          selectedDayVolume >= 1000
-                            ? (selectedDayVolume / 1000).toFixed(1)
-                            : selectedDayVolume.toLocaleString()
-                        }
-                        unit={selectedDayVolume >= 1000 ? 'k kg' : 'kg'}
+                        value={formatCompactWeight(selectedDayVolume)}
+                        unit="kg"
                         accent="emerald"
                         icon={TrendingUp}
                         size="standard"

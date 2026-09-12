@@ -5,7 +5,7 @@ import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edi
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
-import { WORKOUT_COLORS, generateId } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, generateId, formatCompactWeight } from '../utils/fitnessHelpers';
 import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { cn } from '../lib/utils';
@@ -470,7 +470,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       <StatCard
                         label="Sessions"
                         value={currentSessions}
-                        unit="sessions"
                         accent="zinc"
                         trend={sessionsTrendText}
                         trendDirection={sessionsTrendDir}
@@ -478,12 +477,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       />
                       <StatCard
                         label="Volume"
-                        value={
-                          currentVolume >= 1000
-                            ? (currentVolume / 1000).toFixed(1)
-                            : currentVolume.toLocaleString()
-                        }
-                        unit={currentVolume >= 1000 ? 'k kg' : 'kg'}
+                        value={formatCompactWeight(currentVolume)}
+                        unit="kg"
                         accent="emerald"
                         trend={volumeTrendText}
                         trendDirection={volumeTrendDir}
@@ -491,7 +486,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       <StatCard
                         label="PRs"
                         value={currentMonthPRs.length}
-                        unit="PRs"
                         accent="amber"
                         icon={Trophy}
                         trend={prTrendText}
@@ -513,11 +507,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         isUnavailable={monthlyStrengthTrend.percentChange === null}
                         unavailableLabel="No Overlap"
                         sublabel={
-                          monthlyStrengthTrend.comparableExercises > 0
-                            ? `Confidence: ${monthlyStrengthTrend.confidence}`
-                            : hasEarlierHistory
-                            ? 'No matching lifts vs prev'
-                            : 'First recorded month'
+                          monthlyStrengthTrend.percentChange !== null
+                            ? 'vs previous month'
+                            : (monthlyStrengthTrend.comparableExercises > 0
+                              ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                              : hasEarlierHistory
+                              ? 'No matching lifts vs prev'
+                              : 'First recorded month')
                         }
                       />
                     </Grid>

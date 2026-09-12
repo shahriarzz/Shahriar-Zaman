@@ -7,6 +7,7 @@ export {
   CYCLE_LENGTH,
   dk,
   formatDateStr,
+  formatCompactWeight,
   getAdjustedCycleStart,
   getCycleDay
 } from './fitnessCalculations';

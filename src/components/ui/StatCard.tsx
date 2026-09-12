@@ -17,7 +17,6 @@ export interface StatCardProps {
   colorOverride?: string;
   accentStyle?: CardProps['accentStyle'];
   sublabel?: string;
-  secondaryComparison?: React.ReactNode;
   trend?: React.ReactNode;
   trendDirection?: 'positive' | 'negative' | 'neutral';
   isUnavailable?: boolean;
@@ -31,8 +30,8 @@ export interface StatCardProps {
 }
 
 const STAT_NUMBER_VARIANTS = {
-  standard: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
-  hero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none',
+  standard: 'font-display text-3xl sm:text-[2rem] uppercase tracking-tight text-white leading-none tabular-nums',
+  hero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none tabular-nums',
 } as const;
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -44,7 +43,6 @@ export const StatCard: React.FC<StatCardProps> = ({
   colorOverride,
   accentStyle,
   sublabel,
-  secondaryComparison,
   trend,
   trendDirection,
   isUnavailable = false,
@@ -64,6 +62,35 @@ export const StatCard: React.FC<StatCardProps> = ({
         ? 'text-zinc-400'
         : '';
 
+  // Determine what to show in the meta slot (status replaces trend when both present to prevent clutter)
+  const metaBadge = statusIndicator ? (
+    <span
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
+        statusIndicator.color === 'emerald' &&
+          "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+        statusIndicator.color === 'orange' &&
+          "text-orange-400 border-orange-500/30 bg-orange-500/10",
+        statusIndicator.color === 'amber' &&
+          "text-amber-400 border-amber-500/30 bg-amber-500/10",
+        statusIndicator.color === 'rose' &&
+          "text-rose-400 border-rose-500/30 bg-rose-500/10",
+        (!statusIndicator.color || statusIndicator.color === 'zinc') &&
+          "text-zinc-400 border-zinc-700/40"
+      )}
+    >
+      {statusIndicator.label}
+    </span>
+  ) : trend ? (
+    <div className={cn("shrink-0 font-mono text-xs", trendColorClass)}>
+      {trend}
+    </div>
+  ) : null;
+
+  const effectiveSublabel = effectiveUnavailable
+    ? (unavailableLabel || sublabel || 'Building baseline')
+    : sublabel;
+
   return (
     <Card
       variant="standard"
@@ -77,7 +104,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       )}
     >
       <div className="min-w-0">
-        {/* Header */}
+        {/* Header: Icon + Label */}
         <div className="flex min-w-0 items-center gap-2 mb-2">
           {icon && (
             <span
@@ -100,16 +127,16 @@ export const StatCard: React.FC<StatCardProps> = ({
           </span>
         </div>
 
-        {/* Value */}
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5 mt-1">
+        {/* Primary Value + Unit */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1">
           <span
             className={cn(
               STAT_NUMBER_VARIANTS[size],
-              "min-w-0 max-w-full break-words tabular-nums",
+              "min-w-0 max-w-full break-words",
               effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
             )}
           >
-            {typeof value === 'number' ? value.toLocaleString() : value}
+            {effectiveUnavailable ? '—' : (typeof value === 'number' ? value.toLocaleString() : value)}
           </span>
 
           {unit && !effectiveUnavailable && (
@@ -120,67 +147,18 @@ export const StatCard: React.FC<StatCardProps> = ({
         </div>
       </div>
 
-      {/* Footer */}
-      {(secondaryComparison || sublabel || unavailableLabel || statusIndicator || trend) && (
-        <div className="mt-3 min-w-0 space-y-1">
-          {secondaryComparison && (
-            <div className="min-w-0 break-words font-mono text-xs text-zinc-300">
-              {secondaryComparison}
-            </div>
-          )}
-
-          {(sublabel || statusIndicator || trend) && (
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-              {sublabel ? (
-                <p className="min-w-0 flex-1 break-words font-mono text-[10px] leading-tight text-zinc-500">
-                  {sublabel}
-                </p>
-              ) : (
-                <span />
-              )}
-
-              {(statusIndicator || trend) && (
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-                  {statusIndicator && (
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
-                        statusIndicator.color === 'emerald' &&
-                          "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-                        statusIndicator.color === 'orange' &&
-                          "text-orange-400 border-orange-500/30 bg-orange-500/10",
-                        statusIndicator.color === 'amber' &&
-                          "text-amber-400 border-amber-500/30 bg-amber-500/10",
-                        statusIndicator.color === 'rose' &&
-                          "text-rose-400 border-rose-500/30 bg-rose-500/10",
-                        (!statusIndicator.color || statusIndicator.color === 'zinc') &&
-                          "text-zinc-400 border-zinc-700/40"
-                      )}
-                    >
-                      {statusIndicator.label}
-                    </span>
-                  )}
-
-                  {trend && (
-                    <div
-                      className={cn(
-                        "shrink-0 font-mono text-xs",
-                        trendColorClass
-                      )}
-                    >
-                      {trend}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {effectiveUnavailable && unavailableLabel && !sublabel && (
-            <p className="min-w-0 break-words font-mono text-[10px] leading-tight text-zinc-500">
-              {unavailableLabel}
+      {/* Simplified Footer: sublabel on left, status/trend on right */}
+      {(effectiveSublabel || metaBadge) && (
+        <div className="mt-2.5 min-w-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          {effectiveSublabel ? (
+            <p className="min-w-0 flex-1 break-words font-mono text-[10px] leading-tight text-zinc-500">
+              {effectiveSublabel}
             </p>
+          ) : (
+            <span />
           )}
+
+          {metaBadge}
         </div>
       )}
     </Card>

@@ -12,7 +12,6 @@ import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import {
   Card,
-  StatCard,
   Badge,
   Button,
   Input,
@@ -21,6 +20,8 @@ import {
   Grid,
   SEMANTIC_COLORS
 } from './ui';
+import { TYPOGRAPHY } from '../styles/tokens';
+import { formatCompactWeight } from '../utils/fitnessCalculations';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -862,31 +863,32 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         </div>
 
         <Grid cols={2} gap="md">
-          <StatCard
-            label="Duration"
-            value={Math.floor(duration / 60)}
-            unit="min"
-            accent="blue"
-            size="hero"
-          />
-          <StatCard
-            label="Sets Done"
-            value={`${completedLiveSets}/${programmedLiveSets}`}
-            accent="orange"
-            size="hero"
-          />
-          <StatCard
-            label="Total Volume Lifted"
-            value={
-              calculateVolumeLocal() >= 1000
-                ? (calculateVolumeLocal() / 1000).toFixed(1)
-                : calculateVolumeLocal().toLocaleString()
-            }
-            unit={calculateVolumeLocal() >= 1000 ? 'k kg' : 'kg'}
-            accent="emerald"
-            size="hero"
-            className="col-span-2"
-          />
+          <Card variant="standard" accent="blue" padding="standard" className="text-left">
+            <span className={TYPOGRAPHY.label}>Duration</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
+                {Math.floor(duration / 60)}
+              </span>
+              <span className={TYPOGRAPHY.unit}>min</span>
+            </div>
+          </Card>
+          <Card variant="standard" accent="orange" padding="standard" className="text-left">
+            <span className={TYPOGRAPHY.label}>Sets Done</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
+                {completedLiveSets}/{programmedLiveSets}
+              </span>
+            </div>
+          </Card>
+          <Card variant="standard" accent="emerald" padding="standard" className="col-span-2 text-left">
+            <span className={TYPOGRAPHY.label}>Total Volume Lifted</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
+                {formatCompactWeight(calculateVolumeLocal())}
+              </span>
+              <span className={TYPOGRAPHY.unit}>kg</span>
+            </div>
+          </Card>
 
           {/* Today's Personal Records Summary */}
           {todaysPRs.length > 0 && (
@@ -965,19 +967,27 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="flex flex-col items-end gap-0.5">
-            <div className="flex items-center gap-2 font-mono">
-              <Clock size={16} className="text-zinc-500" />
-              <span className="text-xl font-black tabular-nums">{formatTime(duration)}</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5 font-mono text-zinc-600">
-              <span className="text-xs font-black tabular-nums text-zinc-400">
-                {calculateVolumeLocal().toLocaleString()}
-              </span>
-              <span className="text-[9px] uppercase tracking-widest">kg</span>
-            </div>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 font-mono px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <Clock size={15} className="text-zinc-500 shrink-0" />
+            <span className="text-sm sm:text-base font-bold tabular-nums text-white">{formatTime(duration)}</span>
           </div>
+
+          <Badge
+            label={`${completedLiveSets}/${programmedLiveSets} SETS`}
+            color={completedLiveSets === programmedLiveSets ? 'emerald' : 'zinc'}
+            variant="subtle"
+            dot={false}
+            className="font-mono text-xs hidden sm:inline-flex"
+          />
+          <Badge
+            label={`${completedLiveSets}/${programmedLiveSets}`}
+            color={completedLiveSets === programmedLiveSets ? 'emerald' : 'zinc'}
+            variant="subtle"
+            dot={false}
+            className="font-mono text-xs sm:hidden"
+          />
+
           <Button
             variant="primary"
             size="md"
@@ -985,29 +995,21 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             disabled={isSubmitting || isFinishing}
             onClick={finishSession}
             className={cn(
+              "px-3 sm:px-4",
               allExercisesDone && "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold"
             )}
           >
-            {isSubmitting ? 'Syncing...' : 'Finish'}
+            {isSubmitting ? (
+              'Syncing...'
+            ) : (
+              <>
+                <span className="hidden sm:inline">Finish</span>
+                <span className="sm:hidden">✓</span>
+              </>
+            )}
           </Button>
         </div>
       </header>
-
-      {/* Live Session Horizontal Two-Card Stats */}
-      <Grid cols={2} gap="md">
-        <StatCard
-          label="Elapsed Time"
-          value={formatTime(duration)}
-          accent="blue"
-          icon={Clock}
-        />
-        <StatCard
-          label="Sets Done"
-          value={`${completedLiveSets}/${programmedLiveSets}`}
-          accent="orange"
-          icon={Dumbbell}
-        />
-      </Grid>
 
       {/* Exercises List */}
       <Stack spacing="lg">

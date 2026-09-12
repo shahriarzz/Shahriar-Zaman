@@ -35,7 +35,7 @@ import {
   subMonths,
   isSameMonth
 } from 'date-fns';
-import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
@@ -193,12 +193,8 @@ export const AnalyticsView: React.FC = () => {
         {/* 3. Window Volume with Period-over-Period Trend */}
         <StatCard
           label="Window Volume"
-          value={
-            aggregated.rangeVolume >= 1000
-              ? (aggregated.rangeVolume / 1000).toFixed(1)
-              : aggregated.rangeVolume.toLocaleString()
-          }
-          unit={aggregated.rangeVolume >= 1000 ? 'k kg' : 'kg'}
+          value={formatCompactWeight(aggregated.rangeVolume)}
+          unit="kg"
           icon={<Dumbbell size={16} />}
           accent="emerald"
           sublabel={`${timeRange.toUpperCase()} completed volume`}
@@ -227,7 +223,9 @@ export const AnalyticsView: React.FC = () => {
         <StatCard
           label="Performance Score"
           value={performanceScore.score !== null ? performanceScore.score : '—'}
-          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28d` : 'Building baseline'}
+          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
+          isUnavailable={performanceScore.score === null}
+          unavailableLabel="Building baseline"
           icon={<Award size={16} />}
           accent={
             performanceScore.score === null
@@ -237,31 +235,6 @@ export const AnalyticsView: React.FC = () => {
               : performanceScore.status === 'Good'
               ? 'amber'
               : 'rose'
-          }
-          statusIndicator={
-            performanceScore.score !== null
-              ? {
-                  label: performanceScore.status,
-                  color:
-                    performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
-                      ? 'emerald'
-                      : performanceScore.status === 'Good'
-                      ? 'amber'
-                      : 'rose'
-                }
-              : {
-                  label: 'Unavailable',
-                  color: 'zinc'
-                }
-          }
-          trend={
-            strengthTrend.percentChange !== null ? (
-              <span className={cn("font-bold text-xs", strengthTrend.percentChange >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                Strength {strengthTrend.percentChange >= 0 ? `+${strengthTrend.percentChange.toFixed(1)}%` : `${strengthTrend.percentChange.toFixed(1)}%`}
-              </span>
-            ) : (
-              <span className="text-zinc-500 text-xs font-mono">Building baseline</span>
-            )
           }
         />
       </Grid>
@@ -496,7 +469,7 @@ export const AnalyticsView: React.FC = () => {
 
             <AchievementCard
               title="Biggest Week Ever"
-              value={aggregated.biggestWeek.volume > 0 ? `${(aggregated.biggestWeek.volume / 1000).toFixed(1)}k kg` : '0 kg'}
+              value={aggregated.biggestWeek.volume > 0 ? `${formatCompactWeight(aggregated.biggestWeek.volume)} kg` : '0 kg'}
               subtitle={aggregated.biggestWeek.weekStr}
               icon={<Trophy size={18} />}
             />
@@ -729,8 +702,8 @@ export const AnalyticsView: React.FC = () => {
             />
             <StatCard
               label="Total Volume"
-              value={(aggregated.lifetimeVolume / 1000).toFixed(0)}
-              unit="k kg"
+              value={formatCompactWeight(aggregated.lifetimeVolume)}
+              unit="kg"
               accent="emerald"
               sublabel="Cumulative tonnage"
             />

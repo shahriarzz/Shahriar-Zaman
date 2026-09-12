@@ -269,3 +269,25 @@ export function getRelativeTimeString(startTime: number, now: number = Date.now(
     ? `${elapsedMin} min ago` 
     : `${Math.floor(elapsedMin / 60)}h ago`;
 }
+
+/**
+ * Compact weight formatter for tonnage and volume metrics.
+ * 846 -> "846"
+ * 1200 -> "1.2k"
+ * 124600 -> "124.6k"
+ * 1300000 -> "1.3M"
+ */
+export function formatCompactWeight(value: number): string {
+  if (!value || isNaN(value) || value <= 0) return '0';
+  if (value < 1000) {
+    return Math.round(value).toLocaleString();
+  }
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    const formatted = millions.toFixed(1);
+    return `${formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted}M`;
+  }
+  const thousands = value / 1000;
+  const formatted = thousands.toFixed(1);
+  return `${formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted}k`;
+}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { dk } from '../utils/fitnessCalculations';
+import { dk, formatCompactWeight } from '../utils/fitnessCalculations';
 import { useCountUp } from './useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
@@ -89,7 +89,7 @@ export function useDashboardData(): DashboardData {
   const animatedWeight = useCountUp(Math.round(totalWeight));
 
   const formattedWeightLifted = React.useMemo(() => {
-    return animatedWeight >= 1000 ? (animatedWeight / 1000).toFixed(1) + 'k' : animatedWeight.toString();
+    return formatCompactWeight(animatedWeight);
   }, [animatedWeight]);
 
   const stats: DashboardStats = {
