@@ -335,23 +335,41 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       setActiveMonthTab(isSelected ? null : summary.monthKey);
                     }}
                     className={cn(
-                      "snap-center shrink-0 border text-left min-w-[200px] transition-all relative overflow-hidden group cursor-pointer",
+                      "snap-center shrink-0 min-w-[200px] min-h-[132px] border text-left transition-all relative overflow-hidden group cursor-pointer flex flex-col",
                       SPACING.standard,
                       RADIUS.card,
-                      isSelected 
+                      isSelected
                         ? "bg-gradient-to-br from-orange-500/15 to-transparent border-orange-500 text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]"
-                        : cn(SURFACE.recessed, BORDER.standard, "hover:border-zinc-700 hover:bg-zinc-900/60 text-zinc-400 hover:text-white")
+                        : cn(
+                            SURFACE.recessed,
+                            BORDER.standard,
+                            "hover:border-zinc-700 hover:bg-zinc-900/60 text-zinc-400 hover:text-white"
+                          )
                     )}
                   >
-                    <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 group-hover:text-amber-400 transition-colors")}>
+                    <div
+                      className={cn(
+                        TYPOGRAPHY.eyebrow,
+                        "text-zinc-500 group-hover:text-amber-400 transition-colors"
+                      )}
+                    >
                       {summary.monthKey}
                     </div>
-                    <div className="text-sm font-black uppercase tracking-wide leading-tight mt-1 text-white">
-                      {summary.monthName}
+
+                    <div className="mt-1 min-h-[2.25rem] flex items-start">
+                      <div className="text-sm font-black uppercase tracking-wide leading-tight text-white break-words">
+                        {summary.monthName}
+                      </div>
                     </div>
-                    <div className="mt-3 flex justify-between items-end">
-                      <span className={TYPOGRAPHY.label}>Completed Runs</span>
-                      <span className="text-lg font-mono font-black text-white">{summary.sessionsCount}</span>
+
+                    <div className="mt-auto pt-3 flex items-center justify-between gap-3">
+                      <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
+                        Completed Runs
+                      </span>
+
+                      <span className="shrink-0 text-lg font-mono font-black tabular-nums text-white">
+                        {summary.sessionsCount}
+                      </span>
                     </div>
                   </button>
                 );
@@ -570,9 +588,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             <div className="text-xs text-zinc-600 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
                           ) : (
                             (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
-                              <div key={exId} className={cn("flex justify-between items-center p-2 rounded-lg border text-xs text-zinc-300", SURFACE.subtle, BORDER.standard)}>
-                                <span className="font-medium truncate max-w-[200px]">{lift.exerciseName}</span>
-                                <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" />
+                              <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 rounded-lg border text-xs text-zinc-300", SURFACE.subtle, BORDER.standard)}>
+                                <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
+                                <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
                               </div>
                             ))
                           )}

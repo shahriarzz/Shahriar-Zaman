@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2, Dumbbell } from 'lucide-react';
+import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
-import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
 import { sanitizeSessionLog, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
@@ -21,7 +21,6 @@ import {
   SEMANTIC_COLORS
 } from './ui';
 import { TYPOGRAPHY } from '../styles/tokens';
-import { formatCompactWeight } from '../utils/fitnessCalculations';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -967,7 +966,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           <div className="flex items-center gap-1.5 font-mono px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
             <Clock size={15} className="text-zinc-500 shrink-0" />
             <span className="text-sm sm:text-base font-bold tabular-nums text-white">{formatTime(duration)}</span>
@@ -975,17 +974,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
           <Badge
             label={`${completedLiveSets}/${programmedLiveSets} SETS`}
-            color={completedLiveSets === programmedLiveSets ? 'emerald' : 'zinc'}
+            color={completedLiveSets === programmedLiveSets && programmedLiveSets > 0 ? 'emerald' : 'zinc'}
             variant="subtle"
             dot={false}
-            className="font-mono text-xs hidden sm:inline-flex"
-          />
-          <Badge
-            label={`${completedLiveSets}/${programmedLiveSets}`}
-            color={completedLiveSets === programmedLiveSets ? 'emerald' : 'zinc'}
-            variant="subtle"
-            dot={false}
-            className="font-mono text-xs sm:hidden"
+            className="font-mono text-xs whitespace-nowrap"
           />
 
           <Button

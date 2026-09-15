@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { StatCard } from '../components/ui/StatCard';
-import { formatCompactWeight } from '../utils/fitnessCalculations';
+import { formatCompactWeight } from '../utils/fitnessHelpers';
 
 describe('StatCard Architecture & Display Regression Suite', () => {
   describe('formatCompactWeight helper', () => {
@@ -155,6 +155,33 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
       expect(html).toContain('Building baseline');
       expect(html).toContain('text-zinc-500');
+    });
+
+    it('forces neutral zinc accent and suppresses misleading trend/status when unavailable', () => {
+      const html = renderToString(
+        <StatCard
+          label="Strength Trend"
+          value="—"
+          accent="emerald"
+          colorOverride="#10b981"
+          trend="+15%"
+          trendDirection="positive"
+          statusIndicator={{ label: 'STRONG', color: 'emerald' }}
+          isUnavailable={true}
+          unavailableLabel="Building baseline"
+        />
+      );
+
+      // Value is placeholder
+      expect(html).toContain('—');
+      // Unavailable copy is present
+      expect(html).toContain('Building baseline');
+      // Misleading trend or status badge is suppressed
+      expect(html).not.toContain('+15%');
+      expect(html).not.toContain('STRONG');
+      // Color override does not survive into unavailable state
+      expect(html).not.toContain('rgb(16, 185, 129)');
+      expect(html).not.toContain('#10b981');
     });
   });
 });

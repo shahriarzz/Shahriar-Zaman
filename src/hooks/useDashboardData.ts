@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { dk, formatCompactWeight } from '../utils/fitnessCalculations';
+import { dk, formatCompactWeight } from '../utils/fitnessHelpers';
 import { useCountUp } from './useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
