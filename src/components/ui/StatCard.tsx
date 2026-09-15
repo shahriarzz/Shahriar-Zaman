@@ -51,8 +51,10 @@ export const StatCard: React.FC<StatCardProps> = ({
   size = 'standard',
   className
 }) => {
-  const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || '#10b981';
   const effectiveUnavailable = isUnavailable || value === '—' || value === '-';
+  const effectiveAccent = effectiveUnavailable ? 'zinc' : accent;
+  const effectiveColorOverride = effectiveUnavailable ? undefined : colorOverride;
+  const accentHex = effectiveColorOverride || (effectiveUnavailable ? '#71717a' : (getAccentColor(effectiveAccent as SemanticColor) || '#10b981'));
 
   const trendColorClass = trendDirection === 'positive'
     ? 'text-emerald-400'
@@ -62,8 +64,8 @@ export const StatCard: React.FC<StatCardProps> = ({
         ? 'text-zinc-400'
         : '';
 
-  // Determine what to show in the meta slot (status replaces trend when both present to prevent clutter)
-  const metaBadge = statusIndicator ? (
+  // Determine what to show in the meta slot (suppressed when unavailable to avoid misleading trend/status)
+  const metaBadge = !effectiveUnavailable ? (statusIndicator ? (
     <span
       className={cn(
         "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
@@ -85,7 +87,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     <div className={cn("shrink-0 font-mono text-xs", trendColorClass)}>
       {trend}
     </div>
-  ) : null;
+  ) : null) : null;
 
   const effectiveSublabel = effectiveUnavailable
     ? (unavailableLabel || sublabel || 'Building baseline')
@@ -95,7 +97,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     <Card
       variant="standard"
       accent={effectiveUnavailable ? 'zinc' : accent}
-      colorOverride={colorOverride}
+      colorOverride={effectiveUnavailable ? undefined : colorOverride}
       accentStyle={accentStyle}
       padding={size === 'hero' ? 'section' : 'standard'}
       className={cn(
