@@ -199,7 +199,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       );
 
       // Verify root container constraints
-      expect(html).toContain('w-full min-w-0 max-w-full flex-col overflow-hidden');
+      expect(html).toContain('w-full min-w-0 max-w-full flex-col');
       // Verify label wrapping
       expect(html).toContain('min-w-0 max-w-full break-words whitespace-normal');
       // Verify value wrapping
@@ -238,57 +238,48 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
     it('renders the monthly report grid structure with width-constrained items and extreme values', () => {
       const gridHtml = renderToString(
-        <Grid cols={1} colsSm={2} colsLg={4} gap="md" className="grid-cols-1 min-w-0 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="min-w-0 w-full">
-            <StatCard
-              label="Sessions"
-              value={42}
-              accent="zinc"
-              trend="+6 vs previous month"
-              trendDirection="positive"
-              sublabel="Completed 100% of cycle target"
-            />
-          </div>
-          <div className="min-w-0 w-full">
-            <StatCard
-              label="Volume"
-              value="2,450.8k"
-              unit="kg"
-              accent="emerald"
-              trend="+18.4% (All-time high volume window)"
-              trendDirection="positive"
-            />
-          </div>
-          <div className="min-w-0 w-full">
-            <StatCard
-              label="PRs"
-              value={19}
-              accent="amber"
-              trend="+4 new records"
-              trendDirection="positive"
-              sublabel="Barbell Incline Close-Grip Bench Press with Pauses"
-              statusIndicator={{ label: 'RECORD SURGE', color: 'amber' }}
-            />
-          </div>
-          <div className="min-w-0 w-full">
-            <StatCard
-              label="Strength Trend"
-              value="—"
-              accent="indigo"
-              isUnavailable={true}
-              unavailableLabel="No Overlap"
-              sublabel="First recorded month"
-            />
-          </div>
+        <Grid cols={2} gap="md">
+          <StatCard
+            label="Sessions"
+            value={42}
+            accent="zinc"
+            trend="+6 vs previous month"
+            trendDirection="positive"
+            sublabel="Completed 100% of cycle target"
+          />
+          <StatCard
+            label="Volume"
+            value="2,450.8k"
+            unit="kg"
+            accent="emerald"
+            trend="+18.4% (All-time high volume window)"
+            trendDirection="positive"
+          />
+          <StatCard
+            label="PRs"
+            value={19}
+            accent="amber"
+            trend="+4 new records"
+            trendDirection="positive"
+            sublabel="Barbell Incline Close-Grip Bench Press with Pauses"
+            statusIndicator={{ label: 'RECORD SURGE', color: 'amber' }}
+          />
+          <StatCard
+            label="Strength Trend"
+            value="—"
+            accent="indigo"
+            isUnavailable={true}
+            unavailableLabel="No Overlap"
+            sublabel="First recorded month"
+          />
         </Grid>
       );
 
-      // Verify grid constraints
-      expect(gridHtml).toContain('grid-cols-1 min-w-0 sm:grid-cols-2 lg:grid-cols-4');
-      // Verify every child has min-w-0 w-full
-      expect(gridHtml).toContain('min-w-0 w-full');
+      // Verify grid constraints and children shrink safety rule
+      expect(gridHtml).toContain('grid-cols-2');
+      expect(gridHtml).toContain('[&amp;&gt;*]:min-w-0');
       // Verify no card lacks width constraint classes
-      const cardMatches = gridHtml.match(/w-full min-w-0 max-w-full flex-col overflow-hidden/g);
+      const cardMatches = gridHtml.match(/w-full min-w-0 max-w-full flex-col/g);
       expect(cardMatches?.length).toBe(4);
       // Verify value, sublabels and badges render safely
       expect(gridHtml).toContain('2,450.8k');

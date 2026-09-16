@@ -484,64 +484,56 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
                   >
                     {/* Summary Grid: Sessions, Volume, PRs, Strength Trend */}
-                    <Grid cols={1} colsSm={2} colsLg={4} gap="md" className="grid-cols-1 min-w-0 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="min-w-0 w-full">
-                        <StatCard
-                          label="Sessions"
-                          value={currentSessions}
-                          accent="zinc"
-                          trend={sessionsTrendText}
-                          trendDirection={sessionsTrendDir}
-                          sublabel={sessionsSublabel}
-                        />
-                      </div>
-                      <div className="min-w-0 w-full">
-                        <StatCard
-                          label="Volume"
-                          value={formatCompactWeight(currentVolume)}
-                          unit="kg"
-                          accent="emerald"
-                          trend={volumeTrendText}
-                          trendDirection={volumeTrendDir}
-                        />
-                      </div>
-                      <div className="min-w-0 w-full">
-                        <StatCard
-                          label="PRs"
-                          value={currentMonthPRs.length}
-                          accent="amber"
-                          icon={Trophy}
-                          trend={prTrendText}
-                          trendDirection={prTrendDir}
-                          sublabel={prSublabel}
-                        />
-                      </div>
-                      <div className="min-w-0 w-full">
-                        <StatCard
-                          label="Strength Trend"
-                          value={
-                            monthlyStrengthTrend.percentChange !== null
-                              ? `${monthlyStrengthTrend.percentChange >= 0 ? '+' : ''}${monthlyStrengthTrend.percentChange.toFixed(1)}`
-                              : '—'
-                          }
-                          unit={monthlyStrengthTrend.percentChange !== null ? '%' : undefined}
-                          accent="indigo"
-                          icon={Sparkles}
-                          trend={strengthTrendText}
-                          trendDirection={strengthTrendDir}
-                          isUnavailable={monthlyStrengthTrend.percentChange === null}
-                          unavailableLabel="No Overlap"
-                          sublabel={
-                            monthlyStrengthTrend.percentChange !== null
-                              ? 'vs previous month'
-                              : (monthlyStrengthTrend.comparableExercises > 0
-                                ? `Confidence: ${monthlyStrengthTrend.confidence}`
-                                : hasEarlierHistory
-                                ? 'No matching lifts vs prev'
-                                : 'First recorded month')
-                          }
-                        />
-                      </div>
+                    <Grid cols={2} gap="md">
+                      <StatCard
+                        label="Sessions"
+                        value={currentSessions}
+                        accent="zinc"
+                        trend={sessionsTrendText}
+                        trendDirection={sessionsTrendDir}
+                        sublabel={sessionsSublabel}
+                      />
+                      <StatCard
+                        label="Volume"
+                        value={formatCompactWeight(currentVolume)}
+                        unit="kg"
+                        accent="emerald"
+                        trend={volumeTrendText}
+                        trendDirection={volumeTrendDir}
+                      />
+                      <StatCard
+                        label="PRs"
+                        value={currentMonthPRs.length}
+                        accent="amber"
+                        icon={Trophy}
+                        trend={prTrendText}
+                        trendDirection={prTrendDir}
+                        sublabel={prSublabel}
+                      />
+                      <StatCard
+                        label="Strength Trend"
+                        value={
+                          monthlyStrengthTrend.percentChange !== null
+                            ? `${monthlyStrengthTrend.percentChange >= 0 ? '+' : ''}${monthlyStrengthTrend.percentChange.toFixed(1)}`
+                            : '—'
+                        }
+                        unit={monthlyStrengthTrend.percentChange !== null ? '%' : undefined}
+                        accent="indigo"
+                        icon={Sparkles}
+                        trend={strengthTrendText}
+                        trendDirection={strengthTrendDir}
+                        isUnavailable={monthlyStrengthTrend.percentChange === null}
+                        unavailableLabel="No Overlap"
+                        sublabel={
+                          monthlyStrengthTrend.percentChange !== null
+                            ? 'vs previous month'
+                            : (monthlyStrengthTrend.comparableExercises > 0
+                              ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                              : hasEarlierHistory
+                              ? 'No matching lifts vs prev'
+                              : 'First recorded month')
+                        }
+                      />
                     </Grid>
 
                     {/* Preserved Training Duration & Pacing details */}
