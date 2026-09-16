@@ -3,6 +3,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { StatCard } from '../components/ui/StatCard';
+import { Grid } from '../components/ui/Grid';
 import { formatCompactWeight } from '../utils/fitnessHelpers';
 
 describe('StatCard Architecture & Display Regression Suite', () => {
@@ -182,6 +183,117 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       // Color override does not survive into unavailable state
       expect(html).not.toContain('rgb(16, 185, 129)');
       expect(html).not.toContain('#10b981');
+    });
+
+    it('applies strengthened width constraint classes for long monthly values and labels', () => {
+      const html = renderToString(
+        <StatCard
+          label="Monthly Aggregate Tonnage Volume"
+          value="1,452.8k"
+          unit="kg"
+          trend="+18.5% vs previous month"
+          trendDirection="positive"
+          sublabel="Confidence: High · 8 comparable exercises compared"
+          statusIndicator={{ label: 'RECORD HIGH VOLUME', color: 'emerald' }}
+        />
+      );
+
+      // Verify root container constraints
+      expect(html).toContain('w-full min-w-0 max-w-full flex-col overflow-hidden');
+      // Verify label wrapping
+      expect(html).toContain('min-w-0 max-w-full break-words whitespace-normal');
+      // Verify value wrapping
+      expect(html).toContain('1,452.8k');
+      // Verify sublabel wrapping
+      expect(html).toContain('Confidence: High · 8 comparable exercises compared');
+      // Verify badge retains shrink-0 and max-w-full
+      expect(html).toContain('shrink-0 max-w-full');
+    });
+
+    it('renders edge case monthly sublabels cleanly without overflow', () => {
+      const firstMonthHtml = renderToString(
+        <StatCard
+          label="Strength Trend"
+          value="—"
+          isUnavailable={true}
+          unavailableLabel="No Overlap"
+          sublabel="First recorded month"
+        />
+      );
+      expect(firstMonthHtml).toContain('First recorded month');
+      expect(firstMonthHtml).toContain('w-full min-w-0 max-w-full');
+
+      const noMatchHtml = renderToString(
+        <StatCard
+          label="Strength Trend"
+          value="—"
+          isUnavailable={true}
+          unavailableLabel="No Overlap"
+          sublabel="No matching lifts vs prev"
+        />
+      );
+      expect(noMatchHtml).toContain('No matching lifts vs prev');
+      expect(noMatchHtml).toContain('w-full min-w-0 max-w-full');
+    });
+
+    it('renders the monthly report grid structure with width-constrained items and extreme values', () => {
+      const gridHtml = renderToString(
+        <Grid cols={1} colsSm={2} colsLg={4} gap="md" className="grid-cols-1 min-w-0 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="min-w-0 w-full">
+            <StatCard
+              label="Sessions"
+              value={42}
+              accent="zinc"
+              trend="+6 vs previous month"
+              trendDirection="positive"
+              sublabel="Completed 100% of cycle target"
+            />
+          </div>
+          <div className="min-w-0 w-full">
+            <StatCard
+              label="Volume"
+              value="2,450.8k"
+              unit="kg"
+              accent="emerald"
+              trend="+18.4% (All-time high volume window)"
+              trendDirection="positive"
+            />
+          </div>
+          <div className="min-w-0 w-full">
+            <StatCard
+              label="PRs"
+              value={19}
+              accent="amber"
+              trend="+4 new records"
+              trendDirection="positive"
+              sublabel="Barbell Incline Close-Grip Bench Press with Pauses"
+              statusIndicator={{ label: 'RECORD SURGE', color: 'amber' }}
+            />
+          </div>
+          <div className="min-w-0 w-full">
+            <StatCard
+              label="Strength Trend"
+              value="—"
+              accent="indigo"
+              isUnavailable={true}
+              unavailableLabel="No Overlap"
+              sublabel="First recorded month"
+            />
+          </div>
+        </Grid>
+      );
+
+      // Verify grid constraints
+      expect(gridHtml).toContain('grid-cols-1 min-w-0 sm:grid-cols-2 lg:grid-cols-4');
+      // Verify every child has min-w-0 w-full
+      expect(gridHtml).toContain('min-w-0 w-full');
+      // Verify no card lacks width constraint classes
+      const cardMatches = gridHtml.match(/w-full min-w-0 max-w-full flex-col overflow-hidden/g);
+      expect(cardMatches?.length).toBe(4);
+      // Verify value, sublabels and badges render safely
+      expect(gridHtml).toContain('2,450.8k');
+      expect(gridHtml).toContain('First recorded month');
+      expect(gridHtml).toContain('Barbell Incline Close-Grip Bench Press with Pauses');
     });
   });
 });

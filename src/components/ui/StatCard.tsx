@@ -68,7 +68,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   const metaBadge = !effectiveUnavailable ? (statusIndicator ? (
     <span
       className={cn(
-        "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
+        "shrink-0 max-w-full rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
         statusIndicator.color === 'emerald' &&
           "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
         statusIndicator.color === 'orange' &&
@@ -84,13 +84,13 @@ export const StatCard: React.FC<StatCardProps> = ({
       {statusIndicator.label}
     </span>
   ) : trend ? (
-    <div className={cn("shrink-0 font-mono text-xs", trendColorClass)}>
+    <div className={cn("shrink-0 max-w-full font-mono text-xs", trendColorClass)}>
       {trend}
     </div>
   ) : null) : null;
 
   const effectiveSublabel = effectiveUnavailable
-    ? (unavailableLabel || sublabel || 'Building baseline')
+    ? (sublabel || unavailableLabel || 'Building baseline')
     : sublabel;
 
   return (
@@ -101,13 +101,13 @@ export const StatCard: React.FC<StatCardProps> = ({
       accentStyle={accentStyle}
       padding={size === 'hero' ? 'section' : 'standard'}
       className={cn(
-        "flex h-full min-w-0 flex-col overflow-hidden",
+        "flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden",
         className
       )}
     >
       <div className="min-w-0">
         {/* Header: Icon + Label */}
-        <div className="flex min-w-0 items-center gap-2 mb-2">
+        <div className="flex min-w-0 max-w-full items-center gap-2 mb-2">
           {icon && (
             <span
               className="shrink-0 flex items-center"
@@ -124,17 +124,17 @@ export const StatCard: React.FC<StatCardProps> = ({
             </span>
           )}
 
-          <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
+          <span className={cn(TYPOGRAPHY.label, "min-w-0 max-w-full break-words whitespace-normal")}>
             {label}
           </span>
         </div>
 
         {/* Primary Value + Unit */}
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1">
+        <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1 overflow-hidden">
           <span
             className={cn(
               STAT_NUMBER_VARIANTS[size],
-              "min-w-0 max-w-full break-words",
+              "min-w-0 max-w-full break-words whitespace-normal",
               effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
             )}
           >
@@ -151,9 +151,9 @@ export const StatCard: React.FC<StatCardProps> = ({
 
       {/* Simplified Footer: sublabel on left, status/trend on right */}
       {(effectiveSublabel || metaBadge) && (
-        <div className="mt-2.5 min-w-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="mt-2.5 min-w-0 max-w-full flex flex-wrap items-start justify-between gap-x-2 gap-y-1 overflow-hidden">
           {effectiveSublabel ? (
-            <p className="min-w-0 flex-1 break-words font-mono text-[10px] leading-tight text-zinc-500">
+            <p className="min-w-0 max-w-full flex-1 break-words whitespace-normal font-mono text-[10px] leading-tight text-zinc-500">
               {effectiveSublabel}
             </p>
           ) : (

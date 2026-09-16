@@ -79,7 +79,7 @@ export const Grid = React.forwardRef<HTMLDivElement, GridProps>(({
     <div
       ref={ref}
       className={cn(
-        "grid",
+        "grid min-w-0",
         COLS_MAP[cols],
         colsSm && COLS_SM_MAP[colsSm],
         colsMd && COLS_MD_MAP[colsMd],
