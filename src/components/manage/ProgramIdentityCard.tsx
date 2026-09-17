@@ -48,7 +48,7 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
   const programName = `${totalDays}-Day Routine Cycle`;
 
   return (
-    <Card variant="standard" padding="relaxed">
+    <Card variant="standard" padding="section">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className={cn(TYPOGRAPHY.titleSection, "text-white")}>

@@ -12,6 +12,8 @@ import { HistoryView } from './components/HistoryView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { ManageView } from './components/ManageView';
 import { isFirebaseConfigured } from './lib/firebase';
+import { cn } from './lib/utils';
+import { AmbientBackground, ToastContainer, Card, TYPOGRAPHY } from './components/ui';
 
 function AppContent() {
   const { loading, activeSession, clearActiveSession, syncStatus } = useFitness();
@@ -135,9 +137,7 @@ function AppContent() {
 
     return (
       <div className="fixed inset-0 bg-[#06060a] flex flex-col items-center justify-center p-6 z-50">
-        {/* Subtle glowing ambient background spheres */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-orange-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
-        <div className="absolute bottom-1/3 left-1/3 w-60 h-60 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
+        <AmbientBackground />
 
         <div className="flex flex-col items-center max-w-sm w-full gap-8 relative text-center">
           {/* Main loader design */}
@@ -151,7 +151,7 @@ function AppContent() {
           </div>
 
           <div className="space-y-3">
-            <span className="font-mono text-[9px] font-black uppercase tracking-[0.35em] text-orange-500 block animate-pulse">
+            <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block animate-pulse")}>
               GainLog Synchronizer
             </span>
             <h3 className="text-xl font-bold uppercase tracking-wider text-white">
@@ -163,7 +163,7 @@ function AppContent() {
           </div>
 
           {/* Secure status checks log row */}
-          <div className="border border-zinc-900 bg-zinc-950/40 rounded-2xl p-4 w-full text-left space-y-2">
+          <Card variant="standard" surface="recessed" padding="compact" className="w-full text-left space-y-2">
             <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-zinc-300">
               <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
               {status.statusText}
@@ -176,7 +176,7 @@ function AppContent() {
               <span>Encryption Status</span>
               <span className="text-zinc-300">AES-256</span>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     );
@@ -196,34 +196,38 @@ function AppContent() {
   };
 
   return (
-    <Layout activeTab={activeTab} onTabChange={handleTabChange}>
-      {activeTab === 'dashboard' && (
-        <Dashboard 
-          onStartWorkout={handleStartSession} 
-          onNavigateToHistory={(date) => {
-            setHistorySearchDate(date);
-            setActiveTab('history');
-          }}
-        />
-      )}
-      {activeTab === 'session' && (
-        <SessionView
-          workoutId={selectedWorkoutId}
-          onExit={() => {
-            setSelectedWorkoutId(null);
-            setActiveTab('dashboard');
-          }}
-        />
-      )}
-      {activeTab === 'history' && (
-        <HistoryView 
-          initialDate={historySearchDate} 
-          onClearInitialDate={() => setHistorySearchDate(null)} 
+    <>
+      <AmbientBackground intensity="subtle" />
+      <ToastContainer />
+      <Layout activeTab={activeTab} onTabChange={handleTabChange}>
+        {activeTab === 'dashboard' && (
+          <Dashboard 
+            onStartWorkout={handleStartSession} 
+            onNavigateToHistory={(date) => {
+              setHistorySearchDate(date);
+              setActiveTab('history');
+            }}
           />
-      )}
-      {activeTab === 'analytics' && <AnalyticsView />}
-      {activeTab === 'manage' && <ManageView />}
-    </Layout>
+        )}
+        {activeTab === 'session' && (
+          <SessionView
+            workoutId={selectedWorkoutId}
+            onExit={() => {
+              setSelectedWorkoutId(null);
+              setActiveTab('dashboard');
+            }}
+          />
+        )}
+        {activeTab === 'history' && (
+          <HistoryView 
+            initialDate={historySearchDate} 
+            onClearInitialDate={() => setHistorySearchDate(null)} 
+            />
+        )}
+        {activeTab === 'analytics' && <AnalyticsView />}
+        {activeTab === 'manage' && <ManageView />}
+      </Layout>
+    </>
   );
 }
 

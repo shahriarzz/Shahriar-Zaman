@@ -59,7 +59,7 @@ export function SegmentedControl<T extends string>({
             {isSelected && (
               <motion.div
                 layoutId={`segmented-active-${options.map(o => o.value).join('-')}`}
-                className="absolute inset-0 bg-zinc-800 border border-zinc-700/80 shadow-sm rounded-xl -z-0"
+                className={cn("absolute inset-0 bg-zinc-800 border border-zinc-700/80 shadow-sm -z-0", RADIUS.button)}
                 transition={{ type: "spring", stiffness: 500, damping: 35 }}
               />
             )}

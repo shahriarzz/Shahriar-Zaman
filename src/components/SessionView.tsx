@@ -146,17 +146,20 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => getAiAdvice(ex)}
             disabled={loadingAdvice === ex.id}
-            className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 transition-colors"
-          >
-            <Zap 
-              size={18} 
-              className={loadingAdvice === ex.id ? 'animate-pulse' : ''} 
-              style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
-            />
-          </button>
+            className="w-8 h-8 p-0 rounded-full text-zinc-500"
+            icon={
+              <Zap 
+                size={18} 
+                className={loadingAdvice === ex.id ? 'animate-pulse' : ''} 
+                style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
+              />
+            }
+          />
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.2 }}
@@ -180,23 +183,19 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           >
             {/* AI Advice Box */}
             {aiAdvice[ex.id] && (
-              <div 
-                className="mx-6 mb-4 p-4 rounded-2xl flex gap-3 text-xs border"
-                style={{
-                  backgroundColor: `${WORKOUT_COLORS[workoutType]}0D`,
-                  borderColor: `${WORKOUT_COLORS[workoutType]}1A`,
-                  color: `${WORKOUT_COLORS[workoutType]}CC`,
-                }}
-              >
-                <MessageSquareQuote size={18} className="shrink-0" style={{ color: WORKOUT_COLORS[workoutType] }} />
-                <p>{aiAdvice[ex.id]}</p>
+              <div className="mx-6 mb-4">
+                <Banner
+                  variant="achievement"
+                  badge="COACH TIP"
+                  title={aiAdvice[ex.id]}
+                />
               </div>
             )}
 
             {/* Ghost Data Grid */}
             <Grid cols={2} gap="none" className="bg-zinc-950/20 border-y border-zinc-800/50">
               <div className="p-4 border-r border-zinc-800/50 space-y-1">
-                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">Last Session</span>
+                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-widest">Last Session</span>
                 {lastSession ? (
                   <div className="text-[10px] font-mono text-zinc-400">
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
@@ -208,7 +207,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 )}
               </div>
               <div className="p-4 space-y-1">
-                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-[0.2em]">All-Time PR</span>
+                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-widest">All-Time PR</span>
                 {allTimePR ? (
                   <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
                     <Trophy size={10} style={{ color: WORKOUT_COLORS[workoutType] }} /> {allTimePR.weight}kg × {allTimePR.reps}
@@ -221,7 +220,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
             {/* Sets Table */}
             <div className="p-6 pt-4 space-y-3">
-              <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-600 px-2 text-center">
+              <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-widest text-zinc-600 px-2 text-center">
                 <span>Set</span>
                 <span>KG</span>
                 <span>Reps</span>
@@ -245,6 +244,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     >
                       <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
                         <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
+                        {/* specialized table/matrix input for active workout set weight */}
                         <input
                           type="number"
                           placeholder="kg"
@@ -256,6 +256,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
                           )}
                         />
+                        {/* specialized table/matrix input for active workout set reps */}
                         <input
                           type="number"
                           placeholder="reps"
@@ -279,17 +280,18 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           </button>
                         </div>
                         <div className="flex justify-center">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Trash2 size={16} />}
                             onClick={() => {
                               haptics.warning();
                               deleteSet(ex.id, si);
                             }}
                             disabled={setsForEx.length <= 1}
-                            className="w-12 h-12 flex items-center justify-center rounded-xl border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 active:scale-95 transition-all disabled:opacity-10 disabled:pointer-events-none cursor-pointer"
+                            className="w-12 h-12 p-0 border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10"
                             title="Delete this set"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          />
                         </div>
                       </div>
 
@@ -304,15 +306,19 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 })}
               </div>
 
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                fullWidth
+                icon={<Plus size={14} />}
                 onClick={() => {
                   haptics.medium();
                   addSet(ex.id);
                 }}
-                className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 border border-dashed border-zinc-800 rounded-xl hover:bg-zinc-900/50 hover:text-zinc-400 transition-colors"
+                className="py-2 border-dashed font-mono text-xs"
               >
-                <Plus size={14} /> Add Additional Set
-              </button>
+                Add Additional Set
+              </Button>
             </div>
 
             {/* Coach Note (Collapsed) */}
@@ -899,7 +905,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             >
               <div className="flex items-center gap-2">
                 <Trophy className="text-amber-500 animate-pulse" size={16} />
-                <span className="font-mono text-[9px] text-amber-400 uppercase tracking-[0.2em] font-bold">New Records Set Today!</span>
+                <span className="font-mono text-[9px] text-amber-400 uppercase tracking-widest font-bold">New Records Set Today!</span>
               </div>
               <div className="space-y-2">
                 {todaysPRs.map((pr, idx) => (
@@ -1034,7 +1040,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
-                <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-zinc-500">Active Finish Protocol</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Active Finish Protocol</span>
               </div>
               <h3 className="text-lg font-bold text-white uppercase tracking-wide">{activeWorkout.cardio.name}</h3>
               <p className="text-xs text-zinc-500 font-mono tracking-tight">{activeWorkout.cardio.detail}</p>

@@ -53,6 +53,7 @@ import {
   Button,
   Stack,
   Grid,
+  ChartTooltip,
   SURFACE,
   BORDER,
   RADIUS,
@@ -205,7 +206,7 @@ export const AnalyticsView: React.FC = () => {
                   "font-bold flex items-center gap-0.5",
                   aggregated.volumePeriodChangePct > 0
                     ? "text-emerald-400"
-                    : (aggregated.volumePeriodChangePct < 0 ? "text-rose-400" : "text-zinc-400")
+                    : (aggregated.volumePeriodChangePct < 0 ? "text-red-400" : "text-zinc-400")
                 )}
               >
                 {aggregated.volumePeriodChangePct > 0 ? (
@@ -234,7 +235,7 @@ export const AnalyticsView: React.FC = () => {
               ? 'emerald'
               : performanceScore.status === 'Good'
               ? 'amber'
-              : 'rose'
+              : 'red'
           }
         />
       </Grid>
@@ -424,13 +425,13 @@ export const AnalyticsView: React.FC = () => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
                         return (
-                          <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, SPACING.compact, SHADOW.panel, "border font-mono text-xs", STACK_SPACING.xs)}>
+                          <ChartTooltip>
                             <p className="text-zinc-400 font-bold">{data.date}</p>
                             <p className="text-emerald-400 font-black text-sm">
                               Est. 1RM: {data.epley1RM} kg
                             </p>
                             <p className="text-zinc-500 text-[10px]">Best Set: {data.setDetail}</p>
-                          </div>
+                          </ChartTooltip>
                         );
                       }
                       return null;
@@ -513,10 +514,10 @@ export const AnalyticsView: React.FC = () => {
                     if (active && payload && payload.length) {
                       const d = payload[0].payload;
                       return (
-                        <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, SPACING.compact, SHADOW.elevation, "border font-mono text-xs")}>
+                        <ChartTooltip>
                           <span className="text-zinc-400 uppercase">{d.category}: </span>
                           <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
-                        </div>
+                        </ChartTooltip>
                       );
                     }
                     return null;
@@ -567,8 +568,8 @@ export const AnalyticsView: React.FC = () => {
                         )}>
                           #{idx + 1}
                         </span>
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-white truncate">{ex.name}</p>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white break-words">{ex.name}</p>
                           <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
                             {ex.count} {ex.count === 1 ? 'session' : 'sessions'} logged
                           </p>
@@ -623,11 +624,12 @@ export const AnalyticsView: React.FC = () => {
                 <Card
                   key={rec.exerciseName ? `rec-${rec.exerciseName}-${idx}` : `rec-${idx}`}
                   variant="interactive"
+                  accent="orange"
                   padding="standard"
-                  className="flex items-center justify-between group border-orange-500/20 hover:border-orange-500/50"
+                  className="flex items-center justify-between group"
                 >
-                  <div className={cn("truncate pr-2", STACK_SPACING.xs)}>
-                    <p className="text-xs font-bold text-white group-hover:text-orange-400 transition-colors truncate">
+                  <div className={cn("min-w-0 pr-2", STACK_SPACING.xs)}>
+                    <p className="text-xs font-bold text-white group-hover:text-orange-400 transition-colors break-words">
                       {rec.exerciseName}
                     </p>
                     <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
@@ -826,10 +828,10 @@ export const AnalyticsView: React.FC = () => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;
                         return (
-                          <div className={cn(SURFACE.recessed, BORDER.standard, RADIUS.button, SPACING.compact, SHADOW.elevation, "border font-mono text-xs")}>
+                          <ChartTooltip>
                             <span style={{ color: d.color }}>{d.name}: </span>
                             <strong className="text-white">{d.value} {d.value === 1 ? 'session' : 'sessions'}</strong>
-                          </div>
+                          </ChartTooltip>
                         );
                       }
                       return null;

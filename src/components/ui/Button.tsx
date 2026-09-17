@@ -5,7 +5,7 @@ import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE
 import { renderIcon, IconProp } from './renderIcon';
 import { haptics } from '../../utils/haptics';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive' | 'danger' | 'warning' | 'success';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive' | 'warning' | 'success';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 export type HapticType = 'light' | 'medium' | 'selection' | 'success' | 'warning' | 'none';
 
@@ -44,7 +44,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   ...props
 }, ref) => {
   const resolvedColor = colorOverride || getAccentColor(color);
-  const isDestructive = variant === 'destructive' || variant === 'danger';
+  const isDestructive = variant === 'destructive';
 
   const defaultHaptic = (): void => {
     if (haptic === 'none') return;
@@ -76,16 +76,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
     outline: cn(BORDER.standard, 'border hover:border-zinc-700 hover:bg-zinc-800/60 text-zinc-300 font-bold bg-transparent'),
     ghost: 'hover:bg-zinc-800/60 text-zinc-400 hover:text-white font-bold border-transparent bg-transparent',
     destructive: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold',
-    danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold',
     warning: 'bg-amber-500 hover:bg-amber-400 text-black font-bold border-transparent',
     success: 'bg-emerald-500 hover:bg-emerald-400 text-black font-bold border-transparent',
   };
 
   const sizeClasses: Record<ButtonSize, string> = {
-    sm: 'px-3 py-1.5 text-[11px] gap-1.5 min-h-[30px]',
-    md: 'px-5 py-2.5 text-xs gap-2 min-h-[38px]',
-    lg: 'px-8 py-3.5 text-xs tracking-wider gap-2.5 min-h-[46px]',
-    icon: 'p-2 text-sm justify-center min-h-[36px] min-w-[36px]',
+    sm: 'h-8 min-h-[32px] px-3 text-[11px] gap-1.5',
+    md: 'h-10 min-h-[40px] px-5 text-xs gap-2',
+    lg: 'h-12 min-h-[48px] px-8 text-xs tracking-wider gap-2.5',
+    icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-2 text-sm justify-center',
   };
 
   const iconSizes: Record<ButtonSize, number> = {

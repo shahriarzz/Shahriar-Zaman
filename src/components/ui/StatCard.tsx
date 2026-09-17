@@ -1,8 +1,10 @@
 import React from 'react';
 import { Card, CardProps } from './Card';
+import { Badge } from './Badge';
 import { cn } from '../../lib/utils';
 import {
   SemanticColor,
+  SEMANTIC_COLORS,
   getAccentColor,
   TYPOGRAPHY
 } from '../../styles/tokens';
@@ -15,7 +17,7 @@ export interface StatCardProps {
   icon?: IconProp;
   accent?: SemanticColor;
   colorOverride?: string;
-  accentStyle?: CardProps['accentStyle'];
+  accentVariant?: CardProps['accentVariant'];
   sublabel?: string;
   trend?: React.ReactNode;
   trendDirection?: 'positive' | 'negative' | 'neutral';
@@ -30,8 +32,8 @@ export interface StatCardProps {
 }
 
 const STAT_NUMBER_VARIANTS = {
-  standard: 'font-display text-3xl sm:text-[2rem] uppercase tracking-tight text-white leading-none tabular-nums',
-  hero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none tabular-nums',
+  standard: TYPOGRAPHY.statValue,
+  hero: TYPOGRAPHY.statValueHero,
 } as const;
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -41,7 +43,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   icon,
   accent = 'emerald',
   colorOverride,
-  accentStyle,
+  accentVariant,
   sublabel,
   trend,
   trendDirection,
@@ -54,35 +56,25 @@ export const StatCard: React.FC<StatCardProps> = ({
   const effectiveUnavailable = isUnavailable || value === '—' || value === '-';
   const effectiveAccent = effectiveUnavailable ? 'zinc' : accent;
   const effectiveColorOverride = effectiveUnavailable ? undefined : colorOverride;
-  const accentHex = effectiveColorOverride || (effectiveUnavailable ? '#71717a' : (getAccentColor(effectiveAccent as SemanticColor) || '#10b981'));
+  const accentHex = effectiveColorOverride || (effectiveUnavailable ? SEMANTIC_COLORS.zinc : (getAccentColor(effectiveAccent as SemanticColor) || SEMANTIC_COLORS.emerald));
 
   const trendColorClass = trendDirection === 'positive'
     ? 'text-emerald-400'
     : trendDirection === 'negative'
-      ? 'text-rose-400'
+      ? 'text-red-400'
       : trendDirection === 'neutral'
         ? 'text-zinc-400'
         : '';
 
   // Determine what to show in the meta slot (suppressed when unavailable to avoid misleading trend/status)
   const metaBadge = !effectiveUnavailable ? (statusIndicator ? (
-    <span
-      className={cn(
-        "shrink-0 max-w-full rounded-full border px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider",
-        statusIndicator.color === 'emerald' &&
-          "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-        statusIndicator.color === 'orange' &&
-          "text-orange-400 border-orange-500/30 bg-orange-500/10",
-        statusIndicator.color === 'amber' &&
-          "text-amber-400 border-amber-500/30 bg-amber-500/10",
-        statusIndicator.color === 'rose' &&
-          "text-rose-400 border-rose-500/30 bg-rose-500/10",
-        (!statusIndicator.color || statusIndicator.color === 'zinc') &&
-          "text-zinc-400 border-zinc-700/40"
-      )}
-    >
-      {statusIndicator.label}
-    </span>
+    <Badge
+      label={statusIndicator.label}
+      color={statusIndicator.color || 'zinc'}
+      size="sm"
+      dot={false}
+      className="shrink-0 max-w-full"
+    />
   ) : trend ? (
     <div className={cn("shrink-0 max-w-full font-mono text-xs", trendColorClass)}>
       {trend}
@@ -98,7 +90,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       variant="standard"
       accent={effectiveUnavailable ? 'zinc' : accent}
       colorOverride={effectiveUnavailable ? undefined : colorOverride}
-      accentStyle={accentStyle}
+      accentVariant={accentVariant}
       padding={size === 'hero' ? 'section' : 'standard'}
       className={cn(
         "flex h-full w-full min-w-0 max-w-full flex-col",
@@ -112,13 +104,13 @@ export const StatCard: React.FC<StatCardProps> = ({
             <span
               className="shrink-0 flex items-center"
               style={{
-                color: effectiveUnavailable ? '#71717a' : accentHex
+                color: effectiveUnavailable ? SEMANTIC_COLORS.zinc : accentHex
               }}
             >
               {renderIcon(icon, {
                 size: 16,
                 style: {
-                  color: effectiveUnavailable ? '#71717a' : accentHex
+                  color: effectiveUnavailable ? SEMANTIC_COLORS.zinc : accentHex
                 }
               })}
             </span>

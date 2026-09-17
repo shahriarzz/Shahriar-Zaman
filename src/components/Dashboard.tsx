@@ -19,7 +19,15 @@ import {
   Banner,
   Stack,
   Grid,
+  ListRow,
+  WorkoutColorIndicator,
   SEMANTIC_COLORS,
+  SURFACE,
+  BORDER,
+  RADIUS,
+  SPACING,
+  SHADOW,
+  TYPOGRAPHY,
 } from './ui';
 import { cn } from '../lib/utils';
 
@@ -191,7 +199,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         ) : todayWorkout ? (
           <Card
             variant="interactive"
-            padding="relaxed"
+            padding="section"
             onClick={() => {
               haptics.medium();
               onStartWorkout(todayWorkout.id);
@@ -243,7 +251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         eyebrow="Biometrics"
         eyebrowColor="orange"
         title="Body Weight Tracker"
-        padding="relaxed"
+        padding="section"
       >
         <Stack spacing="lg">
           {/* Current + Input Row */}
@@ -347,7 +355,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     <span className="text-zinc-400">{formatDateStr(date)}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-white font-bold">{weight} <span className="text-[10px] text-zinc-500 font-normal">kg</span></span>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Trash2 size={13} />}
                         onClick={async () => {
                           haptics.warning();
                           const proceed = await confirm({
@@ -359,11 +370,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                             weightSummary.deleteWeight(date);
                           }
                         }}
-                        className="text-zinc-600 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                        className="w-6 h-6 p-0 text-zinc-600 hover:text-red-400"
                         title="Delete Entry"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      />
                     </div>
                   </Card>
                 ))}
@@ -381,52 +390,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         padding="none"
       >
         <div className="relative dropdown-container">
-          <button 
+          <Button 
+            variant="secondary"
+            fullWidth
             onClick={() => {
               haptics.light();
               setIsDropdownOpen(!isDropdownOpen);
             }}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 pr-10 font-mono text-xs uppercase tracking-wider outline-none text-left flex justify-between items-center hover:border-zinc-700 transition-all cursor-pointer"
+            className={cn(
+              "p-4 pr-6 font-mono text-xs uppercase tracking-wider justify-between items-center text-left",
+              SURFACE.recessed
+            )}
+            rightIcon={
+              <ChevronRight size={16} className={cn("text-zinc-500 transition-transform", isDropdownOpen && "rotate-90")} />
+            }
           >
             <span className="text-zinc-300">Browse All Routines</span>
-            <ChevronRight size={16} className={cn("text-zinc-500 transition-transform", isDropdownOpen && "rotate-90")} />
-          </button>
+          </Button>
           
           {isDropdownOpen && (
-            <div className="absolute z-40 left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div className={cn(
+              "absolute z-40 left-0 right-0 mt-2 border p-2 space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar",
+              SURFACE.elevated,
+              BORDER.standard,
+              RADIUS.card,
+              SHADOW.elevation
+            )}>
               {workouts.map((wo) => (
-                <button
+                <ListRow
                   key={wo.id}
                   onClick={() => {
                     haptics.selection();
                     if (wo.type !== 'rest') onStartWorkout(wo.id);
                     setIsDropdownOpen(false);
                   }}
-                  disabled={wo.type === 'rest'}
-                  className={cn(
-                    "w-full p-3.5 rounded-xl flex items-center justify-between text-left transition-all border border-transparent",
-                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-zinc-800 cursor-pointer active:scale-[0.99]"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-1.5 h-6 rounded-full" 
-                      style={{ 
-                        backgroundColor: WORKOUT_COLORS[wo.type],
-                      }} 
-                    />
+                  leading={<WorkoutColorIndicator type={wo.type} size="sm" />}
+                  content={
                     <div>
                       <div className="font-bold text-sm uppercase tracking-tight text-white">{wo.name}</div>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-1">Day {wo.cycleDay} · {wo.badge}</div>
                     </div>
-                  </div>
-                  {wo.type !== 'rest' && (
-                    <div className="flex items-center gap-2">
-                      <Badge label={`${wo.exercises.length} EXERCISES`} color="zinc" variant="subtle" />
-                      <ChevronRight size={14} className="text-zinc-500" />
-                    </div>
+                  }
+                  trailing={
+                    wo.type !== 'rest' ? (
+                      <div className="flex items-center gap-2">
+                        <Badge label={`${wo.exercises.length} EXERCISES`} color="zinc" variant="subtle" />
+                        <ChevronRight size={14} className="text-zinc-500" />
+                      </div>
+                    ) : undefined
+                  }
+                  className={cn(
+                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "cursor-pointer"
                   )}
-                </button>
+                />
               ))}
             </div>
           )}

@@ -47,15 +47,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         )}
       >
         {icon && (
-          <div className="p-4 rounded-2xl bg-zinc-900/40 text-zinc-500 mb-1 flex items-center justify-center">
+          <div className={cn("p-4 bg-zinc-900/40 text-zinc-500 mb-1 flex items-center justify-center", RADIUS.card)}>
             {renderIcon(icon, { size: 36 })}
           </div>
         )}
-        <p className={cn(TYPOGRAPHY.titleSubsection, "text-zinc-400")}>
+        <p className={TYPOGRAPHY.emptyTitle}>
           {title}
         </p>
         {description && (
-          <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-wider max-w-[240px] leading-relaxed">
+          <p className={TYPOGRAPHY.emptyDescription}>
             {description}
           </p>
         )}
@@ -77,7 +77,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <div
       className={cn(
-        "py-8 px-6 bg-zinc-950/20 rounded-2xl border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center space-y-2",
+        "py-8 px-6 bg-zinc-950/20 border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center space-y-2",
         RADIUS.card,
         className
       )}
@@ -87,11 +87,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           {renderIcon(icon, { size: 24 })}
         </div>
       )}
-      <p className="text-zinc-300 font-display uppercase text-sm tracking-wide">
+      <p className={TYPOGRAPHY.emptyTitle}>
         {title}
       </p>
       {description && (
-        <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-wider max-w-[260px] leading-relaxed">
+        <p className={TYPOGRAPHY.emptyDescription}>
           {description}
         </p>
       )}

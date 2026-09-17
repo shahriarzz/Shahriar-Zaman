@@ -172,33 +172,38 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           eyebrow="Timeline"
           eyebrowColor="emerald"
           title={`${format(currentMonth, 'MMMM')} ${format(currentMonth, 'yyyy')}`}
-          padding="relaxed"
+          padding="section"
           action={
             <div className="flex gap-2 items-center">
               {!isSameMonthAsToday && (
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     haptics.selection();
                     const today = new Date();
                     setCurrentMonth(today);
                     setSelectedDate(today);
                   }}
-                  className="px-3.5 py-1.5 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full text-xs font-mono uppercase tracking-wider transition-colors text-zinc-400 hover:text-white cursor-pointer"
                 >
                   Today
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<ChevronLeft size={16} />}
                 onClick={() => {
                   haptics.selection();
                   setCurrentMonth(subMonths(currentMonth, 1));
                 }}
                 title="Previous Month"
-                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-full transition-colors cursor-pointer text-zinc-300 hover:text-white"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
+                className="w-8 h-8 p-0"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<ChevronRight size={16} />}
                 onClick={() => {
                   if (isCurrentOrFutureMonth) return;
                   haptics.selection();
@@ -206,20 +211,13 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 }}
                 disabled={isCurrentOrFutureMonth}
                 title={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
-                className={cn(
-                  "w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full transition-colors",
-                  isCurrentOrFutureMonth
-                    ? "opacity-25 cursor-not-allowed text-zinc-600"
-                    : "hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
-                )}
-              >
-                <ChevronRight size={16} />
-              </button>
+                className="w-8 h-8 p-0"
+              />
             </div>
           }
         >
           {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1.5 pt-2">
+          <div className="grid grid-cols-7 gap-1.5 pt-2 min-w-0 [&>*]:min-w-0">
             {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
               <div
                 key={d}
@@ -332,16 +330,17 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     title={format(selectedDate, 'EEEE')}
                     description={format(selectedDate, 'MMMM do, yyyy')}
                   />
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<X size={14} />}
                     onClick={() => {
                       haptics.selection();
                       setSelectedDate(null);
                     }}
                     title="Close Details"
-                    className="w-7 h-7 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <X size={14} />
-                  </button>
+                    className="w-7 h-7 p-0 rounded-full"
+                  />
                 </div>
 
                 {/* Status Badges in Header */}
@@ -683,7 +682,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             animate={{ opacity: 1 }}
             className="hidden lg:flex flex-col w-96"
           >
-            <Card variant="standard" padding="relaxed" className="h-full flex items-center justify-center min-h-[380px]">
+            <Card variant="standard" padding="section" className="h-full flex items-center justify-center min-h-[380px]">
               <EmptyState
                 icon={Dumbbell}
                 title="Session Details"

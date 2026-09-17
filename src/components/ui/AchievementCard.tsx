@@ -2,7 +2,7 @@ import React from 'react';
 import { Trophy } from 'lucide-react';
 import { Card } from './Card';
 import { cn } from '../../lib/utils';
-import { getAccentColor, SemanticColor, TYPOGRAPHY } from '../../styles/tokens';
+import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TYPOGRAPHY } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface AchievementCardProps {
@@ -15,6 +15,8 @@ export interface AchievementCardProps {
   className?: string;
 }
 
+const ACHIEVEMENT_GLOW_BACKDROP = "absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl pointer-events-none";
+
 export const AchievementCard: React.FC<AchievementCardProps> = ({
   title,
   value,
@@ -24,21 +26,21 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
   colorOverride,
   className
 }) => {
-  const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || '#f97316';
+  const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || SEMANTIC_COLORS.orange;
 
   return (
     <Card
       variant="elevated"
       accent={accent}
       colorOverride={colorOverride}
-      accentStyle="glow"
+      accentVariant="glow"
       padding="section"
       className={cn("flex flex-col justify-between relative overflow-hidden", className)}
     >
       {/* Subtle brand glow backdrop */}
       <div
         aria-hidden="true"
-        className="absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl pointer-events-none"
+        className={ACHIEVEMENT_GLOW_BACKDROP}
         style={{ backgroundColor: `${accentHex}1a` }}
       />
 
@@ -65,7 +67,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
         </div>
 
         <div className="flex items-baseline gap-2 mt-2">
-          <span className="font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none">
+          <span className={cn(TYPOGRAPHY.statValueHero, "text-white leading-none")}>
             {value}
           </span>
         </div>

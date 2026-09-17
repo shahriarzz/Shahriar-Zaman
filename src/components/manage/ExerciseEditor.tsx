@@ -5,6 +5,7 @@ import {
   Card,
   Button,
   Input,
+  Textarea,
   Badge,
   Stack,
   Grid,
@@ -177,19 +178,14 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
                 {['priority', 'daily', 'compound', 'isolation', 'machine', 'free-weight'].map(t => {
                   const isSelected = tags.includes(t);
                   return (
-                    <button
+                    <Badge
                       key={t}
-                      type="button"
+                      label={isSelected ? `✓ ${t}` : `+ ${t}`}
+                      color={isSelected ? 'orange' : 'zinc'}
+                      variant={isSelected ? 'subtle' : 'outline'}
+                      size="sm"
                       onClick={() => toggleTag(t)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all border select-none cursor-pointer",
-                        isSelected
-                          ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                      )}
-                    >
-                      {isSelected ? `✓ ${t}` : `+ ${t}`}
-                    </button>
+                    />
                   );
                 })}
               </div>
@@ -197,20 +193,13 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
           </Grid>
 
           {/* Form Cues / Instructions */}
-          <div className="space-y-1.5">
-            <label className={cn(TYPOGRAPHY.label, "block")}>Form Cues & Technique Guidance</label>
-            <textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="e.g. 45° elbow tuck; pause 1s at bottom stretch; focus on clavicular fiber recruitment."
-              className={cn(
-                SURFACE.subtle,
-                BORDER.standard,
-                RADIUS.button,
-                "w-full h-24 p-3 text-xs text-zinc-200 placeholder-zinc-500 outline-none border focus:border-orange-500/50 resize-none font-sans"
-              )}
-            />
-          </div>
+          <Textarea
+            label="Form Cues & Technique Guidance"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="e.g. 45° elbow tuck; pause 1s at bottom stretch; focus on clavicular fiber recruitment."
+            rows={3}
+          />
         </Card>
       )}
 
@@ -272,20 +261,13 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
           </Grid>
 
           {/* Coaching Execution Note */}
-          <div className="space-y-1.5">
-            <label className={cn(TYPOGRAPHY.label, "block")}>Workout Execution Note</label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Safe to push to failure on last set; drop pin 1 notch for drop set."
-              className={cn(
-                SURFACE.subtle,
-                BORDER.standard,
-                RADIUS.button,
-                "w-full h-24 p-3 text-xs text-zinc-200 placeholder-zinc-500 outline-none border focus:border-orange-500/50 resize-none font-sans"
-              )}
-            />
-          </div>
+          <Textarea
+            label="Workout Execution Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Safe to push to failure on last set; drop pin 1 notch for drop set."
+            rows={3}
+          />
         </Card>
       )}
 

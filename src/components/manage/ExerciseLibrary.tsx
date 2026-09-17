@@ -7,6 +7,7 @@ import {
   Button,
   Input,
   Badge,
+  EmptyState,
   Stack,
   Grid,
   SegmentedControl,
@@ -127,15 +128,15 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
       {/* Exercise Cards Grid / List */}
       <div className="space-y-2.5">
         {filteredItems.length === 0 ? (
-          <Card variant="standard" surface="recessed" padding="relaxed" className="text-center space-y-2">
-            <Dumbbell size={28} className="text-zinc-600 mx-auto" />
-            <div className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
-              No exercises match your search
-            </div>
-            <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-500")}>
-              Try clearing your search query or create a new custom exercise.
-            </p>
-          </Card>
+          <EmptyState
+            icon={<Dumbbell size={24} />}
+            title="No exercises match your search"
+            description="Try clearing your search query or create a new custom exercise."
+            action={{
+              label: "+ New Exercise",
+              onClick: onCreateNewExercise
+            }}
+          />
         ) : (
           filteredItems.map(item => {
             const hasPriority = (item.tags || []).includes('priority');
@@ -162,9 +163,13 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                       <Badge label="DAILY" color="amber" size="sm" dot={false} />
                     )}
                     {item.equipment && (
-                      <span className="text-[9px] font-mono text-zinc-500 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 uppercase">
-                        {item.equipment}
-                      </span>
+                      <Badge
+                        label={item.equipment}
+                        color="zinc"
+                        variant="outline"
+                        size="sm"
+                        dot={false}
+                      />
                     )}
                   </div>
 

@@ -3,10 +3,11 @@ import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Card } from './Card';
 import { Badge } from './Badge';
+import { Button } from './Button';
 import { SemanticColor, TYPOGRAPHY } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
-export type BannerVariant = 'warning' | 'success' | 'danger' | 'error' | 'info' | 'achievement';
+export type BannerVariant = 'warning' | 'success' | 'destructive' | 'info' | 'achievement';
 
 export interface BannerProps {
   variant?: BannerVariant;
@@ -38,13 +39,7 @@ const BANNER_CONFIG: Record<BannerVariant, {
     badgeColor: 'emerald',
     pingColor: 'bg-emerald-500',
   },
-  danger: {
-    accent: 'red',
-    bgGradient: 'border-red-500/40 bg-gradient-to-r from-red-500/10 via-zinc-900/40 to-transparent',
-    badgeColor: 'red',
-    pingColor: 'bg-red-500',
-  },
-  error: {
+  destructive: {
     accent: 'red',
     bgGradient: 'border-red-500/40 bg-gradient-to-r from-red-500/10 via-zinc-900/40 to-transparent',
     badgeColor: 'red',
@@ -80,7 +75,7 @@ export const Banner: React.FC<BannerProps> = ({
   return (
     <Card
       variant="elevated"
-      padding="relaxed"
+      padding="section"
       className={cn("relative overflow-hidden", config.bgGradient, className)}
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
@@ -116,14 +111,15 @@ export const Banner: React.FC<BannerProps> = ({
             </div>
           )}
           {onDismiss && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
+              icon={<X size={16} />}
               onClick={onDismiss}
-              className="text-zinc-500 hover:text-zinc-300 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="text-zinc-500 hover:text-zinc-300"
               title="Dismiss"
               aria-label="Dismiss"
-            >
-              <X size={16} />
-            </button>
+            />
           )}
         </div>
       </div>

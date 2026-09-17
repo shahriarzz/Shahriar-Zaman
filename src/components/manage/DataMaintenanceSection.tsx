@@ -22,6 +22,8 @@ import {
   Card,
   Button,
   Banner,
+  Badge,
+  Textarea,
   Stack,
   Grid,
   TYPOGRAPHY,
@@ -32,7 +34,7 @@ import {
 import { cn } from '../../lib/utils';
 
 interface BannerMessage {
-  type: 'success' | 'danger' | 'warning' | 'info';
+  type: 'success' | 'destructive' | 'warning' | 'info';
   text: string;
 }
 
@@ -91,7 +93,7 @@ export const DataMaintenanceSection: React.FC = () => {
       setTimeout(() => setBannerMessage(null), 4000);
     } catch (e: any) {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Failed to export backup: " + (e?.message || e) });
+      setBannerMessage({ type: 'destructive', text: "Failed to export backup: " + (e?.message || e) });
     } finally {
       setLoadingAction(null);
     }
@@ -121,7 +123,7 @@ export const DataMaintenanceSection: React.FC = () => {
     const MAX_SIZE = 5 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Selected file is too large. Backup files must be under 5MB." });
+      setBannerMessage({ type: 'destructive', text: "Selected file is too large. Backup files must be under 5MB." });
       event.target.value = '';
       return;
     }
@@ -141,18 +143,18 @@ export const DataMaintenanceSection: React.FC = () => {
           setTimeout(() => setBannerMessage(null), 5000);
         } else {
           haptics.warning();
-          setBannerMessage({ type: 'danger', text: res.message });
+          setBannerMessage({ type: 'destructive', text: res.message });
         }
       } catch {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: "Failed to import backup file." });
+        setBannerMessage({ type: 'destructive', text: "Failed to import backup file." });
       } finally {
         setLoadingAction(null);
       }
     };
     reader.onerror = () => {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Error reading backup file." });
+      setBannerMessage({ type: 'destructive', text: "Error reading backup file." });
       setLoadingAction(null);
     };
     reader.readAsText(file);
@@ -173,11 +175,11 @@ export const DataMaintenanceSection: React.FC = () => {
         setTimeout(() => setBannerMessage(null), 5000);
       } else {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: res.message });
+        setBannerMessage({ type: 'destructive', text: res.message });
       }
     } catch {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Failed to process JSON backup." });
+      setBannerMessage({ type: 'destructive', text: "Failed to process JSON backup." });
     } finally {
       setLoadingAction(null);
     }
@@ -195,11 +197,11 @@ export const DataMaintenanceSection: React.FC = () => {
         setTimeout(() => setBannerMessage(null), 4000);
       } else {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: res.message });
+        setBannerMessage({ type: 'destructive', text: res.message });
       }
     } catch {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Failed to create savepoint." });
+      setBannerMessage({ type: 'destructive', text: "Failed to create savepoint." });
     } finally {
       setLoadingAction(null);
     }
@@ -225,11 +227,11 @@ export const DataMaintenanceSection: React.FC = () => {
         setTimeout(() => setBannerMessage(null), 5000);
       } else {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: res.message });
+        setBannerMessage({ type: 'destructive', text: res.message });
       }
     } catch {
       haptics.warning();
-      setBannerMessage({ type: 'danger', text: "Failed to restore savepoint snapshot." });
+      setBannerMessage({ type: 'destructive', text: "Failed to restore savepoint snapshot." });
     } finally {
       setRestoringTimestamp(null);
     }
@@ -252,7 +254,7 @@ export const DataMaintenanceSection: React.FC = () => {
         setTimeout(() => setBannerMessage(null), 4000);
       } catch {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: "Failed to reset routines." });
+        setBannerMessage({ type: 'destructive', text: "Failed to reset routines." });
       } finally {
         setLoadingAction(null);
       }
@@ -276,7 +278,7 @@ export const DataMaintenanceSection: React.FC = () => {
         setTimeout(() => setBannerMessage(null), 4000);
       } catch {
         haptics.warning();
-        setBannerMessage({ type: 'danger', text: "Failed to delete training history." });
+        setBannerMessage({ type: 'destructive', text: "Failed to delete training history." });
       } finally {
         setLoadingAction(null);
       }
@@ -289,7 +291,7 @@ export const DataMaintenanceSection: React.FC = () => {
       eyebrowColor="zinc"
       title="Data & Maintenance"
       description="Manage database backups, import/export archives, restore checkpoints, and clear storage."
-      padding="relaxed"
+      padding="section"
     >
       <Stack spacing="lg">
         {/* 1. DATA HEALTH READOUT */}
@@ -407,40 +409,34 @@ export const DataMaintenanceSection: React.FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, "space-y-2 border p-4")}
             >
-              <label className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>
-                Raw Backup JSON Structure
-              </label>
-              <textarea
-                value={pastedJson}
-                onChange={(e) => setPastedJson(e.target.value)}
-                placeholder='Paste your backup JSON string here... (e.g., {"version": 1, ...})'
-                className={cn(
-                  SURFACE.subtle,
-                  BORDER.standard,
-                  RADIUS.button,
-                  "w-full h-32 border hover:border-zinc-700 focus:border-zinc-600 p-3 font-mono text-[10px] text-zinc-300 outline-none resize-none"
-                )}
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPastedJson('')}
-                >
-                  Clear
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  loading={loadingAction === 'paste'}
-                  disabled={!pastedJson.trim() || loadingAction === 'paste'}
-                  onClick={handlePasteRestore}
-                >
-                  {loadingAction === 'paste' ? 'Restoring...' : 'Restore from JSON'}
-                </Button>
-              </div>
+              <Card variant="recessed" padding="standard" className="space-y-3">
+                <Textarea
+                  label="Raw Backup JSON Structure"
+                  value={pastedJson}
+                  onChange={(e) => setPastedJson(e.target.value)}
+                  placeholder='Paste your backup JSON string here... (e.g., {"version": 1, ...})'
+                  rows={4}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPastedJson('')}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={loadingAction === 'paste'}
+                    disabled={!pastedJson.trim() || loadingAction === 'paste'}
+                    onClick={handlePasteRestore}
+                  >
+                    {loadingAction === 'paste' ? 'Restoring...' : 'Restore from JSON'}
+                  </Button>
+                </div>
+              </Card>
             </motion.div>
           )}
         </AnimatePresence>
@@ -484,20 +480,21 @@ export const DataMaintenanceSection: React.FC = () => {
               checkpointHistory.map((b) => {
                 const isRestoringThis = restoringTimestamp === b.timestamp;
                 return (
-                  <div
+                  <Card
                     key={b.timestamp}
-                    className={cn(
-                      SURFACE.subtle,
-                      BORDER.standard,
-                      RADIUS.button,
-                      "p-3 border flex items-center justify-between gap-3 text-left hover:border-zinc-700 hover:bg-zinc-900/50 transition-all"
-                    )}
+                    variant="interactive"
+                    surface="subtle"
+                    padding="compact"
+                    className="flex items-center justify-between gap-3 text-left"
                   >
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[8px] font-mono text-orange-400 font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20">
-                          {b.changeType}
-                        </span>
+                        <Badge
+                          label={b.changeType}
+                          color="orange"
+                          variant="subtle"
+                          size="sm"
+                        />
                         <span className="text-[10px] text-zinc-200 font-bold truncate">{b.desc}</span>
                       </div>
                       <div className="text-[8px] font-mono text-zinc-500 uppercase">
@@ -521,7 +518,7 @@ export const DataMaintenanceSection: React.FC = () => {
                     >
                       {isRestoringThis ? 'Restoring...' : 'Restore'}
                     </Button>
-                  </div>
+                  </Card>
                 );
               })
             )}

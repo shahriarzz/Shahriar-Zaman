@@ -11,16 +11,30 @@ import {
   getAccentColor
 } from '../../styles/tokens';
 
-export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised';
+export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised' | 'panel' | 'elevated';
 export type CardAccentVariant = 'left' | 'top' | 'glow';
+export type CardVariant = 
+  | 'standard' 
+  | 'elevated' 
+  | 'interactive' 
+  | 'panel' 
+  | 'overlay' 
+  | 'default'
+  | 'recessed'
+  | 'selected'
+  | 'active'
+  | 'warning'
+  | 'destructive'
+  | 'success'
+  | 'compact'
+  | 'section';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'standard' | 'elevated' | 'interactive' | 'panel' | 'overlay' | 'default';
+  variant?: CardVariant;
   surface?: CardSurface;
   accent?: SemanticColor | null;
   colorOverride?: string;
   accentVariant?: CardAccentVariant | null;
-  accentStyle?: 'border-left' | 'border-top' | 'glow' | 'left' | 'top' | null;
   hoverable?: boolean;
   onClick?: (e?: React.MouseEvent<HTMLDivElement>) => void;
   padding?: SpacingIntent;
@@ -34,10 +48,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   accent,
   colorOverride,
   accentVariant,
-  accentStyle,
   hoverable = false,
   onClick,
-  padding = 'standard',
+  padding,
   children,
   className,
   style,
@@ -45,12 +58,14 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
 }, ref) => {
   const normalizedVariant = variant === 'default' ? 'standard' : variant;
 
-  // Resolved surface appearance (base / subtle / recessed / raised)
+  // Resolved surface appearance (base / subtle / recessed / raised / elevated / panel)
   const effectiveSurface: CardSurface = surface || (
     normalizedVariant === 'panel'
       ? 'subtle'
       : normalizedVariant === 'elevated'
-      ? 'raised'
+      ? 'elevated'
+      : normalizedVariant === 'recessed'
+      ? 'recessed'
       : 'base'
   );
 
@@ -58,31 +73,59 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     base: SURFACE.default,
     subtle: SURFACE.subtle,
     recessed: SURFACE.recessed,
-    raised: 'bg-gradient-to-br from-zinc-900 to-zinc-950',
+    raised: SURFACE.raised,
+    elevated: SURFACE.elevated,
+    panel: SURFACE.panel,
   };
 
-  const paddingClass = SPACING[padding] || SPACING.standard;
+  // Determine default padding based on variant if not explicitly provided
+  const effectivePadding: SpacingIntent = padding || (
+    normalizedVariant === 'compact'
+      ? 'compact'
+      : normalizedVariant === 'section'
+      ? 'section'
+      : 'standard'
+  );
 
-  const variantClasses = {
+  const paddingClass = SPACING[effectivePadding] || SPACING.standard;
+
+  const variantClasses: Record<string, string> = {
     standard: cn(BORDER.standard, RADIUS.card, SHADOW.elevation, 'border'),
+    recessed: cn(BORDER.standard, RADIUS.card, 'border'),
     elevated: cn(BORDER.standard, RADIUS.panel, SHADOW.elevation, 'border'),
     interactive: cn(
       BORDER.standard,
       RADIUS.card,
-      'border active:scale-[0.99] select-none cursor-pointer'
+      'border active:scale-[0.99] select-none cursor-pointer hover:border-zinc-700 hover:bg-zinc-900/80 transition-all'
     ),
+    selected: cn(
+      'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
+      RADIUS.card
+    ),
+    active: cn(
+      'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
+      RADIUS.card
+    ),
+    warning: cn(
+      'border border-amber-500/30 bg-amber-500/10 text-amber-200',
+      RADIUS.card
+    ),
+    destructive: cn(
+      'border border-red-500/30 bg-red-500/10 text-red-200',
+      RADIUS.card
+    ),
+    success: cn(
+      'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+      RADIUS.card
+    ),
+    compact: cn(BORDER.standard, RADIUS.card, SHADOW.elevation, 'border'),
+    section: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
     panel: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
     overlay: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border backdrop-blur-xl')
   };
 
   const resolvedAccentHex = colorOverride || getAccentColor(accent);
-  const effectiveAccentVariant = accentVariant || (
-    accentStyle === 'border-left'
-      ? 'left'
-      : accentStyle === 'border-top'
-      ? 'top'
-      : accentStyle
-  );
+  const effectiveAccentVariant = accentVariant;
 
   let accentClasses = '';
   let accentStyles: React.CSSProperties = {};
@@ -105,8 +148,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       onClick={onClick}
       style={{ ...accentStyles, ...style }}
       className={cn(
+        "min-w-0",
         surfaceClasses[effectiveSurface],
-        variantClasses[normalizedVariant],
+        variantClasses[normalizedVariant] || variantClasses.standard,
         paddingClass,
         hoverable && 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-all',
         onClick && !hoverable && 'cursor-pointer',

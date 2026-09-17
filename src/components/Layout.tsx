@@ -4,8 +4,16 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
+import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
+
+const NavigationActiveIndicator: React.FC = () => (
+  <motion.div
+    layoutId="nav-pill"
+    className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"
+  />
+);
 
 interface NavItemProps {
   id: ActiveTab;
@@ -15,7 +23,7 @@ interface NavItemProps {
   onClick: () => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick }) => {
+const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick }) => {
   const handleClick = () => {
     haptics.selection();
     onClick();
@@ -24,12 +32,14 @@ const NavItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick }) =
   return (
     <button
       id={`nav-item-${id}`}
+      type="button"
       onClick={handleClick}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center py-2 px-4 gap-1 transition-all relative group",
-        active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300"
+        "flex flex-col items-center justify-center py-2 px-3.5 min-h-[44px] gap-1 transition-all relative group select-none outline-none",
+        active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
+        INTERACTIVE.active
       )}
     >
       <div className={cn(
@@ -38,13 +48,8 @@ const NavItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick }) =
       )}>
         {icon}
       </div>
-      <span className="text-[10px] font-mono uppercase tracking-widest">{label}</span>
-      {active && (
-        <motion.div
-          layoutId="nav-pill"
-          className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full"
-        />
-      )}
+      <span className={cn(TYPOGRAPHY.metadata, "text-[9px] tracking-widest leading-none")}>{label}</span>
+      {active && <NavigationActiveIndicator />}
     </button>
   );
 };
@@ -95,14 +100,14 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
             <Dumbbell size={18} className="text-black stroke-[3px]" />
           </div>
-          <span className="font-display text-xl tracking-[0.2em] font-black uppercase">
+          <span className="font-display text-xl tracking-widest font-black uppercase">
             Gain<span className="text-orange-500">Log</span>
           </span>
         </div>
 
         <div className="hidden md:flex items-center gap-1">
           {navConfig.map(item => (
-            <NavItem
+            <NavigationItem
               key={item.id}
               id={item.id}
               label={item.label}
@@ -200,7 +205,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       {/* Mobile Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4">
         {navConfig.map(item => (
-          <NavItem
+          <NavigationItem
             key={item.id}
             id={item.id}
             label={item.label}

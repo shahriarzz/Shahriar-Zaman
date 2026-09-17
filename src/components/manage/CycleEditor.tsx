@@ -8,11 +8,13 @@ import {
   Button,
   Stack,
   Grid,
+  WorkoutColorIndicator,
   TYPOGRAPHY,
   GAP,
   BORDER,
   SURFACE,
-  RADIUS
+  RADIUS,
+  SEMANTIC_COLORS
 } from '../ui';
 import { cn } from '../../lib/utils';
 import { haptics } from '../../utils/haptics';
@@ -61,7 +63,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
         {cycleWorkouts.map((wo) => {
           const isRest = wo.type === 'rest';
           const exerciseCount = wo.exercises ? wo.exercises.length : 0;
-          const accentColor = WORKOUT_COLORS[wo.type] || '#f97316';
+          const accentColor = WORKOUT_COLORS[wo.type] || SEMANTIC_COLORS.orange;
 
           return (
             <Card
@@ -83,8 +85,8 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
 
                 {/* Workout Details */}
                 <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-bold text-white text-base truncate group-hover:text-orange-400 transition-colors">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="font-bold text-white text-base break-words group-hover:text-orange-400 transition-colors">
                       {wo.name}
                     </span>
                     <Badge
@@ -157,9 +159,9 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                   className="flex items-center justify-between group border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: WORKOUT_COLORS[wo.type] || '#f97316' }} />
-                    <div className="space-y-0.5 truncate">
-                      <div className="font-bold text-white text-sm truncate group-hover:text-orange-400 transition-colors">
+                    <WorkoutColorIndicator type={wo.type} size="sm" />
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="font-bold text-white text-sm break-words group-hover:text-orange-400 transition-colors">
                         {wo.name}
                       </div>
                       <div className={cn(TYPOGRAPHY.label, "text-zinc-500 text-[9px]")}>

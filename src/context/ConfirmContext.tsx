@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { TriangleAlert, HelpCircle } from 'lucide-react';
-import { Button } from '../components/ui';
+import { Button, Dialog, DialogHeader, DialogFooter } from '../components/ui';
 
 interface ConfirmOptions {
   title: string;
@@ -40,24 +39,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
-  // Lock background scroll when the confirm dialog is active
-  React.useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  // Escape and Enter key support to dismiss/confirm the dialog safely
+  // Enter key support to confirm the dialog safely (Escape handled by Dialog)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose(false);
-      } else if (e.key === 'Enter') {
+      if (e.key === 'Enter') {
         e.preventDefault();
         handleClose(true);
       }
@@ -106,75 +91,51 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <ConfirmContext.Provider value={contextValue}>
       {children}
-      <AnimatePresence onExitComplete={() => { if (!isOpen) setOptions(null); }}>
-        {isOpen && options && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => handleClose(false)}
-              className="absolute inset-0 bg-[#040409]/80 backdrop-blur-md"
+      <Dialog
+        isOpen={isOpen && Boolean(options)}
+        onClose={() => handleClose(false)}
+        size="md"
+      >
+        {options && (
+          <>
+            <DialogHeader
+              eyebrow="System Protocol"
+              title={options.title}
+              description={options.message}
+              isDanger={options.isDanger}
+              icon={
+                options.isDanger ? (
+                  <TriangleAlert size={20} />
+                ) : (
+                  <HelpCircle size={20} />
+                )
+              }
             />
 
-            {/* Modal Box */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="confirm-dialog-title"
-              aria-describedby="confirm-dialog-description"
-              className="relative w-full max-w-md bg-[#0e0e15] border border-zinc-800/80 rounded-3xl p-6 text-zinc-200 shadow-2xl focus:outline-none"
-            >
-              <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-2xl flex-shrink-0 ${
-                  options.isDanger ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
-                }`}>
-                  {options.isDanger ? <TriangleAlert size={20} /> : <HelpCircle size={20} />}
-                </div>
-
-                <div className="flex-1 space-y-2">
-                  <h3 className="text-sm font-mono text-[11px] uppercase tracking-[0.2em] font-bold text-zinc-400">
-                    System Protocol
-                  </h3>
-                  <h2 id="confirm-dialog-title" className={`text-base font-sans font-semibold tracking-tight ${options.isDanger ? 'text-red-400' : 'text-zinc-100'}`}>
-                    {options.title}
-                  </h2>
-                  <div id="confirm-dialog-description" className="text-xs text-zinc-400 font-mono leading-relaxed uppercase tracking-wider whitespace-pre-wrap">
-                    {options.message}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-8 flex items-center justify-end gap-3 font-mono text-[10px] tracking-widest uppercase">
-                <Button
-                  ref={abortButtonRef}
-                  type="button"
-                  variant="outline"
-                  size="md"
-                  onClick={() => handleClose(false)}
-                >
-                  ABORT
-                </Button>
-                <Button
-                  type="button"
-                  variant={options.isDanger ? "destructive" : "primary"}
-                  color={options.isDanger ? "red" : "orange"}
-                  size="md"
-                  onClick={() => handleClose(true)}
-                >
-                  EXECUTE
-                </Button>
-              </div>
-            </motion.div>
-          </div>
+            {/* Action Buttons */}
+            <DialogFooter>
+              <Button
+                ref={abortButtonRef}
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => handleClose(false)}
+              >
+                ABORT
+              </Button>
+              <Button
+                type="button"
+                variant={options.isDanger ? "destructive" : "primary"}
+                color={options.isDanger ? "red" : "orange"}
+                size="md"
+                onClick={() => handleClose(true)}
+              >
+                EXECUTE
+              </Button>
+            </DialogFooter>
+          </>
         )}
-      </AnimatePresence>
+      </Dialog>
     </ConfirmContext.Provider>
   );
 };

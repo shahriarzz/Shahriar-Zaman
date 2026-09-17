@@ -26,6 +26,9 @@ import {
   Button,
   Input,
   Badge,
+  WorkoutColorIndicator,
+  SegmentedControl,
+  ListRow,
   Stack,
   Grid,
   TYPOGRAPHY,
@@ -309,10 +312,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
       <Card variant="standard" padding="standard" className="border-zinc-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
-            <div
-              className="w-3 h-8 rounded-full shrink-0"
-              style={{ backgroundColor: WORKOUT_COLORS[workout.type] || '#f97316' }}
-            />
+            <WorkoutColorIndicator type={workout.type} size="lg" />
             <div className="space-y-1 min-w-0">
               {isEditingMeta ? (
                 <div className="flex flex-col sm:flex-row gap-2 pt-1">
@@ -377,7 +377,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
       {/* REST DAY VIEW */}
       {isRest ? (
-        <Card variant="standard" surface="recessed" padding="relaxed" className="space-y-6">
+        <Card variant="standard" surface="recessed" padding="section" className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400">
               <Moon size={24} className="text-orange-400" />
@@ -398,27 +398,20 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
             </label>
             <div className="space-y-2">
               {restNotes.map((note, idx) => (
-                <div
+                <ListRow
                   key={idx}
-                  className={cn(
-                    SURFACE.subtle,
-                    BORDER.standard,
-                    RADIUS.button,
-                    "p-3 border flex items-center justify-between gap-3 text-xs text-zinc-200"
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    {note}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    icon={<Trash2 size={13} />}
-                    className="text-zinc-500 hover:text-red-400"
-                    onClick={() => handleDeleteRestNote(idx)}
-                  />
-                </div>
+                  leading={<Check size={14} className="text-emerald-400 shrink-0" />}
+                  content={<span className="truncate">{note}</span>}
+                  trailing={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      icon={<Trash2 size={13} />}
+                      className="text-zinc-500 hover:text-red-400"
+                      onClick={() => handleDeleteRestNote(idx)}
+                    />
+                  }
+                />
               ))}
             </div>
 
@@ -447,7 +440,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
         /* ACTIVE WORKOUT: EXPANDABLE EXERCISE CARDS */
         <div className="space-y-3">
           {workout.exercises.length === 0 ? (
-            <Card variant="standard" surface="recessed" padding="relaxed" className="text-center space-y-3">
+            <Card variant="standard" surface="recessed" padding="section" className="text-center space-y-3">
               <Dumbbell size={32} className="text-zinc-600 mx-auto" />
               <div className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
                 No exercises programmed in this routine
@@ -498,7 +491,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
                       <div className="space-y-0.5 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-white text-sm truncate">
+                          <span className="font-bold text-white text-sm break-words">
                             {resolvedEx.name}
                           </span>
                           {isPriority && (
@@ -624,52 +617,31 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         </Grid>
 
                         {/* Note / Execution Cues */}
-                        <div className="space-y-1">
-                          <label className={cn(TYPOGRAPHY.label, "text-[10px] block")}>
-                            Execution Cues & Notes
-                          </label>
-                          <input
-                            type="text"
-                            value={ex.note || ''}
-                            placeholder="e.g. 45° elbow tuck; focus on the deep stretch."
-                            onChange={(e) => handleUpdateExerciseField(ex.id, 'note', e.target.value)}
-                            className={cn(
-                              SURFACE.subtle,
-                              BORDER.standard,
-                              RADIUS.button,
-                              "w-full h-8 px-3 text-xs text-zinc-200 placeholder-zinc-500 outline-none border focus:border-zinc-600 font-sans"
-                            )}
-                          />
-                        </div>
+                        <Input
+                          size="sm"
+                          label="Execution Cues & Notes"
+                          value={ex.note || ''}
+                          placeholder="e.g. 45° elbow tuck; focus on the deep stretch."
+                          onChange={(e) => handleUpdateExerciseField(ex.id, 'note', e.target.value)}
+                        />
 
                         {/* Priority / Tag Toggles & Deep Editor Link */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-zinc-800/60">
                           <div className="flex items-center gap-2">
-                            <button
-                              type="button"
+                            <Badge
+                              label={isPriority ? '★ Priority Item' : '+ Mark Priority'}
+                              color={isPriority ? 'orange' : 'zinc'}
+                              variant={isPriority ? 'subtle' : 'outline'}
+                              size="sm"
                               onClick={() => handleTogglePriorityTag(ex.id)}
-                              className={cn(
-                                "px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all border cursor-pointer select-none",
-                                isPriority
-                                  ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
-                                  : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300"
-                              )}
-                            >
-                              {isPriority ? '★ Priority Item' : '+ Mark Priority'}
-                            </button>
-
-                            <button
-                              type="button"
+                            />
+                            <Badge
+                              label={isDaily ? '✓ Daily High-Frequency' : '+ Mark Daily'}
+                              color={isDaily ? 'amber' : 'zinc'}
+                              variant={isDaily ? 'subtle' : 'outline'}
+                              size="sm"
                               onClick={() => handleToggleDailyTag(ex.id)}
-                              className={cn(
-                                "px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all border cursor-pointer select-none",
-                                isDaily
-                                  ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                                  : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300"
-                              )}
-                            >
-                              {isDaily ? '✓ Daily High-Frequency' : '+ Mark Daily'}
-                            </button>
+                            />
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -705,7 +677,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
       {/* ADD EXERCISE MODAL / DRAWER */}
       {isAddingExercise && (
-        <Card variant="standard" surface="recessed" padding="standard" className="border-orange-500/40 bg-zinc-950 space-y-4">
+        <Card variant="standard" surface="recessed" accent="orange" padding="standard" className="bg-zinc-950 space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
             <h3 className={cn(TYPOGRAPHY.label, "text-white text-xs font-bold flex items-center gap-2")}>
               <Plus size={14} className="text-orange-500" />
@@ -720,32 +692,15 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 bg-zinc-900 p-1 rounded-xl w-fit">
-            <button
-              type="button"
-              onClick={() => setAddMode('pick')}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer select-none",
-                addMode === 'pick'
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:text-zinc-200"
-              )}
-            >
-              Choose from Library ({libraryExercises.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setAddMode('new')}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer select-none",
-                addMode === 'new'
-                  ? "bg-orange-500 text-black"
-                  : "text-zinc-400 hover:text-zinc-200"
-              )}
-            >
-              + Create New Custom
-            </button>
-          </div>
+          <SegmentedControl<'pick' | 'new'>
+            value={addMode}
+            onChange={setAddMode}
+            accent="orange"
+            options={[
+              { value: 'pick', label: `Choose from Library (${libraryExercises.length})` },
+              { value: 'new', label: '+ Create New Custom' }
+            ]}
+          />
 
           {addMode === 'pick' ? (
             <div className="space-y-3">

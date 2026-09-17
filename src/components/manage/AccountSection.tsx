@@ -62,7 +62,7 @@ export const AccountSection: React.FC = () => {
       eyebrowColor="zinc"
       title="Cloud Account"
       description="Manage your account login and real-time cloud data synchronization."
-      padding="relaxed"
+      padding="section"
     >
       <Stack spacing="md">
         <Card variant="standard" padding="standard" className="flex flex-col md:flex-row md:items-center justify-between gap-6">

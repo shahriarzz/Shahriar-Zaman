@@ -22,7 +22,9 @@ import {
   Stack,
   Grid,
   EmptyState,
+  SegmentedControl,
   SEMANTIC_COLORS,
+  SEMANTIC_UI,
   RADIUS,
   SURFACE,
   BORDER,
@@ -248,24 +250,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         />
 
         {/* Sub-tab navigation bar */}
-        <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.card, "flex items-center border p-1 w-fit")}>
-          <button
-            type="button"
-            onClick={() => {
-              haptics.selection();
-              setHistorySubTab('log');
-            }}
-            className={cn(
-              "px-5 py-2 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition-all cursor-pointer flex items-center gap-2",
-              historySubTab === 'log'
-                ? "bg-orange-500 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)]"
-                : "text-zinc-400 hover:text-white"
-            )}
-          >
-            <Calendar size={14} />
-            Log
-          </button>
-        </div>
+        <SegmentedControl
+          value={historySubTab}
+          onChange={(val) => {
+            haptics.selection();
+            setHistorySubTab(val as 'log');
+          }}
+          options={[
+            { value: 'log', label: 'Log', icon: <Calendar size={14} /> }
+          ]}
+          accent="orange"
+          size="sm"
+        />
       </div>
 
       {/* Search Bar */}
@@ -276,13 +272,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         onChange={(e) => setSearch(e.target.value)}
         leftIcon={<Search size={18} />}
         rightIcon={search ? (
-          <button 
-            type="button"
+          <Button 
+            variant="ghost"
+            size="icon"
             onClick={clearFilter}
-            className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-all cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+            className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+            aria-label="Clear filter"
+            icon={<X size={14} />}
+          />
         ) : undefined}
       />
 
@@ -321,31 +318,23 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
               </Button>
             ) : undefined
           }
-          padding="relaxed"
+          padding="section"
         >
           <div className="space-y-4">
             <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
               {monthlySummaries.map((summary) => {
                 const isSelected = activeMonthTab === summary.monthKey;
                 return (
-                  <button
+                  <Card
                     key={summary.monthKey}
+                    variant={isSelected ? 'selected' : 'interactive'}
+                    surface={isSelected ? undefined : 'recessed'}
                     onClick={() => {
                       haptics.selection();
                       setActiveMonthTab(isSelected ? null : summary.monthKey);
                     }}
-                    className={cn(
-                      "snap-center shrink-0 min-w-[200px] min-h-[132px] border text-left transition-all relative overflow-hidden group cursor-pointer flex flex-col",
-                      SPACING.standard,
-                      RADIUS.card,
-                      isSelected
-                        ? "bg-gradient-to-br from-orange-500/15 to-transparent border-orange-500 text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]"
-                        : cn(
-                            SURFACE.recessed,
-                            BORDER.standard,
-                            "hover:border-zinc-700 hover:bg-zinc-900/60 text-zinc-400 hover:text-white"
-                          )
-                    )}
+                    padding="standard"
+                    className="snap-center shrink-0 min-w-[200px] min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
                   >
                     <div
                       className={cn(
@@ -371,7 +360,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         {summary.sessionsCount}
                       </span>
                     </div>
-                  </button>
+                  </Card>
                 );
               })}
             </div>
@@ -633,11 +622,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 <Card
                   key={session.id ? `session-${session.id}-${sIdx}` : `session-${sIdx}`}
                   variant={isExpanded ? "elevated" : "default"}
+                  accent={isExpanded ? "orange" : undefined}
                   padding="none"
-                  className={cn(
-                    "overflow-hidden transition-all",
-                    isExpanded && "border-orange-500/40"
-                  )}
+                  className="overflow-hidden transition-all"
                 >
                   {/* 1. Days list bar */}
                   <div
@@ -654,7 +641,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           {session.date}
                         </span>
                       </div>
-                      <h3 className={cn(TYPOGRAPHY.titleSection, "text-white font-black leading-[0.9] tracking-wider")}>
+                      <h3 className={cn(TYPOGRAPHY.titleSection, "text-white font-black leading-none tracking-wider")}>
                         {workout?.name || 'Custom Protocol'}
                       </h3>
                       <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 uppercase tracking-wider">
@@ -686,7 +673,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </div>
 
                     <div className="flex items-center gap-3 self-stretch sm:self-auto justify-between border-t sm:border-t-0 border-zinc-800/60 pt-4 sm:pt-0">
-                      <button
+                      <Button
+                        variant={editingLogId === session.id ? "primary" : "secondary"}
+                        size="sm"
+                        icon={<Edit2 size={14} />}
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingLogId(session.id);
@@ -694,19 +684,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           setEditVerified(false);
                           setExpandedDate(session.id);
                         }}
-                        className={cn(
-                          "p-2.5 border transition-all cursor-pointer",
-                          SURFACE.recessed,
-                          RADIUS.button,
-                          "hover:bg-zinc-800 hover:text-orange-400 text-zinc-400",
-                          editingLogId === session.id ? "border-orange-500 text-orange-400 bg-orange-500/10" : BORDER.standard
-                        )}
                         title="Edit session logs"
-                      >
-                        <Edit2 size={15} />
-                      </button>
+                        className="w-8 h-8 p-0"
+                      />
 
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Trash2 size={14} />}
                         onClick={async (e) => {
                           e.stopPropagation();
                           const proceed = await confirm({
@@ -719,16 +704,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             await deleteLog(session.id);
                           }
                         }}
-                        className={cn(
-                          "p-2.5 border hover:bg-zinc-800 hover:border-red-500/50 hover:text-red-400 text-zinc-400 transition-all cursor-pointer",
-                          SURFACE.recessed,
-                          BORDER.standard,
-                          RADIUS.button
-                        )}
                         title="Purge session"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                        className="w-8 h-8 p-0 hover:text-red-400"
+                      />
                       
                       <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400", SURFACE.recessed, BORDER.standard)}>
                         <ChevronRight 
@@ -757,16 +735,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                               <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>Secure Archive Modification</span>
                               <h4 className="text-sm font-black uppercase text-white leading-tight">Edit Session Logs</h4>
                             </div>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<X size={16} />}
                               onClick={() => {
                                 setEditingLogId(null);
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
-                              className="p-1.5 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                            >
-                              <X size={16} />
-                            </button>
+                              className="w-8 h-8 p-0 rounded-full"
+                            />
                           </div>
 
                           {/* 1. Duration field */}
@@ -775,9 +754,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                               <label className={cn(TYPOGRAPHY.label, "block")}>Session Duration</label>
                               <span className="text-xs text-zinc-500 font-sans">Total elapsed active protocol duration</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <input
+                            <div className="w-32">
+                              <Input
                                 type="number"
+                                size="sm"
+                                suffix="min"
                                 value={editSessionState.durationMinutes}
                                 onChange={(e) => {
                                   const rawVal = e.target.value;
@@ -790,9 +771,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   if (val > 600) val = 600;
                                   setEditSessionState(prev => prev ? { ...prev, durationMinutes: val } : null);
                                 }}
-                                className={cn("w-24 border px-3 py-2 text-sm text-center focus:border-zinc-500 outline-none font-mono text-white", SURFACE.recessed, BORDER.standard, RADIUS.button)}
+                                className="text-center font-mono"
                               />
-                              <span className="text-xs font-mono text-zinc-400 uppercase">min</span>
                             </div>
                           </div>
 
@@ -825,6 +805,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                         <div key={s.id ? `edit-set-${s.id}-${idx}` : `edit-set-${exId}-${idx}`} className="space-y-1.5">
                                           <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center">
                                             <span className="font-mono text-xs text-zinc-400 text-center font-bold">{idx + 1}</span>
+                                            {/* specialized table/matrix input for historical set weight */}
                                             <input
                                               type="number"
                                               placeholder="0"
@@ -847,6 +828,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 isExtremeW ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
                                               )}
                                             />
+                                            {/* specialized table/matrix input for historical set reps */}
                                             <input
                                               type="number"
                                               placeholder="0"
@@ -870,8 +852,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               )}
                                             />
                                             <div className="flex items-center justify-center">
-                                              <button
+                                              <Button
                                                 type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                icon={<X size={14} />}
                                                 onClick={() => {
                                                   setEditSessionState(prev => {
                                                     if (!prev) return null;
@@ -880,11 +865,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                     return { ...prev, sets: newSets };
                                                   });
                                                 }}
-                                                className="p-2 hover:bg-zinc-900 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                                                className="w-7 h-7 p-0 hover:text-red-400"
                                                 title="Remove set"
-                                              >
-                                                <X size={14} />
-                                              </button>
+                                              />
                                             </div>
                                           </div>
 
@@ -1047,16 +1030,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                         <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Progressive Benchmark</span>
                                       </div>
                                       {prWeight > 0 && (
-                                        <div 
-                                          className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full font-bold border"
-                                          style={{
-                                            backgroundColor: `${exColor}1F`,
-                                            color: exColor,
-                                            borderColor: `${exColor}40`
-                                          }}
-                                        >
-                                          Lifetime PR: {prWeight}kg{canonicalPR?.reps ? ` × ${canonicalPR.reps}` : ''}
-                                        </div>
+                                        <Badge
+                                          label={`Lifetime PR: ${prWeight}kg${canonicalPR?.reps ? ` × ${canonicalPR.reps}` : ''}`}
+                                          colorOverride={exColor}
+                                          variant="subtle"
+                                          size="sm"
+                                          dot={false}
+                                        />
                                       )}
                                     </div>
 
@@ -1122,8 +1102,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               className={cn(
                                                 "flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors",
                                                 isPR 
-                                                  ? "bg-orange-500/10 border-orange-500/30 text-orange-200 font-bold" 
-                                                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400"
+                                                  ? cn(SEMANTIC_UI.primary, "font-bold")
+                                                  : SEMANTIC_UI.neutral
                                               )}
                                             >
                                               <div className="flex items-center gap-2">

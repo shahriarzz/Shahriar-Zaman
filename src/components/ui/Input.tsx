@@ -45,9 +45,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   const isSuccess = Boolean(success) && !isError;
 
   const sizeClasses: Record<'sm' | 'md' | 'lg', { input: string; icon: number; text: string }> = {
-    sm: { input: 'py-1.5 px-2.5 text-xs', icon: 13, text: 'text-xs' },
-    md: { input: 'py-2 px-3 text-sm', icon: 14, text: 'text-sm' },
-    lg: { input: 'py-3 px-4 text-base', icon: 16, text: 'text-base' },
+    sm: { input: 'h-8 min-h-[32px] px-2.5 text-xs', icon: 13, text: 'text-xs' },
+    md: { input: 'h-10 min-h-[40px] px-3 text-sm', icon: 14, text: 'text-sm' },
+    lg: { input: 'h-12 min-h-[48px] px-4 text-base', icon: 16, text: 'text-base' },
   };
 
   const currentSize = sizeClasses[size] || sizeClasses.md;
@@ -61,7 +61,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         >
           <span>{label}</span>
           {typeof error === 'string' && (
-            <span className="text-red-400 normal-case font-normal text-[10px] tracking-normal">
+            <span className={cn(TYPOGRAPHY.errorText, "normal-case font-normal")}>
               {error}
             </span>
           )}
@@ -103,7 +103,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         />
 
         {effectiveUnit && (
-          <div className="absolute right-3 flex items-center pointer-events-none text-zinc-500 text-xs font-mono select-none">
+          <div className={cn("absolute right-3 flex items-center pointer-events-none select-none", TYPOGRAPHY.unit)}>
             {effectiveUnit}
           </div>
         )}
@@ -116,17 +116,17 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
       </div>
 
       {helperText && !error && (
-        <p className="text-[10px] font-mono text-zinc-500 tracking-wide">
+        <p className={TYPOGRAPHY.helperText}>
           {helperText}
         </p>
       )}
       {typeof error === 'string' && !label && (
-        <p className="text-[10px] font-mono text-red-400 tracking-wide">
+        <p className={TYPOGRAPHY.errorText}>
           {error}
         </p>
       )}
       {typeof success === 'string' && (
-        <p className="text-[10px] font-mono text-emerald-400 tracking-wide">
+        <p className="font-mono text-[10px] text-emerald-400 font-normal tracking-normal">
           {success}
         </p>
       )}
