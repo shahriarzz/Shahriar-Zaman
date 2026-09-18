@@ -12,7 +12,7 @@ export interface ErrorFallbackProps {
 
 export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) => {
   return (
-    <div className="min-h-screen bg-[#09090e] flex items-center justify-center p-6 text-zinc-200">
+    <div className={cn("min-h-screen flex items-center justify-center p-6 text-zinc-200", SURFACE.canvas)}>
       <Card
         variant="elevated"
         padding="section"

@@ -401,7 +401,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                 <ListRow
                   key={idx}
                   leading={<Check size={14} className="text-emerald-400 shrink-0" />}
-                  content={<span className="truncate">{note}</span>}
+                  content={<span className="break-words">{note}</span>}
                   trailing={
                     <Button
                       variant="ghost"

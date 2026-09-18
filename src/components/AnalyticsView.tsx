@@ -138,31 +138,29 @@ export const AnalyticsView: React.FC = () => {
   return (
     <Stack spacing="2xl" className="pt-2 pb-16">
       {/* 1. HEADER & TIME TOGGLE */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <SectionHeader
-          eyebrow="Performance Intelligence"
-          eyebrowColor="emerald"
-          title="Analytics"
-          size="page"
-        />
-
-        {/* Time range segmented control */}
-        <SegmentedControl<TimeRange>
-          options={[
-            { value: '7d', label: '7D' },
-            { value: '30d', label: '30D' },
-            { value: '90d', label: '90D' },
-            { value: 'all', label: 'ALL' }
-          ]}
-          value={timeRange}
-          onChange={(r) => {
-            haptics.selection();
-            setTimeRange(r);
-          }}
-          accent="emerald"
-          size="md"
-        />
-      </div>
+      <SectionHeader
+        eyebrow="Performance Intelligence"
+        eyebrowColor="emerald"
+        title="Analytics"
+        size="page"
+        action={
+          <SegmentedControl<TimeRange>
+            options={[
+              { value: '7d', label: '7D' },
+              { value: '30d', label: '30D' },
+              { value: '90d', label: '90D' },
+              { value: 'all', label: 'ALL' }
+            ]}
+            value={timeRange}
+            onChange={(r) => {
+              haptics.selection();
+              setTimeRange(r);
+            }}
+            accent="emerald"
+            size="md"
+          />
+        }
+      />
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
       <Grid cols={2} colsLg={4} gap="md">

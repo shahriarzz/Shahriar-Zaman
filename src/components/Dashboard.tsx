@@ -89,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Stats Grid */}
       <Grid cols={2} colsMd={4} gap="md">
         <StatCard
-          label="Streak"
+          label="Training Streak"
           value={trainingStreak.currentStreak}
           unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
           sublabel={`Best: ${trainingStreak.longestStreak}d`}
@@ -107,7 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           size="standard"
         />
         <StatCard
-          label="Strength Trend"
+          label="Strength Progress"
           value={
             strengthTrend.percentChange !== null
               ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}`
@@ -125,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           size="standard"
         />
         <StatCard
-          label="Total kg Lifted"
+          label="Total Volume"
           value={stats.formattedWeightLifted}
           unit="kg"
           sublabel="Lifetime"
@@ -213,8 +213,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   colorOverride={WORKOUT_COLORS[todayWorkout.type]}
                   variant="subtle"
                 />
-                <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight font-display text-white">{todayWorkout.name}</h2>
-                <p className="text-zinc-500 text-sm font-mono">
+                <h2 className={cn(TYPOGRAPHY.titlePage, "text-3xl md:text-4xl")}>{todayWorkout.name}</h2>
+                <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
                   {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
                 </p>
               </Stack>
@@ -257,12 +257,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {/* Current + Input Row */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
             <div className="space-y-1">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Current</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Current</span>
               <div className="flex items-end gap-1.5">
-                <span className="text-4xl font-black text-white tabular-nums">
+                <span className={cn(TYPOGRAPHY.statValueHero, "text-white")}>
                   {weightSummary.currentWeight}
                 </span>
-                <span className="text-zinc-500 font-mono text-xs mb-1.5">kg</span>
+                <span className={TYPOGRAPHY.unit}>kg</span>
               </div>
             </div>
 
@@ -326,7 +326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               </div>
 
               {/* Min/Max labels */}
-              <div className="flex justify-between text-[8px] font-mono text-zinc-600 uppercase">
+              <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-600")}>
                 <span>{weightSummary.sparklineData.sorted[0][0].slice(5)}</span>
                 <span className="text-zinc-500">
                   {Math.min(...weightSummary.sparklineData.weights)}kg → {Math.max(...weightSummary.sparklineData.weights)}kg
@@ -348,7 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {/* Recent Entries */}
           {weightSummary.recentWeightLogs.length > 0 && (
             <div className="border-t border-zinc-800/60 pt-4 space-y-2">
-              <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Recent Logs</div>
+              <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Recent Logs</div>
               <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {weightSummary.recentWeightLogs.map(([date, weight]) => (
                   <Card key={date} variant="standard" padding="compact" className="flex items-center justify-between text-xs font-mono">
@@ -427,8 +427,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   leading={<WorkoutColorIndicator type={wo.type} size="sm" />}
                   content={
                     <div>
-                      <div className="font-bold text-sm uppercase tracking-tight text-white">{wo.name}</div>
-                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-1">Day {wo.cycleDay} · {wo.badge}</div>
+                      <div className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>{wo.name}</div>
+                      <div className={cn(TYPOGRAPHY.caption, "mt-1")}>Day {wo.cycleDay} · {wo.badge}</div>
                     </div>
                   }
                   trailing={

@@ -99,7 +99,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     >
       <div className="min-w-0">
         {/* Header: Icon + Label */}
-        <div className="flex min-w-0 max-w-full items-center gap-2 mb-2">
+        <div className="flex min-w-0 max-w-full items-center gap-2 mb-2 min-h-[20px]">
           {icon && (
             <span
               className="shrink-0 flex items-center"
@@ -143,7 +143,7 @@ export const StatCard: React.FC<StatCardProps> = ({
 
       {/* Simplified Footer: sublabel on left, status/trend on right */}
       {(effectiveSublabel || metaBadge) && (
-        <div className="mt-2.5 min-w-0 max-w-full flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+        <div className="mt-auto pt-2.5 min-w-0 max-w-full flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
           {effectiveSublabel ? (
             <p className="min-w-0 max-w-full flex-1 break-words whitespace-normal font-mono text-[10px] leading-tight text-zinc-500">
               {effectiveSublabel}

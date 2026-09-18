@@ -8,6 +8,7 @@ import {
   Button,
   Stack,
   Grid,
+  SectionHeader,
   WorkoutColorIndicator,
   TYPOGRAPHY,
   GAP,
@@ -47,16 +48,11 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
 
   return (
     <Stack spacing="lg">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>
-            8-Day Routine Cycle
-          </h3>
-          <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400 mt-1")}>
-            Sequential progression schedule. Tap any day to customize its exercise protocol.
-          </p>
-        </div>
-      </div>
+      <SectionHeader
+        size="subsection"
+        title="8-Day Routine Cycle"
+        description="Sequential progression schedule. Tap any day to customize its exercise protocol."
+      />
 
       {/* Cycle Days Sequential List */}
       <div className="space-y-3">
@@ -137,14 +133,11 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
       {/* Additional / Bonus Workouts (if any exist) */}
       {additionalWorkouts.length > 0 && (
         <div className="space-y-3 pt-4 border-t border-zinc-800/60">
-          <div>
-            <h4 className={cn(TYPOGRAPHY.label, "text-zinc-400 text-xs font-bold")}>
-              Bonus & Auxiliary Protocols
-            </h4>
-            <p className={cn(TYPOGRAPHY.body, "text-[11px] text-zinc-500")}>
-              Specialized sessions outside the primary 8-day progression.
-            </p>
-          </div>
+          <SectionHeader
+            size="subsection"
+            title="Bonus & Auxiliary Protocols"
+            description="Specialized sessions outside the primary 8-day progression."
+          />
 
           <div className="space-y-2.5">
             {additionalWorkouts.map((wo) => {

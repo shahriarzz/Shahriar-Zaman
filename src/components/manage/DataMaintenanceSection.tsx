@@ -330,7 +330,7 @@ export const DataMaintenanceSection: React.FC = () => {
           <Card variant="standard" padding="standard" className="flex flex-col justify-between items-start gap-4">
             <div className="space-y-1">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Export</span>
-              <h4 className="text-xs font-bold text-zinc-200">Data Backup File</h4>
+              <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Data Backup File</h4>
               <p className={cn(TYPOGRAPHY.body, "text-[10px] text-zinc-400 leading-normal")}>
                 Compile all training routines, session history, set logs, and body weight logs into a downloadable JSON file.
               </p>
@@ -364,7 +364,7 @@ export const DataMaintenanceSection: React.FC = () => {
           <Card variant="standard" padding="standard" className="flex flex-col justify-between items-start gap-4">
             <div className="space-y-1 w-full">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Import</span>
-              <h4 className="text-xs font-bold text-zinc-200">Restore from Backup</h4>
+              <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Restore from Backup</h4>
               <p className={cn(TYPOGRAPHY.body, "text-[10px] text-zinc-400 leading-normal")}>
                 Import saved routines and historical session logs by uploading a JSON backup file or pasting raw JSON text.
               </p>
@@ -495,7 +495,7 @@ export const DataMaintenanceSection: React.FC = () => {
                           variant="subtle"
                           size="sm"
                         />
-                        <span className="text-[10px] text-zinc-200 font-bold truncate">{b.desc}</span>
+                        <span className="text-[10px] text-zinc-200 font-bold break-words">{b.desc}</span>
                       </div>
                       <div className="text-[8px] font-mono text-zinc-500 uppercase">
                         {new Date(b.timestamp).toLocaleString(undefined, {

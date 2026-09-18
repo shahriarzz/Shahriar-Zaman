@@ -18,9 +18,11 @@ import {
   Banner,
   Stack,
   Grid,
+  StatCard,
+  SectionHeader,
   SEMANTIC_COLORS
 } from './ui';
-import { TYPOGRAPHY } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -116,7 +118,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       animate={justCompleted ? { scale: [1, 1.015, 1] } : {}}
       transition={{ duration: 0.25, ease: "easeOut" }}
       className={cn(
-        "bg-zinc-900/80 border rounded-3xl overflow-hidden transition-all",
+        "bg-zinc-900/80 border rounded-2xl overflow-hidden transition-all",
         isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
       )}
     >
@@ -126,7 +128,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
         className="p-6 cursor-pointer hover:bg-zinc-800/10 transition-colors flex items-start justify-between gap-4"
       >
         <div className="space-y-1">
-          <h3 className="text-lg font-bold flex items-center gap-2">
+          <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white flex items-center gap-2")}>
             {ex.name}
             {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
           </h3>
@@ -193,9 +195,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             )}
 
             {/* Ghost Data Grid */}
-            <Grid cols={2} gap="none" className="bg-zinc-950/20 border-y border-zinc-800/50">
+            <Grid cols={2} gap="none" className={cn(SURFACE.recessed, BORDER.subtle, "border-y")}>
               <div className="p-4 border-r border-zinc-800/50 space-y-1">
-                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-widest">Last Session</span>
+                <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>Last Session</span>
                 {lastSession ? (
                   <div className="text-[10px] font-mono text-zinc-400">
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
@@ -207,7 +209,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 )}
               </div>
               <div className="p-4 space-y-1">
-                <span className="text-[8px] font-mono uppercase text-zinc-600 tracking-widest">All-Time PR</span>
+                <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>All-Time PR</span>
                 {allTimePR ? (
                   <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
                     <Trophy size={10} style={{ color: WORKOUT_COLORS[workoutType] }} /> {allTimePR.weight}kg × {allTimePR.reps}
@@ -220,7 +222,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
             {/* Sets Table */}
             <div className="p-6 pt-4 space-y-3">
-              <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 text-[9px] font-mono uppercase tracking-widest text-zinc-600 px-2 text-center">
+              <div className={cn("grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 uppercase text-zinc-500 px-2 text-center", TYPOGRAPHY.eyebrow)}>
                 <span>Set</span>
                 <span>KG</span>
                 <span>Reps</span>
@@ -269,15 +271,17 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           )}
                         />
                         <div className="flex justify-center">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleSetDone(ex.id, si, s.done)}
                             className={cn(
-                              "w-12 h-12 flex items-center justify-center rounded-xl border transition-all",
-                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-zinc-950 border-zinc-800 text-zinc-850 hover:text-zinc-650"
+                              "w-12 h-12 p-0 flex items-center justify-center rounded-xl border transition-all",
+                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400" : "bg-zinc-950 border-zinc-800 text-zinc-600 hover:text-zinc-400"
                             )}
-                          >
-                            <CheckCircle2 size={24} />
-                          </button>
+                            icon={<CheckCircle2 size={24} />}
+                            aria-label={s.done ? "Mark set incomplete" : "Mark set complete"}
+                          />
                         </div>
                         <div className="flex justify-center">
                           <Button
@@ -836,9 +840,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
   if (!activeWorkout) return (
     <Stack spacing="xl" className="py-20">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold font-display uppercase tracking-wide">Select a Protocol to Begin</h2>
-      </div>
+      <SectionHeader
+        size="section"
+        title="Select a Protocol to Begin"
+        className="text-center sm:text-center items-center"
+      />
       <Grid cols={1} colsSm={2} gap="md">
         {workouts.map((wo, woIdx) => (
           <Card
@@ -863,37 +869,30 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <CheckCircle2 size={40} />
         </div>
         <div className="space-y-2">
-          <h1 className="text-4xl font-black uppercase">Session Cleared</h1>
-          <p className="text-zinc-500 font-mono text-sm tracking-widest uppercase">Target Achieved · Stats Synchronized</p>
+          <h1 className={TYPOGRAPHY.titlePage}>Session Cleared</h1>
+          <p className={TYPOGRAPHY.metadata}>Target Achieved · Stats Synchronized</p>
         </div>
 
         <Grid cols={2} gap="md">
-          <Card variant="standard" accent="blue" padding="standard" className="text-left">
-            <span className={TYPOGRAPHY.label}>Duration</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
-                {Math.floor(duration / 60)}
-              </span>
-              <span className={TYPOGRAPHY.unit}>min</span>
-            </div>
-          </Card>
-          <Card variant="standard" accent="orange" padding="standard" className="text-left">
-            <span className={TYPOGRAPHY.label}>Sets Done</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
-                {completedLiveSets}/{programmedLiveSets}
-              </span>
-            </div>
-          </Card>
-          <Card variant="standard" accent="emerald" padding="standard" className="col-span-2 text-left">
-            <span className={TYPOGRAPHY.label}>Total Volume Lifted</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="font-display text-3xl uppercase tracking-tight text-white leading-none tabular-nums">
-                {formatCompactWeight(calculateVolumeLocal())}
-              </span>
-              <span className={TYPOGRAPHY.unit}>kg</span>
-            </div>
-          </Card>
+          <StatCard
+            label="Duration"
+            value={Math.floor(duration / 60)}
+            unit="min"
+            accent="blue"
+          />
+          <StatCard
+            label="Sets Done"
+            value={`${completedLiveSets}/${programmedLiveSets}`}
+            accent="orange"
+          />
+          <div className="col-span-2">
+            <StatCard
+              label="Total Volume"
+              value={formatCompactWeight(calculateVolumeLocal())}
+              unit="kg"
+              accent="emerald"
+            />
+          </div>
 
           {/* Today's Personal Records Summary */}
           {todaysPRs.length > 0 && (
@@ -950,7 +949,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
       <header 
-        className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300"
+        className={cn("sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300", SURFACE.canvasHeader)}
         style={{
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
@@ -968,12 +967,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               color={WORKOUT_COLORS[activeWorkout.type]}
               variant="subtle"
             />
-            <h2 className="text-2xl font-black uppercase leading-none font-display">{activeWorkout.name}</h2>
+            <h2 className={cn(TYPOGRAPHY.titlePage, "text-2xl sm:text-3xl")}>{activeWorkout.name}</h2>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 font-mono px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+          <div className="flex items-center gap-1.5 font-mono px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300">
             <Clock size={15} className="text-zinc-500 shrink-0" />
             <span className="text-sm sm:text-base font-bold tabular-nums text-white">{formatTime(duration)}</span>
           </div>
@@ -1036,23 +1035,23 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         })}
 
         {activeWorkout.cardio && (
-          <div className="bg-gradient-to-br from-zinc-800/10 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <Card variant="standard" padding="section" className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
-                <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Active Finish Protocol</span>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Active Finish Protocol</span>
               </div>
-              <h3 className="text-lg font-bold text-white uppercase tracking-wide">{activeWorkout.cardio.name}</h3>
-              <p className="text-xs text-zinc-500 font-mono tracking-tight">{activeWorkout.cardio.detail}</p>
+              <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>{activeWorkout.cardio.name}</h3>
+              <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>{activeWorkout.cardio.detail}</p>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-2xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
+            <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
               <Clock size={16} style={{ color: WORKOUT_COLORS[activeWorkout.type] }} />
               <div className="text-left leading-none">
                 <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Target Dur</span>
                 <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.duration}</span>
               </div>
             </div>
-          </div>
+          </Card>
         )}
       </Stack>
     </Stack>

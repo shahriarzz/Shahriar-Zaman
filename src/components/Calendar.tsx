@@ -32,7 +32,8 @@ import {
   Card,
   Button,
   Stack,
-  Grid
+  Grid,
+  TYPOGRAPHY
 } from './ui';
 
 interface CalendarProps {
@@ -165,9 +166,17 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const selectedDayVolume = selectedDateStr ? (index.volumeByDate[selectedDateStr] ?? 0) : 0;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 items-start">
-      {/* Calendar Grid Container */}
-      <div className="flex-1 w-full">
+    <Stack spacing="xl" className="pt-4 pb-12">
+      <SectionHeader
+        eyebrow="Schedule & Consistency"
+        eyebrowColor="emerald"
+        title="Calendar"
+        size="page"
+      />
+
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
+        {/* Calendar Grid Container */}
+        <div className="flex-1 w-full">
         <Section
           eyebrow="Timeline"
           eyebrowColor="emerald"
@@ -418,11 +427,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           >
                             <div className="flex justify-between items-start gap-2">
                               <div>
-                                <h5 className="font-display uppercase text-sm tracking-wide text-white leading-tight">
+                                <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white leading-tight break-words")}>
                                   {meta?.name || exercise?.name || 'Custom Exercise'}
                                 </h5>
                                 {exercise?.target && (
-                                  <span className="font-mono text-[9px] text-zinc-500 uppercase">
+                                  <span className={TYPOGRAPHY.caption}>
                                     {exercise.target}
                                   </span>
                                 )}
@@ -478,10 +487,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                     {expectedWoForSelected.type === 'rest' ? (
                       <Card variant="standard" padding="standard" className="space-y-2.5 border-emerald-500/30 bg-emerald-500/5">
-                        <h5 className="font-display uppercase text-sm text-emerald-300">
+                        <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-emerald-300")}>
                           Rest & Adaptation Protocol
                         </h5>
-                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                        <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-300 leading-relaxed")}>
                           Muscle recovery window. Prioritize hydration, sleep quality, and reaching your daily protein targets.
                         </p>
                         {expectedWoForSelected.restNotes && expectedWoForSelected.restNotes.length > 0 && (
@@ -499,8 +508,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       <div className="space-y-2">
                         <Card variant="standard" padding="compact" className="flex items-center justify-between">
                           <div>
-                            <p className="text-[10px] font-mono text-zinc-400 uppercase">Workout Routine</p>
-                            <h5 className="text-sm font-display uppercase text-white">{expectedWoForSelected.name}</h5>
+                            <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Workout Routine</p>
+                            <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>{expectedWoForSelected.name}</h5>
                           </div>
                           <Badge
                             label={expectedWoForSelected.badge}
@@ -522,8 +531,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                 className="flex items-center justify-between"
                               >
                                 <div className="space-y-0.5">
-                                  <p className="font-display text-xs uppercase text-zinc-200">{meta?.name || 'Exercise'}</p>
-                                  <p className="font-mono text-[9px] text-zinc-500 uppercase">{meta?.target || ''}</p>
+                                  <p className={cn(TYPOGRAPHY.titleSubsection, "text-xs text-zinc-200")}>{meta?.name || 'Exercise'}</p>
+                                  <p className={TYPOGRAPHY.caption}>{meta?.target || ''}</p>
                                 </div>
                                 <div className="text-right">
                                   <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
@@ -558,10 +567,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                     {expectedWoForSelected.type === 'rest' ? (
                       <Card variant="standard" padding="standard" className="space-y-2 border-emerald-500/30 bg-emerald-500/5">
-                        <h5 className="font-display uppercase text-sm text-emerald-300">
+                        <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-emerald-300")}>
                           Scheduled Rest Day
                         </h5>
-                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                        <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-300 leading-relaxed")}>
                           This date was a planned recovery day.
                         </p>
                       </Card>
@@ -569,7 +578,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       <div className="space-y-2.5">
                         <Card variant="standard" padding="standard" className="space-y-1.5 border-red-500/30 bg-red-500/5">
                           <div className="flex justify-between items-center">
-                            <h5 className="font-display uppercase text-sm text-white">
+                            <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>
                               {expectedWoForSelected.name}
                             </h5>
                             <Badge label="MISSED" color="red" variant="subtle" />
@@ -630,7 +639,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     </span>
                     <Grid cols={3} gap="sm">
                       <StatCard
-                        label="Volume"
+                        label="Total Volume"
                         value={formatCompactWeight(selectedDayVolume)}
                         unit="kg"
                         accent="emerald"
@@ -694,6 +703,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
         )}
       </AnimatePresence>
     </div>
+    </Stack>
   );
 };
 

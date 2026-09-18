@@ -9,6 +9,8 @@ export const SURFACE = {
   raised: 'bg-gradient-to-br from-zinc-900 to-zinc-950', // high-contrast card background
   panel: 'bg-[#0e0e15]',      // dialogs and prominent floating panels
   overlay: 'bg-zinc-950/95 backdrop-blur-xl', // modal backdrops / sheets
+  canvas: 'bg-[#09090e]',     // primary application root canvas
+  canvasHeader: 'bg-[#09090e]/95 backdrop-blur-md', // sticky header canvas
 } as const;
 
 export const BORDER = {
@@ -16,6 +18,7 @@ export const BORDER = {
   standard: 'border-zinc-800',
   strong: 'border-zinc-700',
   interactive: 'border-zinc-800 hover:border-zinc-700',
+  canvasHalo: 'border-[#09090e]',
 } as const;
 
 export const RADIUS = {
@@ -117,29 +120,46 @@ export const TYPOGRAPHY = {
   // Headings & Titles
   eyebrow: 'font-mono text-[9px] uppercase tracking-[0.25em] font-bold',
   titlePage: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
+  pageTitle: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
   titleSection: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
+  sectionTitle: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
   titleSubsection: 'font-display text-lg uppercase tracking-wide text-white leading-none',
+  subsectionTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none',
+  cardTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none',
   
   // Card & Stat Tokens
   cardLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   cardValue: 'font-mono text-2xl font-bold tracking-tight text-white',
   cardUnit: 'font-mono text-xs text-zinc-500 font-normal',
   label: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
+  statLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   unit: 'font-mono text-xs text-zinc-500 font-normal',
   statValue: 'font-display text-3xl sm:text-[2rem] uppercase tracking-tight text-white leading-none tabular-nums',
   statValueHero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none tabular-nums',
   
   // Text & Body
   body: 'font-sans text-sm text-zinc-400 leading-relaxed',
+  bodySecondary: 'font-sans text-xs text-zinc-400 leading-normal',
   supporting: 'font-sans text-xs text-zinc-400 leading-normal',
   metadata: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider',
   caption: 'font-mono text-[9px] text-zinc-500 uppercase tracking-wide',
   
   // Controls & States
   buttonLabel: 'font-mono text-xs uppercase tracking-wider font-bold',
+  buttonText: 'font-mono text-xs uppercase tracking-wider font-bold',
+  badgeText: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   inputLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
+  formLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
+  formError: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
   helperText: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
+  formHelper: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
+  formSuccess: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
+  navLabel: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+
+  // Tables & Lists
+  listValue: 'font-mono text-xs font-bold text-zinc-200 tabular-nums',
+  listLabel: 'font-mono text-xs text-zinc-400 font-medium',
   
   // Empty States
   emptyTitle: 'font-display text-sm uppercase tracking-wide text-zinc-300',

@@ -110,7 +110,7 @@ export const Badge: React.FC<BadgeProps> = ({
           {renderIcon(icon, { size: size === 'sm' ? 12 : 14 })}
         </span>
       )}
-      <span className="truncate">{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </div>
   );
 };

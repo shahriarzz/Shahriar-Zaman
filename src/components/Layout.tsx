@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -91,11 +91,12 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
 
   return (
     <div className={cn(
-      "min-h-screen bg-[#09090e] text-zinc-200 font-sans selection:bg-orange-500/30",
+      "min-h-screen text-zinc-200 font-sans selection:bg-orange-500/30",
+      SURFACE.canvas,
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className="sticky top-0 z-50 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]">
+      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", SURFACE.canvasHeader)}>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
             <Dumbbell size={18} className="text-black stroke-[3px]" />
@@ -147,7 +148,8 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
             {user && (
               <span 
                 className={cn(
-                  "absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border border-[#09090e]",
+                  "absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border",
+                  BORDER.canvasHalo,
                   getSyncColorClass()
                 )} 
               />
@@ -203,7 +205,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </main>
 
       {/* Mobile Bottom Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#09090e]/95 backdrop-blur-md transform-gpu will-change-transform border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4">
+      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4", SURFACE.canvasHeader)}>
         {navConfig.map(item => (
           <NavigationItem
             key={item.id}

@@ -241,28 +241,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   return (
     <Stack spacing="xl" className="pt-4">
       {/* Upper header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <SectionHeader
-          eyebrow="Growth Protocol"
-          eyebrowColor="orange"
-          title="History"
-          size="page"
-        />
-
-        {/* Sub-tab navigation bar */}
-        <SegmentedControl
-          value={historySubTab}
-          onChange={(val) => {
-            haptics.selection();
-            setHistorySubTab(val as 'log');
-          }}
-          options={[
-            { value: 'log', label: 'Log', icon: <Calendar size={14} /> }
-          ]}
-          accent="orange"
-          size="sm"
-        />
-      </div>
+      <SectionHeader
+        eyebrow="Growth Protocol"
+        eyebrowColor="orange"
+        title="History"
+        size="page"
+        action={
+          <SegmentedControl
+            value={historySubTab}
+            onChange={(val) => {
+              haptics.selection();
+              setHistorySubTab(val as 'log');
+            }}
+            options={[
+              { value: 'log', label: 'Log', icon: <Calendar size={14} /> }
+            ]}
+            accent="orange"
+            size="sm"
+          />
+        }
+      />
 
       {/* Search Bar */}
       <Input
@@ -483,7 +481,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         sublabel={sessionsSublabel}
                       />
                       <StatCard
-                        label="Volume"
+                        label="Window Volume"
                         value={formatCompactWeight(currentVolume)}
                         unit="kg"
                         accent="emerald"
@@ -500,7 +498,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         sublabel={prSublabel}
                       />
                       <StatCard
-                        label="Strength Trend"
+                        label="Strength Progress"
                         value={
                           monthlyStrengthTrend.percentChange !== null
                             ? `${monthlyStrengthTrend.percentChange >= 0 ? '+' : ''}${monthlyStrengthTrend.percentChange.toFixed(1)}`
@@ -733,7 +731,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           <div className={cn("flex justify-between items-center p-4 border", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                             <div className="space-y-1">
                               <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>Secure Archive Modification</span>
-                              <h4 className="text-sm font-black uppercase text-white leading-tight">Edit Session Logs</h4>
+                              <h4 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>Edit Session Logs</h4>
                             </div>
                             <Button
                               variant="ghost"
@@ -785,7 +783,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                 <div key={exId} className={cn("border p-4 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                                   <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500" />
-                                    <h5 className="font-black text-xs sm:text-sm text-white uppercase tracking-wider">{exName}</h5>
+                                    <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white")}>{exName}</h5>
                                   </div>
 
                                   <div className={cn("grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
