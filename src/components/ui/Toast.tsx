@@ -112,7 +112,7 @@ export const ToastContainer: React.FC = () => {
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <span className={cn("w-1.5 h-1.5 rounded-full animate-ping shrink-0", config.bgDot)} />
                 <Icon size={14} className={cn("shrink-0", config.textColor)} />
-                <span className={cn(TYPOGRAPHY.metadata, config.textColor, "text-[10px] break-words")}>
+                <span className={cn(TYPOGRAPHY.metadata, config.textColor, "break-words")}>
                   {toast.message}
                 </span>
               </div>

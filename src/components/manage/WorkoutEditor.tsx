@@ -502,7 +502,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                           )}
                         </div>
 
-                        <div className={cn(TYPOGRAPHY.label, "text-zinc-500 text-[10px] flex items-center gap-1.5 flex-wrap")}>
+                        <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap")}>
                           <span>{resolvedEx.target}</span>
                           <span>·</span>
                           <span className="text-zinc-300 font-bold">{ex.sets} Sets</span>
@@ -573,7 +573,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         <Grid cols={1} colsMd={3} gap="sm">
                           {/* Sets adjustment */}
                           <div className="space-y-1">
-                            <label className={cn(TYPOGRAPHY.label, "text-[10px] block")}>Sets</label>
+                            <label className={cn(TYPOGRAPHY.label, "block")}>Sets</label>
                             <div className="flex items-center gap-1.5">
                               <Button
                                 variant="outline"
@@ -730,7 +730,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     >
                       <div className="space-y-0.5">
                         <div className="text-xs font-bold text-white">{libEx.name}</div>
-                        <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 text-[9px]")}>
+                        <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>
                           {libEx.target} · {libEx.sets} sets × {libEx.reps}
                         </div>
                       </div>

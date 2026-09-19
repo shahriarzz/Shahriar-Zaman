@@ -90,23 +90,23 @@ export const AccountSection: React.FC = () => {
                     Signed in as <strong className="text-white font-mono">{user.email}</strong>
                   </span>
                   {syncStatus === 'syncing' && (
-                    <span className="text-amber-400 font-mono text-[10px] uppercase tracking-wider">
+                    <span className={cn(TYPOGRAPHY.label, "text-amber-400")}>
                       ⚡ Synchronizing with Firestore...
                     </span>
                   )}
                   {syncStatus === 'synced' && (
-                    <span className="text-emerald-400 font-mono text-[10px] uppercase tracking-wider">
+                    <span className={cn(TYPOGRAPHY.label, "text-emerald-400")}>
                       ✓ Cloud synchronization complete. Data secure.
                     </span>
                   )}
                   {syncStatus === 'failed' && (
-                    <span className="text-red-400 font-mono text-[10px] uppercase tracking-wider flex flex-col gap-0.5">
+                    <span className={cn(TYPOGRAPHY.label, "text-red-400 flex flex-col gap-0.5")}>
                       <span>⚠ Sync mismatch / connection timeout.</span>
                       {syncError && <span className="text-zinc-400 normal-case tracking-normal">{syncError}</span>}
                     </span>
                   )}
                   {syncStatus === 'idle' && (
-                    <span className="text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
+                    <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
                       Connection established. Idle.
                     </span>
                   )}
@@ -141,7 +141,7 @@ export const AccountSection: React.FC = () => {
             )}
 
             {authError && (
-              <span className="text-[9px] font-mono text-red-400 uppercase tracking-tighter text-left md:text-right max-w-xs">
+              <span className={cn(TYPOGRAPHY.caption, "text-red-400 uppercase tracking-tighter text-left md:text-right max-w-xs")}>
                 {authError}
               </span>
             )}
@@ -152,10 +152,10 @@ export const AccountSection: React.FC = () => {
         {typeof window !== 'undefined' && window.self !== window.top && (
           <Card variant="standard" surface="recessed" padding="compact">
             <div className="flex items-start gap-2.5">
-              <span className="text-[9px] font-mono text-orange-400 uppercase tracking-wider font-bold shrink-0 mt-0.5">
+              <span className={cn(TYPOGRAPHY.label, "text-orange-400 shrink-0 mt-0.5")}>
                 💡 Web Preview Alert:
               </span>
-              <p className="text-[10px] text-zinc-400 leading-normal">
+              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Google Sign-In popups are restricted inside embedded iframes. Open the app in a <strong className="text-zinc-200">New Tab</strong> to authenticate and synchronize seamlessly.
               </p>
             </div>

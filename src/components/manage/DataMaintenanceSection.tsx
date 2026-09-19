@@ -331,7 +331,7 @@ export const DataMaintenanceSection: React.FC = () => {
             <div className="space-y-1">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Export</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Data Backup File</h4>
-              <p className={cn(TYPOGRAPHY.body, "text-[10px] text-zinc-400 leading-normal")}>
+              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Compile all training routines, session history, set logs, and body weight logs into a downloadable JSON file.
               </p>
             </div>
@@ -365,7 +365,7 @@ export const DataMaintenanceSection: React.FC = () => {
             <div className="space-y-1 w-full">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Import</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Restore from Backup</h4>
-              <p className={cn(TYPOGRAPHY.body, "text-[10px] text-zinc-400 leading-normal")}>
+              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Import saved routines and historical session logs by uploading a JSON backup file or pasting raw JSON text.
               </p>
             </div>
@@ -454,7 +454,7 @@ export const DataMaintenanceSection: React.FC = () => {
                   Up to 8 snapshots
                 </span>
               </div>
-              <p className={cn(TYPOGRAPHY.body, "text-[10px] text-zinc-400 leading-normal")}>
+              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 GainLog caches local savepoint snapshots before modifications or imports. You can also create manual checkpoints.
               </p>
             </div>
@@ -473,7 +473,7 @@ export const DataMaintenanceSection: React.FC = () => {
 
           <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pt-1 pr-1">
             {checkpointHistory.length === 0 ? (
-              <div className={cn(BORDER.standard, RADIUS.button, "p-4 text-center border border-dashed text-[9px] font-mono text-zinc-500 uppercase")}>
+              <div className={cn(BORDER.standard, RADIUS.button, "p-4 text-center border border-dashed text-zinc-500", TYPOGRAPHY.micro)}>
                 No restore points available.
               </div>
             ) : (
@@ -495,9 +495,9 @@ export const DataMaintenanceSection: React.FC = () => {
                           variant="subtle"
                           size="sm"
                         />
-                        <span className="text-[10px] text-zinc-200 font-bold break-words">{b.desc}</span>
+                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-200 font-bold break-words")}>{b.desc}</span>
                       </div>
-                      <div className="text-[8px] font-mono text-zinc-500 uppercase">
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
                         {new Date(b.timestamp).toLocaleString(undefined, {
                           month: 'short',
                           day: 'numeric',
@@ -532,7 +532,7 @@ export const DataMaintenanceSection: React.FC = () => {
               <AlertTriangle size={12} className="text-red-400" />
               Danger Zone
             </h4>
-            <p className={cn(TYPOGRAPHY.body, "text-[11px] text-zinc-400 leading-normal")}>
+            <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
               Reset your workout catalog back to factory defaults or permanently delete all recorded session history.
             </p>
           </div>

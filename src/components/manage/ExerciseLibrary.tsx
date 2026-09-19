@@ -173,7 +173,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                     )}
                   </div>
 
-                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 text-[10px] flex items-center gap-1.5 flex-wrap")}>
+                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap")}>
                     <span className="text-zinc-400 font-bold">{item.target}</span>
                     <span>·</span>
                     <span>

@@ -145,7 +145,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       {(effectiveSublabel || metaBadge) && (
         <div className="mt-auto pt-2.5 min-w-0 max-w-full flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
           {effectiveSublabel ? (
-            <p className="min-w-0 max-w-full flex-1 break-words whitespace-normal font-mono text-[10px] leading-tight text-zinc-500">
+            <p className={cn(TYPOGRAPHY.metadata, "min-w-0 max-w-full flex-1 break-words whitespace-normal leading-tight")}>
               {effectiveSublabel}
             </p>
           ) : (

@@ -639,10 +639,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           {session.date}
                         </span>
                       </div>
-                      <h3 className={cn(TYPOGRAPHY.titleSection, "text-white font-black leading-none tracking-wider")}>
+                      <h3 className={TYPOGRAPHY.titleSection}>
                         {workout?.name || 'Custom Protocol'}
                       </h3>
-                      <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                      <div className={cn(TYPOGRAPHY.metadata, "flex flex-wrap items-center gap-3 text-zinc-400 normal-case")}>
                         <div className="flex items-center gap-1">
                           <Clock size={13} className="text-zinc-500 shrink-0" /> {session.durationMinutes || 0} min
                         </div>
@@ -871,7 +871,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                           {/* Set-Level Warning */}
                                           {isSetExtreme && (
-                                            <div className="ml-9 p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] text-amber-400 font-mono">
+                                            <div className={cn("ml-9 p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400", TYPOGRAPHY.micro)}>
                                               ⚠️ Unusual volume bounds: {isExtremeW ? 'Weight exceeds 500kg.' : ''} {isExtremeR ? 'Reps exceed 100.' : ''} Check typographical mistakes.
                                             </div>
                                           )}
@@ -988,7 +988,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       {exerciseName}
                                     </h4>
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-400 font-mono uppercase tracking-wider">
+                                  <div className={cn("flex flex-wrap items-center gap-2", TYPOGRAPHY.label, "text-zinc-400")}>
                                     <span>{doneSets.length} sets logged</span>
                                     {isSessionPR && (
                                       <span className="text-orange-400 font-bold flex items-center gap-1">
@@ -1000,7 +1000,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                 <div className="flex items-center gap-4 self-start sm:self-auto">
                                   {currentMaxWeight > 0 && (
-                                    <div className={cn("px-2.5 py-1 border text-[10px] font-mono text-zinc-300", SURFACE.recessed, BORDER.standard, RADIUS.button)}>
+                                    <div className={cn("px-2.5 py-1 border text-zinc-300", SURFACE.recessed, BORDER.standard, RADIUS.button, TYPOGRAPHY.metadata)}>
                                       Peak Today: <span className="text-white font-bold">{currentMaxWeight}kg</span>
                                     </div>
                                   )}
@@ -1105,7 +1105,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               )}
                                             >
                                               <div className="flex items-center gap-2">
-                                                <span className="font-mono text-[11px] text-zinc-400">{h.date}</span>
+                                                <span className={cn(TYPOGRAPHY.metadata, "text-zinc-400")}>{h.date}</span>
                                                 {isPR && (
                                                   <Badge label="PR PEAK" color="orange" size="sm" dot={false} />
                                                 )}
@@ -1114,7 +1114,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               <div className="flex items-center gap-3">
                                                 <div className="flex gap-1 flex-wrap">
                                                   {h.sets.map((s, sIdx) => (
-                                                    <span key={sIdx} className="text-[9px] font-mono text-zinc-400 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                                    <span key={sIdx} className={cn("bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-zinc-400", TYPOGRAPHY.micro)}>
                                                       {s.weight ? `${s.weight}kg×${s.reps}` : `${s.reps}r`}
                                                     </span>
                                                   ))}

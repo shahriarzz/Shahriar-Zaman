@@ -199,23 +199,23 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <div className="p-4 border-r border-zinc-800/50 space-y-1">
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>Last Session</span>
                 {lastSession ? (
-                  <div className="text-[10px] font-mono text-zinc-400">
+                  <div className={TYPOGRAPHY.metadata}>
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
                       <div key={s.id || `ghost-set-${idx}`}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[10px] font-mono text-zinc-600 italic">No history data</div>
+                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No history data</div>
                 )}
               </div>
               <div className="p-4 space-y-1">
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>All-Time PR</span>
                 {allTimePR ? (
-                  <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
+                  <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1")} style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
                     <Trophy size={10} style={{ color: WORKOUT_COLORS[workoutType] }} /> {allTimePR.weight}kg × {allTimePR.reps}
                   </div>
                 ) : (
-                  <div className="text-[10px] font-mono text-zinc-600 italic">No PR recorded</div>
+                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No PR recorded</div>
                 )}
               </div>
             </Grid>
@@ -245,7 +245,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       )}
                     >
                       <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
-                        <span className="text-zinc-600 font-mono text-[10px] text-center">{si + 1}</span>
+                        <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 text-center")}>{si + 1}</span>
                         {/* specialized table/matrix input for active workout set weight */}
                         <input
                           type="number"
@@ -300,7 +300,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       </div>
 
                       {isExtreme && (
-                        <div className="mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px] text-amber-400 font-mono animate-pulse">
+                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-amber-400 animate-pulse", TYPOGRAPHY.metadata)}>
                           <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
                           <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
                         </div>
@@ -328,8 +328,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             {/* Coach Note (Collapsed) */}
             {ex.note && (
               <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
-                <div className="bg-zinc-950/40 p-4 rounded-2xl text-[11px] text-zinc-500 leading-relaxed border border-zinc-900">
-                  <span className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest block mb-2">Coach's Field Notes</span>
+                <div className={cn("bg-zinc-950/40 p-4 rounded-2xl leading-relaxed border border-zinc-900", TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-700 block mb-2")}>Coach's Field Notes</span>
                   {ex.note}
                 </div>
               </div>
@@ -904,14 +904,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             >
               <div className="flex items-center gap-2">
                 <Trophy className="text-amber-500 animate-pulse" size={16} />
-                <span className="font-mono text-[9px] text-amber-400 uppercase tracking-widest font-bold">New Records Set Today!</span>
+                <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold")}>New Records Set Today!</span>
               </div>
               <div className="space-y-2">
                 {todaysPRs.map((pr, idx) => (
                   <div key={`session-pr-${pr.name}-${idx}`} className="flex justify-between items-center py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
                     <div>
                       <div className="font-bold text-white leading-tight">{pr.name}</div>
-                      <div className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-wider">
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
                         {pr.isNew ? 'Baseline Established' : 'Personal Record Smashed'}
                       </div>
                     </div>
@@ -1047,7 +1047,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
               <Clock size={16} style={{ color: WORKOUT_COLORS[activeWorkout.type] }} />
               <div className="text-left leading-none">
-                <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Target Dur</span>
+                <span className={cn(TYPOGRAPHY.micro, "text-zinc-500 block mb-1")}>Target Dur</span>
                 <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.duration}</span>
               </div>
             </div>

@@ -330,7 +330,7 @@ export const AnalyticsView: React.FC = () => {
                   >
                     <span className={cn(TYPOGRAPHY.label, "leading-none")}>{format(day, 'd')}</span>
                     {vol > 0 && isCurrentMonth && (
-                      <span className={cn(TYPOGRAPHY.eyebrow, "leading-none mt-1 opacity-80 text-[8px]")}>
+                      <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80")}>
                         {(vol / 1000).toFixed(1)}k
                       </span>
                     )}
@@ -428,7 +428,7 @@ export const AnalyticsView: React.FC = () => {
                             <p className="text-emerald-400 font-black text-sm">
                               Est. 1RM: {data.epley1RM} kg
                             </p>
-                            <p className="text-zinc-500 text-[10px]">Best Set: {data.setDetail}</p>
+                            <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
                           </ChartTooltip>
                         );
                       }

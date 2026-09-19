@@ -126,7 +126,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         </p>
       )}
       {typeof success === 'string' && (
-        <p className="font-mono text-[10px] text-emerald-400 font-normal tracking-normal">
+        <p className={TYPOGRAPHY.formSuccess}>
           {success}
         </p>
       )}

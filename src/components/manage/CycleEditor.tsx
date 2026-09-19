@@ -73,7 +73,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               <div className="flex items-center gap-4 min-w-0">
                 {/* Day Indicator Badge / Pill */}
                 <div className="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-zinc-950 border border-zinc-800/80 shrink-0">
-                  <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 text-[8px]")}>DAY</span>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>DAY</span>
                   <span className="font-display text-lg font-bold text-white leading-none">
                     {wo.cycleDay}
                   </span>
@@ -120,7 +120,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
 
               {/* Right Tap Affordance */}
               <div className="flex items-center gap-1.5 text-zinc-500 group-hover:text-white transition-colors shrink-0 ml-3">
-                <span className={cn(TYPOGRAPHY.eyebrow, "hidden sm:inline-block text-[9px]")}>
+                <span className={cn(TYPOGRAPHY.eyebrow, "hidden sm:inline-block")}>
                   Edit
                 </span>
                 <ChevronRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
@@ -157,7 +157,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                       <div className="font-bold text-white text-sm break-words group-hover:text-orange-400 transition-colors">
                         {wo.name}
                       </div>
-                      <div className={cn(TYPOGRAPHY.label, "text-zinc-500 text-[9px]")}>
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
                         {exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}
                       </div>
                     </div>

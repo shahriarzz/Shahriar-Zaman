@@ -186,7 +186,8 @@ export const DialogFooter: React.FC<DialogFooterProps> = ({
   return (
     <div
       className={cn(
-        "mt-8 flex items-center justify-end gap-3 font-mono text-[10px] tracking-widest uppercase",
+        "mt-8 flex items-center justify-end gap-3",
+        TYPOGRAPHY.label,
         className
       )}
       {...props}

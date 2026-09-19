@@ -48,7 +48,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       )}>
         {icon}
       </div>
-      <span className={cn(TYPOGRAPHY.metadata, "text-[9px] tracking-widest leading-none")}>{label}</span>
+      <span className={cn(TYPOGRAPHY.micro, "leading-none")}>{label}</span>
       {active && <NavigationActiveIndicator />}
     </button>
   );
@@ -177,9 +177,9 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                   >
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <span className={cn("w-1.5 h-1.5 rounded-full", getSyncColorClass())} />
-                      <p className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest leading-none">Cloud Protocol</p>
+                      <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 leading-none")}>Cloud Protocol</p>
                     </div>
-                    <p className="text-[11px] text-zinc-200 leading-normal font-sans">
+                    <p className={cn(TYPOGRAPHY.caption, "text-zinc-200 leading-normal")}>
                       {user ? getSyncTooltip() : 'Local client database active.'}
                     </p>
                   </motion.div>

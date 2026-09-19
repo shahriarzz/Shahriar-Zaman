@@ -164,15 +164,15 @@ function AppContent() {
 
           {/* Secure status checks log row */}
           <Card variant="standard" surface="recessed" padding="compact" className="w-full text-left space-y-2">
-            <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-zinc-300">
+            <div className={cn("flex items-center gap-2 text-zinc-300", TYPOGRAPHY.caption)}>
               <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
               {status.statusText}
             </div>
-            <div className="flex justify-between text-[8px] font-mono uppercase text-zinc-500">
+            <div className={cn("flex justify-between text-zinc-500", TYPOGRAPHY.micro)}>
               <span>Cloud DB Connection</span>
               <span className={status.connectionColor}>{status.connectionText}</span>
             </div>
-            <div className="flex justify-between text-[8px] font-mono uppercase text-zinc-500">
+            <div className={cn("flex justify-between text-zinc-500", TYPOGRAPHY.micro)}>
               <span>Encryption Status</span>
               <span className="text-zinc-300">AES-256</span>
             </div>

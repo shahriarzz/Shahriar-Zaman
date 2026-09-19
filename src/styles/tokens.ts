@@ -143,6 +143,7 @@ export const TYPOGRAPHY = {
   supporting: 'font-sans text-xs text-zinc-400 leading-normal',
   metadata: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider',
   caption: 'font-mono text-[9px] text-zinc-500 uppercase tracking-wide',
+  micro: 'font-mono text-[8px] uppercase tracking-widest font-bold',
   
   // Controls & States
   buttonLabel: 'font-mono text-xs uppercase tracking-wider font-bold',

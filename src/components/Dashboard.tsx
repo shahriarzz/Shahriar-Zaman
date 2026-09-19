@@ -213,7 +213,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   colorOverride={WORKOUT_COLORS[todayWorkout.type]}
                   variant="subtle"
                 />
-                <h2 className={cn(TYPOGRAPHY.titlePage, "text-3xl md:text-4xl")}>{todayWorkout.name}</h2>
+                <h2 className={TYPOGRAPHY.titlePage}>{todayWorkout.name}</h2>
                 <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
                   {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
                 </p>
@@ -354,7 +354,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   <Card key={date} variant="standard" padding="compact" className="flex items-center justify-between text-xs font-mono">
                     <span className="text-zinc-400">{formatDateStr(date)}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-white font-bold">{weight} <span className="text-[10px] text-zinc-500 font-normal">kg</span></span>
+                      <span className="text-white font-bold">{weight} <span className={cn(TYPOGRAPHY.unit, "ml-0.5")}>kg</span></span>
                       <Button
                         variant="ghost"
                         size="sm"

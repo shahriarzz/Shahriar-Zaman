@@ -230,7 +230,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
               <div
                 key={d}
-                className="text-center font-mono text-[10px] text-zinc-500 uppercase pb-2 tracking-wider font-bold"
+                className={cn("text-center pb-2", TYPOGRAPHY.label, "text-zinc-500")}
               >
                 {d}
               </div>
@@ -310,7 +310,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: l.color }}
                 />
-                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                <span className={TYPOGRAPHY.label}>
                   {l.label}
                 </span>
               </div>
@@ -401,10 +401,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 {selectedLog && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 font-bold">
+                      <span className={TYPOGRAPHY.label}>
                         Exercise Breakdown
                       </span>
-                      <span className="font-mono text-[10px] text-zinc-500">
+                      <span className={TYPOGRAPHY.metadata}>
                         {Object.keys(selectedLog.sets || {}).length} exercises
                       </span>
                     </div>
@@ -449,7 +449,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                 <div
                                   key={`set-${exId}-${idx}`}
                                   className={cn(
-                                    "border rounded-lg px-2 py-1 flex items-center gap-1.5 font-mono text-[10px]",
+                                    "border rounded-lg px-2 py-1 flex items-center gap-1.5",
+                                    TYPOGRAPHY.metadata,
                                     s.done
                                       ? "bg-zinc-900 border-zinc-700/80 text-white"
                                       : "bg-zinc-950/40 border-zinc-800/40 text-zinc-600 line-through"
@@ -458,7 +459,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                   <span className="font-bold text-white/90">
                                     {s.weight ? `${s.weight}kg` : 'BW'}
                                   </span>
-                                  <span className="text-[8px] text-zinc-500">×</span>
+                                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>×</span>
                                   <span className="text-zinc-300">{s.reps || '0'}</span>
                                 </div>
                               ))}
@@ -474,11 +475,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 {!selectedLog && isSelectedDateFuture && expectedWoForSelected && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-orange-400 font-bold flex items-center gap-1.5">
+                      <span className={cn(TYPOGRAPHY.label, "text-orange-400 flex items-center gap-1.5")}>
                         <CalendarIcon size={12} />
                         Scheduled Protocol
                       </span>
-                      <span className="font-mono text-[10px] text-zinc-500">
+                      <span className={TYPOGRAPHY.metadata}>
                         {expectedWoForSelected.type === 'rest'
                           ? 'Rest Day'
                           : `${expectedWoForSelected.exercises?.length || 0} Exercises`}
@@ -496,7 +497,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         {expectedWoForSelected.restNotes && expectedWoForSelected.restNotes.length > 0 && (
                           <div className="space-y-1.5 pt-2 border-t border-emerald-500/20">
                             {expectedWoForSelected.restNotes.map((note, nIdx) => (
-                              <div key={`note-${nIdx}`} className="flex items-center gap-2 text-[11px] font-mono text-emerald-200">
+                              <div key={`note-${nIdx}`} className={cn(TYPOGRAPHY.bodySecondary, "flex items-center gap-2 font-mono text-emerald-200")}>
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                                 <span>{note}</span>
                               </div>
@@ -559,7 +560,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 {!selectedLog && isSelectedDatePast && expectedWoForSelected && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-red-400 font-bold flex items-center gap-1.5">
+                      <span className={cn(TYPOGRAPHY.label, "text-red-400 flex items-center gap-1.5")}>
                         <AlertCircle size={12} />
                         Missed Session Preview
                       </span>
@@ -590,7 +591,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                         {/* List of exercises that were scheduled */}
                         <div className="space-y-1.5">
-                          <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 block font-bold">
+                          <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 block font-bold")}>
                             Planned Exercises:
                           </span>
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
@@ -606,10 +607,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                 <div>
                                   <span className="font-display uppercase text-zinc-300">{meta?.name || 'Exercise'}</span>
                                   {meta?.target && (
-                                    <span className="font-mono text-[9px] text-zinc-500 ml-2 uppercase">({meta.target})</span>
+                                    <span className={cn(TYPOGRAPHY.caption, "ml-2")}>({meta.target})</span>
                                   )}
                                 </div>
-                                <span className="font-mono text-[10px] text-zinc-400">
+                                <span className={TYPOGRAPHY.metadata}>
                                   {ex.sets} × {ex.reps}
                                 </span>
                               </Card>
@@ -634,7 +635,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                 {/* 5. SECONDARY SECTION: Stats Cards (Volume, Time, Sets Completed) */}
                 {selectedLog && (
                   <div className="space-y-3 pt-3 border-t border-zinc-800/60">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
+                    <span className={cn(TYPOGRAPHY.label, "block")}>
                       Session Summary
                     </span>
                     <Grid cols={3} gap="sm">
