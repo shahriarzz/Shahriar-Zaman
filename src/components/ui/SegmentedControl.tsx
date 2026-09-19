@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS, SURFACE, BORDER, TYPOGRAPHY } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -35,7 +35,8 @@ export function SegmentedControl<T extends string>({
       className={cn(
         SURFACE.recessed,
         BORDER.standard,
-        "p-1 border flex items-center gap-1",
+        GAP.micro,
+        "p-1 border flex items-center",
         RADIUS.button,
         className
       )}
@@ -48,8 +49,9 @@ export function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              "relative font-mono uppercase font-bold tracking-wider transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5",
-              size === 'sm' ? cn("px-3 py-1", TYPOGRAPHY.micro) : cn("px-4 py-1.5", TYPOGRAPHY.buttonLabel),
+              "relative transition-colors cursor-pointer select-none flex items-center justify-center",
+              GAP.xs,
+              size === 'sm' ? cn(SPACING.segmentedSm, TYPOGRAPHY.segmentedSm) : cn(SPACING.segmentedMd, TYPOGRAPHY.segmentedMd),
               RADIUS.button,
               isSelected
                 ? "text-white font-black"
@@ -63,7 +65,7 @@ export function SegmentedControl<T extends string>({
                 transition={{ type: "spring", stiffness: 500, damping: 35 }}
               />
             )}
-            <span className="relative z-10 flex items-center gap-1.5">
+            <span className={cn("relative z-10 flex items-center", GAP.xs)}>
               {opt.icon && (
                 <span
                   className="shrink-0"

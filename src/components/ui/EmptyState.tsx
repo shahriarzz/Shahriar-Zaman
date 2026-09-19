@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SPACING, GAP } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SPACING, GAP, STACK_SPACING } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { Button } from './Button';
 
@@ -45,7 +45,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return (
       <div
         className={cn(
-          "p-8 md:p-12 border border-dashed flex flex-col items-center justify-center text-center space-y-3",
+          "border border-dashed flex flex-col items-center justify-center text-center",
+          SPACING.hero,
+          STACK_SPACING.sm,
           SURFACE.subtle,
           BORDER.subtle,
           RADIUS.panel,
@@ -83,7 +85,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <div
       className={cn(
-        "py-8 px-6 border border-dashed flex flex-col items-center justify-center text-center space-y-2",
+        "border border-dashed flex flex-col items-center justify-center text-center",
+        SPACING.section,
+        STACK_SPACING.xs,
         SURFACE.subtle,
         BORDER.standard,
         RADIUS.card,

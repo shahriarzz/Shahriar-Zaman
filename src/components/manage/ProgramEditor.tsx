@@ -12,7 +12,8 @@ import {
   SegmentedControl,
   Stack,
   TYPOGRAPHY,
-  BORDER
+  BORDER,
+  EDITOR_HEADER
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -132,7 +133,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
   return (
     <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
       {/* Top Navigation Bar */}
-      <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4", BORDER.standard)}>
+      <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -142,7 +143,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
           >
             Back to Manage
           </Button>
-          <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
+          <div className={EDITOR_HEADER.divider} />
           <span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold")}>
             Program Configuration
           </span>

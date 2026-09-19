@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS, TYPOGRAPHY, SURFACE, BORDER } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, RADIUS, TYPOGRAPHY, SURFACE, BORDER, SPACING, GAP } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export type BadgeTone = 'achievement' | 'success' | 'warning' | 'destructive' | 'info' | 'workout' | 'neutral';
@@ -89,9 +89,11 @@ export const Badge: React.FC<BadgeProps> = ({
   return (
     <div
       className={cn(
-        "inline-flex items-center font-mono uppercase tracking-wider font-bold border transition-colors select-none shrink-0",
+        "inline-flex items-center border transition-colors select-none shrink-0",
         RADIUS.pill,
-        size === 'sm' ? cn("gap-1 px-2 py-0.5", TYPOGRAPHY.badgeSm) : cn("gap-1.5 px-2.5 py-1", TYPOGRAPHY.badgeMd),
+        size === 'sm'
+          ? cn(GAP.micro, SPACING.badgeSm, TYPOGRAPHY.badgeSm)
+          : cn(GAP.xs, SPACING.badgeMd, TYPOGRAPHY.badgeMd),
         !resolvedColor && effectiveVariant === 'subtle' && cn(SURFACE.subtle, "text-zinc-300", BORDER.subtle),
         !resolvedColor && effectiveVariant === 'outline' && cn("bg-transparent text-zinc-400", BORDER.standard),
         className

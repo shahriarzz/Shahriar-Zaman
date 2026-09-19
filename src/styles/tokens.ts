@@ -43,9 +43,24 @@ export const SPACING = {
   section: 'p-6',
   hero: 'p-8',
   modal: 'p-6',
+  badgeSm: 'px-2 py-0.5',
+  badgeMd: 'px-2.5 py-1',
+  segmentedSm: 'px-3 py-1',
+  segmentedMd: 'px-4 py-1.5',
+  navItem: 'py-2 px-3.5 min-h-[44px]',
 } as const;
 
 export type SpacingIntent = keyof typeof SPACING;
+
+export const NAV = {
+  item: 'py-2 px-3.5 min-h-[44px]',
+  itemGap: 'gap-1',
+} as const;
+
+export const EDITOR_HEADER = {
+  container: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b pb-4',
+  divider: 'h-4 w-px bg-zinc-800 hidden sm:block',
+} as const;
 
 export const PAGE_SPACING = {
   container: 'space-y-6 md:space-y-8 pb-16',
@@ -156,9 +171,14 @@ export const TYPOGRAPHY = {
   // Controls & States
   buttonLabel: 'font-mono text-xs uppercase tracking-wider font-bold',
   buttonText: 'font-mono text-xs uppercase tracking-wider font-bold',
+  buttonSm: 'font-mono text-[11px] uppercase tracking-wider font-bold',
+  buttonMd: 'font-mono text-xs uppercase tracking-wider font-bold',
+  buttonLg: 'font-mono text-xs uppercase tracking-wider font-bold',
   badgeText: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   badgeSm: 'font-mono text-[9px] uppercase tracking-wider font-bold',
   badgeMd: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+  segmentedSm: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+  segmentedMd: 'font-mono text-xs uppercase tracking-wider font-bold',
   dialogFooter: 'font-mono text-[10px] text-zinc-500 uppercase tracking-widest',
   inputLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   formLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
@@ -180,6 +200,7 @@ export const TYPOGRAPHY = {
 
 export const GAP = {
   none: 'gap-0',
+  micro: 'gap-1',
   xs: 'gap-1.5',
   sm: 'gap-2.5',
   md: 'gap-4',

@@ -524,7 +524,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </Grid>
 
                     {/* Preserved Training Duration & Pacing details */}
-                    <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 rounded-xl border text-xs font-mono", SURFACE.subtle, BORDER.standard)}>
+                    <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 border text-xs font-mono", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
                       <div className="flex items-center gap-2 text-zinc-300">
                         <Clock size={15} className="text-orange-400" />
                         <span>Total Time Trained:</span>
@@ -575,7 +575,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             <div className="text-xs text-zinc-600 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
                           ) : (
                             (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
-                              <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 rounded-lg border text-xs text-zinc-300", SURFACE.subtle, BORDER.standard)}>
+                              <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 border text-xs text-zinc-300", RADIUS.button, SURFACE.subtle, BORDER.standard)}>
                                 <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
                                 <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
                               </div>
@@ -823,7 +823,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               className={cn(
                                                 "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
                                                 RADIUS.button,
-                                                isExtremeW ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
+                                                isExtremeW ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
                                               )}
                                             />
                                             {/* specialized table/matrix input for historical set reps */}
@@ -846,7 +846,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               className={cn(
                                                 "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
                                                 RADIUS.button,
-                                                isExtremeR ? "border-amber-500 text-amber-400 font-bold" : "border-zinc-800 focus:border-zinc-600"
+                                                isExtremeR ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
                                               )}
                                             />
                                             <div className="flex items-center justify-center">
@@ -871,7 +871,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                                           {/* Set-Level Warning */}
                                           {isSetExtreme && (
-                                            <div className={cn("ml-9 p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400", TYPOGRAPHY.micro)}>
+                                            <div className={cn("ml-9 p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400", RADIUS.button, TYPOGRAPHY.micro)}>
                                               ⚠️ Unusual volume bounds: {isExtremeW ? 'Weight exceeds 500kg.' : ''} {isExtremeR ? 'Reps exceed 100.' : ''} Check typographical mistakes.
                                             </div>
                                           )}
@@ -1098,7 +1098,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             <div 
                                               key={hIdx}
                                               className={cn(
-                                                "flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors",
+                                                "flex items-center justify-between p-2.5 border text-xs transition-colors", RADIUS.card,
                                                 isPR 
                                                   ? cn(SEMANTIC_UI.primary, "font-bold")
                                                   : SEMANTIC_UI.neutral
@@ -1114,7 +1114,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               <div className="flex items-center gap-3">
                                                 <div className="flex gap-1 flex-wrap">
                                                   {h.sets.map((s, sIdx) => (
-                                                    <span key={sIdx} className={cn("bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-zinc-400", TYPOGRAPHY.micro)}>
+                                                    <span key={sIdx} className={cn("bg-zinc-950 px-1.5 py-0.5 border text-zinc-400", BORDER.standard, RADIUS.sm, TYPOGRAPHY.micro)}>
                                                       {s.weight ? `${s.weight}kg×${s.reps}` : `${s.reps}r`}
                                                     </span>
                                                   ))}

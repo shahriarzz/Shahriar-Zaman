@@ -543,7 +543,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                   <p className={TYPOGRAPHY.caption}>{meta?.target || ''}</p>
                                 </div>
                                 <div className="text-right">
-                                  <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                  <span className={cn("font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5", RADIUS.sm)}>
                                     {ex.sets} × {ex.reps}
                                   </span>
                                 </div>
@@ -641,7 +641,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                 {/* 5. SECONDARY SECTION: Stats Cards (Volume, Time, Sets Completed) */}
                 {selectedLog && (
-                  <div className="space-y-3 pt-3 border-t border-zinc-800/60">
+                  <div className={cn("space-y-3 pt-3 border-t", BORDER.divider)}>
                     <span className={cn(TYPOGRAPHY.label, "block")}>
                       Session Summary
                     </span>

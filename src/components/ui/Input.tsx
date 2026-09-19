@@ -94,12 +94,13 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
             variant === 'filled' && cn(
               SURFACE.subtle,
               "border border-transparent",
-              BORDER.interactive
+              BORDER.hover,
+              FOCUS.ring
             ),
             variant === 'flush' && cn("bg-transparent border-b rounded-none", BORDER.standard, FOCUS.ring),
             isError && "border-red-500/70 focus:border-red-500 text-red-200",
             isSuccess && "border-emerald-500/70 focus:border-emerald-500 text-emerald-200",
-            disabled && "opacity-40 cursor-not-allowed bg-zinc-900/30",
+            disabled && cn("opacity-40 cursor-not-allowed", SURFACE.subtle),
             className
           )}
           {...props}

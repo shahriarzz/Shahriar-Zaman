@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE, RADIUS, GAP, SHADOW } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE, RADIUS, GAP, SHADOW, NAV } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -37,8 +37,9 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center py-2 px-3.5 min-h-[44px] transition-all relative group select-none outline-none",
-        GAP.xs,
+        "flex flex-col items-center justify-center transition-all relative group select-none outline-none",
+        NAV.item,
+        NAV.itemGap,
         active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
         INTERACTIVE.active
       )}
@@ -97,7 +98,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.subtle, SURFACE.canvasHeader)}>
+      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.divider, SURFACE.canvasHeader)}>
         <div className="flex items-center gap-2">
           <div className={cn("w-8 h-8 bg-orange-500 flex items-center justify-center", RADIUS.sm)}>
             <Dumbbell size={18} className="text-black stroke-[3px]" />

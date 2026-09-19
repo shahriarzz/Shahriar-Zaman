@@ -118,8 +118,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       animate={justCompleted ? { scale: [1, 1.015, 1] } : {}}
       transition={{ duration: 0.25, ease: "easeOut" }}
       className={cn(
-        "bg-zinc-900/80 border rounded-2xl overflow-hidden transition-all",
-        isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-zinc-800"
+        "bg-zinc-900/80 border overflow-hidden transition-all",
+        RADIUS.card,
+        isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : BORDER.standard
       )}
     >
       {/* Header */}
@@ -240,7 +241,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <div
                       key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
-                        "space-y-1.5 rounded-2xl px-2 py-1.5 transition-colors duration-500",
+                        "space-y-1.5 px-2 py-1.5 transition-colors duration-500",
+                        RADIUS.card,
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
                       )}
                     >
@@ -310,7 +312,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       </div>
 
                       {isExtreme && (
-                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center gap-2 text-amber-400 animate-pulse", TYPOGRAPHY.metadata)}>
+                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 flex items-center gap-2 text-amber-400 animate-pulse", RADIUS.button, TYPOGRAPHY.metadata)}>
                           <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
                           <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
                         </div>
@@ -337,8 +339,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
             {/* Coach Note (Collapsed) */}
             {ex.note && (
-              <div className="px-6 pb-6 pt-2 border-t border-zinc-800/30">
-                <div className={cn("bg-zinc-950/40 p-4 rounded-2xl leading-relaxed border border-zinc-900", TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
+              <div className={cn("px-6 pb-6 pt-2 border-t", BORDER.subtle)}>
+                <div className={cn("p-4 leading-relaxed border", SURFACE.recessed, BORDER.subtle, RADIUS.card, TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
                   <span className={cn(TYPOGRAPHY.micro, "text-zinc-700 block mb-2")}>Coach's Field Notes</span>
                   {ex.note}
                 </div>
@@ -1054,7 +1056,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>{activeWorkout.cardio.name}</h3>
               <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>{activeWorkout.cardio.detail}</p>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-xl flex items-center gap-3 self-stretch sm:self-auto justify-center">
+            <div className={cn("border px-4 py-2.5 flex items-center gap-3 self-stretch sm:self-auto justify-center", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
               <Clock size={16} style={{ color: WORKOUT_COLORS[activeWorkout.type] }} />
               <div className="text-left leading-none">
                 <span className={cn(TYPOGRAPHY.micro, "text-zinc-500 block mb-1")}>Target Dur</span>

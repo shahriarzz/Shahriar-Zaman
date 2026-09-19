@@ -19,7 +19,7 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) 
         className="max-w-xl w-full border-red-500/30 bg-red-950/20 space-y-5"
       >
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 shrink-0">
+          <div className={cn("p-3 bg-red-500/10 border border-red-500/20 text-red-400 shrink-0", RADIUS.card)}>
             <TriangleAlert size={24} />
           </div>
           <div className="space-y-1">

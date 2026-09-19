@@ -36,7 +36,8 @@ import {
   BORDER,
   SURFACE,
   RADIUS,
-  SPACING
+  SPACING,
+  INTERACTIVE
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -475,7 +476,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     BORDER.standard,
                     RADIUS.card,
                     "border overflow-hidden transition-all duration-200",
-                    isExpanded ? "border-zinc-700 bg-zinc-900/90 shadow-lg" : "hover:border-zinc-700/80"
+                    isExpanded ? cn(BORDER.interactive, SURFACE.subtle, "shadow-lg") : BORDER.hover
                   )}
                 >
                   {/* COLLAPSED HEADER (SessionView Pattern) */}
@@ -678,7 +679,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
       {/* ADD EXERCISE MODAL / DRAWER */}
       {isAddingExercise && (
         <Card variant="standard" surface="recessed" accent="orange" padding="standard" className="bg-zinc-950 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className={cn("flex items-center justify-between border-b pb-3", BORDER.standard)}>
             <h3 className={cn(TYPOGRAPHY.label, "text-white text-xs font-bold flex items-center gap-2")}>
               <Plus size={14} className="text-orange-500" />
               Add Exercise to {workout.name}
@@ -724,8 +725,10 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                       className={cn(
                         SURFACE.subtle,
                         BORDER.standard,
+                        BORDER.hover,
+                        INTERACTIVE.hover,
                         RADIUS.button,
-                        "p-2.5 border flex items-center justify-between hover:border-zinc-700 hover:bg-zinc-900/60 cursor-pointer transition-all"
+                        "p-2.5 border flex items-center justify-between cursor-pointer transition-all"
                       )}
                     >
                       <div className="space-y-0.5">

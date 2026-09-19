@@ -2,7 +2,7 @@ import React from 'react';
 import { Trophy } from 'lucide-react';
 import { Card } from './Card';
 import { cn } from '../../lib/utils';
-import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TYPOGRAPHY } from '../../styles/tokens';
+import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TYPOGRAPHY, RADIUS } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface AchievementCardProps {
@@ -47,7 +47,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
       <div>
         <div className="flex items-center gap-2 mb-3">
           <div
-            className="p-2 rounded-xl shrink-0 flex items-center justify-center border"
+            className={cn("p-2 shrink-0 flex items-center justify-center border", RADIUS.button)}
             style={{
               backgroundColor: `${accentHex}1a`,
               borderColor: `${accentHex}4d`,
