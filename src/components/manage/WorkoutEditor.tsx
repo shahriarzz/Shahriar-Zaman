@@ -277,7 +277,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   return (
     <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
       {/* Top Breadcrumb Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+      <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4", BORDER.standard)}>
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -309,7 +309,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
       </div>
 
       {/* Workout Header Card */}
-      <Card variant="standard" padding="standard" className="border-zinc-800">
+      <Card variant="standard" padding="standard">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
             <WorkoutColorIndicator type={workout.type} size="lg" />
@@ -379,7 +379,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
       {isRest ? (
         <Card variant="standard" surface="recessed" padding="section" className="space-y-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400">
+            <div className={cn("p-3 text-zinc-400 border", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
               <Moon size={24} className="text-orange-400" />
             </div>
             <div>
@@ -485,7 +485,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {/* Exercise Index Badge */}
-                      <div className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0">
+                      <div className={cn("w-7 h-7 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0 border", RADIUS.sm, SURFACE.recessed, BORDER.standard)}>
                         {index + 1}
                       </div>
 
@@ -568,7 +568,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2, ease: 'easeInOut' }}
-                        className="overflow-hidden border-t border-zinc-800/80 bg-zinc-950/40 p-4 space-y-4"
+                        className={cn("overflow-hidden border-t p-4 space-y-4", BORDER.standard, SURFACE.recessed)}
                       >
                         <Grid cols={1} colsMd={3} gap="sm">
                           {/* Sets adjustment */}
@@ -626,7 +626,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         />
 
                         {/* Priority / Tag Toggles & Deep Editor Link */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-zinc-800/60">
+                        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t", BORDER.subtle)}>
                           <div className="flex items-center gap-2">
                             <Badge
                               label={isPriority ? '★ Priority Item' : '+ Mark Priority'}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
@@ -88,12 +88,15 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
             variant === 'standard' && cn(
               SURFACE.recessed,
               BORDER.standard,
-              "border focus:border-orange-500"
+              "border",
+              FOCUS.ring
             ),
             variant === 'filled' && cn(
-              "bg-zinc-900/70 border border-transparent focus:border-zinc-700"
+              SURFACE.subtle,
+              "border border-transparent",
+              BORDER.interactive
             ),
-            variant === 'flush' && "bg-transparent border-b border-zinc-800 rounded-none focus:border-orange-500",
+            variant === 'flush' && cn("bg-transparent border-b rounded-none", BORDER.standard, FOCUS.ring),
             isError && "border-red-500/70 focus:border-red-500 text-red-200",
             isSuccess && "border-emerald-500/70 focus:border-emerald-500 text-emerald-200",
             disabled && "opacity-40 cursor-not-allowed bg-zinc-900/30",

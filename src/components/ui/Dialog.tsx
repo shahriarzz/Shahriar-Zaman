@@ -67,7 +67,7 @@ export const Dialog: React.FC<DialogProps> = ({
                 onClose();
               }
             }}
-            className="absolute inset-0 bg-[#040409]/80 backdrop-blur-md"
+            className={cn("absolute inset-0", SURFACE.backdrop)}
             aria-hidden="true"
           />
 
@@ -122,7 +122,8 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({
       {icon && (
         <div
           className={cn(
-            "p-3 rounded-2xl flex-shrink-0 border",
+            "p-3 flex-shrink-0 border",
+            RADIUS.card,
             isDanger
               ? "bg-red-500/10 text-red-500 border-red-500/20"
               : "bg-orange-500/10 text-orange-500 border-orange-500/20"
@@ -187,7 +188,7 @@ export const DialogFooter: React.FC<DialogFooterProps> = ({
     <div
       className={cn(
         "mt-8 flex items-center justify-end gap-3",
-        TYPOGRAPHY.label,
+        TYPOGRAPHY.dialogFooter,
         className
       )}
       {...props}

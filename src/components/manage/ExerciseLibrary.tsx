@@ -149,7 +149,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                 surface="base"
                 padding="standard"
                 onClick={() => onOpenExerciseEditor(item as Exercise)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer group select-none"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all cursor-pointer group select-none"
               >
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

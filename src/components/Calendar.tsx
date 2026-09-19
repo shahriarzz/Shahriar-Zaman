@@ -33,7 +33,12 @@ import {
   Button,
   Stack,
   Grid,
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  BORDER,
+  SURFACE,
+  RADIUS,
+  INTERACTIVE,
+  GAP
 } from './ui';
 
 interface CalendarProps {
@@ -253,13 +258,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     setSelectedDate(day);
                   }}
                   className={cn(
-                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border transition-all duration-200 rounded-2xl flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border transition-all duration-200 flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    RADIUS.card,
                     !isCurrentMonthDay && "opacity-20 pointer-events-none",
                     isSelected
                       ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
                       : isToday
                         ? "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
-                        : "border-zinc-800/40 bg-zinc-950/30 hover:bg-zinc-800/40 hover:border-zinc-700/60"
+                        : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
                   )}
                 >
                   {/* Date Number Badge */}
@@ -296,7 +302,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           </div>
 
           {/* Legend */}
-          <div className="mt-6 pt-5 border-t border-zinc-800/80 flex flex-wrap gap-x-5 gap-y-2.5">
+          <div className={cn("mt-6 pt-5 border-t flex flex-wrap gap-x-5 gap-y-2.5", BORDER.standard)}>
             {[
               { label: 'Push', color: WORKOUT_COLORS.push },
               { label: 'Pull', color: WORKOUT_COLORS.pull },
@@ -331,7 +337,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           >
             <Card variant="elevated" padding="none" className="overflow-hidden h-full flex flex-col">
               {/* Header */}
-              <div className="p-5 border-b border-zinc-800/80 bg-zinc-900/40">
+              <div className={cn("p-5 border-b", BORDER.standard, SURFACE.subtle)}>
                 <div className="flex justify-between items-start mb-2">
                   <SectionHeader
                     eyebrow="Day Overview"
@@ -449,11 +455,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                 <div
                                   key={`set-${exId}-${idx}`}
                                   className={cn(
-                                    "border rounded-lg px-2 py-1 flex items-center gap-1.5",
+                                    "border px-2 py-1 flex items-center gap-1.5",
+                                    RADIUS.sm,
                                     TYPOGRAPHY.metadata,
                                     s.done
-                                      ? "bg-zinc-900 border-zinc-700/80 text-white"
-                                      : "bg-zinc-950/40 border-zinc-800/40 text-zinc-600 line-through"
+                                      ? cn(SURFACE.default, BORDER.strong, "text-white")
+                                      : cn(SURFACE.recessed, BORDER.subtle, "text-zinc-600 line-through")
                                   )}
                                 >
                                   <span className="font-bold text-white/90">

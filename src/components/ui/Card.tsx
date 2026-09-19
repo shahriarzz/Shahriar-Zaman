@@ -8,7 +8,8 @@ import {
   SpacingIntent,
   SHADOW,
   SemanticColor,
-  getAccentColor
+  getAccentColor,
+  INTERACTIVE
 } from '../../styles/tokens';
 
 export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised' | 'panel' | 'elevated';
@@ -96,7 +97,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     interactive: cn(
       BORDER.standard,
       RADIUS.card,
-      'border active:scale-[0.99] select-none cursor-pointer hover:border-zinc-700 hover:bg-zinc-900/80 transition-all'
+      BORDER.hover,
+      INTERACTIVE.hover,
+      'border active:scale-[0.99] select-none cursor-pointer transition-all'
     ),
     selected: cn(
       'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
@@ -152,7 +155,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         surfaceClasses[effectiveSurface],
         variantClasses[normalizedVariant] || variantClasses.standard,
         paddingClass,
-        hoverable && 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-all',
+        hoverable && cn(BORDER.hover, INTERACTIVE.hover, 'transition-all'),
         onClick && !hoverable && 'cursor-pointer',
         accentClasses,
         className

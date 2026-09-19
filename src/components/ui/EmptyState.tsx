@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SPACING, GAP } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { Button } from './Button';
 
@@ -25,7 +25,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return (
       <div
         className={cn(
-          "py-4 px-3 flex items-center justify-center gap-2 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-800",
+          "flex items-center justify-center text-center text-zinc-500 border border-dashed",
+          SPACING.compact,
+          GAP.xs,
+          BORDER.standard,
+          TYPOGRAPHY.metadata,
           RADIUS.card,
           className
         )}
@@ -41,13 +45,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return (
       <div
         className={cn(
-          "p-12 bg-zinc-900/10 border border-zinc-800/60 border-dashed flex flex-col items-center justify-center text-center space-y-3",
+          "p-8 md:p-12 border border-dashed flex flex-col items-center justify-center text-center space-y-3",
+          SURFACE.subtle,
+          BORDER.subtle,
           RADIUS.panel,
           className
         )}
       >
         {icon && (
-          <div className={cn("p-4 bg-zinc-900/40 text-zinc-500 mb-1 flex items-center justify-center", RADIUS.card)}>
+          <div className={cn("p-4 text-zinc-500 mb-1 flex items-center justify-center", SURFACE.subtle, RADIUS.card)}>
             {renderIcon(icon, { size: 36 })}
           </div>
         )}
@@ -77,7 +83,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <div
       className={cn(
-        "py-8 px-6 bg-zinc-950/20 border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center space-y-2",
+        "py-8 px-6 border border-dashed flex flex-col items-center justify-center text-center space-y-2",
+        SURFACE.subtle,
+        BORDER.standard,
         RADIUS.card,
         className
       )}

@@ -87,7 +87,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
   return (
     <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
       {/* Top Header & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+      <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4", BORDER.standard)}>
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"

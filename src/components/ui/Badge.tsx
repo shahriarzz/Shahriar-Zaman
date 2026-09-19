@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, RADIUS, TYPOGRAPHY, SURFACE, BORDER } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export type BadgeTone = 'achievement' | 'success' | 'warning' | 'destructive' | 'info' | 'workout' | 'neutral';
@@ -91,9 +91,9 @@ export const Badge: React.FC<BadgeProps> = ({
       className={cn(
         "inline-flex items-center font-mono uppercase tracking-wider font-bold border transition-colors select-none shrink-0",
         RADIUS.pill,
-        size === 'sm' ? "gap-1 px-2 py-0.5 text-[9px]" : "gap-1.5 px-2.5 py-1 text-[10px]",
-        !resolvedColor && effectiveVariant === 'subtle' && "bg-zinc-800/60 text-zinc-300 border-zinc-700/50",
-        !resolvedColor && effectiveVariant === 'outline' && "bg-transparent text-zinc-400 border-zinc-800",
+        size === 'sm' ? cn("gap-1 px-2 py-0.5", TYPOGRAPHY.badgeSm) : cn("gap-1.5 px-2.5 py-1", TYPOGRAPHY.badgeMd),
+        !resolvedColor && effectiveVariant === 'subtle' && cn(SURFACE.subtle, "text-zinc-300", BORDER.subtle),
+        !resolvedColor && effectiveVariant === 'outline' && cn("bg-transparent text-zinc-400", BORDER.standard),
         className
       )}
       style={{ ...style, ...userStyle }}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE } from '../../styles/tokens';
+import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { haptics } from '../../utils/haptics';
 
@@ -73,7 +73,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   const variantClasses: Record<string, string> = {
     primary: 'bg-orange-500 hover:bg-orange-400 text-black font-bold border-transparent',
     secondary: cn(SURFACE.default, BORDER.standard, 'border hover:bg-zinc-800 text-zinc-200 font-bold'),
-    outline: cn(BORDER.standard, 'border hover:border-zinc-700 hover:bg-zinc-800/60 text-zinc-300 font-bold bg-transparent'),
+    outline: cn(BORDER.interactive, 'border hover:bg-zinc-800/60 text-zinc-300 font-bold bg-transparent'),
     ghost: 'hover:bg-zinc-800/60 text-zinc-400 hover:text-white font-bold border-transparent bg-transparent',
     destructive: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold',
     warning: 'bg-amber-500 hover:bg-amber-400 text-black font-bold border-transparent',
@@ -81,10 +81,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   };
 
   const sizeClasses: Record<ButtonSize, string> = {
-    sm: 'h-8 min-h-[32px] px-3 text-[11px] gap-1.5',
-    md: 'h-10 min-h-[40px] px-5 text-xs gap-2',
-    lg: 'h-12 min-h-[48px] px-8 text-xs tracking-wider gap-2.5',
-    icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-2 text-sm justify-center',
+    sm: 'h-8 min-h-[32px] px-3 gap-1.5 text-[11px]',
+    md: 'h-10 min-h-[40px] px-5 gap-2',
+    lg: 'h-12 min-h-[48px] px-8 gap-2.5',
+    icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-2 justify-center',
   };
 
   const iconSizes: Record<ButtonSize, number> = {
@@ -107,7 +107,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
         ...style
       }}
       className={cn(
-        "inline-flex items-center justify-center font-mono uppercase tracking-wider transition-all select-none cursor-pointer",
+        "inline-flex items-center justify-center transition-all select-none cursor-pointer",
+        TYPOGRAPHY.buttonLabel,
+        FOCUS.visible,
         RADIUS.button,
         variantClasses[variant] || variantClasses.secondary,
         sizeClasses[size],

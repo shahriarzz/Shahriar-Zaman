@@ -347,7 +347,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
           {/* Recent Entries */}
           {weightSummary.recentWeightLogs.length > 0 && (
-            <div className="border-t border-zinc-800/60 pt-4 space-y-2">
+            <div className={cn("border-t pt-4 space-y-2", BORDER.subtle)}>
               <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Recent Logs</div>
               <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {weightSummary.recentWeightLogs.map(([date, weight]) => (

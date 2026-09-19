@@ -11,7 +11,8 @@ import {
   Button,
   SegmentedControl,
   Stack,
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  BORDER
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -131,7 +132,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
   return (
     <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
       {/* Top Navigation Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+      <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4", BORDER.standard)}>
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"

@@ -68,11 +68,11 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               surface="base"
               padding="standard"
               onClick={() => handleWorkoutClick(wo.id)}
-              className="flex items-center justify-between group border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer select-none"
+              className={cn("flex items-center justify-between group transition-all cursor-pointer select-none", BORDER.interactive)}
             >
               <div className="flex items-center gap-4 min-w-0">
                 {/* Day Indicator Badge / Pill */}
-                <div className="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-zinc-950 border border-zinc-800/80 shrink-0">
+                <div className={cn("flex flex-col items-center justify-center w-12 h-12 shrink-0 border", RADIUS.button, SURFACE.recessed, BORDER.standard)}>
                   <span className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>DAY</span>
                   <span className="font-display text-lg font-bold text-white leading-none">
                     {wo.cycleDay}
@@ -132,7 +132,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
 
       {/* Additional / Bonus Workouts (if any exist) */}
       {additionalWorkouts.length > 0 && (
-        <div className="space-y-3 pt-4 border-t border-zinc-800/60">
+        <div className={cn("space-y-3 pt-4 border-t", BORDER.standard)}>
           <SectionHeader
             size="subsection"
             title="Bonus & Auxiliary Protocols"
@@ -149,7 +149,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                   surface="base"
                   padding="compact"
                   onClick={() => handleWorkoutClick(wo.id)}
-                  className="flex items-center justify-between group border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer select-none"
+                  className={cn("flex items-center justify-between group transition-all cursor-pointer select-none", BORDER.interactive)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <WorkoutColorIndicator type={wo.type} size="sm" />

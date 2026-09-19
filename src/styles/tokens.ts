@@ -8,7 +8,8 @@ export const SURFACE = {
   recessed: 'bg-zinc-950/80', // recessed/nested content
   raised: 'bg-gradient-to-br from-zinc-900 to-zinc-950', // high-contrast card background
   panel: 'bg-[#0e0e15]',      // dialogs and prominent floating panels
-  overlay: 'bg-zinc-950/95 backdrop-blur-xl', // modal backdrops / sheets
+  overlay: 'bg-zinc-950/95 backdrop-blur-xl', // modal popovers / sheets
+  backdrop: 'bg-[#040409]/80 backdrop-blur-md', // modal dialog backdrops
   canvas: 'bg-[#09090e]',     // primary application root canvas
   canvasHeader: 'bg-[#09090e]/95 backdrop-blur-md', // sticky header canvas
 } as const;
@@ -18,6 +19,8 @@ export const BORDER = {
   standard: 'border-zinc-800',
   strong: 'border-zinc-700',
   interactive: 'border-zinc-800 hover:border-zinc-700',
+  hover: 'hover:border-zinc-700',
+  divider: 'border-zinc-800',
   canvasHalo: 'border-[#09090e]',
 } as const;
 
@@ -69,6 +72,11 @@ export const INTERACTIVE = {
   active: 'active:scale-[0.99] transition-transform',
   focus: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950',
   disabled: 'opacity-40 cursor-not-allowed pointer-events-none select-none',
+} as const;
+
+export const FOCUS = {
+  ring: 'focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/40',
+  visible: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950',
 } as const;
 
 export const SHADOW = {
@@ -149,6 +157,9 @@ export const TYPOGRAPHY = {
   buttonLabel: 'font-mono text-xs uppercase tracking-wider font-bold',
   buttonText: 'font-mono text-xs uppercase tracking-wider font-bold',
   badgeText: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+  badgeSm: 'font-mono text-[9px] uppercase tracking-wider font-bold',
+  badgeMd: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+  dialogFooter: 'font-mono text-[10px] text-zinc-500 uppercase tracking-widest',
   inputLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   formLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',

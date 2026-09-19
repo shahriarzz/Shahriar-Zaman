@@ -539,7 +539,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </div>
 
                     {/* Routine split and Peaks */}
-                    <Grid cols={1} colsMd={2} gap="lg" className="pt-2 border-t border-zinc-900">
+                    <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.divider)}>
                       {/* Training Split Distribution */}
                       <div className="space-y-3">
                         <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
@@ -552,7 +552,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
                                   <span className="text-zinc-500">{count} workouts ({percentage}%)</span>
                                 </div>
-                                <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+                                <div className={cn("h-1.5 w-full rounded-full overflow-hidden", SURFACE.recessed)}>
                                   <div 
                                     className="h-full bg-orange-500" 
                                     style={{
@@ -670,7 +670,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 self-stretch sm:self-auto justify-between border-t sm:border-t-0 border-zinc-800/60 pt-4 sm:pt-0">
+                    <div className={cn("flex items-center gap-3 self-stretch sm:self-auto justify-between border-t sm:border-t-0 pt-4 sm:pt-0", BORDER.subtle)}>
                       <Button
                         variant={editingLogId === session.id ? "primary" : "secondary"}
                         size="sm"

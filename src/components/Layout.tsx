@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE, RADIUS, GAP, SHADOW } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -37,7 +37,8 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center py-2 px-3.5 min-h-[44px] gap-1 transition-all relative group select-none outline-none",
+        "flex flex-col items-center justify-center py-2 px-3.5 min-h-[44px] transition-all relative group select-none outline-none",
+        GAP.xs,
         active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
         INTERACTIVE.active
       )}
@@ -96,9 +97,9 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b border-zinc-800/50 px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", SURFACE.canvasHeader)}>
+      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.subtle, SURFACE.canvasHeader)}>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+          <div className={cn("w-8 h-8 bg-orange-500 flex items-center justify-center", RADIUS.sm)}>
             <Dumbbell size={18} className="text-black stroke-[3px]" />
           </div>
           <span className="font-display text-xl tracking-widest font-black uppercase">
@@ -106,7 +107,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
           </span>
         </div>
 
-        <div className="hidden md:flex items-center gap-1">
+        <div className={cn("hidden md:flex items-center", GAP.xs)}>
           {navConfig.map(item => (
             <NavigationItem
               key={item.id}
@@ -133,14 +134,14 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                 src={user.photoURL} 
                 alt={user.displayName || "User"} 
                 referrerPolicy="no-referrer" 
-                className="w-8 h-8 rounded-full object-cover border border-zinc-800" 
+                className={cn("w-8 h-8 object-cover border", RADIUS.pill, BORDER.standard)} 
               />
             ) : user ? (
-              <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono font-bold text-zinc-300">
+              <div className={cn("w-8 h-8 flex items-center justify-center text-xs font-mono font-bold text-zinc-300 border", RADIUS.pill, SURFACE.subtle, BORDER.strong)}>
                 {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+              <div className={cn("w-8 h-8 flex items-center justify-center border", RADIUS.pill, SURFACE.recessed, BORDER.standard)}>
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
               </div>
             )}
@@ -172,7 +173,13 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.95 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute right-0 top-10 z-50 w-52 bg-zinc-950/95 border border-zinc-800 rounded-2xl p-4.5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.8)] backdrop-blur-xl text-left pointer-events-auto"
+                    className={cn(
+                      "absolute right-0 top-10 z-50 w-52 p-4 text-left pointer-events-auto border",
+                      SURFACE.overlay,
+                      BORDER.standard,
+                      RADIUS.card,
+                      SHADOW.panel
+                    )}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -205,7 +212,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </main>
 
       {/* Mobile Bottom Bar */}
-      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t border-zinc-800 flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4", SURFACE.canvasHeader)}>
+      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4", BORDER.standard, SURFACE.canvasHeader)}>
         {navConfig.map(item => (
           <NavigationItem
             key={item.id}

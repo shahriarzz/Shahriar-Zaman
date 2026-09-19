@@ -22,7 +22,7 @@ import {
   SectionHeader,
   SEMANTIC_COLORS
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -196,7 +196,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
             {/* Ghost Data Grid */}
             <Grid cols={2} gap="none" className={cn(SURFACE.recessed, BORDER.subtle, "border-y")}>
-              <div className="p-4 border-r border-zinc-800/50 space-y-1">
+              <div className={cn("p-4 border-r space-y-1", BORDER.subtle)}>
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>Last Session</span>
                 {lastSession ? (
                   <div className={TYPOGRAPHY.metadata}>
@@ -254,8 +254,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           inputMode="decimal"
                           onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
                           className={cn(
-                            "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                            isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                            "border py-3 px-1 text-sm text-center outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            RADIUS.button,
+                            SURFACE.recessed,
+                            isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
                           )}
                         />
                         {/* specialized table/matrix input for active workout set reps */}
@@ -266,8 +268,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           inputMode="numeric"
                           onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
                           className={cn(
-                            "bg-zinc-950 border rounded-xl py-3 px-1 text-sm text-center focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
-                            isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : "border-zinc-800 focus:border-zinc-500"
+                            "border py-3 px-1 text-sm text-center outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            RADIUS.button,
+                            SURFACE.recessed,
+                            isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
                           )}
                         />
                         <div className="flex justify-center">
@@ -276,8 +280,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             size="sm"
                             onClick={() => handleSetDone(ex.id, si, s.done)}
                             className={cn(
-                              "w-12 h-12 p-0 flex items-center justify-center rounded-xl border transition-all",
-                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400" : "bg-zinc-950 border-zinc-800 text-zinc-600 hover:text-zinc-400"
+                              "w-12 h-12 p-0 flex items-center justify-center border transition-all",
+                              RADIUS.button,
+                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400" : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
                             )}
                             icon={<CheckCircle2 size={24} />}
                             aria-label={s.done ? "Mark set incomplete" : "Mark set complete"}
@@ -293,7 +298,12 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                               deleteSet(ex.id, si);
                             }}
                             disabled={setsForEx.length <= 1}
-                            className="w-12 h-12 p-0 border border-zinc-800/40 bg-zinc-950/20 text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10"
+                            className={cn(
+                              "w-12 h-12 p-0 border text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10",
+                              RADIUS.button,
+                              BORDER.subtle,
+                              SURFACE.recessed
+                            )}
                             title="Delete this set"
                           />
                         </div>
@@ -908,7 +918,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               </div>
               <div className="space-y-2">
                 {todaysPRs.map((pr, idx) => (
-                  <div key={`session-pr-${pr.name}-${idx}`} className="flex justify-between items-center py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
+                  <div key={`session-pr-${pr.name}-${idx}`} className={cn("flex justify-between items-center py-1.5 border-b last:border-0 text-xs", BORDER.subtle)}>
                     <div>
                       <div className="font-bold text-white leading-tight">{pr.name}</div>
                       <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
@@ -949,7 +959,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
       <header 
-        className={cn("sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/50 -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300", SURFACE.canvasHeader)}
+        className={cn("sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300", BORDER.subtle, SURFACE.canvasHeader)}
         style={{
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
@@ -972,7 +982,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 font-mono px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300">
+          <div className={cn("flex items-center gap-1.5 font-mono px-2.5 py-1.5 border text-zinc-300", RADIUS.button, SURFACE.default, BORDER.standard)}>
             <Clock size={15} className="text-zinc-500 shrink-0" />
             <span className="text-sm sm:text-base font-bold tabular-nums text-white">{formatTime(duration)}</span>
           </div>
