@@ -287,4 +287,82 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(gridHtml).toContain('Barbell Incline Close-Grip Bench Press with Pauses');
     });
   });
+
+  describe('StatCard Animation & Formatting Regression', () => {
+    it('renders formatted numeric strings with suffix preserved', () => {
+      const html = renderToString(
+        <StatCard
+          label="Total Volume"
+          value="124.6k"
+          unit="kg"
+        />
+      );
+
+      expect(html).toContain('124.6k');
+      expect(html).toContain('kg');
+    });
+
+    it('supports custom formatValue function', () => {
+      const html = renderToString(
+        <StatCard
+          label="Custom Formatted"
+          value={8500}
+          formatValue={(val) => `$${Math.round(val).toLocaleString()}`}
+        />
+      );
+
+      expect(html).toContain('$8,500');
+    });
+
+    it('respects disableAnimation prop', () => {
+      const html = renderToString(
+        <StatCard
+          label="Static Metric"
+          value={42}
+          disableAnimation={true}
+        />
+      );
+
+      expect(html).toContain('42');
+    });
+
+    it('renders placeholder dash when unavailable, ignoring animation', () => {
+      const html = renderToString(
+        <StatCard
+          label="Pending Metric"
+          value={100}
+          isUnavailable={true}
+          unavailableLabel="Awaiting logs"
+        />
+      );
+
+      expect(html).toContain('—');
+      expect(html).toContain('Awaiting logs');
+      expect(html).not.toContain('100');
+    });
+
+    it('maintains deterministic min-height layout for headers and footers', () => {
+      const cardWithoutFooter = renderToString(
+        <StatCard
+          label="Streak"
+          value={5}
+        />
+      );
+      const cardWithFooter = renderToString(
+        <StatCard
+          label="Streak"
+          value={5}
+          sublabel="Current active streak"
+          trend="+1 day"
+          trendDirection="positive"
+        />
+      );
+
+      // Both should share deterministic header height
+      expect(cardWithoutFooter).toContain('min-h-[36px]');
+      expect(cardWithFooter).toContain('min-h-[36px]');
+      // The one with footer has deterministic footer container
+      expect(cardWithFooter).toContain('min-h-[32px]');
+    });
+  });
 });

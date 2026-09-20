@@ -77,63 +77,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   };
 
   return (
-    <Stack spacing="2xl" className="pt-4">
-      {/* Hero Greeting */}
-      <SectionHeader
-        eyebrow={heroDateStr}
-        eyebrowColor="orange"
-        title="Stay Aggressive"
-        size="page"
-      />
+    <Stack spacing="2xl" className="pt-4 pb-16">
+      {/* Header + StatCards Hero Block */}
+      <div className="space-y-6">
+        <SectionHeader
+          eyebrow={heroDateStr}
+          eyebrowColor="orange"
+          title="Stay Aggressive"
+          size="page"
+        />
 
-      {/* Stats Grid */}
-      <Grid cols={2} colsMd={4} gap="md">
-        <StatCard
-          label="Training Streak"
-          value={trainingStreak.currentStreak}
-          unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
-          sublabel={`Best: ${trainingStreak.longestStreak}d`}
-          accent="orange"
-          icon={TrendingUp}
-          size="standard"
-        />
-        <StatCard
-          label="Training Frequency"
-          value={trainingFrequency.sessionsPerWeek.toFixed(1)}
-          unit="/ week"
-          sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
-          accent="emerald"
-          icon={CalendarIcon}
-          size="standard"
-        />
-        <StatCard
-          label="Strength Progress"
-          value={
-            strengthTrend.percentChange !== null
-              ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}`
-              : '—'
-          }
-          unit={strengthTrend.percentChange !== null ? '%' : undefined}
-          sublabel={
-            strengthTrend.percentChange !== null
-              ? '30-day vs previous 30d'
-              : 'Building baseline'
-          }
-          isUnavailable={strengthTrend.percentChange === null}
-          accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
-          icon={Dumbbell}
-          size="standard"
-        />
-        <StatCard
-          label="Total Volume"
-          value={stats.formattedWeightLifted}
-          unit="kg"
-          sublabel="Lifetime"
-          accent="emerald"
-          icon={Trophy}
-          size="standard"
-        />
-      </Grid>
+        {/* Stats Grid */}
+        <Grid cols={2} colsMd={4} gap="md">
+          <StatCard
+            label="Training Streak"
+            value={trainingStreak.currentStreak}
+            unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
+            sublabel={`Best: ${trainingStreak.longestStreak}d`}
+            accent="orange"
+            icon={TrendingUp}
+            size="standard"
+          />
+          <StatCard
+            label="Training Frequency"
+            value={trainingFrequency.sessionsPerWeek.toFixed(1)}
+            unit="/ week"
+            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
+            accent="emerald"
+            icon={CalendarIcon}
+            size="standard"
+          />
+          <StatCard
+            label="Strength Progress"
+            value={
+              strengthTrend.percentChange !== null
+                ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}`
+                : '—'
+            }
+            unit={strengthTrend.percentChange !== null ? '%' : undefined}
+            sublabel={
+              strengthTrend.percentChange !== null
+                ? '30-day vs previous 30d'
+                : 'Building baseline'
+            }
+            isUnavailable={strengthTrend.percentChange === null}
+            accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
+            icon={Dumbbell}
+            size="standard"
+          />
+          <StatCard
+            label="Total Volume"
+            value={stats.formattedWeightLifted}
+            unit="kg"
+            sublabel="Lifetime"
+            accent="emerald"
+            icon={Trophy}
+            size="standard"
+          />
+        </Grid>
+      </div>
 
       {/* Unfinished Session Alert */}
       {unfinishedSession && (
@@ -198,13 +200,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
         ) : todayWorkout ? (
           <Card
-            variant="interactive"
+            variant={todayWorkout.type === 'rest' ? 'standard' : 'interactive'}
             padding="section"
             onClick={() => {
-              haptics.medium();
-              onStartWorkout(todayWorkout.id);
+              if (todayWorkout.type !== 'rest') {
+                haptics.medium();
+                onStartWorkout(todayWorkout.id);
+              }
             }}
-            className="group relative overflow-hidden"
+            className={cn(
+              "group relative overflow-hidden",
+              todayWorkout.type === 'rest' && "cursor-default"
+            )}
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <Stack spacing="xs">
@@ -222,10 +229,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               <Button
                 variant={todayWorkout.type === 'rest' ? 'secondary' : 'success'}
                 size="lg"
+                disabled={todayWorkout.type === 'rest'}
                 onClick={(e) => {
                   e.stopPropagation();
-                  haptics.medium();
-                  onStartWorkout(todayWorkout.id);
+                  if (todayWorkout.type !== 'rest') {
+                    haptics.medium();
+                    onStartWorkout(todayWorkout.id);
+                  }
                 }}
                 className="w-full md:w-auto"
               >
@@ -267,32 +277,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             </div>
 
             {/* Quick log input */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="w-full sm:w-36">
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.1"
-                  placeholder="0.0"
-                  unit="kg"
-                  value={weightInput}
-                  onChange={(e) => setWeightInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleLogWeightSubmit();
-                    }
-                  }}
-                  className="text-center font-bold"
-                />
+            <div className="flex flex-col gap-1 w-full sm:w-auto">
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 hidden sm:block")}>Quick Entry</span>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="w-full sm:w-36">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    placeholder="0.0"
+                    unit="kg"
+                    value={weightInput}
+                    onChange={(e) => setWeightInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleLogWeightSubmit();
+                      }
+                    }}
+                    className="text-center font-mono font-bold"
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  color="orange"
+                  onClick={handleLogWeightSubmit}
+                  className="whitespace-nowrap"
+                >
+                  Log
+                </Button>
               </div>
-              <Button
-                variant="primary"
-                color="orange"
-                onClick={handleLogWeightSubmit}
-                className="whitespace-nowrap"
-              >
-                Log
-              </Button>
             </div>
           </div>
 

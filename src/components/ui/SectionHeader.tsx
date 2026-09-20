@@ -49,11 +49,15 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   );
 
   return (
-    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4", className)}>
-      <div className="space-y-1 min-w-0 flex-1">
+    <div className={cn(
+      "flex flex-col sm:flex-row justify-between gap-3 sm:gap-4",
+      description ? "sm:items-start" : "sm:items-center",
+      className
+    )}>
+      <div className="min-w-0 flex-1">
         {eyebrow && (
           <p
-            className={TYPOGRAPHY.eyebrow}
+            className={cn(TYPOGRAPHY.eyebrow, "mb-1.5")}
             style={{ color: eyebrowHex }}
           >
             {eyebrow}
@@ -65,14 +69,17 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
           </HeadingTag>
         )}
         {description && (
-          <p className={TYPOGRAPHY.body}>
+          <p className={cn(TYPOGRAPHY.body, "mt-1.5")}>
             {description}
           </p>
         )}
       </div>
 
       {action && (
-        <div className="self-start sm:self-auto shrink-0 flex items-center gap-2 max-w-full overflow-x-auto pb-1 sm:pb-0">
+        <div className={cn(
+          "self-start shrink-0 flex items-center gap-2 max-w-full overflow-x-auto pb-1 sm:pb-0",
+          description ? "sm:self-start sm:pt-1" : "sm:self-center"
+        )}>
           {action}
         </div>
       )}

@@ -2,7 +2,6 @@ import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { dk, formatCompactWeight } from '../utils/fitnessHelpers';
-import { useCountUp } from './useCountUp';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
 import { getRelativeTimeString } from '../utils/dashboardSelectors';
@@ -86,15 +85,13 @@ export function useDashboardData(): DashboardData {
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;
-  const animatedWeight = useCountUp(Math.round(totalWeight));
-
   const formattedWeightLifted = React.useMemo(() => {
-    return formatCompactWeight(animatedWeight);
-  }, [animatedWeight]);
+    return formatCompactWeight(totalWeight);
+  }, [totalWeight]);
 
   const stats: DashboardStats = {
     totalWeight,
-    animatedWeight,
+    animatedWeight: totalWeight,
     formattedWeightLifted
   };
 

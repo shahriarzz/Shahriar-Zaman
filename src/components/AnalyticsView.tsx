@@ -136,7 +136,7 @@ export const AnalyticsView: React.FC = () => {
     : aggregated.mostFrequentExercises.slice(0, 3);
 
   return (
-    <Stack spacing="2xl" className="pt-2 pb-16">
+    <Stack spacing="2xl" className="pt-4 pb-16">
       {/* 1. HEADER & TIME TOGGLE */}
       <SectionHeader
         eyebrow="Performance Intelligence"
