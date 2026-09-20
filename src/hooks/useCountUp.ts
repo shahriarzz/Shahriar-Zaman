@@ -1,60 +1,66 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 
 export interface UseCountUpOptions {
   duration?: number;
   disabled?: boolean;
 }
 
+const emptySubscribe = () => () => {};
+
 export const useCountUp = (
   target: number,
-  optionsOrDuration: number | UseCountUpOptions = 800
+  options?: UseCountUpOptions
 ): number => {
-  const options: UseCountUpOptions =
-    typeof optionsOrDuration === 'number'
-      ? { duration: optionsOrDuration }
-      : optionsOrDuration;
+  const duration = options?.duration ?? 800;
+  const disabled = options?.disabled ?? false;
 
-  const duration = options.duration ?? 800;
-  const disabled = options.disabled ?? false;
+  // Detect SSR / static string rendering (e.g. renderToString)
+  const isServerRendering = useSyncExternalStore(
+    emptySubscribe,
+    () => false,
+    () => true
+  );
 
   // Check prefers-reduced-motion in browser environments
   const isReducedMotion =
     typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const shouldSkipAnimation = disabled || Boolean(isReducedMotion);
+  const shouldSkipAnimation =
+    isServerRendering ||
+    disabled ||
+    Boolean(isReducedMotion) ||
+    target === 0 ||
+    isNaN(target) ||
+    !isFinite(target);
 
-  // In SSR / static render, start with target directly
-  const [value, setValue] = useState(target);
+  // When skipping, or when target is 0, start with target immediately.
+  // On client mount with animation active, start from 0 and animate to target.
+  const [value, setValue] = useState<number>(() => (shouldSkipAnimation ? target : 0));
 
-  const prevTargetRef = useRef(target);
-  const currentValRef = useRef(target);
-  const isMountedRef = useRef(false);
+  const prevTargetRef = useRef<number>(target);
+  const currentValRef = useRef<number>(shouldSkipAnimation ? target : 0);
+  const isMountedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (shouldSkipAnimation || isNaN(target) || !isFinite(target)) {
+    if (shouldSkipAnimation) {
       setValue(target);
       currentValRef.current = target;
       prevTargetRef.current = target;
       return;
     }
 
-    // Determine start value:
-    // If not mounted yet (first client render), start from 0.
-    // If already mounted and target didn't change, do nothing.
-    // If target changed, start from currentValRef.current.
     let startVal = 0;
     if (isMountedRef.current) {
+      // If target hasn't changed, do not restart animation on unrelated re-renders
       if (prevTargetRef.current === target) {
-        // No meaningful numeric change
         return;
       }
       startVal = currentValRef.current;
     } else {
       isMountedRef.current = true;
       startVal = 0;
-      setValue(0);
-      currentValRef.current = 0;
     }
 
     prevTargetRef.current = target;
@@ -95,6 +101,11 @@ export const useCountUp = (
     };
   }, [target, duration, shouldSkipAnimation]);
 
-  return shouldSkipAnimation ? target : value;
+  if (shouldSkipAnimation) {
+    return target;
+  }
+
+  return value;
 };
+
 

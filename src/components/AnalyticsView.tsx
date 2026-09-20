@@ -192,7 +192,8 @@ export const AnalyticsView: React.FC = () => {
         {/* 3. Window Volume with Period-over-Period Trend */}
         <StatCard
           label="Window Volume"
-          value={formatCompactWeight(aggregated.rangeVolume)}
+          value={aggregated.rangeVolume}
+          formatValue={formatCompactWeight}
           unit="kg"
           icon={<Dumbbell size={16} />}
           accent="emerald"
@@ -696,13 +697,15 @@ export const AnalyticsView: React.FC = () => {
             />
             <StatCard
               label="Total Sets"
-              value={aggregated.lifetimeSets.toLocaleString()}
+              value={aggregated.lifetimeSets}
+              formatValue={(val) => Math.round(val).toLocaleString()}
               accent="emerald"
               sublabel="Executed sets"
             />
             <StatCard
               label="Total Volume"
-              value={formatCompactWeight(aggregated.lifetimeVolume)}
+              value={aggregated.lifetimeVolume}
+              formatValue={formatCompactWeight}
               unit="kg"
               accent="emerald"
               sublabel="Cumulative tonnage"

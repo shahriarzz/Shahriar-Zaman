@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Dumbbell } from 'lucide-react';
-import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { formatDateStr } from '../utils/dashboardSelectors';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
@@ -100,7 +100,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
           <StatCard
             label="Training Frequency"
-            value={trainingFrequency.sessionsPerWeek.toFixed(1)}
+            value={trainingFrequency.sessionsPerWeek}
+            formatValue={(val) => val.toFixed(1)}
             unit="/ week"
             sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
             accent="emerald"
@@ -111,9 +112,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             label="Strength Progress"
             value={
               strengthTrend.percentChange !== null
-                ? `${strengthTrend.percentChange >= 0 ? '+' : ''}${strengthTrend.percentChange.toFixed(1)}`
+                ? strengthTrend.percentChange
                 : '—'
             }
+            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
             unit={strengthTrend.percentChange !== null ? '%' : undefined}
             sublabel={
               strengthTrend.percentChange !== null
@@ -127,7 +129,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
           <StatCard
             label="Total Volume"
-            value={stats.formattedWeightLifted}
+            value={stats.totalWeight}
+            formatValue={formatCompactWeight}
             unit="kg"
             sublabel="Lifetime"
             accent="emerald"

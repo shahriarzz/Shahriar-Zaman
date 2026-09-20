@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
-import React from 'react';
-import { describe, it, expect } from 'vitest';
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { StatCard } from '../components/ui/StatCard';
 import { Grid } from '../components/ui/Grid';
 import { formatCompactWeight } from '../utils/fitnessHelpers';
+import { useCountUp, UseCountUpOptions } from '../hooks/useCountUp';
 
 describe('StatCard Architecture & Display Regression Suite', () => {
   describe('formatCompactWeight helper', () => {
@@ -363,6 +366,199 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(cardWithFooter).toContain('min-h-[36px]');
       // The one with footer has deterministic footer container
       expect(cardWithFooter).toContain('min-h-[32px]');
+    });
+  });
+
+  describe('StatCard & useCountUp Animation Pipeline Regression Suite', () => {
+    let container: HTMLDivElement | null = null;
+    let root: ReturnType<typeof createRoot> | null = null;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      if (root) {
+        act(() => {
+          root?.unmount();
+        });
+      }
+      if (container) {
+        container.remove();
+      }
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('numeric value renders final value', () => {
+      act(() => {
+        root!.render(<StatCard label="Volume" value={100} animationDuration={800} />);
+      });
+      // Advance timers to complete animation
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      expect(container!.textContent).toContain('100');
+    });
+
+    it('numeric value animates', () => {
+      act(() => {
+        root!.render(<StatCard label="Volume" value={100} animationDuration={800} />);
+      });
+      // At t=0, starts at 0
+      expect(container!.textContent).toContain('0');
+      // Advance halfway
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      // At halfway, should be animated and not yet at 100
+      expect(container!.textContent).not.toContain('100');
+      // Advance to completion
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(container!.textContent).toContain('100');
+    });
+
+    it('decimal value animates', () => {
+      act(() => {
+        root!.render(<StatCard label="Frequency" value={4.2} animationDuration={800} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      expect(container!.textContent).toContain('4.2');
+    });
+
+    it('formatted numeric value animates', () => {
+      act(() => {
+        root!.render(<StatCard label="Volume" value="124.6k" unit="kg" animationDuration={800} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      expect(container!.textContent).toContain('124.6k');
+      expect(container!.textContent).toContain('kg');
+    });
+
+    it('formatValue receives animated numeric value', () => {
+      const receivedValues: number[] = [];
+      act(() => {
+        root!.render(
+          <StatCard
+            label="Tonnage"
+            value={500}
+            animationDuration={800}
+            formatValue={(val) => {
+              receivedValues.push(val);
+              return `${Math.round(val)}kg`;
+            }}
+          />
+        );
+      });
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      expect(receivedValues.length).toBeGreaterThan(0);
+      expect(typeof receivedValues[0]).toBe('number');
+      // Final call should receive target 500
+      expect(receivedValues[receivedValues.length - 1]).toBe(500);
+      expect(container!.textContent).toContain('500kg');
+    });
+
+    it('disabled animation immediately renders target', () => {
+      act(() => {
+        root!.render(<StatCard label="Volume" value={750} disableAnimation={true} />);
+      });
+      // Immediately contains 750 without advancing timers
+      expect(container!.textContent).toContain('750');
+    });
+
+    it('unavailable value renders —', () => {
+      act(() => {
+        root!.render(<StatCard label="Progress" value="—" />);
+      });
+      expect(container!.textContent).toContain('—');
+      expect(container!.textContent).not.toContain('0');
+
+      act(() => {
+        root!.render(<StatCard label="Progress" value={100} isUnavailable={true} />);
+      });
+      expect(container!.textContent).toContain('—');
+      expect(container!.textContent).not.toContain('100');
+    });
+
+    it('zero renders 0', () => {
+      act(() => {
+        root!.render(<StatCard label="Streak" value={0} />);
+      });
+      expect(container!.textContent).toContain('0');
+      expect(container!.textContent).not.toContain('—');
+    });
+
+    it('target change updates value', () => {
+      act(() => {
+        root!.render(<StatCard label="Streak" value={10} animationDuration={400} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(container!.textContent).toContain('10');
+
+      // Update target to 15
+      act(() => {
+        root!.render(<StatCard label="Streak" value={15} animationDuration={400} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(container!.textContent).toContain('15');
+    });
+
+    it('reduced-motion renders target immediately', () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      } as any));
+
+      try {
+        act(() => {
+          root!.render(<StatCard label="Reduced" value={99} animationDuration={800} />);
+        });
+        // Renders 99 immediately without timer advancement
+        expect(container!.textContent).toContain('99');
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('regression test: fails if useCountUp receives incorrect options shape', () => {
+      function HookTest({ target, options }: { target: number; options?: UseCountUpOptions }) {
+        const val = useCountUp(target, options);
+        return <span id="hook-val">{val}</span>;
+      }
+
+      // Disabled option should immediately return target without animation
+      act(() => {
+        root!.render(<HookTest target={450} options={{ duration: 500, disabled: true }} />);
+      });
+      expect(container!.querySelector('#hook-val')!.textContent).toBe('450');
+
+      // Zero target returns 0 immediately
+      act(() => {
+        root!.render(<HookTest target={0} options={{ duration: 500 }} />);
+      });
+      expect(container!.querySelector('#hook-val')!.textContent).toBe('0');
     });
   });
 });

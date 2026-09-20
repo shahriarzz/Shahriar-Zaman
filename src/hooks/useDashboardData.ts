@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { dk, formatCompactWeight } from '../utils/fitnessHelpers';
+import { dk } from '../utils/fitnessHelpers';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
 import { getRelativeTimeString } from '../utils/dashboardSelectors';
@@ -14,8 +14,6 @@ import {
 
 export interface DashboardStats {
   totalWeight: number;
-  animatedWeight: number;
-  formattedWeightLifted: string;
 }
 
 export interface UnfinishedSessionInfo {
@@ -85,14 +83,9 @@ export function useDashboardData(): DashboardData {
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;
-  const formattedWeightLifted = React.useMemo(() => {
-    return formatCompactWeight(totalWeight);
-  }, [totalWeight]);
 
   const stats: DashboardStats = {
-    totalWeight,
-    animatedWeight: totalWeight,
-    formattedWeightLifted
+    totalWeight
   };
 
   // 4. Unfinished Session

@@ -482,8 +482,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       />
                       <StatCard
                         label="Window Volume"
-                        value={formatCompactWeight(currentVolume)}
+                        value={currentVolume}
                         unit="kg"
+                        formatValue={formatCompactWeight}
                         accent="emerald"
                         trend={volumeTrendText}
                         trendDirection={volumeTrendDir}
@@ -501,10 +502,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                         label="Strength Progress"
                         value={
                           monthlyStrengthTrend.percentChange !== null
-                            ? `${monthlyStrengthTrend.percentChange >= 0 ? '+' : ''}${monthlyStrengthTrend.percentChange.toFixed(1)}`
+                            ? monthlyStrengthTrend.percentChange
                             : '—'
                         }
                         unit={monthlyStrengthTrend.percentChange !== null ? '%' : undefined}
+                        formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
                         accent="indigo"
                         icon={Sparkles}
                         trend={strengthTrendText}

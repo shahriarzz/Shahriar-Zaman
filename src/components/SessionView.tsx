@@ -900,7 +900,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <div className="col-span-2">
             <StatCard
               label="Total Volume"
-              value={formatCompactWeight(calculateVolumeLocal())}
+              value={calculateVolumeLocal()}
+              formatValue={formatCompactWeight}
               unit="kg"
               accent="emerald"
             />

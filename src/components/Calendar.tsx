@@ -648,7 +648,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <Grid cols={3} gap="sm">
                       <StatCard
                         label="Total Volume"
-                        value={formatCompactWeight(selectedDayVolume)}
+                        value={selectedDayVolume}
+                        formatValue={formatCompactWeight}
                         unit="kg"
                         accent="emerald"
                         icon={TrendingUp}
