@@ -90,12 +90,27 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
   const rawDuration = rawLog.durationMinutes !== undefined ? rawLog.durationMinutes : rawLog.duration;
   const durationMin = Number(rawDuration);
 
+  let isComplete = false;
+  if (rawLog.complete !== undefined) {
+    isComplete = Boolean(rawLog.complete);
+  } else if ((rawLog as any).completed !== undefined) {
+    isComplete = Boolean((rawLog as any).completed);
+  } else if ((rawLog as any).isComplete !== undefined) {
+    isComplete = Boolean((rawLog as any).isComplete);
+  } else {
+    // If completion flag is omitted in legacy session log, infer true if there are completed sets
+    const hasAnyDoneSet = Object.values(sanitizedSets).some(sets =>
+      Array.isArray(sets) && sets.some(s => s && s.done)
+    );
+    isComplete = hasAnyDoneSet;
+  }
+
   return {
     id: String(rawLog.id),
     workoutId: String(rawLog.workoutId || ''),
     date: String(rawLog.date || dk()),
     sets: sanitizedSets,
-    complete: Boolean(rawLog.complete),
+    complete: isComplete,
     durationMinutes: Number.isFinite(durationMin) && durationMin >= 0 ? Math.floor(durationMin) : 0,
     ...(rawLog.updatedAt ? { updatedAt: rawLog.updatedAt } : {})
   };
@@ -106,7 +121,18 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
  * Used consistently across all analytics, adherence, streaks, frequencies, and lifetime summaries.
  */
 export function isCompletedSession(log: Partial<SessionLog> | null | undefined): boolean {
-  return Boolean(log && log.complete === true);
+  if (!log) return false;
+  if (log.complete === true) return true;
+  if ((log as any).completed === true) return true;
+  if ((log as any).isComplete === true) return true;
+  if (log.complete === undefined && (log as any).completed === undefined && (log as any).isComplete === undefined) {
+    if (log.sets && typeof log.sets === 'object') {
+      return Object.values(log.sets).some(sets =>
+        Array.isArray(sets) && sets.some(s => s && s.done)
+      );
+    }
+  }
+  return false;
 }
 
 /** Alias for isCompletedSession */

@@ -10,6 +10,7 @@
     "start": "node dist/server.cjs",
     "clean": "rimraf dist",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ci": "npm run lint && npm run test && npm run build"
   },

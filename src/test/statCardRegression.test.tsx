@@ -485,6 +485,21 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).not.toContain('0');
 
       act(() => {
+        root!.render(<StatCard label="Progress" value={null} />);
+      });
+      expect(container!.textContent).toContain('—');
+
+      act(() => {
+        root!.render(<StatCard label="Progress" value={undefined} />);
+      });
+      expect(container!.textContent).toContain('—');
+
+      act(() => {
+        root!.render(<StatCard label="Progress" value="" />);
+      });
+      expect(container!.textContent).toContain('—');
+
+      act(() => {
         root!.render(<StatCard label="Progress" value={100} isUnavailable={true} />);
       });
       expect(container!.textContent).toContain('—');
@@ -559,6 +574,25 @@ describe('StatCard Architecture & Display Regression Suite', () => {
         root!.render(<HookTest target={0} options={{ duration: 500 }} />);
       });
       expect(container!.querySelector('#hook-val')!.textContent).toBe('0');
+    });
+
+    it('renders and animates accurately in React.StrictMode without getting stuck at 0', () => {
+      act(() => {
+        root!.render(
+          <React.StrictMode>
+            <StatCard label="Total Volume" value="12,500" unit="kg" animationDuration={400} />
+          </React.StrictMode>
+        );
+      });
+
+      // Complete animation
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      // Must show the actual value, never stuck at 0
+      expect(container!.textContent).toContain('12,500');
+      expect(container!.textContent).toContain('kg');
     });
   });
 });

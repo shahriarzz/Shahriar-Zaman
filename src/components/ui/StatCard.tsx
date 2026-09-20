@@ -13,7 +13,7 @@ import { useCountUp } from '../../hooks/useCountUp';
 
 export interface StatCardProps {
   label: string;
-  value: string | number;
+  value: string | number | null | undefined;
   unit?: string;
   formatValue?: (val: number) => string;
   disableAnimation?: boolean;
@@ -51,9 +51,13 @@ interface ParsedStatValue {
 }
 
 function parseStatValue(
-  value: string | number,
+  value: string | number | null | undefined,
   formatValue?: (val: number) => string
 ): ParsedStatValue {
+  if (value === null || value === undefined) {
+    return { isNumeric: false, target: 0, prefix: '', suffix: '', decimals: 0, hasCommas: false };
+  }
+
   if (typeof value === 'number') {
     if (isNaN(value) || !isFinite(value)) {
       return { isNumeric: false, target: 0, prefix: '', suffix: '', decimals: 0, hasCommas: false };
@@ -156,7 +160,13 @@ export const StatCard: React.FC<StatCardProps> = ({
   size = 'standard',
   className
 }) => {
-  const effectiveUnavailable = isUnavailable || value === '—' || value === '-';
+  const effectiveUnavailable =
+    isUnavailable ||
+    value === '—' ||
+    value === '-' ||
+    value === null ||
+    value === undefined ||
+    value === '';
   const effectiveAccent = effectiveUnavailable ? 'zinc' : accent;
   const effectiveColorOverride = effectiveUnavailable ? undefined : colorOverride;
   const accentHex = effectiveColorOverride || (effectiveUnavailable ? SEMANTIC_COLORS.zinc : (getAccentColor(effectiveAccent as SemanticColor) || SEMANTIC_COLORS.emerald));
@@ -170,7 +180,7 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   const displayString = useMemo(() => {
     if (effectiveUnavailable) return '—';
-    if (!parsed.isNumeric) return String(value);
+    if (!parsed.isNumeric) return String(value ?? '—');
     if (disableAnimation) {
       return parsed.formatFn ? parsed.formatFn(parsed.target) : formatAnimatedValue(parsed.target, parsed);
     }

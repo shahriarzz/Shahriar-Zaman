@@ -27,47 +27,31 @@ export const useCountUp = (
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const isInvalidTarget = isNaN(target) || !isFinite(target);
+
   const shouldSkipAnimation =
     isServerRendering ||
     disabled ||
     Boolean(isReducedMotion) ||
     target === 0 ||
-    isNaN(target) ||
-    !isFinite(target);
+    isInvalidTarget;
 
-  // When skipping, or when target is 0, start with target immediately.
-  // On client mount with animation active, start from 0 and animate to target.
-  const [value, setValue] = useState<number>(() => (shouldSkipAnimation ? target : 0));
+  // Initial state: immediately show target if skipping or if target is 0, otherwise start from 0
+  const [value, setValue] = useState<number>(() => (shouldSkipAnimation ? (isInvalidTarget ? 0 : target) : 0));
 
-  const prevTargetRef = useRef<number>(target);
-  const currentValRef = useRef<number>(shouldSkipAnimation ? target : 0);
-  const isMountedRef = useRef<boolean>(false);
+  const currentValRef = useRef<number>(shouldSkipAnimation ? (isInvalidTarget ? 0 : target) : 0);
 
   useEffect(() => {
     if (shouldSkipAnimation) {
-      setValue(target);
-      currentValRef.current = target;
-      prevTargetRef.current = target;
+      const finalVal = isInvalidTarget ? 0 : target;
+      setValue(finalVal);
+      currentValRef.current = finalVal;
       return;
     }
 
-    let startVal = 0;
-    if (isMountedRef.current) {
-      // If target hasn't changed, do not restart animation on unrelated re-renders
-      if (prevTargetRef.current === target) {
-        return;
-      }
-      startVal = currentValRef.current;
-    } else {
-      isMountedRef.current = true;
-      startVal = 0;
-    }
-
-    prevTargetRef.current = target;
-
+    const startVal = currentValRef.current;
     if (startVal === target) {
       setValue(target);
-      currentValRef.current = target;
       return;
     }
 
@@ -84,8 +68,8 @@ export const useCountUp = (
       currentValRef.current = current;
 
       if (progress >= 1) {
-        setValue(target);
         currentValRef.current = target;
+        setValue(target);
       } else {
         setValue(current);
         animFrameId = requestAnimationFrame(tick);
@@ -99,10 +83,10 @@ export const useCountUp = (
         cancelAnimationFrame(animFrameId);
       }
     };
-  }, [target, duration, shouldSkipAnimation]);
+  }, [target, duration, disabled, shouldSkipAnimation, isInvalidTarget]);
 
   if (shouldSkipAnimation) {
-    return target;
+    return isInvalidTarget ? 0 : target;
   }
 
   return value;
