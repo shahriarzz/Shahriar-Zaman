@@ -500,12 +500,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       />
                       <StatCard
                         label="Strength Progress"
-                        value={
-                          monthlyStrengthTrend.percentChange !== null
-                            ? monthlyStrengthTrend.percentChange
-                            : '—'
-                        }
-                        unit={monthlyStrengthTrend.percentChange !== null ? '%' : undefined}
+                        value={monthlyStrengthTrend.percentChange}
+                        unit="%"
                         formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
                         accent="indigo"
                         icon={Sparkles}

@@ -222,7 +222,7 @@ export const AnalyticsView: React.FC = () => {
         {/* 4. Performance Score */}
         <StatCard
           label="Performance Score"
-          value={performanceScore.score !== null ? performanceScore.score : '—'}
+          value={performanceScore.score}
           sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
           isUnavailable={performanceScore.score === null}
           unavailableLabel="Building baseline"
@@ -459,8 +459,8 @@ export const AnalyticsView: React.FC = () => {
           <Grid cols={1} colsMd={2} gap="md">
             <StatCard
               label="Average Session Length"
-              value={aggregated.avgDuration > 0 ? aggregated.avgDuration : '—'}
-              unit={aggregated.avgDuration > 0 ? 'min' : undefined}
+              value={aggregated.avgDuration}
+              unit="min"
               isUnavailable={aggregated.avgDuration <= 0}
               icon={<Clock size={20} />}
               accent="emerald"

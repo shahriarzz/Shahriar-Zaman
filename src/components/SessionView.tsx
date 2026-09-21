@@ -189,6 +189,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <div className="mx-6 mb-4">
                 <Banner
                   variant="achievement"
+                  size="compact"
                   badge="COACH TIP"
                   title={aiAdvice[ex.id]}
                 />
@@ -906,6 +907,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               accent="emerald"
             />
           </div>
+
+          {/* Minimal PR acknowledgement in Session Summary */}
+          {todaysPRs.length > 0 && (
+            <div className="col-span-2 flex items-center justify-center gap-1.5 py-1">
+              <Trophy size={14} className="text-amber-500 shrink-0" />
+              <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold tracking-wider")}>
+                {todaysPRs.length} {todaysPRs.length === 1 ? 'PR' : 'PRs'}
+              </span>
+            </div>
+          )}
 
           {/* Today's Personal Records Summary */}
           {todaysPRs.length > 0 && (

@@ -110,13 +110,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
           <StatCard
             label="Strength Progress"
-            value={
-              strengthTrend.percentChange !== null
-                ? strengthTrend.percentChange
-                : '—'
-            }
+            value={strengthTrend.percentChange}
             formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-            unit={strengthTrend.percentChange !== null ? '%' : undefined}
+            unit="%"
             sublabel={
               strengthTrend.percentChange !== null
                 ? '30-day vs previous 30d'

@@ -11,6 +11,7 @@ export type BannerVariant = 'warning' | 'success' | 'destructive' | 'info' | 'ac
 
 export interface BannerProps {
   variant?: BannerVariant;
+  size?: 'default' | 'compact';
   badge?: string;
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -61,6 +62,7 @@ const BANNER_CONFIG: Record<BannerVariant, {
 
 export const Banner: React.FC<BannerProps> = ({
   variant = 'warning',
+  size = 'default',
   badge,
   title,
   description,
@@ -71,31 +73,50 @@ export const Banner: React.FC<BannerProps> = ({
   children,
 }) => {
   const config = BANNER_CONFIG[variant] || BANNER_CONFIG.warning;
+  const isCompact = size === 'compact';
 
   return (
     <Card
       variant="elevated"
-      padding="section"
+      padding={isCompact ? 'compact' : 'section'}
       className={cn("relative overflow-hidden", config.bgGradient, className)}
     >
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
-        <div className="space-y-1.5 flex-1 min-w-0">
+      <div className={cn(
+        "relative z-10",
+        isCompact
+          ? "flex items-start justify-between gap-3"
+          : "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6"
+      )}>
+        <div className={cn(isCompact ? "space-y-1" : "space-y-1.5", "flex-1 min-w-0")}>
           {(badge || icon) && (
             <div className="flex items-center gap-2">
-              <span className={cn("w-2 h-2 rounded-full animate-ping", config.pingColor)} />
-              {badge && <Badge label={badge} color={config.badgeColor} variant="subtle" />}
-              {icon && renderIcon(icon, { size: 14 })}
+              <span className={cn(isCompact ? "w-1.5 h-1.5" : "w-2 h-2", "rounded-full animate-ping", config.pingColor)} />
+              {badge && (
+                <Badge
+                  label={badge}
+                  color={config.badgeColor}
+                  variant="subtle"
+                  size={isCompact ? "sm" : "md"}
+                />
+              )}
+              {icon && renderIcon(icon, { size: isCompact ? 12 : 14 })}
             </div>
           )}
           {typeof title === 'string' ? (
-            <h3 className={cn(TYPOGRAPHY.titleSection, "font-black")}>
-              {title}
-            </h3>
+            isCompact ? (
+              <p className={cn(TYPOGRAPHY.metadata, "text-zinc-300 normal-case font-mono leading-relaxed break-words")}>
+                {title}
+              </p>
+            ) : (
+              <h3 className={cn(TYPOGRAPHY.titleSection, "font-black")}>
+                {title}
+              </h3>
+            )
           ) : (
             title
           )}
           {typeof description === 'string' ? (
-            <p className={cn(TYPOGRAPHY.body, "text-xs font-mono")}>
+            <p className={cn(isCompact ? TYPOGRAPHY.caption : TYPOGRAPHY.body, "text-xs font-mono")}>
               {description}
             </p>
           ) : (
@@ -104,7 +125,10 @@ export const Banner: React.FC<BannerProps> = ({
           {children}
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+        <div className={cn(
+          "flex items-center gap-3 shrink-0",
+          isCompact ? "w-auto" : "w-full sm:w-auto"
+        )}>
           {action && (
             <div className="flex items-center gap-3 w-full sm:w-auto">
               {action}

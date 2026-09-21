@@ -8,6 +8,7 @@ import { StatCard } from '../components/ui/StatCard';
 import { Grid } from '../components/ui/Grid';
 import { formatCompactWeight } from '../utils/fitnessHelpers';
 import { useCountUp, UseCountUpOptions } from '../hooks/useCountUp';
+import { Banner } from '../components/ui/Banner';
 
 describe('StatCard Architecture & Display Regression Suite', () => {
   describe('formatCompactWeight helper', () => {
@@ -593,6 +594,75 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       // Must show the actual value, never stuck at 0
       expect(container!.textContent).toContain('12,500');
       expect(container!.textContent).toContain('kg');
+    });
+
+    it('handles pure numeric value with isUnavailable explicitly without preformatted strings', () => {
+      // When unavailable with raw number
+      act(() => {
+        root!.render(
+          <StatCard
+            label="Average Session Length"
+            value={0}
+            unit="min"
+            isUnavailable={true}
+          />
+        );
+      });
+      expect(container!.textContent).toContain('—');
+      // Unit is suppressed when unavailable
+      expect(container!.textContent).not.toContain('min');
+
+      // When available with raw number
+      act(() => {
+        root!.render(
+          <StatCard
+            label="Average Session Length"
+            value={45}
+            unit="min"
+            isUnavailable={false}
+            animationDuration={400}
+          />
+        );
+      });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(container!.textContent).toContain('45');
+      expect(container!.textContent).toContain('min');
+    });
+  });
+
+  describe('Compact Banner Typography & Hierarchy', () => {
+    it('renders compact typography and subtle badge when size="compact"', () => {
+      const html = renderToString(
+        <Banner
+          variant="achievement"
+          size="compact"
+          badge="COACH TIP"
+          title="Progressive overload achieved on bench press."
+        />
+      );
+
+      // Does not use large titleSection h3
+      expect(html).not.toContain('<h3');
+      // Uses paragraph with compact font-mono styling
+      expect(html).toContain('<p');
+      expect(html).toContain('COACH TIP');
+      expect(html).toContain('Progressive overload achieved on bench press.');
+    });
+
+    it('renders standard titleSection when size="default" (preserving other banners)', () => {
+      const html = renderToString(
+        <Banner
+          variant="achievement"
+          badge="ALL-TIME MILESTONE"
+          title="New All-Time High"
+        />
+      );
+
+      // Uses large titleSection h3
+      expect(html).toContain('<h3');
+      expect(html).toContain('New All-Time High');
     });
   });
 });
