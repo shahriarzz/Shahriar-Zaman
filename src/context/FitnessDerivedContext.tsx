@@ -125,16 +125,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return selectMuscleDistribution(index);
   }, [index]);
 
-  // 8. Canonical Cycle Day Calculations
-  const nextCycleDay = useMemo(() => {
-    return selectNextCycleDay(index, workoutMap, appState?.cycleStart);
-  }, [index, workoutMap, appState?.cycleStart]);
-
-  const getCycleDayForDate = useCallback((targetDate: Date | string): number => {
-    return selectCycleDayForDate(targetDate, index, workoutMap, appState?.cycleStart);
-  }, [index, workoutMap, appState?.cycleStart]);
-
-  // 9. Canonical Training Intelligence Calculations
+  // 8. Reactive Calendar Date Tracking (midnight and visibility updates)
   const [currentDate, setCurrentDate] = React.useState<Date>(() => new Date());
 
   React.useEffect(() => {
@@ -185,6 +176,17 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   const todayStr = useMemo(() => format(currentDate, 'yyyy-MM-dd'), [currentDate]);
+
+  // 9. Canonical Cycle Day Calculations
+  const nextCycleDay = useMemo(() => {
+    return selectNextCycleDay(index, workoutMap, appState?.cycleStart, currentDate);
+  }, [index, workoutMap, appState?.cycleStart, currentDate]);
+
+  const getCycleDayForDate = useCallback((targetDate: Date | string): number => {
+    return selectCycleDayForDate(targetDate, index, workoutMap, appState?.cycleStart, currentDate);
+  }, [index, workoutMap, appState?.cycleStart, currentDate]);
+
+  // 10. Canonical Training Intelligence Calculations
 
   const trainingStreak = useMemo(() => {
     return calculateTrainingStreak({

@@ -214,8 +214,10 @@ export function calculateE1RM(weight: number | string, reps: number | string): n
   return Math.round(e1rm * 10) / 10;
 }
 
-export function getAdjustedCycleStart(workoutCycleDay: number): string {
-  const adjusted = subDays(new Date(), workoutCycleDay - 1);
+export function getAdjustedCycleStart(workoutCycleDay: number, referenceDate: Date | string = new Date()): string {
+  const ref = typeof referenceDate === 'string' ? parseISO(referenceDate) : referenceDate;
+  const validRef = isValid(ref) ? ref : new Date();
+  const adjusted = subDays(validRef, workoutCycleDay - 1);
   return format(adjusted, 'yyyy-MM-dd');
 }
 

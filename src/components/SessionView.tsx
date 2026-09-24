@@ -3,13 +3,151 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Workout, Exercise, SetLog, SessionLog, WorkoutType } from '../types/fitness';
+import { Workout, Exercise, SetLog, SessionLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
-import { sanitizeSessionLog, calculateSetsVolume } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
-import { ExerciseSessionHistoryEntry, WeightPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
+import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
+
+export interface SessionPR {
+  exerciseDefinitionId: string;
+  name: string;
+  weight: number;
+  reps: string;
+  isNew: boolean;
+  isWeightPR?: boolean;
+  isE1RMPR?: boolean;
+}
+
+export interface CalculateSessionPRsParams {
+  workout: Workout;
+  sessionSets: Record<string, SetLog[]>;
+  exerciseDefinitions: ExerciseDefinition[];
+  getWeightPRForExercise: (exDefId: string) => WeightPRRecord | null;
+  getE1RMPRForExercise?: (exDefId: string) => E1RMPRRecord | null;
+}
+
+/**
+ * Pure evaluator for session qualifying PRs against pre-session canonical history.
+ * Must be executed BEFORE persisting the session via addLog() so comparisons
+ * evaluate today's performance against historical records rather than against itself.
+ *
+ * Invariants:
+ * - Only completed sets (done === true, weight > 0, reps > 0) are considered.
+ * - Compares today's heaviest weight and highest reps against pre-session getWeightPRForExercise().
+ * - Compares today's highest calculated e1RM against pre-session getE1RMPRForExercise().
+ * - New exercises with no previous PR count as baseline PRs (isNew: true).
+ * - Smashed existing PRs have isNew: false.
+ * - Sets establishing both weight PR and e1RM PR count as exactly ONE PR event.
+ */
+export function calculateSessionPRs({
+  workout,
+  sessionSets,
+  exerciseDefinitions,
+  getWeightPRForExercise,
+  getE1RMPRForExercise
+}: CalculateSessionPRsParams): SessionPR[] {
+  if (!workout || !workout.exercises) return [];
+  const prs: SessionPR[] = [];
+
+  workout.exercises.forEach(ex => {
+    const exDefId = ex.exerciseDefinitionId;
+    const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
+    const exName = resolvedEx.name || 'Exercise';
+    const todaySets = sessionSets[exDefId] || [];
+    const doneToday = todaySets.filter(s => s.done && (parseFloat(s.weight) || 0) > 0 && (parseInt(s.reps, 10) || 0) > 0);
+    if (doneToday.length === 0) return;
+
+    // 1. Find heaviest weight lifted today, and highest reps at that max weight
+    let todayMaxWeight = 0;
+    let todayMaxReps = 0;
+    doneToday.forEach(s => {
+      const w = parseFloat(s.weight) || 0;
+      const r = parseInt(s.reps, 10) || 0;
+      if (w > todayMaxWeight) {
+        todayMaxWeight = w;
+        todayMaxReps = r;
+      } else if (w === todayMaxWeight && r > todayMaxReps) {
+        todayMaxReps = r;
+      }
+    });
+
+    if (todayMaxWeight <= 0) return;
+
+    // 2. Find best e1RM lifted today and the set details for that best e1RM
+    let todayMaxE1RM = 0;
+    let bestE1RMWeight = 0;
+    let bestE1RMReps = 0;
+    doneToday.forEach(s => {
+      const w = parseFloat(s.weight) || 0;
+      const r = parseInt(s.reps, 10) || 0;
+      const e1rm = calculateE1RM(w, r);
+      if (e1rm > todayMaxE1RM) {
+        todayMaxE1RM = e1rm;
+        bestE1RMWeight = w;
+        bestE1RMReps = r;
+      }
+    });
+
+    const prevWeightPR = getWeightPRForExercise(exDefId);
+    const prevE1RMPR = getE1RMPRForExercise ? getE1RMPRForExercise(exDefId) : null;
+
+    const hasWeightHistory = !!prevWeightPR && prevWeightPR.weight > 0;
+    const hasE1RMHistory = !!prevE1RMPR && prevE1RMPR.maxEpley > 0;
+    const hasHistory = hasWeightHistory || hasE1RMHistory;
+
+    if (!hasHistory) {
+      // New exercise with no previous PR counts as a baseline PR
+      prs.push({
+        exerciseDefinitionId: exDefId,
+        name: exName,
+        weight: todayMaxWeight,
+        reps: String(todayMaxReps),
+        isNew: true,
+        isWeightPR: true,
+        isE1RMPR: true
+      });
+      return;
+    }
+
+    // Evaluate Weight PR using canonical isNewPersonalBest helper
+    const isWeightPR = isNewPersonalBest({ weight: todayMaxWeight, reps: todayMaxReps }, prevWeightPR);
+
+    // Evaluate e1RM PR
+    const prevMaxE1 = prevE1RMPR?.maxEpley ?? (prevWeightPR && prevWeightPR.weight > 0 ? calculateE1RM(prevWeightPR.weight, prevWeightPR.reps) : 0);
+    const isE1RMPR = prevMaxE1 > 0 ? todayMaxE1RM > prevMaxE1 : todayMaxE1RM > 0;
+
+    if (isWeightPR || isE1RMPR) {
+      // Exactly ONE PR event for this exercise even if both weight PR and e1RM PR are established
+      if (isWeightPR) {
+        prs.push({
+          exerciseDefinitionId: exDefId,
+          name: exName,
+          weight: todayMaxWeight,
+          reps: String(todayMaxReps),
+          isNew: false,
+          isWeightPR: true,
+          isE1RMPR
+        });
+      } else {
+        // e1RM PR only
+        prs.push({
+          exerciseDefinitionId: exDefId,
+          name: exName,
+          weight: bestE1RMWeight,
+          reps: String(bestE1RMReps),
+          isNew: false,
+          isWeightPR: false,
+          isE1RMPR: true
+        });
+      }
+    }
+  });
+
+  return prs;
+}
 import {
   Card,
   Badge,
@@ -363,6 +501,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const { 
     workouts, 
     exerciseDefinitions,
+    appState,
     addLog, 
     updateCycleStart,
     activeSession,
@@ -371,7 +510,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     clearActiveSession,
     user
   } = useFitness();
-  const { getLatestForExercise, getWeightPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
+  const { getLatestForExercise, getWeightPRForExercise, getE1RMPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -380,6 +519,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const [startTime, setStartTime] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [sessionPRs, setSessionPRs] = useState<SessionPR[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
   const [loadingAdvice, setLoadingAdvice] = useState<string | null>(null);
@@ -463,6 +603,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     const sessionStart = Date.now();
     setStartTime(sessionStart);
     setDuration(0);
+    setIsFinishing(false);
+    setSessionPRs([]);
     
     const initialSets: Record<string, SetLog[]> = {};
 
@@ -519,49 +661,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
     return data;
   }, [activeWorkout, getLatestForExercise, getWeightPRForExercise]);
-
-  // Today's PRs: Heaviest completed weight + highest reps at that weight compared against prior historical logs
-  const todaysPRs = React.useMemo(() => {
-    if (!activeWorkout || !isFinishing) return [];
-    const prs: { name: string; weight: number; reps: string; isNew: boolean }[] = [];
-
-    activeWorkout.exercises.forEach(ex => {
-      const exDefId = ex.exerciseDefinitionId;
-      const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
-      const todaySets = sessionSets[exDefId] || [];
-      const doneToday = todaySets.filter(s => s.done && parseFloat(s.weight) > 0 && parseInt(s.reps, 10) > 0);
-      if (doneToday.length === 0) return;
-
-      // 1. Find heaviest weight lifted today
-      const todayMaxWeight = Math.max(...doneToday.map(s => parseFloat(s.weight) || 0));
-      if (todayMaxWeight <= 0) return;
-
-      // 2. Among sets at that max weight, find highest reps
-      const setsAtMax = doneToday.filter(s => (parseFloat(s.weight) || 0) === todayMaxWeight);
-      const todayMaxReps = Math.max(...setsAtMax.map(s => parseInt(s.reps, 10) || 0));
-
-      const prevPR = getWeightPRForExercise(exDefId);
-      const hasHistory = !!prevPR && prevPR.weight > 0;
-
-      if (!hasHistory) {
-        prs.push({
-          name: resolvedEx.name,
-          weight: todayMaxWeight,
-          reps: String(todayMaxReps),
-          isNew: true
-        });
-      } else if (isNewPersonalBest({ weight: todayMaxWeight, reps: todayMaxReps }, prevPR)) {
-        prs.push({
-          name: resolvedEx.name,
-          weight: todayMaxWeight,
-          reps: String(todayMaxReps),
-          isNew: true
-        });
-      }
-    });
-
-    return prs;
-  }, [isFinishing, activeWorkout, sessionSets, exerciseDefinitions, getWeightPRForExercise]);
 
   // Synchronize active session sets to persistent activeSession state safely in an effect
   const isInitialSyncRef = useRef(true);
@@ -818,12 +917,25 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       // Harden log according to GainLog contract
       const sanitizedLog = sanitizeSessionLog(rawLog);
 
+      // Snapshot qualifying PRs against pre-session canonical history BEFORE persistence
+      const detectedPRs = calculateSessionPRs({
+        workout: activeWorkout,
+        sessionSets,
+        exerciseDefinitions,
+        getWeightPRForExercise,
+        getE1RMPRForExercise
+      });
+      setSessionPRs(detectedPRs);
+
       // Await persistence (offline-first ensures local save occurs immediately)
       await addLog(logId, sanitizedLog);
 
       if (activeWorkout.cycleDay && activeWorkout.isCore) {
-        const newCycleStart = getAdjustedCycleStart(activeWorkout.cycleDay);
-        await updateCycleStart(newCycleStart);
+        const currentScheduledDay = getCycleDay(appState?.cycleStart, new Date());
+        if (!appState?.cycleStart || currentScheduledDay !== activeWorkout.cycleDay) {
+          const newCycleStart = getAdjustedCycleStart(activeWorkout.cycleDay);
+          await updateCycleStart(newCycleStart);
+        }
       }
 
       // Only after persistence completes do we clear active session and display finish summary
@@ -909,17 +1021,17 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           </div>
 
           {/* Minimal PR acknowledgement in Session Summary */}
-          {todaysPRs.length > 0 && (
+          {sessionPRs.length > 0 && (
             <div className="col-span-2 flex items-center justify-center gap-1.5 py-1">
               <Trophy size={14} className="text-amber-500 shrink-0" />
               <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold tracking-wider")}>
-                {todaysPRs.length} {todaysPRs.length === 1 ? 'PR' : 'PRs'}
+                {sessionPRs.length} {sessionPRs.length === 1 ? 'PR' : 'PRs'}
               </span>
             </div>
           )}
 
           {/* Today's Personal Records Summary */}
-          {todaysPRs.length > 0 && (
+          {sessionPRs.length > 0 && (
             <Card
               variant="elevated"
               accent="amber"
@@ -931,7 +1043,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
                 <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold")}>New Records Set Today!</span>
               </div>
               <div className="space-y-2">
-                {todaysPRs.map((pr, idx) => (
+                {sessionPRs.map((pr, idx) => (
                   <div key={`session-pr-${pr.name}-${idx}`} className={cn("flex justify-between items-center py-1.5 border-b last:border-0 text-xs", BORDER.subtle)}>
                     <div>
                       <div className="font-bold text-white leading-tight">{pr.name}</div>

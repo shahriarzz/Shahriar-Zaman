@@ -714,54 +714,62 @@ export function selectLatestForExercise(
 }
 
 
+/**
+ * Canonical Cycle Day Selector:
+ * The protocol is calendar-date driven anchored to cycleStart.
+ * For any target or current date:
+ *   cycleDay = getCycleDay(cycleStart, date)
+ * Protocol core schedule does NOT depend on whether intermediate days were logged.
+ * Specifically across Recovery Days (Day 4 and Day 8), no log is required to advance.
+ */
 export function selectNextCycleDay(
-  index: FitnessIndex | undefined | null,
-  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
-  cycleStart?: string | null
+  index?: FitnessIndex | null,
+  workoutMap?: Map<string, Workout> | Workout[] | null,
+  cycleStart?: string | null,
+  now: Date | string = new Date()
 ): number {
-  if (!index || !index.sortedLogsDescending || !workoutMap) {
-    return getCycleDay(cycleStart || dk());
-  }
-
-  const map = Array.isArray(workoutMap)
-    ? new Map(workoutMap.map(w => [w.id, w]))
-    : workoutMap;
-
-  if (map.size === 0) {
-    return getCycleDay(cycleStart || dk());
-  }
-
-  // Find the most recent completed log for a core workout from the descending indexed logs
-  const latestCoreLog = index.sortedLogsDescending.find(log => {
-    if (!isCompletedSession(log)) return false;
-    const wo = map.get(log.workoutId);
-    return wo && wo.isCore && typeof wo.cycleDay === 'number';
-  });
-
-  if (!latestCoreLog) {
-    return getCycleDay(cycleStart || dk());
-  }
-
-  const lastWorkout = map.get(latestCoreLog.workoutId);
-  const lastCycleDay = lastWorkout?.cycleDay || 1;
-
-  return ((lastCycleDay % CYCLE_LENGTH) + 1);
+  return getCycleDay(cycleStart, now);
 }
 
 export function selectCycleDayForDate(
   targetDate: Date | string,
-  index: FitnessIndex | undefined | null,
-  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  index?: FitnessIndex | null,
+  workoutMap?: Map<string, Workout> | Workout[] | null,
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): number {
-  const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
-  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
-  const validTarget = isValid(target) ? target : new Date();
-  const validNow = isValid(parsedNow) ? parsedNow : new Date();
-  const todayCycleDay = selectNextCycleDay(index, workoutMap, cycleStart);
-  const diffDays = differenceInCalendarDays(validTarget, validNow);
-  return ((((todayCycleDay - 1 + diffDays) % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
+  return getCycleDay(cycleStart, targetDate);
+}
+
+/**
+ * Resolves the scheduled core workout for a given cycle day.
+ */
+export function selectCoreWorkoutForCycleDay(
+  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  cycleDay: number
+): Workout | undefined {
+  if (!workoutMap) return undefined;
+  if (Array.isArray(workoutMap)) {
+    return workoutMap.find(w => w.cycleDay === cycleDay && w.isCore);
+  }
+  for (const w of workoutMap.values()) {
+    if (w.cycleDay === cycleDay && w.isCore) {
+      return w;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolves today's scheduled core workout based on canonical cycleStart date anchor.
+ */
+export function selectTodayCoreWorkout(
+  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  cycleStart?: string | null,
+  now: Date | string = new Date()
+): Workout | undefined {
+  const todayCycleDay = selectNextCycleDay(null, workoutMap, cycleStart, now);
+  return selectCoreWorkoutForCycleDay(workoutMap, todayCycleDay);
 }
 
 /**
