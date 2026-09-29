@@ -206,19 +206,23 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [index, currentDate]);
 
   const adherenceInsight = useMemo(() => {
+    const currentEndStr = todayStr;
+    const currentStartStr = format(subDays(currentDate, 27), 'yyyy-MM-dd');
     return calculateAdherence({
       index,
       coreWorkoutByCycleDayMap,
       cycleStart: appState?.cycleStart,
+      startDate: currentStartStr,
+      endDate: currentEndStr,
       now: currentDate
     });
-  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate]);
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate, todayStr]);
 
   const strengthTrend = useMemo(() => {
     const currentEndStr = todayStr;
-    const currentStartStr = format(subDays(currentDate, 29), 'yyyy-MM-dd');
-    const comparisonEndStr = format(subDays(currentDate, 30), 'yyyy-MM-dd');
-    const comparisonStartStr = format(subDays(currentDate, 59), 'yyyy-MM-dd');
+    const currentStartStr = format(subDays(currentDate, 27), 'yyyy-MM-dd');
+    const comparisonEndStr = format(subDays(currentDate, 28), 'yyyy-MM-dd');
+    const comparisonStartStr = format(subDays(currentDate, 55), 'yyyy-MM-dd');
 
     return calculateStrengthTrend({
       index,
@@ -228,11 +232,15 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [index, currentDate, todayStr]);
 
   const performanceScore = useMemo(() => {
-    const start28Str = format(subDays(currentDate, 27), 'yyyy-MM-dd');
+    const currentEndStr = todayStr;
+    const currentStartStr = format(subDays(currentDate, 27), 'yyyy-MM-dd');
+    const comparisonEndStr = format(subDays(currentDate, 28), 'yyyy-MM-dd');
+    const comparisonStartStr = format(subDays(currentDate, 55), 'yyyy-MM-dd');
+
     let sumCompleted = 0;
     let sumPlanned = 0;
     Object.entries(index.plannedSetsByDate).forEach(([d, p]) => {
-      if (d >= start28Str && d <= todayStr) {
+      if (d >= currentStartStr && d <= currentEndStr) {
         sumPlanned += (typeof p === 'number' ? p : Number(p) || 0);
         sumCompleted += (index.completedSetsByDate[d] || 0);
       }
@@ -244,7 +252,11 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
       completionRate,
       strengthTrend,
       index,
-      now: currentDate
+      now: currentDate,
+      evaluationWindow: {
+        currentRange: { start: currentStartStr, end: currentEndStr },
+        previousRange: { start: comparisonStartStr, end: comparisonEndStr }
+      }
     });
   }, [adherenceInsight, strengthTrend, index, currentDate, todayStr]);
 

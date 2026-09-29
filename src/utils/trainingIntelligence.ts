@@ -2,14 +2,16 @@ import {
   format,
   parseISO,
   subDays,
+  subWeeks,
   isValid,
   startOfDay,
+  startOfWeek,
   isSameDay,
   eachDayOfInterval,
   differenceInCalendarDays
 } from 'date-fns';
 import { Workout, SessionLog, SetLog } from '../types/fitness';
-import { FitnessIndex, ExerciseIndexEntry } from './fitnessDerivedSelectors';
+import type { FitnessIndex, ExerciseIndexEntry } from './fitnessDerivedSelectors';
 import { isCompletedSession, getCycleDay } from './fitnessCalculations';
 
 // ----------------------------------------------------------------------------
@@ -97,10 +99,22 @@ export interface StrengthTrendInsight {
 
 export type PerformanceScoreStatus = 'Excellent' | 'Strong' | 'Good' | 'Needs attention' | 'Struggling' | 'Unavailable';
 
+export interface DateRange {
+  start: string; // YYYY-MM-DD
+  end: string;   // YYYY-MM-DD
+}
+
+export interface PerformanceEvaluationWindow {
+  currentRange: DateRange;
+  previousRange: DateRange;
+}
+
 export interface PerformanceScoreComponent {
   score: number | null;
   weight: number;
   available: boolean;
+  windowType: 'current_window' | 'previous_window' | 'lifetime_baseline';
+  windowDescription: string;
 }
 
 export interface PerformanceScoreInsight {
@@ -115,11 +129,7 @@ export interface PerformanceScoreInsight {
   };
   confidence: 'high' | 'medium' | 'low';
   primaryFactors: string[];
-}
-
-export interface DateRange {
-  start: string; // YYYY-MM-DD
-  end: string;   // YYYY-MM-DD
+  evaluationWindow: PerformanceEvaluationWindow;
 }
 
 // ----------------------------------------------------------------------------
@@ -566,6 +576,7 @@ export interface CalculatePerformanceScoreOptions {
   strengthTrend?: StrengthTrendInsight;
   index: FitnessIndex;
   now?: Date | string;
+  evaluationWindow?: PerformanceEvaluationWindow;
 }
 
 /**
@@ -581,9 +592,23 @@ export function calculatePerformanceScore({
   completionRate,
   strengthTrend,
   index,
-  now = new Date()
+  now = new Date(),
+  evaluationWindow
 }: CalculatePerformanceScoreOptions): PerformanceScoreInsight {
   const primaryFactors: string[] = [];
+
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = isValid(parsedNow) ? startOfDay(parsedNow) : startOfDay(new Date());
+
+  const currentEndStr = format(validNow, 'yyyy-MM-dd');
+  const currentStartStr = format(subDays(validNow, 27), 'yyyy-MM-dd');
+  const prevEndStr = format(subDays(validNow, 28), 'yyyy-MM-dd');
+  const prevStartStr = format(subDays(validNow, 55), 'yyyy-MM-dd');
+
+  const evalWindow: PerformanceEvaluationWindow = evaluationWindow || {
+    currentRange: { start: currentStartStr, end: currentEndStr },
+    previousRange: { start: prevStartStr, end: prevEndStr }
+  };
 
   // Component 1: Adherence (weight 0.25)
   let adherenceScore: number | null = null;
@@ -597,6 +622,14 @@ export function calculatePerformanceScore({
     }
   }
 
+  const adherenceComponent: PerformanceScoreComponent = {
+    score: adherenceScore,
+    weight: 0.25,
+    available: adherenceAvailable,
+    windowType: 'current_window',
+    windowDescription: `Current evaluation window (${evalWindow.currentRange.start} to ${evalWindow.currentRange.end})`
+  };
+
   // Component 2: Completion (weight 0.15)
   let completionScore: number | null = null;
   const completionAvailable = completionRate !== undefined && Number.isFinite(completionRate);
@@ -606,6 +639,14 @@ export function calculatePerformanceScore({
       primaryFactors.push('Consistent set completion rate');
     }
   }
+
+  const completionComponent: PerformanceScoreComponent = {
+    score: completionScore,
+    weight: 0.15,
+    available: completionAvailable,
+    windowType: 'current_window',
+    windowDescription: `Current evaluation window (${evalWindow.currentRange.start} to ${evalWindow.currentRange.end})`
+  };
 
   // Component 3: Strength progression (weight 0.30)
   let strengthScore: number | null = null;
@@ -623,27 +664,33 @@ export function calculatePerformanceScore({
     }
   }
 
+  const strengthProgressionComponent: PerformanceScoreComponent = {
+    score: strengthScore,
+    weight: 0.30,
+    available: strengthAvailable,
+    windowType: 'previous_window',
+    windowDescription: `Current window (${evalWindow.currentRange.start} to ${evalWindow.currentRange.end}) vs previous window (${evalWindow.previousRange.start} to ${evalWindow.previousRange.end})`
+  };
+
   // Component 4: Performance vs previous sessions (weight 0.15)
-  // Restrict to exercises whose latest session occurred within the 28-day window
+  // Evaluates exercises whose latest session occurred within the evaluation window vs their preceding session
   let performanceScoreVal: number | null = null;
   let performanceAvailable = false;
   const recentRatios: number[] = [];
 
-  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
-  const validNow = isValid(parsedNow) ? startOfDay(parsedNow) : startOfDay(new Date());
-  const cutoff28DaysStr = format(subDays(validNow, 28), 'yyyy-MM-dd');
-  // Reasonable comparison window (90 days / 1 quarter) for the immediately preceding session
+  const windowStartStr = evalWindow.currentRange.start;
+  const windowEndStr = evalWindow.currentRange.end;
   const maxPrecedingAgeDaysStr = format(subDays(validNow, 90), 'yyyy-MM-dd');
 
   index.exerciseIndex.forEach(entry => {
     if (entry.sessions.length >= 2) {
       const s0 = entry.sessions[0];
       const s1 = entry.sessions[1];
-      // Latest session must be within the 28-day evaluation window
-      if (s0.date < cutoff28DaysStr) {
+      // Latest session must be within the current evaluation window
+      if (s0.date < windowStartStr || s0.date > windowEndStr) {
         return;
       }
-      // Immediately preceding session must be within the reasonable comparison window
+      // Immediately preceding session must be within the comparison window
       if (s1.date < maxPrecedingAgeDaysStr) {
         return;
       }
@@ -663,36 +710,84 @@ export function calculatePerformanceScore({
     else performanceScoreVal = 50;
   }
 
+  const performanceVsPreviousComponent: PerformanceScoreComponent = {
+    score: performanceScoreVal,
+    weight: 0.15,
+    available: performanceAvailable,
+    windowType: 'current_window',
+    windowDescription: `Exercises in current window (${evalWindow.currentRange.start} to ${evalWindow.currentRange.end}) vs preceding baseline`
+  };
+
   // Component 5: Volume consistency (weight 0.15)
+  // Build consecutive calendar weeks for evaluation period, strictly preserving zero-volume weeks
   let volumeScore: number | null = null;
   let volumeAvailable = false;
-  const weeklyVols = Object.values(index.weeklyVolumeMap).filter(v => v > 0);
-  if (weeklyVols.length >= 2) {
+
+  const endParsed = parseISO(evalWindow.currentRange.end);
+  const validEvalEnd = isValid(endParsed) ? endParsed : validNow;
+  const currentWeekStart = startOfWeek(validEvalEnd, { weekStartsOn: 1 });
+
+  // Check user active calendar history
+  const firstSessionStr = index.lifetimeStats.firstSessionDate;
+  const hasHistory = !!firstSessionStr;
+  const firstSessionDate = hasHistory ? parseISO(firstSessionStr) : null;
+  const earliestWeekStart = (hasHistory && isValid(firstSessionDate))
+    ? startOfWeek(firstSessionDate!, { weekStartsOn: 1 })
+    : currentWeekStart;
+
+  // Build the 4 consecutive calendar weeks ending at current week
+  const consecutiveWeeks: { weekStart: Date; weekStr: string; volume: number }[] = [];
+  for (let i = 3; i >= 0; i--) {
+    const wStart = subWeeks(currentWeekStart, i);
+    const weekStr = format(wStart, 'MMM dd, yyyy');
+    const volume = index.weeklyVolumeMap[weekStr] || 0;
+    consecutiveWeeks.push({ weekStart: wStart, weekStr, volume });
+  }
+
+  // Weeks that fall within the user's active calendar history
+  const weeksInHistory = consecutiveWeeks.filter(w => w.weekStart >= earliestWeekStart);
+
+  // Require at least 2 distinct calendar weeks in user history to evaluate volume consistency
+  if (hasHistory && weeksInHistory.length >= 2) {
     volumeAvailable = true;
-    const recent4 = weeklyVols.slice(-4);
-    const minV = Math.min(...recent4);
-    const maxV = Math.max(...recent4);
-    const ratio = maxV > 0 ? minV / maxV : 0;
-    if (ratio >= 0.7) {
-      volumeScore = 90;
-    } else if (ratio >= 0.5) {
-      volumeScore = 75;
+    const evaluatedWeeks = weeksInHistory.slice(-4);
+    const evaluatedVolumes = evaluatedWeeks.map(w => w.volume);
+    const minV = Math.min(...evaluatedVolumes);
+    const maxV = Math.max(...evaluatedVolumes);
+
+    if (minV === 0) {
+      // Missed week with zero volume: volume consistency decreases appropriately
+      volumeScore = 50;
+      primaryFactors.push('Inconsistent weekly volume (zero-volume week detected)');
     } else {
-      // Neutral baseline when volume consistency cannot distinguish intentional reduction (taper/deload) from poor consistency
-      const isHighConsistency = (adherenceAvailable && (adherenceScore || 0) >= 80) || (completionAvailable && (completionScore || 0) >= 80);
-      volumeScore = isHighConsistency ? 75 : 60;
-    }
-    if (volumeScore >= 80) {
-      primaryFactors.push('Consistent weekly volume load');
+      const ratio = maxV > 0 ? minV / maxV : 0;
+      if (ratio >= 0.7) {
+        volumeScore = 90;
+        primaryFactors.push('Consistent weekly volume load');
+      } else if (ratio >= 0.5) {
+        volumeScore = 75;
+      } else {
+        // Deload / taper secondary interpretation: when non-zero volume drops with high adherence
+        const isHighConsistency = (adherenceAvailable && (adherenceScore || 0) >= 80) || (completionAvailable && (completionScore || 0) >= 80);
+        volumeScore = isHighConsistency ? 75 : 60;
+      }
     }
   }
 
+  const volumeConsistencyComponent: PerformanceScoreComponent = {
+    score: volumeScore,
+    weight: 0.15,
+    available: volumeAvailable,
+    windowType: 'current_window',
+    windowDescription: `Consecutive calendar weeks up to ${evalWindow.currentRange.end}`
+  };
+
   const rawComponents = [
-    { score: adherenceScore, weight: 0.25, available: adherenceAvailable },
-    { score: completionScore, weight: 0.15, available: completionAvailable },
-    { score: strengthScore, weight: 0.30, available: strengthAvailable },
-    { score: performanceScoreVal, weight: 0.15, available: performanceAvailable },
-    { score: volumeScore, weight: 0.15, available: volumeAvailable }
+    adherenceComponent,
+    completionComponent,
+    strengthProgressionComponent,
+    performanceVsPreviousComponent,
+    volumeConsistencyComponent
   ];
 
   const availableWeights = rawComponents.filter(c => c.available && c.score !== null);
@@ -703,14 +798,15 @@ export function calculatePerformanceScore({
       score: null,
       status: 'Unavailable',
       components: {
-        adherence: { score: adherenceScore, weight: 0.25, available: adherenceAvailable },
-        completion: { score: completionScore, weight: 0.15, available: completionAvailable },
-        strengthProgression: { score: strengthScore, weight: 0.30, available: strengthAvailable },
-        performanceVsPrevious: { score: performanceScoreVal, weight: 0.15, available: performanceAvailable },
-        volumeConsistency: { score: volumeScore, weight: 0.15, available: volumeAvailable }
+        adherence: adherenceComponent,
+        completion: completionComponent,
+        strengthProgression: strengthProgressionComponent,
+        performanceVsPrevious: performanceVsPreviousComponent,
+        volumeConsistency: volumeConsistencyComponent
       },
       confidence: 'low',
-      primaryFactors: ['Insufficient baseline data for scoring']
+      primaryFactors: ['Insufficient baseline data for scoring'],
+      evaluationWindow: evalWindow
     };
   }
 
@@ -731,14 +827,15 @@ export function calculatePerformanceScore({
     score: finalScore,
     status,
     components: {
-      adherence: { score: adherenceScore, weight: 0.25, available: adherenceAvailable },
-      completion: { score: completionScore, weight: 0.15, available: completionAvailable },
-      strengthProgression: { score: strengthScore, weight: 0.30, available: strengthAvailable },
-      performanceVsPrevious: { score: performanceScoreVal, weight: 0.15, available: performanceAvailable },
-      volumeConsistency: { score: volumeScore, weight: 0.15, available: volumeAvailable }
+      adherence: adherenceComponent,
+      completion: completionComponent,
+      strengthProgression: strengthProgressionComponent,
+      performanceVsPrevious: performanceVsPreviousComponent,
+      volumeConsistency: volumeConsistencyComponent
     },
     confidence,
-    primaryFactors
+    primaryFactors,
+    evaluationWindow: evalWindow
   };
 }
 

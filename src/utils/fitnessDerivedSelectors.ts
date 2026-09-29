@@ -21,6 +21,7 @@ import {
   MUSCLE_CATEGORIES,
   ResolvedExerciseMeta
 } from './exerciseResolver';
+import { calculateAdherence, calculateTrainingStreak, StreakInsight } from './trainingIntelligence';
 
 export const CYCLE_LENGTH = 8;
 
@@ -75,8 +76,11 @@ export interface LifetimeStats {
   totalSets: number;
   totalMinutes: number;
   measuredSessionsCount: number;
+  /** Consecutive calendar training dates streak */
   currentStreak: number;
   longestStreak: number;
+  consecutiveDaysStreak: number;
+  consecutiveCalendarStreak: number;
   firstSessionDate: string | null;
   lastSessionDate: string | null;
 }
@@ -176,10 +180,10 @@ export interface FitnessIndex {
 }
 
 /**
- * Internal helper to calculate current consecutive workout day streak.
- * Only counts completed workouts (isCompletedSession invariant).
+ * Consecutive calendar training days streak calculation.
+ * Counts unbroken consecutive calendar dates on which at least one completed session occurred.
  */
-function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
+export function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
   const completedLogs = logs.filter(isCompletedSession);
   const datesSet = new Set(completedLogs.map(l => l?.date).filter(Boolean));
   if (datesSet.size === 0) return 0;
@@ -210,6 +214,8 @@ function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date
   }
   return streak;
 }
+
+export const computeConsecutiveDaysStreak = computeCurrentStreak;
 
 /**
  * Internal helper to calculate longest consecutive workout day streak.
@@ -594,14 +600,19 @@ export function buildFitnessIndex(
     });
   });
 
+  const calendarCurrentStreak = computeCurrentStreak(completedLogsDescending);
+  const calendarLongestStreak = computeLongestStreak(completedLogsDescending);
+
   const lifetimeStats: LifetimeStats = {
     totalSessions: completedLogsDescending.length,
     totalVolume: totalLifetimeVolume,
     totalSets: totalLifetimeSets,
     totalMinutes: totalLifetimeMinutes,
     measuredSessionsCount: measuredLifetimeCount,
-    currentStreak: computeCurrentStreak(completedLogsDescending),
-    longestStreak: computeLongestStreak(completedLogsDescending),
+    currentStreak: calendarCurrentStreak,
+    longestStreak: calendarLongestStreak,
+    consecutiveDaysStreak: calendarCurrentStreak,
+    consecutiveCalendarStreak: calendarCurrentStreak,
     firstSessionDate: completedLogsAscending[0]?.date || null,
     lastSessionDate: completedLogsDescending[0]?.date || null
   };
@@ -965,69 +976,31 @@ export function selectTimeRangeAnalytics(
     };
   });
 
-  // Scheduled Adherence calculation
+  // Scheduled Adherence and Streak calculation via canonical training intelligence
   const firstLogDate = index.lifetimeStats.firstSessionDate;
   const rangeStartDate = cutoffDateStr
     ? parseISO(cutoffDateStr)
-    : (firstLogDate ? parseISO(firstLogDate) : subDays(validNow, 30));
+    : (firstLogDate ? parseISO(firstLogDate) : subDays(validNow, 29));
   
-  const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(validNow, 30);
-  let intervalStart = validRangeStart;
-  let intervalEnd = validNow;
-  if (intervalStart > intervalEnd) {
-    intervalEnd = intervalStart;
-  }
-  const dayInterval = (isValid(intervalStart) && isValid(intervalEnd))
-    ? eachDayOfInterval({
-        start: intervalStart,
-        end: intervalEnd
-      })
-    : [validNow];
+  const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(validNow, 29);
+  const intervalStart = validRangeStart > validNow ? validNow : validRangeStart;
 
-  let scheduledCoreWorkouts = 0;
-  let completedScheduledCore = 0;
-  let scheduledRestDays = 0;
-  let missedPastCoreDays = 0;
-  let bonusCompletedSessions = 0;
-  let isTodayCorePending = false;
-
-  dayInterval.forEach(dayDate => {
-    const dateStr = format(dayDate, 'yyyy-MM-dd');
-    const isToday = isSameDay(dayDate, now) || dateStr === todayStr;
-    const isPast = dayDate < startOfToday && !isToday;
-
-    const cycleDay = getCycleDay(cycleStart, dayDate);
-    const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
-    const dayLogs = index.logsByDate.get(dateStr) || [];
-    // Strict adherence invariant: completion is solely determined by isCompletedSession
-    const hasCompletedWorkout = dayLogs.some(isCompletedSession);
-
-    const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
-    const isScheduledRest = expectedWo && expectedWo.type === 'rest';
-
-    if (isScheduledCore) {
-      scheduledCoreWorkouts++;
-      if (hasCompletedWorkout) {
-        completedScheduledCore++;
-      } else if (isPast) {
-        missedPastCoreDays++;
-      } else if (isToday) {
-        isTodayCorePending = true;
-      }
-    } else if (isScheduledRest) {
-      scheduledRestDays++;
-      if (hasCompletedWorkout) {
-        bonusCompletedSessions++;
-      }
-    } else {
-      if (hasCompletedWorkout) {
-        bonusCompletedSessions++;
-      }
-    }
+  const adherence = calculateAdherence({
+    index,
+    coreWorkoutByCycleDayMap,
+    cycleStart,
+    startDate: intervalStart,
+    endDate: validNow,
+    now: validNow
   });
 
-  const baseCoreExpected = Math.max(1, scheduledCoreWorkouts);
-  const adherencePct = Math.min(100, Math.round((completedScheduledCore / baseCoreExpected) * 100));
+  const trainingStreak = calculateTrainingStreak({
+    index,
+    coreWorkoutByCycleDayMap,
+    cycleStart,
+    now: validNow
+  });
+
   const avgDuration = rangeMeasuredCount > 0 ? Math.round(rangeMeasuredMinutes / rangeMeasuredCount) : 0;
   const lifetimeHours = index.lifetimeStats.totalMinutes > 0 ? Math.round((index.lifetimeStats.totalMinutes / 60) * 10) / 10 : 0;
 
@@ -1078,15 +1051,19 @@ export function selectTimeRangeAnalytics(
     priorVolume,
     volumePeriodChangePct,
     activeDaysCount: activeDatesSet.size,
-    scheduledCoreWorkouts,
-    completedScheduledCore,
-    scheduledRestDays,
-    missedPastCoreDays,
-    bonusCompletedSessions,
-    isTodayCorePending,
-    adherencePct,
-    currentStreak: index.lifetimeStats.currentStreak,
-    longestStreak: index.lifetimeStats.longestStreak,
+    scheduledCoreWorkouts: adherence.scheduledCoreWorkouts,
+    completedScheduledCore: adherence.completedScheduled,
+    scheduledRestDays: adherence.scheduledRestDays,
+    missedPastCoreDays: adherence.missedPastCoreDays,
+    bonusCompletedSessions: adherence.bonusCompletedSessions,
+    isTodayCorePending: adherence.isTodayPending,
+    adherencePct: adherence.percent,
+    currentStreak: trainingStreak.currentStreak,
+    longestStreak: trainingStreak.longestStreak,
+    consecutiveDaysStreak: computeConsecutiveDaysStreak(index.sortedLogsDescending, validNow),
+    consecutiveCalendarStreak: computeConsecutiveDaysStreak(index.sortedLogsDescending, validNow),
+    trainingStreak,
+    adherence,
     avgDuration,
     biggestWeek: index.biggestWeek,
     recordsList: index.weightPRs,
