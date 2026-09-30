@@ -357,10 +357,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // In production, server.cjs runs from /app/dist or /app
-    const distPath = fs.existsSync(path.join(process.cwd(), 'dist'))
-      ? path.join(process.cwd(), 'dist')
-      : __dirname;
+    // In production, resolve the directory containing index.html
+    const possibleDistPaths = [
+      path.join(process.cwd(), 'dist'),
+      process.cwd(),
+      __dirname,
+      path.join(__dirname, '..', 'dist'),
+    ];
+    const distPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html'))) || path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
@@ -384,7 +388,7 @@ async function startServer() {
     });
   });
 
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });

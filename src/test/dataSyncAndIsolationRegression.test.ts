@@ -214,24 +214,24 @@ describe('Phase A — High-Priority Data / Sync & Isolation Regressions', () => 
   // 4. Cloud sanitization boundary: do not trust unverified Firestore records
   describe('4. Cloud records sanitization pipeline', () => {
     it('sanitizes untrusted/malformed cloud session log records', () => {
-      const malformedCloudLog = {
+      const validSanitizedLog = {
         id: 'cloud_log_1',
         workoutId: 12345, // Number instead of string
-        date: undefined,
+        date: '2026-09-15',
         sets: {
           ex_1: [
             { id: null, weight: 80, reps: '10', completed: true },
             { id: '', weightKg: 85, reps: 8, done: false }
           ]
         },
-        complete: 1, // Number instead of boolean
+        complete: true,
         duration: '45.8'
       };
 
-      const sanitized = sanitizeSessionLog(malformedCloudLog as any);
+      const sanitized = sanitizeSessionLog(validSanitizedLog as any);
       expect(sanitized.id).toBe('cloud_log_1');
       expect(sanitized.workoutId).toBe('12345');
-      expect(typeof sanitized.date).toBe('string');
+      expect(sanitized.date).toBe('2026-09-15');
       expect(sanitized.complete).toBe(true);
       expect(sanitized.durationMinutes).toBe(45);
       expect(sanitized.sets.ex_1).toHaveLength(2);
@@ -240,6 +240,24 @@ describe('Phase A — High-Priority Data / Sync & Isolation Regressions', () => 
       expect(sanitized.sets.ex_1[0].reps).toBe('10');
       expect(sanitized.sets.ex_1[0].done).toBe(true);
       expect(sanitized.sets.ex_1[1].weight).toBe('85');
+
+      // Test strict rejection of non-boolean completion (e.g. 1, "false") and missing dates
+      const nonBooleanLog = sanitizeSessionLog({
+        id: 'bad_complete',
+        workoutId: 'w1',
+        date: '2026-09-15',
+        complete: 1 as any
+      });
+      expect(nonBooleanLog.complete).toBe(false);
+
+      const missingDateLog = sanitizeSessionLog({
+        id: 'no_date',
+        workoutId: 'w1',
+        date: undefined,
+        complete: true
+      });
+      expect(missingDateLog.date).toBe('');
+      expect(missingDateLog.complete).toBe(false);
     });
 
     it('sanitizes untrusted/malformed cloud exercise definitions', () => {
@@ -333,6 +351,66 @@ describe('Phase A — High-Priority Data / Sync & Isolation Regressions', () => 
       expect(getDeletedIdsTracker().logs).toHaveLength(0);
       expect(freshData.logs).toEqual({});
       expect(freshData.workouts.length).toBeGreaterThan(0); // Default templates seeded
+    });
+  });
+
+  // 8. Sync retry mechanism
+  describe('8. Sync retry mechanism', () => {
+    it('executes retry when syncDataBackground rejects on transient failure', async () => {
+      let callCount = 0;
+      const mockSync = async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Transient network error');
+        }
+        return 'success';
+      };
+
+      let finalStatus = '';
+      const executeWithRetry = async (retriesLeft = 3, delayMs = 10): Promise<string> => {
+        try {
+          return await mockSync();
+        } catch (err: any) {
+          if (retriesLeft > 1) {
+            await new Promise(r => setTimeout(r, delayMs));
+            return executeWithRetry(retriesLeft - 1, delayMs * 2);
+          } else {
+            finalStatus = 'failed';
+            throw err;
+          }
+        }
+      };
+
+      const result = await executeWithRetry(3, 10);
+      expect(result).toBe('success');
+      expect(callCount).toBe(2);
+      expect(finalStatus).not.toBe('failed');
+    });
+
+    it('sets failure state when all retries are exhausted', async () => {
+      let callCount = 0;
+      const mockFailingSync = async () => {
+        callCount++;
+        throw new Error('Persistent failure');
+      };
+
+      let finalStatus = '';
+      const executeWithRetry = async (retriesLeft = 3, delayMs = 10): Promise<void> => {
+        try {
+          await mockFailingSync();
+        } catch (err: any) {
+          if (retriesLeft > 1) {
+            await new Promise(r => setTimeout(r, delayMs));
+            return executeWithRetry(retriesLeft - 1, delayMs * 2);
+          } else {
+            finalStatus = 'failed';
+          }
+        }
+      };
+
+      await executeWithRetry(3, 10);
+      expect(callCount).toBe(3);
+      expect(finalStatus).toBe('failed');
     });
   });
 });

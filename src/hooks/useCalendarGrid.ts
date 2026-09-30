@@ -77,7 +77,9 @@ export function useCalendarGrid({
     // Populate dateMap and detailMap from index.logsByDate
     index.logsByDate.forEach((logsForDate, dateStr) => {
       if (!logsForDate || logsForDate.length === 0) return;
-      const primaryLog = logsForDate[0];
+      // Derive day status from all logs: completed session exists -> prioritize completed session
+      const completedLog = logsForDate.find(l => l && l.complete === true);
+      const primaryLog = completedLog || logsForDate[0];
       dateMap.set(dateStr, primaryLog);
       if (primaryLog.id) {
         dateMap.set(primaryLog.id, primaryLog);
@@ -88,13 +90,12 @@ export function useCalendarGrid({
 
       const workoutNames: string[] = [];
       const workoutIds: string[] = [];
-      let isComplete = true;
+      const hasCompleted = logsForDate.some(l => l && l.complete === true);
 
       logsForDate.forEach(l => {
         const wo = workoutMap.get(l.workoutId);
         workoutNames.push(wo?.name || 'Session');
         workoutIds.push(l.workoutId);
-        if (!l.complete) isComplete = false;
       });
 
       const dayVol = volMap[dateStr] || 0;
@@ -107,7 +108,7 @@ export function useCalendarGrid({
         volume: dayVol,
         doneSets,
         totalSets,
-        isComplete,
+        isComplete: hasCompleted,
         logs: logsForDate
       };
     });

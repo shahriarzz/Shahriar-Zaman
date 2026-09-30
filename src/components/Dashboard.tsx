@@ -115,7 +115,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             unit="%"
             sublabel={
               strengthTrend.percentChange !== null
-                ? '30-day vs previous 30d'
+                ? '28-day vs previous 28d'
                 : 'Building baseline'
             }
             isUnavailable={strengthTrend.percentChange === null}

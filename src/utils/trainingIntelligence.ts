@@ -6,6 +6,7 @@ import {
   isValid,
   startOfDay,
   startOfWeek,
+  endOfWeek,
   isSameDay,
   eachDayOfInterval,
   differenceInCalendarDays
@@ -735,12 +736,20 @@ export function calculatePerformanceScore({
     ? startOfWeek(firstSessionDate!, { weekStartsOn: 1 })
     : currentWeekStart;
 
-  // Build the 4 consecutive calendar weeks ending at current week
+  // Build the 4 consecutive calendar weeks ending at current week, enforcing upper bound
   const consecutiveWeeks: { weekStart: Date; weekStr: string; volume: number }[] = [];
   for (let i = 3; i >= 0; i--) {
     const wStart = subWeeks(currentWeekStart, i);
     const weekStr = format(wStart, 'MMM dd, yyyy');
-    const volume = index.weeklyVolumeMap[weekStr] || 0;
+    const wEnd = endOfWeek(wStart, { weekStartsOn: 1 });
+    const weekDays = eachDayOfInterval({ start: wStart, end: wEnd });
+    let volume = 0;
+    weekDays.forEach(d => {
+      const dStr = format(d, 'yyyy-MM-dd');
+      if (dStr <= evalWindow.currentRange.end) {
+        volume += (index.volumeByDate[dStr] || 0);
+      }
+    });
     consecutiveWeeks.push({ weekStart: wStart, weekStr, volume });
   }
 
@@ -851,6 +860,7 @@ export function calculatePerformanceScore({
 export function calculatePREvents(index: FitnessIndex): PREvent[] {
   const prEvents: PREvent[] = [];
   const runningMaxWeight = new Map<string, number>();
+  const runningMaxWeightReps = new Map<string, number>();
   const runningMaxE1RM = new Map<string, number>();
 
   // Process chronologically across verified completed sessions
@@ -872,9 +882,10 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
         const e1rm = r === 1 ? w : Math.round(w * (1 + effectiveReps / 30) * 10) / 10;
 
         const prevMaxW = runningMaxWeight.get(exId) || 0;
+        const prevMaxWReps = runningMaxWeightReps.get(exId) || 0;
         const prevMaxE1 = runningMaxE1RM.get(exId) || 0;
 
-        const isWeightPR = w > prevMaxW;
+        const isWeightPR = w > prevMaxW || (w === prevMaxW && r > prevMaxWReps);
         const isE1RMPR = e1rm > prevMaxE1;
 
         if (isWeightPR || isE1RMPR) {
@@ -891,7 +902,10 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
             isE1RMPR
           });
 
-          if (isWeightPR) runningMaxWeight.set(exId, w);
+          if (isWeightPR) {
+            runningMaxWeight.set(exId, w);
+            runningMaxWeightReps.set(exId, r);
+          }
           if (isE1RMPR) runningMaxE1RM.set(exId, e1rm);
         }
       });

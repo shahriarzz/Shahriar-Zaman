@@ -732,24 +732,44 @@ export function selectLatestForExercise(
  *   cycleDay = getCycleDay(cycleStart, date)
  * Protocol core schedule does NOT depend on whether intermediate days were logged.
  * Specifically across Recovery Days (Day 4 and Day 8), no log is required to advance.
+ * 
+ * Signature supports both clean 1-2 argument form:
+ *   selectNextCycleDay(cycleStart, now?)
+ * And backward-compatible legacy 4-argument form:
+ *   selectNextCycleDay(index?, workoutMap?, cycleStart?, now?)
+ * (where index and workoutMap are deprecated and ignored).
  */
 export function selectNextCycleDay(
-  index?: FitnessIndex | null,
-  workoutMap?: Map<string, Workout> | Workout[] | null,
+  cycleStartOrIndex?: string | FitnessIndex | null,
+  nowOrWorkoutMap?: Date | string | Map<string, Workout> | Workout[] | null,
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): number {
-  return getCycleDay(cycleStart, now);
+  if (arguments.length > 2 || (cycleStartOrIndex && typeof cycleStartOrIndex === 'object' && 'exerciseIndex' in cycleStartOrIndex)) {
+    return getCycleDay(cycleStart, now);
+  }
+  return getCycleDay(cycleStartOrIndex as string | null | undefined, (nowOrWorkoutMap as Date | string) || now);
 }
 
+/**
+ * Resolves the cycle day for a specific target date.
+ * Signature supports both clean 2-argument form:
+ *   selectCycleDayForDate(targetDate, cycleStart?)
+ * And backward-compatible legacy 5-argument form:
+ *   selectCycleDayForDate(targetDate, index?, workoutMap?, cycleStart?, now?)
+ * (where index and workoutMap are deprecated and ignored).
+ */
 export function selectCycleDayForDate(
   targetDate: Date | string,
-  index?: FitnessIndex | null,
-  workoutMap?: Map<string, Workout> | Workout[] | null,
+  indexOrCycleStart?: FitnessIndex | string | null,
+  workoutMapOrNow?: Map<string, Workout> | Workout[] | Date | string | null,
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): number {
-  return getCycleDay(cycleStart, targetDate);
+  if (arguments.length > 2 && (typeof indexOrCycleStart === 'object' || typeof workoutMapOrNow === 'object')) {
+    return getCycleDay(cycleStart, targetDate);
+  }
+  return getCycleDay(indexOrCycleStart as string | null | undefined, targetDate);
 }
 
 /**
@@ -846,12 +866,15 @@ export function selectExerciseFrequency(
 }
 
 export function selectWeightSummary(
-  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null,
+  now: Date | string = new Date()
 ): WeightSummaryData {
-  const weightEntries = getSortedWeightEntries(weightLog);
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const todayStr = isValid(parsedNow) ? format(parsedNow, 'yyyy-MM-dd') : dk();
+  const weightEntries = getSortedWeightEntries(weightLog, todayStr);
   const currentWeight = weightEntries.length > 0 ? weightEntries[0][1] : '--';
   const recentWeightLogs = weightEntries.slice(0, 5);
-  const sparklineData = getWeightSparklineData(weightLog);
+  const sparklineData = getWeightSparklineData(weightLog, todayStr);
 
   return {
     currentWeight,
@@ -894,12 +917,21 @@ export function selectTimeRangeAnalytics(
     priorCutoffDateStr = format(subDays(validNow, 179), 'yyyy-MM-dd');
   }
 
+  // Upper boundary enforcement: logs cannot be dated in the future
+  const isInCurrentRange = (date: string) =>
+    (!cutoffDateStr || date >= cutoffDateStr) && date <= todayStr;
+
   // Canonical completion filter for analytics
-  const rangeLogs = index.sortedLogsAscending.filter(isCompletedSession).filter(l => !cutoffDateStr || l.date >= cutoffDateStr);
-  const priorLogs = index.sortedLogsAscending.filter(isCompletedSession).filter(l => {
-    if (!cutoffDateStr || !priorCutoffDateStr) return false;
-    return l.date >= priorCutoffDateStr && l.date < cutoffDateStr;
-  });
+  const rangeLogs = index.sortedLogsAscending
+    .filter(isCompletedSession)
+    .filter(l => Boolean(l.date) && isInCurrentRange(l.date));
+
+  const priorLogs = index.sortedLogsAscending
+    .filter(isCompletedSession)
+    .filter(l => {
+      if (!cutoffDateStr || !priorCutoffDateStr || !l.date) return false;
+      return l.date >= priorCutoffDateStr && l.date < cutoffDateStr;
+    });
 
   // Calculate range and prior volumes using indexed volumeByDate
   const rangeDates = new Set(rangeLogs.map(l => l.date));
@@ -953,7 +985,7 @@ export function selectTimeRangeAnalytics(
 
   // Aggregate muscle & exercise stats purely from pre-indexed exercise entries (no raw set traversals or recalculations)
   index.exerciseIndex.forEach((entry, normId) => {
-    const rangeSessions = entry.sessions.filter(s => !cutoffDateStr || s.date >= cutoffDateStr);
+    const rangeSessions = entry.sessions.filter(s => Boolean(s.date) && isInCurrentRange(s.date));
     if (rangeSessions.length === 0) return;
 
     let exRangeVol = 0;

@@ -95,7 +95,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     const today = new Date();
     const isFuture = isAfter(startOfDay(date), startOfDay(today));
 
-    // Cycle day anchored to last completed workout (matching Dashboard)
+    // Cycle day is derived from the canonical cycleStart date anchor
     const cycleDay = getCycleDayForDate(date);
     const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
 

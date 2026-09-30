@@ -226,6 +226,7 @@ export function useFitnessSync({
       handleFirestoreError(err, OperationType.GET, `users/${uid}`);
       setSyncStatus('failed');
       setSyncError("Cloud synchronization failed. Operating in offline mode.");
+      throw err;
     } finally {
       isSyncingRef.current = false;
     }
@@ -412,7 +413,9 @@ export function useFitnessSync({
   }, [user, syncDataBackground, exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
 
   const retrySync = useCallback(() => {
-    if (user) syncDataBackground(user.uid);
+    if (user) {
+      syncDataBackground(user.uid).catch(() => {});
+    }
   }, [user, syncDataBackground]);
 
   return useMemo(() => ({

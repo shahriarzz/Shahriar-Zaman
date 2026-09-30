@@ -417,7 +417,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         workoutId: 'w1',
         date: '2026-08-13',
         durationMinutes: -15 as any, // Negative duration
-        complete: 'yes' as any, // Truthy string coerced to boolean
+        complete: 'yes' as any, // Non-boolean string strictly parsed to false
         sets: {
           def_bench: [
             { weight: ' 100 ', reps: ' 10 ', done: 1 as any }, // whitespace and truthy number
@@ -429,7 +429,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
 
       const sanitized = sanitizeSessionLog(malformedLog as any);
       expect(sanitized.durationMinutes).toBe(0); // Coerced to 0
-      expect(sanitized.complete).toBe(true);
+      expect(sanitized.complete).toBe(false); // Non-boolean value rejected
       expect(sanitized.sets['def_bench']).toHaveLength(3);
       expect(sanitized.sets['def_bench'][0]).toEqual({ id: 'def_bench_set_0', weight: '100', reps: '10', done: true });
       expect(sanitized.sets['def_bench'][1]).toEqual({ id: 'def_bench_set_1', weight: '', reps: '', done: false });

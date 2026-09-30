@@ -32,6 +32,33 @@ export function formatDateStr(dateStr: string): string {
   }
 }
 
+export interface DateRange {
+  start: string;
+  end: string;
+}
+
+/**
+ * Returns a rolling date range [today - (days - 1), today]
+ */
+export function getRollingDateRange(now: Date | string = new Date(), days: number): DateRange {
+  const nowDate = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = isValid(nowDate) ? nowDate : new Date();
+  const endStr = dk(validNow);
+  const startStr = dk(subDays(validNow, Math.max(1, days) - 1));
+  return { start: startStr, end: endStr };
+}
+
+/**
+ * Returns the preceding date range of identical length prior to currentRangeStart
+ */
+export function getPreviousDateRange(currentRangeStart: string, days: number): DateRange {
+  const startDate = parseISO(currentRangeStart);
+  const validStart = isValid(startDate) ? startDate : new Date();
+  const prevEnd = subDays(validStart, 1);
+  const prevStart = subDays(validStart, Math.max(1, days));
+  return { start: dk(prevStart), end: dk(prevEnd) };
+}
+
 export interface RawSetLog {
   id?: string;
   weight?: string | number;
@@ -83,11 +110,30 @@ export function sanitizeSetLog(set: RawSetLog | null | undefined, fallbackId: st
  * Hardens and sanitizes a complete SessionLog according to the GainLog data contract.
  * Generates deterministic fallback set IDs based on exercise ID + set position.
  * Guaranteed 100% idempotent: sanitizeSessionLog(log) is byte-equivalent across multiple passes.
+ * Strict parsing:
+ * - true boolean -> true
+ * - false boolean -> false
+ * - legacy boolean -> normalized
+ * - non-boolean / invalid -> false
+ * - missing or invalid date -> preserved as empty/invalid string, never silently defaulting to today's date.
  */
 export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
+  const rawId = String(rawLog?.id || '').trim();
+  const rawWorkoutId = String(rawLog?.workoutId || '').trim();
+
+  // Validate date format strictly: YYYY-MM-DD
+  const rawDateStr = typeof rawLog?.date === 'string' ? rawLog.date.trim() : '';
+  let validDate = '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawDateStr)) {
+    const parsed = parseISO(rawDateStr);
+    if (isValid(parsed)) {
+      validDate = rawDateStr;
+    }
+  }
+
   const sanitizedSets: Record<string, SetLog[]> = {};
 
-  if (rawLog.sets && typeof rawLog.sets === 'object') {
+  if (rawLog?.sets && typeof rawLog.sets === 'object') {
     Object.entries(rawLog.sets).forEach(([exDefId, setsList]) => {
       if (Array.isArray(setsList)) {
         sanitizedSets[exDefId] = setsList.map((s, idx) => sanitizeSetLog(s, `${exDefId}_set_${idx}`));
@@ -95,32 +141,43 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
     });
   }
 
-  const rawDuration = rawLog.durationMinutes !== undefined ? rawLog.durationMinutes : rawLog.duration;
+  const rawDuration = rawLog?.durationMinutes !== undefined ? rawLog.durationMinutes : rawLog?.duration;
   const durationMin = Number(rawDuration);
 
+  // Strict boolean completion parsing
   let isComplete = false;
-  if (rawLog.complete !== undefined) {
-    isComplete = Boolean(rawLog.complete);
-  } else if ((rawLog as any).completed !== undefined) {
-    isComplete = Boolean((rawLog as any).completed);
-  } else if ((rawLog as any).isComplete !== undefined) {
-    isComplete = Boolean((rawLog as any).isComplete);
+  if (typeof rawLog?.complete === 'boolean') {
+    isComplete = rawLog.complete;
+  } else if (rawLog?.complete === undefined) {
+    if (typeof (rawLog as any)?.completed === 'boolean') {
+      isComplete = (rawLog as any).completed;
+    } else if (typeof (rawLog as any)?.isComplete === 'boolean') {
+      isComplete = (rawLog as any).isComplete;
+    } else {
+      // If completion flag is omitted in legacy session log, infer true if there are completed sets
+      const hasAnyDoneSet = Object.values(sanitizedSets).some(sets =>
+        Array.isArray(sets) && sets.some(s => s && s.done)
+      );
+      isComplete = hasAnyDoneSet;
+    }
   } else {
-    // If completion flag is omitted in legacy session log, infer true if there are completed sets
-    const hasAnyDoneSet = Object.values(sanitizedSets).some(sets =>
-      Array.isArray(sets) && sets.some(s => s && s.done)
-    );
-    isComplete = hasAnyDoneSet;
+    // Non-boolean value provided for complete (e.g. "false", 1) -> strictly false
+    isComplete = false;
+  }
+
+  // Completed sessions strictly require valid id, valid workoutId, and valid calendar date
+  if (isComplete && (!rawId || !rawWorkoutId || !validDate)) {
+    isComplete = false;
   }
 
   return {
-    id: String(rawLog.id),
-    workoutId: String(rawLog.workoutId || ''),
-    date: String(rawLog.date || dk()),
+    id: rawId,
+    workoutId: rawWorkoutId,
+    date: validDate,
     sets: sanitizedSets,
     complete: isComplete,
     durationMinutes: Number.isFinite(durationMin) && durationMin >= 0 ? Math.floor(durationMin) : 0,
-    ...(rawLog.updatedAt ? { updatedAt: rawLog.updatedAt } : {})
+    ...(rawLog?.updatedAt ? { updatedAt: Number(rawLog.updatedAt) || 0 } : {})
   };
 }
 
@@ -139,6 +196,10 @@ export function sanitizeExerciseDefinition(raw: any, fallbackId: string = ''): E
     updatedAt: Number(raw?.updatedAt) || 0
   };
 }
+
+const VALID_WORKOUT_TYPES: Set<WorkoutType> = new Set([
+  'push', 'pull', 'hybrid', 'rest', 'date', 'upper', 'lower', 'custom'
+]);
 
 /**
  * Sanitizes and validates a Workout template ensuring valid exercises and properties.
@@ -164,14 +225,22 @@ export function sanitizeWorkout(raw: any, fallbackId: string = ''): Workout {
     };
   }
 
+  const rawType = String(raw?.type || '').toLowerCase();
+  const type: WorkoutType = VALID_WORKOUT_TYPES.has(rawType as WorkoutType) ? (rawType as WorkoutType) : 'custom';
+
+  let cycleDay: number | null = null;
+  if (typeof raw?.cycleDay === 'number' && Number.isInteger(raw.cycleDay) && raw.cycleDay >= 1 && raw.cycleDay <= 8) {
+    cycleDay = raw.cycleDay;
+  }
+
   return {
     id,
     name: String(raw?.name || '').trim() || 'Workout',
     badge: String(raw?.badge || '').trim(),
-    type: (raw?.type || 'custom') as WorkoutType,
+    type,
     exercises,
     cardio,
-    cycleDay: typeof raw?.cycleDay === 'number' ? raw.cycleDay : null,
+    cycleDay,
     isCore: Boolean(raw?.isCore),
     restNotes: Array.isArray(raw?.restNotes) ? raw.restNotes.map(String) : [],
     updatedAt: Number(raw?.updatedAt) || 0
@@ -232,12 +301,13 @@ export function getCompletedSets(setsOrLog: SetLog[] | SessionLog | null | undef
 /**
  * Calculates volume (weight × reps in kg) for a single set.
  * Invariant: only done === true sets count.
+ * Strict protection: weight and reps must be strictly positive (> 0).
  */
 export function calculateSetVolume(set: Partial<SetLog> | null | undefined): number {
   if (!set || !set.done) return 0;
-  const w = parseFloat(String(set.weight)) || 0;
-  let r = parseInt(String(set.reps), 10);
-  if (Number.isNaN(r) || r < 0) r = 0;
+  const w = parseFloat(String(set.weight));
+  const r = parseInt(String(set.reps), 10);
+  if (Number.isNaN(w) || w <= 0 || Number.isNaN(r) || r <= 0) return 0;
   return w * r;
 }
 
@@ -254,12 +324,13 @@ export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[]
  * Calculates Estimated 1RM (e1RM) using the standard Epley formula:
  * e1RM = weight * (1 + reps / 30) for reps > 1, or weight for reps === 1.
  * Capped at 30 reps for realism.
+ * Invariant: weight and reps must be strictly positive.
  */
 export function calculateE1RM(weight: number | string, reps: number | string): number {
-  const w = typeof weight === 'number' ? weight : parseFloat(weight) || 0;
-  const r = typeof reps === 'number' ? reps : parseInt(reps, 10) || 0;
+  const w = typeof weight === 'number' ? weight : parseFloat(weight);
+  const r = typeof reps === 'number' ? reps : parseInt(reps, 10);
 
-  if (w <= 0 || r <= 0) return 0;
+  if (Number.isNaN(w) || w <= 0 || Number.isNaN(r) || r <= 0) return 0;
   if (r === 1) return Math.round(w * 10) / 10;
 
   const effectiveReps = Math.min(r, 30);
@@ -274,14 +345,22 @@ export function getAdjustedCycleStart(workoutCycleDay: number, referenceDate: Da
   return format(adjusted, 'yyyy-MM-dd');
 }
 
+/**
+ * Calculates the protocol cycle day (1-8) for a given target date based on canonical cycleStart anchor.
+ * Fallback is fully deterministic: if cycleStart is missing or invalid, anchors to target date (Day 1).
+ */
 export function getCycleDay(cycleStart: string | undefined | null, targetDate: Date | string = new Date()): number {
-  const todayStr = dk();
-  let start = parseISO(cycleStart || todayStr);
-  if (!isValid(start)) {
-    start = parseISO(todayStr);
-  }
   const targetParsed = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
   const target = isValid(targetParsed) ? targetParsed : new Date();
+  
+  let start: Date;
+  if (cycleStart && isValid(parseISO(cycleStart))) {
+    start = parseISO(cycleStart);
+  } else {
+    // Deterministic fallback: anchor to supplied targetDate
+    start = target;
+  }
+  
   const diff = differenceInCalendarDays(target, start);
   return (((diff % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
 }
@@ -301,13 +380,16 @@ export function normalizeWeightEntry(
 }
 
 export function getSortedWeightEntries(
-  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null,
+  maxDateStr?: string
 ): [string, number][] {
   if (!weightLog) return [];
   const entries: [string, number][] = [];
+  const capDate = maxDateStr || dk();
   Object.entries(weightLog).forEach(([date, val]) => {
+    if (capDate && date > capDate) return;
     const norm = normalizeWeightEntry(val);
-    if (norm && !isNaN(norm.weight)) {
+    if (norm && !isNaN(norm.weight) && norm.weight > 0) {
       entries.push([date, norm.weight]);
     }
   });
@@ -324,13 +406,16 @@ export interface SparklineData {
 }
 
 export function getWeightSparklineData(
-  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null
+  weightLog: Record<string, number | { weight: number; updatedAt?: number }> | undefined | null,
+  maxDateStr?: string
 ): SparklineData | null {
   if (!weightLog) return null;
   const raw: [string, number][] = [];
+  const capDate = maxDateStr || dk();
   Object.entries(weightLog).forEach(([date, val]) => {
+    if (capDate && date > capDate) return;
     const norm = normalizeWeightEntry(val);
-    if (norm && !isNaN(norm.weight)) {
+    if (norm && !isNaN(norm.weight) && norm.weight > 0) {
       raw.push([date, norm.weight]);
     }
   });
