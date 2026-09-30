@@ -31,8 +31,9 @@ export function useFitnessLogs({
 }: UseFitnessLogsProps) {
 
   const addLog = useCallback(async (logId: string, logOriginal: SessionLog): Promise<void> => {
-    // Single canonical ingestion path: sanitize and validate according to data contract
-    const log = sanitizeSessionLog({ ...logOriginal, id: logId });
+    const now = Date.now();
+    // Single canonical ingestion path: sanitize and validate according to data contract with canonical timestamp
+    const log = sanitizeSessionLog({ ...logOriginal, id: logId, updatedAt: now });
     try {
       const nextLogs = { ...logsRef.current, [logId]: log };
       // Assign ref synchronously alongside setLogs so ref and state represent the same logical write immediately
@@ -103,12 +104,13 @@ export function useFitnessLogs({
 
   const updateCycleStart = useCallback(async (date: string): Promise<void> => {
     try {
-      const nextState = { ...appStateRef.current, cycleStart: date };
+      const now = Date.now();
+      const nextState = { ...appStateRef.current, cycleStart: date, updatedAt: now };
       appStateRef.current = nextState;
       setAppState(nextState);
 
       if (user) {
-        await saveAppState(user.uid, { cycleStart: date }, true);
+        await saveAppState(user.uid, { cycleStart: date, updatedAt: now }, true);
       }
     } catch (error) {
       console.error("Failed to update cycle start", error);

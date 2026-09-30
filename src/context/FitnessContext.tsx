@@ -83,7 +83,8 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setExerciseDefinitions: data.setExerciseDefinitions,
     setWorkouts: data.setWorkouts,
     setLogs: data.setLogs,
-    setAppState: data.setAppState
+    setAppState: data.setAppState,
+    resetToDefaultData: data.resetToDefaultData
   });
 
   // 3. Backups manager

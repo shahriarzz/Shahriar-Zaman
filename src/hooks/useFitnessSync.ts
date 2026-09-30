@@ -4,6 +4,11 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandle
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import { dk } from '../utils/fitnessHelpers';
 import { 
+  sanitizeExerciseDefinition, 
+  sanitizeWorkout, 
+  sanitizeSessionLog 
+} from '../utils/fitnessCalculations';
+import { 
   getDeletedIdsTracker, 
   removeDeletedId,
   clearDeletedIdsTracker, 
@@ -41,6 +46,7 @@ interface UseFitnessSyncProps {
   setWorkouts: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => void;
   setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
   setAppState: (state: AppState | ((prev: AppState) => AppState)) => void;
+  resetToDefaultData?: () => void;
 }
 
 export function useFitnessSync({
@@ -51,7 +57,8 @@ export function useFitnessSync({
   setExerciseDefinitions,
   setWorkouts,
   setLogs,
-  setAppState
+  setAppState,
+  resetToDefaultData
 }: UseFitnessSyncProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +66,7 @@ export function useFitnessSync({
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
+  const previousUidRef = useRef<string | null>(null);
 
   // Auth listener
   useEffect(() => {
@@ -67,6 +75,18 @@ export function useFitnessSync({
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
+      const prevUid = previousUidRef.current;
+      const currentUid = u ? u.uid : null;
+
+      // When switching accounts or logging out from an existing account, isolate data by resetting local state
+      if (prevUid && prevUid !== currentUid) {
+        clearDeletedIdsTracker();
+        if (resetToDefaultData) {
+          resetToDefaultData();
+        }
+      }
+      previousUidRef.current = currentUid;
+
       setUser(u);
       setLoading(false);
       if (!u) {
@@ -75,7 +95,7 @@ export function useFitnessSync({
       }
     });
     return unsubscribeAuth;
-  }, []);
+  }, [resetToDefaultData]);
 
   const login = useCallback(async () => {
     try {
@@ -91,10 +111,14 @@ export function useFitnessSync({
   const logout = useCallback(async () => {
     try {
       await auth.signOut();
+      clearDeletedIdsTracker();
+      if (resetToDefaultData) {
+        resetToDefaultData();
+      }
     } catch (e) {
       console.error("Sign out error:", e);
     }
-  }, []);
+  }, [resetToDefaultData]);
 
   // Sync logic
   const syncDataBackground = useCallback(async (uid: string) => {
@@ -166,7 +190,7 @@ export function useFitnessSync({
       // 2. Deterministic Defs Sync
       const { merged: mergedDefs, toUpload: defsToUpload } = mergeDefinitions(
         exerciseDefsRef.current,
-        rawCloudDefs,
+        cloudDefs,
         activeTracker.defs
       );
       if (defsToUpload.length > 0) {
@@ -177,7 +201,7 @@ export function useFitnessSync({
       // 3. Deterministic Workouts Sync
       const { merged: mergedWorkouts, toUpload: workoutsToUpload } = mergeWorkouts(
         workoutsRef.current,
-        rawCloudWorkouts,
+        cloudWorkouts,
         activeTracker.workouts
       );
       if (workoutsToUpload.length > 0) {
@@ -188,7 +212,7 @@ export function useFitnessSync({
       // 4. Deterministic Logs Sync
       const { merged: mergedLogs, toUpload: logsToUpload } = mergeLogs(
         logsRef.current,
-        rawCloudLogs || {},
+        cloudLogsMap,
         activeTracker.logs
       );
       if (Object.keys(logsToUpload).length > 0) {
@@ -252,7 +276,7 @@ export function useFitnessSync({
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
-            const cloudDef = change.doc.data() as ExerciseDefinition;
+            const cloudDef = sanitizeExerciseDefinition(change.doc.data(), id);
             const idx = current.findIndex(d => d.id === id);
             const localDef = idx !== -1 ? current[idx] : null;
             const result = resolveLocalCloudRecord(localDef, cloudDef, isTombstoned);
@@ -293,7 +317,7 @@ export function useFitnessSync({
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
-            const cloudW = change.doc.data() as Workout;
+            const cloudW = sanitizeWorkout(change.doc.data(), id);
             const idx = current.findIndex(w => w.id === id);
             const localW = idx !== -1 ? current[idx] : null;
             const result = resolveLocalCloudRecord(localW, cloudW, isTombstoned);
@@ -334,16 +358,7 @@ export function useFitnessSync({
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);
           if (change.type === 'added' || change.type === 'modified') {
-            const raw = change.doc.data() as any;
-            const cloudVal: SessionLog = {
-              id,
-              workoutId: raw.workoutId,
-              date: raw.date,
-              sets: raw.sets || {},
-              complete: !!raw.complete,
-              durationMinutes: Number(raw.durationMinutes !== undefined ? raw.durationMinutes : raw.duration) || 0,
-              updatedAt: Number(raw.updatedAt) || 0
-            };
+            const cloudVal: SessionLog = sanitizeSessionLog({ ...change.doc.data(), id });
             const localL = current[id] || null;
             const result = resolveLocalCloudRecord(localL, cloudVal, isTombstoned);
 

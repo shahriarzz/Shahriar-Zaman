@@ -1,5 +1,13 @@
 import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
-import { SessionLog, SetLog, Workout } from '../types/fitness';
+import { 
+  SessionLog, 
+  SetLog, 
+  Workout, 
+  ExerciseDefinition, 
+  WorkoutExercise, 
+  CardioFinisher, 
+  WorkoutType 
+} from '../types/fitness';
 
 export const CYCLE_LENGTH = 8;
 
@@ -117,22 +125,67 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
 }
 
 /**
+ * Sanitizes and validates an ExerciseDefinition ensuring non-null types and defaults.
+ */
+export function sanitizeExerciseDefinition(raw: any, fallbackId: string = ''): ExerciseDefinition {
+  const id = String(raw?.id || fallbackId || '').trim();
+  return {
+    id,
+    name: String(raw?.name || '').trim() || 'Exercise',
+    target: String(raw?.target || '').trim() || 'General',
+    equipment: String(raw?.equipment || '').trim(),
+    instructions: String(raw?.instructions || '').trim(),
+    tags: Array.isArray(raw?.tags) ? raw.tags.map(String) : [],
+    updatedAt: Number(raw?.updatedAt) || 0
+  };
+}
+
+/**
+ * Sanitizes and validates a Workout template ensuring valid exercises and properties.
+ */
+export function sanitizeWorkout(raw: any, fallbackId: string = ''): Workout {
+  const id = String(raw?.id || fallbackId || '').trim();
+  const rawExercises = Array.isArray(raw?.exercises) ? raw.exercises : [];
+  const exercises: WorkoutExercise[] = rawExercises.map((e: any) => ({
+    exerciseDefinitionId: String(e?.exerciseDefinitionId || e?.exerciseId || e?.id || '').trim(),
+    sets: Number(e?.sets) > 0 ? Number(e.sets) : 3,
+    reps: String(e?.reps || '10–12').trim(),
+    rest: String(e?.rest || '90s').trim(),
+    note: String(e?.note || '').trim(),
+    tags: Array.isArray(e?.tags) ? e.tags.map(String) : []
+  }));
+
+  let cardio: CardioFinisher | null = null;
+  if (raw?.cardio && typeof raw.cardio === 'object') {
+    cardio = {
+      name: String(raw.cardio.name || '').trim(),
+      detail: String(raw.cardio.detail || '').trim(),
+      duration: String(raw.cardio.duration || '').trim()
+    };
+  }
+
+  return {
+    id,
+    name: String(raw?.name || '').trim() || 'Workout',
+    badge: String(raw?.badge || '').trim(),
+    type: (raw?.type || 'custom') as WorkoutType,
+    exercises,
+    cardio,
+    cycleDay: typeof raw?.cycleDay === 'number' ? raw.cycleDay : null,
+    isCore: Boolean(raw?.isCore),
+    restNotes: Array.isArray(raw?.restNotes) ? raw.restNotes.map(String) : [],
+    updatedAt: Number(raw?.updatedAt) || 0
+  };
+}
+
+/**
  * Single canonical predicate determining if a SessionLog is a completed workout session.
  * Used consistently across all analytics, adherence, streaks, frequencies, and lifetime summaries.
+ * Strict invariant: runtime predicate checks exclusively for complete === true.
+ * Legacy inferencing is performed exclusively in migration/sanitization.
  */
 export function isCompletedSession(log: Partial<SessionLog> | null | undefined): boolean {
-  if (!log) return false;
-  if (log.complete === true) return true;
-  if ((log as any).completed === true) return true;
-  if ((log as any).isComplete === true) return true;
-  if (log.complete === undefined && (log as any).completed === undefined && (log as any).isComplete === undefined) {
-    if (log.sets && typeof log.sets === 'object') {
-      return Object.values(log.sets).some(sets =>
-        Array.isArray(sets) && sets.some(s => s && s.done)
-      );
-    }
-  }
-  return false;
+  return log?.complete === true;
 }
 
 /** Alias for isCompletedSession */

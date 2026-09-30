@@ -30,16 +30,21 @@ export function useFitnessWorkouts({
 
   const setWorkouts = useCallback(async (w: Workout[] | ((prev: Workout[]) => Workout[])): Promise<void> => {
     try {
+      const now = Date.now();
       const currentWorkouts = workoutsRef.current;
       const rawNext = typeof w === 'function' ? w(currentWorkouts) : w;
       const { workouts: migrated } = extractExerciseDefinitionsFromWorkouts(rawNext);
+      const workoutsWithTimestamp = migrated.map(item => ({
+        ...item,
+        updatedAt: now
+      }));
 
-      workoutsRef.current = migrated;
-      setWorkoutsState(migrated);
-      pushAutoBackup(migrated, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
+      workoutsRef.current = workoutsWithTimestamp;
+      setWorkoutsState(workoutsWithTimestamp);
+      pushAutoBackup(workoutsWithTimestamp, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
 
       if (user) {
-        await saveWorkoutsBatch(user.uid, migrated);
+        await saveWorkoutsBatch(user.uid, workoutsWithTimestamp);
       }
     } catch (error) {
       console.error("Failed to update workouts", error);
@@ -75,11 +80,13 @@ export function useFitnessWorkouts({
       tags: programming?.tags ?? []
     };
 
+    const now = Date.now();
     const nextWorkouts = currentWorkouts.map(w => {
       if (w.id === workoutId) {
         return {
           ...w,
-          exercises: [...(w.exercises || []), newExEntry]
+          exercises: [...(w.exercises || []), newExEntry],
+          updatedAt: now
         };
       }
       return w;
@@ -104,12 +111,14 @@ export function useFitnessWorkouts({
   }, [user, workoutsRef, setWorkoutsState, setSyncStatus, setSyncError]);
 
   const removeExerciseFromWorkout = useCallback(async (workoutId: string, exerciseDefId: string): Promise<void> => {
+    const now = Date.now();
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.map(w => {
       if (w.id === workoutId) {
         return {
           ...w,
-          exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== exerciseDefId)
+          exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== exerciseDefId),
+          updatedAt: now
         };
       }
       return w;
@@ -138,6 +147,7 @@ export function useFitnessWorkouts({
     exerciseDefId: string, 
     programming: Partial<WorkoutExercise>
   ): Promise<void> => {
+    const now = Date.now();
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.map(w => {
       if (w.id === workoutId) {
@@ -152,7 +162,8 @@ export function useFitnessWorkouts({
               };
             }
             return e;
-          })
+          }),
+          updatedAt: now
         };
       }
       return w;

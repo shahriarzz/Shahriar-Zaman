@@ -89,6 +89,27 @@ export function useFitnessData() {
     setAppStateState(snapshot.appState);
   }, []);
 
+  // Isolate and reset local state to fresh defaults on logout or user switch
+  const resetToDefaultData = useCallback((): FitnessDatabaseSnapshot => {
+    localStorage.removeItem('gl_exercise_definitions');
+    localStorage.removeItem('gl_workouts');
+    localStorage.removeItem('gl_logs');
+    localStorage.removeItem('gl_state');
+    localStorage.removeItem('gl_deleted_ids');
+    localStorage.removeItem('gl_auto_backups');
+    localStorage.removeItem('gl_active_session');
+
+    const fresh = loadInitialFitnessData();
+    const snapshot: FitnessDatabaseSnapshot = {
+      exerciseDefinitions: fresh.defs,
+      workouts: fresh.workouts,
+      logs: fresh.logs,
+      appState: fresh.appState
+    };
+    applyFitnessDatabaseSnapshot(snapshot);
+    return snapshot;
+  }, [applyFitnessDatabaseSnapshot]);
+
   // Unified single-point persistence to localStorage
   useEffect(() => {
     if (!isInitialized) return;
@@ -118,6 +139,7 @@ export function useFitnessData() {
     appStateRef,
 
     applyFitnessDatabaseSnapshot,
+    resetToDefaultData,
 
     isInitialized,
     setIsInitialized

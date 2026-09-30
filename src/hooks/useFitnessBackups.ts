@@ -80,6 +80,12 @@ export function useFitnessBackups({
     }
   }, []);
 
+  const clearAutoBackups = useCallback((): void => {
+    try {
+      localStorage.removeItem('gl_auto_backups');
+    } catch {}
+  }, []);
+
   const restoreAutoBackup = useCallback(async (timestamp: string): Promise<{ success: boolean; message: string }> => {
     try {
       const backups = getAutoBackups();
@@ -217,6 +223,7 @@ export function useFitnessBackups({
   return useMemo(() => ({
     pushAutoBackup,
     getAutoBackups,
+    clearAutoBackups,
     restoreAutoBackup,
     createManualBackup,
     exportBackup,
@@ -224,6 +231,7 @@ export function useFitnessBackups({
   }), [
     pushAutoBackup,
     getAutoBackups,
+    clearAutoBackups,
     restoreAutoBackup,
     createManualBackup,
     exportBackup,

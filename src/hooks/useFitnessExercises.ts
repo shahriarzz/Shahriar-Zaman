@@ -40,6 +40,7 @@ export function useFitnessExercises({
   const addExerciseDefinition = useCallback(async (
     defData: Omit<ExerciseDefinition, 'id'> & { id?: string }
   ): Promise<ExerciseDefinition> => {
+    const now = Date.now();
     const id = defData.id || `ex-${generateId()}`;
     const newDef: ExerciseDefinition = {
       id,
@@ -47,7 +48,8 @@ export function useFitnessExercises({
       target: defData.target.trim() || 'General',
       equipment: defData.equipment?.trim() || '',
       instructions: defData.instructions?.trim() || '',
-      tags: defData.tags || []
+      tags: defData.tags || [],
+      updatedAt: now
     };
 
     const currentDefs = exerciseDefsRef.current;
@@ -78,15 +80,17 @@ export function useFitnessExercises({
   }, [user, exerciseDefsRef, setExerciseDefinitions, setSyncStatus, setSyncError]);
 
   const updateExerciseDefinition = useCallback(async (def: ExerciseDefinition): Promise<void> => {
+    const now = Date.now();
+    const updatedDef: ExerciseDefinition = { ...def, updatedAt: now };
     const currentDefs = exerciseDefsRef.current;
-    const nextDefs = currentDefs.map(d => d.id === def.id ? def : d);
+    const nextDefs = currentDefs.map(d => d.id === def.id ? updatedDef : d);
 
     exerciseDefsRef.current = nextDefs;
     setExerciseDefinitions(nextDefs);
 
     if (user) {
       try {
-        await saveExerciseDefinition(user.uid, def);
+        await saveExerciseDefinition(user.uid, updatedDef);
       } catch (e) {
         console.error("Failed to update exercise definition in cloud", e);
         handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}/exerciseDefinitions/${def.id}`);
