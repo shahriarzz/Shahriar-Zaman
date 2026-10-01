@@ -1,4 +1,5 @@
 import { showToast } from '../components/ui';
+import { logger } from '../utils/logger';
 
 export enum OperationType {
   CREATE = 'create',
@@ -51,9 +52,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
   // Clean logging to production console (excluding noisy or sensitive auth credentials)
   if (isOffline) {
-    console.log('Firestore (offline):', JSON.stringify(errInfo));
+    logger.debug('Firestore (offline):', JSON.stringify(errInfo));
   } else {
-    console.error('Firestore Error:', JSON.stringify(errInfo));
+    logger.error('Firestore Error:', JSON.stringify(errInfo));
   }
 
   // Visual user-facing notification for write operations to provide clean UX

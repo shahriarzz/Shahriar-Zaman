@@ -79,6 +79,8 @@ export interface LifetimeStats {
   totalMinutes: number;
   measuredSessionsCount: number;
   /** Consecutive calendar training dates streak */
+  calendarTrainingStreak: number;
+  longestCalendarStreak: number;
   currentStreak: number;
   longestStreak: number;
   consecutiveDaysStreak: number;
@@ -182,10 +184,11 @@ export interface FitnessIndex {
 }
 
 /**
- * Consecutive calendar training days streak calculation.
- * Counts unbroken consecutive calendar dates on which at least one completed session occurred.
+ * Canonical Calendar Days Training Streak:
+ * Strictly counts unbroken consecutive calendar dates on which at least one completed session occurred.
+ * This measures daily training frequency regardless of split or rest schedule.
  */
-export function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
+export function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
   const completedLogs = logs.filter(isCompletedSession);
   const datesSet = new Set(completedLogs.map(l => l?.date).filter(Boolean));
   if (datesSet.size === 0) return 0;
@@ -217,7 +220,8 @@ export function computeCurrentStreak(logs: SessionLog[], referenceDate: Date = n
   return streak;
 }
 
-export const computeConsecutiveDaysStreak = computeCurrentStreak;
+export const computeCurrentStreak = computeCalendarTrainingStreak;
+export const computeConsecutiveDaysStreak = computeCalendarTrainingStreak;
 
 /**
  * Internal helper to calculate longest consecutive workout day streak.
@@ -610,7 +614,7 @@ export function buildFitnessIndex(
     });
   });
 
-  const calendarCurrentStreak = computeCurrentStreak(completedLogsDescending);
+  const calendarCurrentStreak = computeCalendarTrainingStreak(completedLogsDescending);
   const calendarLongestStreak = computeLongestStreak(completedLogsDescending);
 
   const lifetimeStats: LifetimeStats = {
@@ -619,6 +623,8 @@ export function buildFitnessIndex(
     totalSets: totalLifetimeSets,
     totalMinutes: totalLifetimeMinutes,
     measuredSessionsCount: measuredLifetimeCount,
+    calendarTrainingStreak: calendarCurrentStreak,
+    longestCalendarStreak: calendarLongestStreak,
     currentStreak: calendarCurrentStreak,
     longestStreak: calendarLongestStreak,
     consecutiveDaysStreak: calendarCurrentStreak,

@@ -145,8 +145,9 @@ export interface CalculateStreakOptions {
 }
 
 /**
- * Calculates consecutive scheduled training opportunities completed,
- * counting backward from the latest relevant scheduled day.
+ * Canonical Scheduled Protocol Streak:
+ * Protocol-aware streak that respects scheduled training split and programmed recovery days.
+ * An active scheduled protocol streak is NOT broken on rest days or by unperformed workouts on future days.
  *
  * Invariants:
  * - completed scheduled workout -> continues streak
@@ -158,7 +159,7 @@ export interface CalculateStreakOptions {
  * - future scheduled workout -> cannot break current streak
  * - current-day workout not yet completed -> does not prematurely break streak
  */
-export function calculateTrainingStreak({
+export function calculateScheduledProtocolStreak({
   index,
   coreWorkoutByCycleDayMap,
   cycleStart,
@@ -267,6 +268,9 @@ export function calculateTrainingStreak({
     streakEndDate: currentStreak > 0 ? tempStreakEnd : null
   };
 }
+
+/** Canonical alias for backward compatibility */
+export const calculateTrainingStreak = calculateScheduledProtocolStreak;
 
 // ----------------------------------------------------------------------------
 // 2. Training Frequency

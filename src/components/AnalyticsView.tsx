@@ -164,14 +164,14 @@ export const AnalyticsView: React.FC = () => {
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
       <Grid cols={2} colsLg={4} gap="md">
-        {/* 1. Training Streak */}
+        {/* 1. Scheduled Training Streak */}
         <StatCard
-          label="Training Streak"
+          label="Scheduled Training Streak"
           value={trainingStreak.currentStreak}
           unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
           icon={<Flame size={16} />}
           accent="orange"
-          sublabel="Current scheduled streak"
+          sublabel="Respects recovery days"
           trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
         />
 

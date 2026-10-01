@@ -172,23 +172,23 @@ function AppContent() {
               Booting Protocol Engine
             </h3>
             <p className="text-xs text-zinc-500 max-w-[280px] leading-relaxed mx-auto">
-              Decrypting database layers and aligning previous statistics securely...
+              Loading training data and preparing your dashboard...
             </p>
           </div>
 
-          {/* Secure status checks log row */}
+          {/* System status row */}
           <Card variant="standard" surface="recessed" padding="compact" className="w-full text-left space-y-2">
             <div className={cn("flex items-center gap-2 text-zinc-300", TYPOGRAPHY.caption)}>
               <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
               {status.statusText}
             </div>
             <div className={cn("flex justify-between text-zinc-500", TYPOGRAPHY.micro)}>
-              <span>Cloud DB Connection</span>
-              <span className={status.connectionColor}>{status.connectionText}</span>
+              <span>Local Storage</span>
+              <span className="text-emerald-400">READY</span>
             </div>
             <div className={cn("flex justify-between text-zinc-500", TYPOGRAPHY.micro)}>
-              <span>Encryption Status</span>
-              <span className="text-zinc-300">AES-256</span>
+              <span>Cloud Sync</span>
+              <span className={status.connectionColor}>{status.connectionText}</span>
             </div>
           </Card>
         </div>

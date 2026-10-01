@@ -27,6 +27,7 @@ import {
   Firestore
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
+import { logger } from '../utils/logger';
 // Safely check for firebase-applet-config.json without triggering static module resolution errors if file is deleted
 const configModules = (import.meta as any).glob(['/firebase-applet-config.json', '../../firebase-applet-config.json'], { eager: true }) as Record<string, any>;
 const rawConfig = configModules['/firebase-applet-config.json']?.default 
@@ -214,13 +215,13 @@ export {
 // Connection test - dev only to prevent unnecessary network calls in production
 async function testConnection() {
   if (!isFirebaseConfigured) {
-    console.log("Firebase is not configured. Running in offline-only mode.");
+    logger.debug("Firebase is not configured. Running in offline-only mode.");
     return;
   }
   try {
     // Attempt to read a dummy document to verify connection on configured database ID
     await fbGetDocFromServer(fbDoc(dbInstance, 'test', 'connection'));
-    console.log("Firebase connection established successfully with database:", actualConfig.firestoreDatabaseId || "(default)");
+    logger.debug("Firebase connection established successfully with database:", actualConfig.firestoreDatabaseId || "(default)");
   } catch (error: any) {
     const errMsg = error?.message || String(error);
     const errCode = error?.code || '';
@@ -242,9 +243,9 @@ async function testConnection() {
         `Error: ${errMsg}`
       );
     } else if (isOffline) {
-      console.log("Firebase is offline. Operating in offline cache mode.");
+      logger.debug("Firebase is offline. Operating in offline cache mode.");
     } else {
-      console.log("Firebase connection established.");
+      logger.debug("Firebase connection established.");
     }
   }
 }

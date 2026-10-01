@@ -35,6 +35,8 @@ android {
         release {
             if (signingConfigs.release.storeFile != null) {
                 signingConfig signingConfigs.release
+            } else if (System.getenv("REQUIRE_SIGNING") == "true" || (project.hasProperty('REQUIRE_SIGNING') && project.property('REQUIRE_SIGNING') == "true")) {
+                throw new GradleException("Release signing is mandatory for publishing, but no keystore was found via KEYSTORE_PATH environment variable or gradle.properties!")
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

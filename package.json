@@ -6,16 +6,18 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "npm run clean && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
-    "clean": "rimraf dist",
+    "clean": "rimraf dist dist-server",
+    "build:web": "vite build",
+    "build:server": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist-server/server.cjs",
+    "build": "npm run clean && npm run build:web && npm run build:server",
+    "start": "node dist-server/server.cjs",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ci": "npm run lint && npm run test && npm run build",
     "cap:sync": "cap sync android",
-    "android:debug": "npm run build && npx cap sync android && cd android && ./gradlew assembleDebug",
-    "android:release": "npm run build && npx cap sync android && cd android && ./gradlew bundleRelease"
+    "android:debug": "npm run clean && npm run build:web && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "android:release": "npm run clean && npm run build:web && npx cap sync android && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
     "@capacitor/android": "8",

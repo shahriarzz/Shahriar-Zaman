@@ -16,38 +16,6 @@
   <body style="background-color: #09090e; margin: 0; padding: 0;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Force unregister service workers and clear caches to prevent white screens caused by stale service workers
-      try {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then((registrations) => {
-            for (const registration of registrations) {
-              if (registration && typeof registration.unregister === 'function') {
-                registration.unregister().then(() => {
-                  console.log('Stale ServiceWorker unregistered');
-                }).catch(e => console.warn(e));
-              }
-            }
-          }).catch(e => console.warn(e));
-        }
-      } catch (err) {
-        console.warn("ServiceWorker retrieval blocked:", err);
-      }
-
-      try {
-        if ('caches' in window) {
-          caches.keys().then((keys) => {
-            for (const key of keys) {
-              caches.delete(key).then(() => {
-                console.log('Stale Cache cleared:', key);
-              }).catch(e => console.warn(e));
-            }
-          }).catch(e => console.warn(e));
-        }
-      } catch (err) {
-        console.warn("Cache storage blocked:", err);
-      }
-    </script>
   </body>
 </html>
 
