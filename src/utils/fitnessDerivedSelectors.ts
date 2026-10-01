@@ -1,4 +1,4 @@
-import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, startOfDay, isSameDay, eachDayOfInterval } from 'date-fns';
+import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, isSameDay, eachDayOfInterval } from 'date-fns';
 import { SessionLog, SetLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
   calculateSetVolume,
@@ -9,6 +9,8 @@ import {
   getWeightSparklineData,
   getCycleDay,
   isCompletedSession,
+  getRollingDateRange,
+  getPreviousDateRange,
   dk,
   SparklineData
 } from './fitnessCalculations';
@@ -255,11 +257,18 @@ function computeLongestStreak(logs: SessionLog[]): number {
 
 /**
  * Builds the canonical FitnessIndex in a single, high-performance O(N) traversal.
+ * Enforces canonical date validation boundary: future-dated logs never qualify
+ * as completed or contribute to lifetime volume, PRs, streaks, or completion metrics.
  */
 export function buildFitnessIndex(
   logs: Record<string, SessionLog> | SessionLog[] | null | undefined,
-  defsMap: Map<string, ExerciseDefinition> = new Map()
+  defsMap: Map<string, ExerciseDefinition> = new Map(),
+  now: Date | string = new Date()
 ): FitnessIndex {
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = isValid(parsedNow) ? parsedNow : new Date();
+  const todayStr = format(validNow, 'yyyy-MM-dd');
+
   const rawLogs = Array.isArray(logs) ? logs : Object.values(logs || {});
   
   // Validated logs
@@ -276,9 +285,9 @@ export function buildFitnessIndex(
 
   const sortedLogsAscending = [...sortedLogsDescending].reverse();
 
-  // Completed logs subset for canonical completion invariants
-  const completedLogsDescending = sortedLogsDescending.filter(isCompletedSession);
-  const completedLogsAscending = sortedLogsAscending.filter(isCompletedSession);
+  // Completed non-future logs subset for canonical completion invariants and lifetime stats
+  const completedLogsDescending = sortedLogsDescending.filter(l => isCompletedSession(l) && (!l.date || l.date <= todayStr));
+  const completedLogsAscending = sortedLogsAscending.filter(l => isCompletedSession(l) && (!l.date || l.date <= todayStr));
 
   const logsByDate = new Map<string, SessionLog[]>();
   const historyByExercise = new Map<string, ExerciseSessionHistoryEntry[]>();
@@ -328,7 +337,8 @@ export function buildFitnessIndex(
   // Single pass over ascending logs (chronological order)
   sortedLogsAscending.forEach(log => {
     let logSessionVol = 0;
-    const isCompleted = isCompletedSession(log);
+    // Canonical boundary: future-dated logs cannot qualify as completed for lifetime/PR metrics
+    const isCompleted = isCompletedSession(log) && (!log.date || log.date <= todayStr);
 
     if (isCompleted && log.durationMinutes && log.durationMinutes > 0) {
       totalLifetimeMinutes += log.durationMinutes;
@@ -732,44 +742,22 @@ export function selectLatestForExercise(
  *   cycleDay = getCycleDay(cycleStart, date)
  * Protocol core schedule does NOT depend on whether intermediate days were logged.
  * Specifically across Recovery Days (Day 4 and Day 8), no log is required to advance.
- * 
- * Signature supports both clean 1-2 argument form:
- *   selectNextCycleDay(cycleStart, now?)
- * And backward-compatible legacy 4-argument form:
- *   selectNextCycleDay(index?, workoutMap?, cycleStart?, now?)
- * (where index and workoutMap are deprecated and ignored).
  */
 export function selectNextCycleDay(
-  cycleStartOrIndex?: string | FitnessIndex | null,
-  nowOrWorkoutMap?: Date | string | Map<string, Workout> | Workout[] | null,
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): number {
-  if (arguments.length > 2 || (cycleStartOrIndex && typeof cycleStartOrIndex === 'object' && 'exerciseIndex' in cycleStartOrIndex)) {
-    return getCycleDay(cycleStart, now);
-  }
-  return getCycleDay(cycleStartOrIndex as string | null | undefined, (nowOrWorkoutMap as Date | string) || now);
+  return getCycleDay(cycleStart, now);
 }
 
 /**
  * Resolves the cycle day for a specific target date.
- * Signature supports both clean 2-argument form:
- *   selectCycleDayForDate(targetDate, cycleStart?)
- * And backward-compatible legacy 5-argument form:
- *   selectCycleDayForDate(targetDate, index?, workoutMap?, cycleStart?, now?)
- * (where index and workoutMap are deprecated and ignored).
  */
 export function selectCycleDayForDate(
   targetDate: Date | string,
-  indexOrCycleStart?: FitnessIndex | string | null,
-  workoutMapOrNow?: Map<string, Workout> | Workout[] | Date | string | null,
-  cycleStart?: string | null,
-  now: Date | string = new Date()
+  cycleStart?: string | null
 ): number {
-  if (arguments.length > 2 && (typeof indexOrCycleStart === 'object' || typeof workoutMapOrNow === 'object')) {
-    return getCycleDay(cycleStart, targetDate);
-  }
-  return getCycleDay(indexOrCycleStart as string | null | undefined, targetDate);
+  return getCycleDay(cycleStart, targetDate);
 }
 
 /**
@@ -799,7 +787,7 @@ export function selectTodayCoreWorkout(
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): Workout | undefined {
-  const todayCycleDay = selectNextCycleDay(null, workoutMap, cycleStart, now);
+  const todayCycleDay = selectNextCycleDay(cycleStart, now);
   return selectCoreWorkoutForCycleDay(workoutMap, todayCycleDay);
 }
 
@@ -900,21 +888,26 @@ export function selectTimeRangeAnalytics(
   const parsedNow = typeof now === 'string' ? parseISO(now) : now;
   const validNow = isValid(parsedNow) ? parsedNow : new Date();
   const todayStr = format(validNow, 'yyyy-MM-dd');
-  const startOfToday = startOfDay(validNow);
 
-  // Calculate cutoffs
+  // Calculate cutoffs using canonical rolling date range helpers
   let cutoffDateStr: string | null = null;
   let priorCutoffDateStr: string | null = null;
 
   if (timeRange === '7d') {
-    cutoffDateStr = format(subDays(validNow, 6), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(validNow, 13), 'yyyy-MM-dd');
+    const currentRange = getRollingDateRange(validNow, 7);
+    const priorRange = getPreviousDateRange(currentRange.start, 7);
+    cutoffDateStr = currentRange.start;
+    priorCutoffDateStr = priorRange.start;
   } else if (timeRange === '30d') {
-    cutoffDateStr = format(subDays(validNow, 29), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(validNow, 59), 'yyyy-MM-dd');
+    const currentRange = getRollingDateRange(validNow, 30);
+    const priorRange = getPreviousDateRange(currentRange.start, 30);
+    cutoffDateStr = currentRange.start;
+    priorCutoffDateStr = priorRange.start;
   } else if (timeRange === '90d') {
-    cutoffDateStr = format(subDays(validNow, 89), 'yyyy-MM-dd');
-    priorCutoffDateStr = format(subDays(validNow, 179), 'yyyy-MM-dd');
+    const currentRange = getRollingDateRange(validNow, 90);
+    const priorRange = getPreviousDateRange(currentRange.start, 90);
+    cutoffDateStr = currentRange.start;
+    priorCutoffDateStr = priorRange.start;
   }
 
   // Upper boundary enforcement: logs cannot be dated in the future

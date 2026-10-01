@@ -179,12 +179,12 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   // 9. Canonical Cycle Day Calculations
   const nextCycleDay = useMemo(() => {
-    return selectNextCycleDay(index, workoutMap, appState?.cycleStart, currentDate);
-  }, [index, workoutMap, appState?.cycleStart, currentDate]);
+    return selectNextCycleDay(appState?.cycleStart, currentDate);
+  }, [appState?.cycleStart, currentDate]);
 
   const getCycleDayForDate = useCallback((targetDate: Date | string): number => {
-    return selectCycleDayForDate(targetDate, index, workoutMap, appState?.cycleStart, currentDate);
-  }, [index, workoutMap, appState?.cycleStart, currentDate]);
+    return selectCycleDayForDate(targetDate, appState?.cycleStart);
+  }, [appState?.cycleStart]);
 
   // 10. Canonical Training Intelligence Calculations
 

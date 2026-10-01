@@ -1,24 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #09090e;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>GAINLOG — Professional Fitness Tracking</title>
+    <title>GAINLOG: Protocol Tracker</title>
+    <meta name="description" content="Professional 8-day split fitness tracker with PR detection, AI coaching, and comprehensive progress analytics. Optimized for high-performance training." />
+    <meta property="og:title" content="GAINLOG: Protocol Tracker" />
+    <meta property="og:description" content="Professional 8-day split fitness tracker with PR detection, AI coaching, and comprehensive progress analytics. Optimized for high-performance training." />
     <link rel="manifest" href="/manifest.json" />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-DobGfrxH.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D83lfBpE.css">
+    <script type="module" crossorigin src="/assets/index-CqtOjTPM.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-aLj_5lJA.css">
   </head>
-  <body>
+  <body style="background-color: #09090e; margin: 0; padding: 0;">
     <div id="root"></div>
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed: ', err));
-        });
+      // Force unregister service workers and clear caches to prevent white screens caused by stale service workers
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              if (registration && typeof registration.unregister === 'function') {
+                registration.unregister().then(() => {
+                  console.log('Stale ServiceWorker unregistered');
+                }).catch(e => console.warn(e));
+              }
+            }
+          }).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.warn("ServiceWorker retrieval blocked:", err);
+      }
+
+      try {
+        if ('caches' in window) {
+          caches.keys().then((keys) => {
+            for (const key of keys) {
+              caches.delete(key).then(() => {
+                console.log('Stale Cache cleared:', key);
+              }).catch(e => console.warn(e));
+            }
+          }).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.warn("Cache storage blocked:", err);
       }
     </script>
   </body>

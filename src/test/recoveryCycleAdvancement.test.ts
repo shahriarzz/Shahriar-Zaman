@@ -43,13 +43,13 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex(logs);
 
     // Day 3 evaluates to cycleDay 3
-    const day3 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-03');
+    const day3 = selectNextCycleDay(cycleStart, '2026-10-03');
     expect(day3).toBe(3);
     const day3Workout = selectCoreWorkoutForCycleDay(workoutMap, day3);
     expect(day3Workout?.badge).toBe('DAY 3 · HYBRID A');
 
     // Tomorrow (2026-10-04) naturally becomes Day 4 Recovery
-    const day4 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-04');
+    const day4 = selectNextCycleDay(cycleStart, '2026-10-04');
     expect(day4).toBe(4);
     const day4Workout = selectCoreWorkoutForCycleDay(workoutMap, day4);
     expect(day4Workout?.badge).toBe('DAY 4 · REST');
@@ -64,7 +64,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex(logs);
 
     // On Day 5 (2026-10-05), protocol must advance to Day 5 (Push Day B)
-    const day5 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-05');
+    const day5 = selectNextCycleDay(cycleStart, '2026-10-05');
     expect(day5).toBe(5);
 
     const day5Workout = selectCoreWorkoutForCycleDay(workoutMap, day5);
@@ -82,13 +82,13 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex(logs);
 
     // Day 7 evaluates to cycleDay 7
-    const day7 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-07');
+    const day7 = selectNextCycleDay(cycleStart, '2026-10-07');
     expect(day7).toBe(7);
     const day7Workout = selectCoreWorkoutForCycleDay(workoutMap, day7);
     expect(day7Workout?.badge).toBe('DAY 7 · HYBRID B');
 
     // Tomorrow (2026-10-08) is Day 8 Recovery
-    const day8 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-08');
+    const day8 = selectNextCycleDay(cycleStart, '2026-10-08');
     expect(day8).toBe(8);
     const day8Workout = selectCoreWorkoutForCycleDay(workoutMap, day8);
     expect(day8Workout?.badge).toBe('DAY 8 · REST');
@@ -103,7 +103,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex(logs);
 
     // On Day 1 (2026-10-09), protocol wraps to Day 1 (Push Day A)
-    const day1NextCycle = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-09');
+    const day1NextCycle = selectNextCycleDay(cycleStart, '2026-10-09');
     expect(day1NextCycle).toBe(1);
 
     const day1Workout = selectCoreWorkoutForCycleDay(workoutMap, day1NextCycle);
@@ -119,7 +119,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex([]);
 
     // Open on Day 5 directly
-    const day5 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-05');
+    const day5 = selectNextCycleDay(cycleStart, '2026-10-05');
     expect(day5).toBe(5);
 
     const targetWorkout = selectTodayCoreWorkout(workoutMap, cycleStart, '2026-10-05');
@@ -130,7 +130,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex([]);
 
     // Open on Day 1 of next cycle directly
-    const day1 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-09');
+    const day1 = selectNextCycleDay(cycleStart, '2026-10-09');
     expect(day1).toBe(1);
 
     const targetWorkout = selectTodayCoreWorkout(workoutMap, cycleStart, '2026-10-09');
@@ -146,13 +146,13 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const index = buildFitnessIndex(logs);
 
     // Day 4 scheduled protocol remains Recovery Day despite bonus workout
-    const day4 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-04');
+    const day4 = selectNextCycleDay(cycleStart, '2026-10-04');
     expect(day4).toBe(4);
     const day4Workout = selectCoreWorkoutForCycleDay(workoutMap, day4);
     expect(day4Workout?.badge).toBe('DAY 4 · REST');
 
     // Day 5 scheduled protocol remains Push Day B
-    const day5 = selectNextCycleDay(index, workoutMap, cycleStart, '2026-10-05');
+    const day5 = selectNextCycleDay(cycleStart, '2026-10-05');
     expect(day5).toBe(5);
     const day5Workout = selectCoreWorkoutForCycleDay(workoutMap, day5);
     expect(day5Workout?.badge).toBe('DAY 5 · PUSH B');
@@ -167,7 +167,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const indexAfterReload = buildFitnessIndex(logs);
 
     // Reopen next morning (2026-10-05)
-    const morningCycleDay = selectNextCycleDay(indexAfterReload, workoutMap, cycleStart, '2026-10-05');
+    const morningCycleDay = selectNextCycleDay(cycleStart, '2026-10-05');
     expect(morningCycleDay).toBe(5);
     const morningWorkout = selectTodayCoreWorkout(workoutMap, cycleStart, '2026-10-05');
     expect(morningWorkout?.badge).toBe('DAY 5 · PUSH B');
@@ -221,12 +221,12 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const tomorrow = '2026-10-05';
 
     // Today is Day 4
-    const todayCycle = selectNextCycleDay(null, workoutMap, cycleStart, today);
+    const todayCycle = selectNextCycleDay(cycleStart, today);
     const todayWorkout = selectCoreWorkoutForCycleDay(workoutMap, todayCycle);
     expect(todayWorkout?.badge).toBe('DAY 4 · REST');
 
     // Without logging anything today, tomorrow's workout resolves
-    const tomorrowCycle = selectNextCycleDay(null, workoutMap, cycleStart, tomorrow);
+    const tomorrowCycle = selectNextCycleDay(cycleStart, tomorrow);
     const tomorrowWorkout = selectCoreWorkoutForCycleDay(workoutMap, tomorrowCycle);
     expect(tomorrowWorkout?.badge).toBe('DAY 5 · PUSH B');
   });
@@ -236,12 +236,12 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const tomorrow = '2026-10-09';
 
     // Today is Day 8
-    const todayCycle = selectNextCycleDay(null, workoutMap, cycleStart, today);
+    const todayCycle = selectNextCycleDay(cycleStart, today);
     const todayWorkout = selectCoreWorkoutForCycleDay(workoutMap, todayCycle);
     expect(todayWorkout?.badge).toBe('DAY 8 · REST');
 
     // Without logging anything today, tomorrow's workout resolves
-    const tomorrowCycle = selectNextCycleDay(null, workoutMap, cycleStart, tomorrow);
+    const tomorrowCycle = selectNextCycleDay(cycleStart, tomorrow);
     const tomorrowWorkout = selectCoreWorkoutForCycleDay(workoutMap, tomorrowCycle);
     expect(tomorrowWorkout?.badge).toBe('DAY 1 · PUSH A');
   });

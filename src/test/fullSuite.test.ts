@@ -417,7 +417,7 @@ describe('GainLog Comprehensive Validation Suite', () => {
 
     it('queries exercise history from canonical index with zero set-traversal overhead', () => {
       const { defsMap, logs } = generateSyntheticData(1000);
-      const index = buildFitnessIndex(logs, defsMap);
+      const index = buildFitnessIndex(logs, defsMap, new Date(2026, 11, 31));
 
       const start = performance.now();
       const benchEntry = index.exerciseIndex.get('barbell-bench-press');

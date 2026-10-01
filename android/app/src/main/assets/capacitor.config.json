@@ -3,6 +3,22 @@
 	"appName": "GAINLOG: Protocol Tracker",
 	"webDir": "dist",
 	"server": {
-		"androidScheme": "https"
+		"androidScheme": "https",
+		"hostname": "gainlog.app"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchAutoHide": false,
+			"backgroundColor": "#09090e",
+			"showSpinner": false
+		},
+		"StatusBar": {
+			"style": "light",
+			"backgroundColor": "#09090e"
+		},
+		"Keyboard": {
+			"resize": "body",
+			"resizeOnFullScreen": true
+		}
 	}
 }

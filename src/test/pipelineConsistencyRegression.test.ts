@@ -192,13 +192,65 @@ describe('P0 & P1 Pipeline Consistency Regressions', () => {
       const targetDay = selectCycleDayForDate('2026-09-05', '2026-09-01');
       expect(targetDay).toBe(5);
     });
+  });
 
-    it('retains backward compatibility with legacy multi-arg signatures', () => {
-      const dayLegacy = selectNextCycleDay(null, null, '2026-09-01', new Date('2026-09-03T10:00:00Z'));
-      expect(dayLegacy).toBe(3);
+  // P1 — Prevent future-dated workout logs from entering lifetime calculations
+  describe('P1 — Future-dated completed logs cannot contaminate lifetime metrics', () => {
+    it('strictly isolates lifetime volume, sets, sessions, PRs, e1RM history, and streaks from future logs', () => {
+      const pastLog: SessionLog = {
+        id: 'past_1',
+        workoutId: 'w1',
+        date: '2026-09-25',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          bench: [{ id: 's1', weight: '100', reps: '5', done: true }] // volume = 500
+        }
+      };
 
-      const targetLegacy = selectCycleDayForDate('2026-09-04', null, null, '2026-09-01');
-      expect(targetLegacy).toBe(4);
+      const futureLog: SessionLog = {
+        id: 'future_corrupted',
+        workoutId: 'w1',
+        date: '2026-10-10', // future relative to 2026-09-30
+        complete: true,
+        durationMinutes: 60,
+        sets: {
+          bench: [{ id: 's2', weight: '300', reps: '10', done: true }] // volume = 3000
+        }
+      };
+
+      const refDate = new Date('2026-09-30T12:00:00Z');
+      const index = buildFitnessIndex([pastLog, futureLog], defsMap, refDate);
+
+      // 1. Lifetime volume must only include past session (500, not 3500)
+      expect(index.lifetimeStats.totalVolume).toBe(500);
+
+      // 2. Lifetime sessions count must be 1 (not 2)
+      expect(index.lifetimeStats.totalSessions).toBe(1);
+
+      // 3. Lifetime sets must be 1 (not 2)
+      expect(index.lifetimeStats.totalSets).toBe(1);
+
+      // 4. Lifetime lastSessionDate must be 2026-09-25 (not future 2026-10-10)
+      expect(index.lifetimeStats.lastSessionDate).toBe('2026-09-25');
+
+      // 5. Weight PR must remain 100kg (not corrupted by future 300kg)
+      const benchPR = index.weightPRs.find(pr => pr.exerciseDefinitionId === 'bench');
+      expect(benchPR?.weight).toBe(100);
+
+      // 6. E1RM PR must remain based on 100x5 (not 300x10)
+      const benchE1RM = index.e1RMPRs.find(pr => pr.exerciseDefinitionId === 'bench');
+      expect(benchE1RM?.weight).toBe(100);
+
+      // 7. e1rmHistoryByExercise must not contain future progression points
+      const progression = index.e1rmHistoryByExercise.get('bench') || [];
+      expect(progression.every(p => p.date <= '2026-09-30')).toBe(true);
+
+      // 8. Completed sets by date must not have entries for future date
+      expect(index.completedSetsByDate['2026-10-10']).toBeUndefined();
+
+      // 9. Volume by date must not have entries for future date
+      expect(index.volumeByDate['2026-10-10']).toBeUndefined();
     });
   });
 });

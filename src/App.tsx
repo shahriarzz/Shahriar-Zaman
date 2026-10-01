@@ -25,7 +25,7 @@ function AppContent() {
   // Set up native status bar style and background color on launch
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      StatusBar.setStyle({ style: Style.Dark }).catch(err => {
+      StatusBar.setStyle({ style: Style.Light }).catch(err => {
         console.warn('Error setting StatusBar style:', err);
       });
       StatusBar.setBackgroundColor({ color: '#09090e' }).catch(err => {
@@ -34,17 +34,31 @@ function AppContent() {
     }
   }, []);
 
-  // Dynamically hide the native splash screen only when loading is fully complete
+  // Dynamically hide the native splash screen with loading completion & safety timeout
   useEffect(() => {
-    if (!loading && Capacitor.isNativePlatform()) {
-      // Small timeout to allow the browser to paint the ready state before hiding the splash screen
+    if (!Capacitor.isNativePlatform()) return;
+
+    // Safety timeout: splash screen must never remain indefinitely under slow or offline conditions
+    const safetyTimer = setTimeout(() => {
+      SplashScreen.hide().catch(err => {
+        console.warn('Error hiding splash screen on safety timeout:', err);
+      });
+    }, 3000);
+
+    if (!loading) {
+      // Small timeout to allow browser to paint ready state before hiding splash
       const timer = setTimeout(() => {
         SplashScreen.hide().catch(err => {
           console.warn('Error hiding splash screen:', err);
         });
       }, 100);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(safetyTimer);
+      };
     }
+
+    return () => clearTimeout(safetyTimer);
   }, [loading]);
 
   // Unify and deduplicate session exit/abandon flow

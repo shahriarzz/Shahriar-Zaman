@@ -725,15 +725,15 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const index = buildFitnessIndex(logs);
 
       // Anchored to 2026-08-01, on 2026-08-02 the cycle day is 2
-      const nextDay = selectNextCycleDay(index, workoutMap, '2026-08-01', '2026-08-02');
+      const nextDay = selectNextCycleDay('2026-08-01', '2026-08-02');
       expect(nextDay).toBe(2);
 
       // On 2026-08-02, selectCycleDayForDate is also 2
-      const targetDayCycle = selectCycleDayForDate('2026-08-02', index, workoutMap, '2026-08-01');
+      const targetDayCycle = selectCycleDayForDate('2026-08-02', '2026-08-01');
       expect(targetDayCycle).toBe(2);
 
       // On 2026-08-01, cycle day is 1
-      const startDayCycle = selectCycleDayForDate('2026-08-01', index, workoutMap, '2026-08-01');
+      const startDayCycle = selectCycleDayForDate('2026-08-01', '2026-08-01');
       expect(startDayCycle).toBe(1);
     });
   });

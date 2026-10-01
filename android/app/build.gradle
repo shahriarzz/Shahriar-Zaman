@@ -7,8 +7,8 @@ android {
         applicationId "com.gainlog.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode Integer.parseInt(System.getenv("VERSION_CODE") ?: "1")
+        versionName System.getenv("VERSION_NAME") ?: "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (System.getenv("KEYSTORE_PATH") != null && file(System.getenv("KEYSTORE_PATH")).exists()) {
+                storeFile file(System.getenv("KEYSTORE_PATH"))
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            } else if (project.hasProperty('RELEASE_STORE_FILE') && file(project.property('RELEASE_STORE_FILE')).exists()) {
+                storeFile file(project.property('RELEASE_STORE_FILE'))
+                storePassword project.property('RELEASE_STORE_PASSWORD')
+                keyAlias project.property('RELEASE_KEY_ALIAS')
+                keyPassword project.property('RELEASE_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
