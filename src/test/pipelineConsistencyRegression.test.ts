@@ -252,5 +252,47 @@ describe('P0 & P1 Pipeline Consistency Regressions', () => {
       // 9. Volume by date must not have entries for future date
       expect(index.volumeByDate['2026-10-10']).toBeUndefined();
     });
+
+    it('accurately uses injected reference date for calendar training streak instead of system clock', () => {
+      const consecutiveLogs: SessionLog[] = [
+        {
+          id: 'log_d1',
+          workoutId: 'w1',
+          date: '2026-04-10',
+          complete: true,
+          durationMinutes: 45,
+          sets: { bench: [{ id: 's1', weight: '100', reps: '10', done: true }] }
+        },
+        {
+          id: 'log_d2',
+          workoutId: 'w1',
+          date: '2026-04-11',
+          complete: true,
+          durationMinutes: 45,
+          sets: { bench: [{ id: 's2', weight: '100', reps: '10', done: true }] }
+        },
+        {
+          id: 'log_d3',
+          workoutId: 'w1',
+          date: '2026-04-12',
+          complete: true,
+          durationMinutes: 45,
+          sets: { bench: [{ id: 's3', weight: '100', reps: '10', done: true }] }
+        }
+      ];
+
+      // 1. Injected date is exactly day 3 (2026-04-12) -> streak is 3
+      const indexDay3 = buildFitnessIndex(consecutiveLogs, defsMap, new Date('2026-04-12T10:00:00Z'));
+      expect(indexDay3.lifetimeStats.calendarTrainingStreak).toBe(3);
+
+      // 2. Injected date is day 4 (2026-04-13, no workout yet today) -> streak is still 3 from yesterday
+      const indexDay4 = buildFitnessIndex(consecutiveLogs, defsMap, new Date('2026-04-13T10:00:00Z'));
+      expect(indexDay4.lifetimeStats.calendarTrainingStreak).toBe(3);
+
+      // 3. Injected date is day 10 (2026-04-20, streak has lapsed) -> streak is 0
+      const indexDay10 = buildFitnessIndex(consecutiveLogs, defsMap, new Date('2026-04-20T10:00:00Z'));
+      expect(indexDay10.lifetimeStats.calendarTrainingStreak).toBe(0);
+      expect(indexDay10.lifetimeStats.longestCalendarStreak).toBe(3);
+    });
   });
 });

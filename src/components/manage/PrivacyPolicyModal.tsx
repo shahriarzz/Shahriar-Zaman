@@ -78,7 +78,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                 2. AI Coaching (Gemini API)
               </h4>
               <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
-                When you request AI Coaching for an exercise, only the current exercise name, target rep range, and recent sets for that exercise are transmitted via secure HTTPS to Google Gemini. No personal identifying information (PII) is sent with coaching prompts, and your workout data is never used to train public foundational models.
+                When you request AI Coaching for an exercise, movement parameters (exercise name, target rep range, and recent set history) are processed by Google Gemini to generate progressive overload suggestions. No account credentials or personal identifying details are transmitted with coaching requests, and data is processed according to Google API Terms of Service.
               </p>
             </section>
 
@@ -86,10 +86,10 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             <section className="space-y-2">
               <h4 className={cn(TYPOGRAPHY.cardTitle, "text-white flex items-center gap-2")}>
                 <Lock size={15} className="text-emerald-400" />
-                3. Storage, Encryption & Third Parties
+                3. Storage, Encryption & Security
               </h4>
               <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
-                Cloud synchronization is powered by Google Firebase Firestore. Data is encrypted in transit via TLS 1.3 and at rest via AES-256. Firestore security rules enforce strict user-level authorization: no user can read or write another athlete's data. We do not sell, rent, or monetize your training data.
+                Cloud synchronization is powered by Google Firebase Firestore. Data is encrypted in transit using industry-standard Transport Layer Security (HTTPS/TLS) and encrypted at rest by Google Cloud infrastructure. Database security rules enforce user-level authorization so each user can only read and write their own data. We never sell, rent, or monetize user training logs.
               </p>
             </section>
 

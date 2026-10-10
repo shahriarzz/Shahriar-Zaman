@@ -614,7 +614,7 @@ export function buildFitnessIndex(
     });
   });
 
-  const calendarCurrentStreak = computeCalendarTrainingStreak(completedLogsDescending);
+  const calendarCurrentStreak = computeCalendarTrainingStreak(completedLogsDescending, validNow);
   const calendarLongestStreak = computeLongestStreak(completedLogsDescending);
 
   const lifetimeStats: LifetimeStats = {
@@ -1089,10 +1089,13 @@ export function selectTimeRangeAnalytics(
     bonusCompletedSessions: adherence.bonusCompletedSessions,
     isTodayCorePending: adherence.isTodayPending,
     adherencePct: adherence.percent,
+    scheduledTrainingStreak: trainingStreak,
+    calendarTrainingStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
+    // Compatibility properties for existing callers
     currentStreak: trainingStreak.currentStreak,
     longestStreak: trainingStreak.longestStreak,
-    consecutiveDaysStreak: computeConsecutiveDaysStreak(index.sortedLogsDescending, validNow),
-    consecutiveCalendarStreak: computeConsecutiveDaysStreak(index.sortedLogsDescending, validNow),
+    consecutiveDaysStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
+    consecutiveCalendarStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
     trainingStreak,
     adherence,
     avgDuration,

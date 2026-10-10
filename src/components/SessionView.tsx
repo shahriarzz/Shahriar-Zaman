@@ -10,6 +10,8 @@ import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
+import { buildApiUrl } from '../utils/apiConfig';
+import { generateClientCoachingFallback } from '../utils/aiAdviceFallback';
 
 export interface SessionPR {
   exerciseDefinitionId: string;
@@ -790,7 +792,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         headers['Authorization'] = `Bearer ${idToken}`;
       }
 
-      const response = await fetch('/api/fitness/advice', {
+      const response = await fetch(buildApiUrl('/api/fitness/advice'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -833,15 +835,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('AI Coaching advice service notice:', errorMessage);
       
-      // Selectively present detailed server/Gemini errors or guide user if missing config
-      let humanMsg = "Unable to reach the Coach's server right now. Keep your form strict, match your targets, and try again shortly!";
+      // When network fails or server is unreachable, deliver client-side progressive overload advice
+      let humanMsg = generateClientCoachingFallback(ex.name, ex.reps || '', history as any);
       if (error instanceof Error) {
         const msg = error.message;
         if (msg.includes("GEMINI_API_KEY") || msg.includes("api key") || msg.includes("API key")) {
           humanMsg = "Coaching engine requires a configured GEMINI_API_KEY environment variable. Please make sure it is added inside the project Settings.";
         } else if (msg.includes("Too many advice requests") || msg.includes("rate-limit") || msg.includes("cooldown")) {
           humanMsg = "Coaching engine cooldown: " + msg;
-        } else if (msg && !msg.includes("Server error") && !msg.includes("invalid response")) {
+        } else if (msg && !msg.toLowerCase().includes("fetch") && !msg.includes("Server error") && !msg.includes("invalid response")) {
           humanMsg = msg;
         }
       }
