@@ -55,18 +55,30 @@ const isValidConfigField = (val: unknown): boolean =>
   !val.includes('YOUR_') &&
   val !== 'undefined';
 
-const isFirebaseConfigured = Boolean(
-  isValidConfigField(actualConfig.apiKey) &&
-  isValidConfigField(actualConfig.projectId) &&
-  isValidConfigField(actualConfig.appId)
-);
-
 export type FirebaseConfigState = 'configured' | 'incomplete' | 'offline_by_default';
-export const firebaseConfigState: FirebaseConfigState = isFirebaseConfigured
-  ? 'configured'
-  : (isValidConfigField(actualConfig.apiKey) || isValidConfigField(actualConfig.projectId))
-    ? 'incomplete'
-    : 'offline_by_default';
+
+/**
+ * Validates the required Firebase fields according to services consumed (Auth with Google & Firestore).
+ * Strictly checks apiKey, projectId, appId, and authDomain for complete authentication setup.
+ */
+export function computeFirebaseConfigState(config: Record<string, any>): FirebaseConfigState {
+  const hasApiKey = isValidConfigField(config.apiKey);
+  const hasProjectId = isValidConfigField(config.projectId);
+  const hasAppId = isValidConfigField(config.appId);
+  const hasAuthDomain = isValidConfigField(config.authDomain);
+
+  const isFullyConfigured = hasApiKey && hasProjectId && hasAppId && hasAuthDomain;
+  if (isFullyConfigured) return 'configured';
+
+  const hasAnyField = hasApiKey || hasProjectId || hasAppId || hasAuthDomain ||
+    isValidConfigField(config.storageBucket) || isValidConfigField(config.messagingSenderId);
+  if (hasAnyField) return 'incomplete';
+
+  return 'offline_by_default';
+}
+
+export const firebaseConfigState: FirebaseConfigState = computeFirebaseConfigState(actualConfig);
+export const isFirebaseConfigured = firebaseConfigState === 'configured';
 
 // Real implementation variables typed fully
 let dbInstance: Firestore;
@@ -222,12 +234,15 @@ export {
   collectionFunc as collection,
   deleteDocFunc as deleteDoc,
   onSnapshotFunc as onSnapshot,
-  writeBatchFunc as writeBatch,
-  isFirebaseConfigured
+  writeBatchFunc as writeBatch
 };
 
 // Connection test - dev only to prevent unnecessary network calls in production
 async function testConnection() {
+  if (firebaseConfigState === 'incomplete') {
+    logger.warn("Firebase configuration is incomplete. Running in offline fallback mode.");
+    return;
+  }
   if (!isFirebaseConfigured) {
     logger.debug("Firebase is not configured. Running in offline-only mode.");
     return;

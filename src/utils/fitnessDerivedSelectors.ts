@@ -4,6 +4,8 @@ import {
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
+  parseStrictWeight,
+  parseStrictReps,
   getSortedLogsDescending,
   getSortedWeightEntries,
   getWeightSparklineData,
@@ -415,10 +417,10 @@ export function buildFitnessIndex(
         let maxSetDetailInSession = '';
 
         doneSets.forEach(s => {
-          const rawW = parseFloat(s.weight);
-          const w = Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 ? rawW : 0;
-          const rawR = parseInt(s.reps, 10);
-          const r = Number.isFinite(rawR) && rawR > 0 && rawR <= 1000 ? rawR : 0;
+          const parsedW = parseStrictWeight(s.weight, 0.0001, 5000);
+          const w = parsedW !== null ? parsedW : 0;
+          const parsedR = parseStrictReps(s.reps, 1, 1000);
+          const r = parsedR !== null ? parsedR : 0;
           const setVol = calculateSetVolume(s);
           exSessionVol += setVol;
 
@@ -810,21 +812,17 @@ export function selectTodayCoreWorkout(
  * 5. Equal weight + equal/lower reps is not a PR.
  */
 export function isNewPersonalBest(
-  candidate: { weight: number; reps: number | string },
+  candidate: { weight: number | string; reps: number | string },
   previous: { weight: number | string; reps: number | string } | null | undefined
 ): boolean {
-  const rawCWeight = typeof candidate?.weight === 'number' ? candidate.weight : parseFloat(String(candidate?.weight));
-  const cWeight = Number.isFinite(rawCWeight) && rawCWeight > 0 && rawCWeight <= 5000 ? rawCWeight : 0;
-  const rawCReps = typeof candidate?.reps === 'number' ? candidate.reps : parseInt(String(candidate?.reps), 10);
-  const cReps = Number.isFinite(rawCReps) && rawCReps > 0 && rawCReps <= 1000 ? rawCReps : 0;
+  const cWeight = parseStrictWeight(candidate?.weight, 0.0001, 5000) || 0;
+  const cReps = parseStrictReps(candidate?.reps, 1, 1000) || 0;
 
   if (cWeight <= 0 || cReps <= 0) return false;
   if (!previous) return true;
 
-  const rawPWeight = typeof previous.weight === 'number' ? previous.weight : parseFloat(String(previous.weight));
-  const pWeight = Number.isFinite(rawPWeight) ? rawPWeight : 0;
-  const rawPReps = typeof previous.reps === 'number' ? previous.reps : parseInt(String(previous.reps), 10);
-  const pReps = Number.isFinite(rawPReps) ? rawPReps : 0;
+  const pWeight = parseStrictWeight(previous.weight, 0.0001, 5000) || 0;
+  const pReps = parseStrictReps(previous.reps, 1, 1000) || 0;
 
   if (pWeight <= 0) return true;
 

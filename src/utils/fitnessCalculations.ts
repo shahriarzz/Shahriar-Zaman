@@ -86,6 +86,48 @@ export interface RawSessionLogInput {
 }
 
 /**
+ * Shared strict parser for weight values.
+ * - Accepts finite positive numbers or numeric strings representing valid integers/decimals.
+ * - Rejects non-numeric characters (e.g. "12abc"), negative values, and extreme out-of-range values.
+ * - Default range: min = 0, max = 5000 (kg/lbs)
+ */
+export function parseStrictWeight(val: unknown, min: number = 0, max: number = 5000): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') {
+    return (Number.isFinite(val) && val >= min && val <= max) ? val : null;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+    const num = Number(trimmed);
+    return (Number.isFinite(num) && num >= min && num <= max) ? num : null;
+  }
+  return null;
+}
+
+/**
+ * Shared strict parser for repetitions (reps).
+ * - Reps must be strictly WHOLE positive numbers (integers).
+ * - Rejects decimals (e.g. "5.5"), non-numeric strings (e.g. "12abc"), negative values, and non-finite values.
+ * - Default range: min = 0, max = 1000
+ */
+export function parseStrictReps(val: unknown, min: number = 0, max: number = 1000): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') {
+    return (Number.isFinite(val) && Number.isInteger(val) && val >= min && val <= max) ? val : null;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    if (!/^\d+$/.test(trimmed)) return null;
+    const num = Number(trimmed);
+    return (Number.isFinite(num) && Number.isInteger(num) && num >= min && num <= max) ? num : null;
+  }
+  return null;
+}
+
+/**
  * Pure helper to sanitize a single SetLog ensuring valid types and defaults.
  * Guaranteed 100% deterministic: NEVER generates random IDs under any circumstances.
  */
@@ -94,25 +136,17 @@ export function sanitizeSetLog(set: RawSetLog | null | undefined, fallbackId: st
     ? String(set.id).trim()
     : (fallbackId && fallbackId.trim().length > 0 ? fallbackId.trim() : 'set_0');
   const rawWeight = set?.weight !== undefined ? set.weight : (set?.weightKg !== undefined ? set.weightKg : '');
-  let weightStr = typeof rawWeight === 'number' ? String(rawWeight) : String(rawWeight || '');
-  const rawNumW = Number(weightStr);
-  const numW = parseFloat(weightStr);
-  if (weightStr.trim().length > 0 && (!Number.isFinite(rawNumW) || !Number.isFinite(numW) || rawNumW < 0 || rawNumW > 5000 || numW < 0 || numW > 5000)) {
-    weightStr = '';
-  }
+  const parsedW = parseStrictWeight(rawWeight, 0, 5000);
+  const weightStr = parsedW !== null ? String(rawWeight).trim() : '';
 
-  let repsStr = typeof set?.reps === 'number' ? String(set.reps) : String(set?.reps || '');
-  const rawNumR = Number(repsStr);
-  const numR = parseInt(repsStr, 10);
-  if (repsStr.trim().length > 0 && (!Number.isFinite(rawNumR) || !Number.isFinite(numR) || rawNumR < 0 || rawNumR > 1000 || numR < 0 || numR > 1000)) {
-    repsStr = '';
-  }
+  const parsedR = parseStrictReps(set?.reps, 0, 1000);
+  const repsStr = parsedR !== null ? String(set?.reps).trim() : '';
   const done = Boolean(set?.done ?? set?.completed);
 
   return {
     id,
-    weight: weightStr.trim(),
-    reps: repsStr.trim(),
+    weight: weightStr,
+    reps: repsStr,
     done
   };
 }
@@ -319,9 +353,9 @@ export function getCompletedSets(setsOrLog: SetLog[] | SessionLog | null | undef
  */
 export function calculateSetVolume(set: Partial<SetLog> | null | undefined): number {
   if (!set || !set.done) return 0;
-  const w = parseFloat(String(set.weight));
-  const r = parseInt(String(set.reps), 10);
-  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(r) || r <= 0 || w > 5000 || r > 1000) return 0;
+  const w = parseStrictWeight(set.weight, 0.0001, 5000);
+  const r = parseStrictReps(set.reps, 1, 1000);
+  if (w === null || r === null) return 0;
   const vol = w * r;
   return Number.isFinite(vol) ? vol : 0;
 }
@@ -342,13 +376,13 @@ export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[]
  * Invariant: weight and reps must be strictly positive and finite.
  */
 export function calculateE1RM(weight: number | string, reps: number | string): number {
-  const w = typeof weight === 'number' ? weight : parseFloat(String(weight));
-  const r = typeof reps === 'number' ? reps : parseInt(String(reps), 10);
+  const w = parseStrictWeight(weight, 0.0001, 5000);
+  const r = parseStrictReps(reps, 1, 1000);
 
-  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(r) || r <= 0 || w > 5000) return 0;
+  if (w === null || r === null) return 0;
   if (r === 1) return Math.round(w * 10) / 10;
 
-  const effectiveReps = Math.min(Math.max(1, r), 30);
+  const effectiveReps = Math.min(r, 30);
   const e1rm = w * (1 + effectiveReps / 30);
   return Number.isFinite(e1rm) ? Math.round(e1rm * 10) / 10 : 0;
 }

@@ -13,7 +13,7 @@ import {
 } from 'date-fns';
 import { Workout, SessionLog, SetLog } from '../types/fitness';
 import type { FitnessIndex, ExerciseIndexEntry } from './fitnessDerivedSelectors';
-import { isCompletedSession, getCycleDay } from './fitnessCalculations';
+import { isCompletedSession, getCycleDay, parseStrictWeight, parseStrictReps, calculateE1RM } from './fitnessCalculations';
 
 // ----------------------------------------------------------------------------
 // Types & Contracts
@@ -878,14 +878,11 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
 
       (sets as SetLog[]).forEach((set, sIdx) => {
         if (!set.done) return;
-        const rawW = parseFloat(set.weight);
-        const w = Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 ? rawW : 0;
-        const rawR = parseInt(set.reps, 10);
-        const r = Number.isFinite(rawR) && rawR > 0 && rawR <= 1000 ? rawR : 0;
-        if (w <= 0 || r <= 0) return;
+        const w = parseStrictWeight(set.weight, 0.0001, 5000);
+        const r = parseStrictReps(set.reps, 1, 1000);
+        if (w === null || r === null) return;
 
-        const effectiveReps = Math.min(r, 30);
-        const e1rm = r === 1 ? w : Math.round(w * (1 + effectiveReps / 30) * 10) / 10;
+        const e1rm = calculateE1RM(w, r);
 
         const prevMaxW = runningMaxWeight.get(exId) || 0;
         const prevMaxWReps = runningMaxWeightReps.get(exId) || 0;

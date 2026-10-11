@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -11,7 +11,7 @@ import { SessionView } from './components/SessionView';
 import { HistoryView } from './components/HistoryView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { ManageView } from './components/ManageView';
-import { isFirebaseConfigured } from './lib/firebase';
+import { isFirebaseConfigured, firebaseConfigState } from './lib/firebase';
 import { cn } from './lib/utils';
 import { AmbientBackground, ToastContainer, Card, TYPOGRAPHY } from './components/ui';
 
@@ -61,16 +61,29 @@ function AppContent() {
     return () => clearTimeout(safetyTimer);
   }, [loading]);
 
-  // Unify and deduplicate session exit/abandon flow
+  // Current-state refs to maintain a stable Android back handler without re-registration cycles
+  const activeTabRef = useRef<ActiveTab>(activeTab);
+  activeTabRef.current = activeTab;
+
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
+
+  const clearActiveSessionRef = useRef(clearActiveSession);
+  clearActiveSessionRef.current = clearActiveSession;
+
+  // Stable session exit/abandon flow using latest refs
   const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {
-    if (activeSession) {
-      const confirmExit = await confirm({
+    if (activeSessionRef.current) {
+      const confirmExit = await confirmRef.current({
         title: 'Abandon Active Session?',
         message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
         isDanger: true
       });
       if (confirmExit) {
-        clearActiveSession();
+        clearActiveSessionRef.current();
         setSelectedWorkoutId(null);
         setActiveTab(destination);
         return true;
@@ -81,9 +94,12 @@ function AppContent() {
       setActiveTab(destination);
       return true;
     }
-  }, [activeSession, confirm, clearActiveSession]);
+  }, []);
 
-  // Set up safe native hardware back button support on Android with robust lifecycle guard
+  const leaveSessionRef = useRef(leaveSession);
+  leaveSessionRef.current = leaveSession;
+
+  // Set up safe native hardware back button support on Android with stable registration and lifecycle cleanup protection
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
@@ -93,9 +109,10 @@ function AppContent() {
     const initBackButton = async () => {
       try {
         const handle = await CapApp.addListener('backButton', async () => {
-          if (activeTab === 'session') {
-            await leaveSession('dashboard');
-          } else if (activeTab !== 'dashboard') {
+          const currentTab = activeTabRef.current;
+          if (currentTab === 'session') {
+            await leaveSessionRef.current('dashboard');
+          } else if (currentTab !== 'dashboard') {
             setActiveTab('dashboard');
           } else {
             CapApp.minimizeApp();
@@ -103,8 +120,8 @@ function AppContent() {
         });
 
         if (isCleanedUp) {
-          // If effect was unmounted/re-run while addListener was in-flight, immediately remove it!
-          handle.remove();
+          // If effect was unmounted while addListener was in-flight (e.g. Strict Mode), immediately remove it!
+          await handle.remove().catch(err => console.warn("Failed removing in-flight back listener:", err));
         } else {
           sub = handle;
         }
@@ -118,16 +135,25 @@ function AppContent() {
     return () => {
       isCleanedUp = true;
       if (sub && typeof sub.remove === 'function') {
-        sub.remove();
+        const handleToRemove = sub;
         sub = null;
+        handleToRemove.remove().catch(err => console.warn("Failed removing back listener on unmount:", err));
       }
     };
-  }, [activeTab, leaveSession]);
+  }, []);
 
   if (loading) {
     // Determine dynamic network and connection details for highly accurate loader logging
     const getStatusDetails = () => {
       if (!isFirebaseConfigured) {
+        if (firebaseConfigState === 'incomplete') {
+          return {
+            dotColor: 'bg-amber-600',
+            statusText: 'Incomplete Cloud Setup (Running Offline)',
+            connectionText: 'INCOMPLETE CONFIG',
+            connectionColor: 'text-amber-500'
+          };
+        }
         return {
           dotColor: 'bg-zinc-600',
           statusText: 'Local Offline Protocol',

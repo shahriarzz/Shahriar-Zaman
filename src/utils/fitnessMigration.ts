@@ -298,30 +298,133 @@ export function validateAndSanitizeFitnessData(parsed: any): {
   };
 }
 
+export interface ValidatedSnapshotData {
+  exerciseDefinitions: ExerciseDefinition[];
+  workouts: Workout[];
+  logs: Record<string, SessionLog>;
+  appState: AppState;
+}
+
+/**
+ * Validates the schema version and full snapshot structure strictly.
+ * Rejects objects with missing fields, wrong types, or unsupported schema versions.
+ */
+export function validateSnapshotStructure(candidate: unknown): ValidatedSnapshotData | null {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return null;
+  }
+
+  const obj = candidate as Record<string, any>;
+  
+  // 1. Validate schemaVersion: must be positive number <= CURRENT_SCHEMA_VERSION
+  const schemaVer = obj.schemaVersion;
+  if (typeof schemaVer !== 'number' || !Number.isFinite(schemaVer) || schemaVer <= 0 || schemaVer > CURRENT_SCHEMA_VERSION) {
+    return null;
+  }
+
+  // 2. Extract inner data payload or root
+  const data = (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) ? obj.data : obj;
+
+  // 3. Validate required fields existence and types
+  if (!Array.isArray(data.exerciseDefinitions)) {
+    return null;
+  }
+  if (!Array.isArray(data.workouts)) {
+    return null;
+  }
+  if (!data.logs || typeof data.logs !== 'object' || Array.isArray(data.logs)) {
+    return null;
+  }
+  if (!data.appState || typeof data.appState !== 'object' || Array.isArray(data.appState)) {
+    return null;
+  }
+
+  // 4. Validate array contents are valid objects with basic required properties
+  const defsValid = data.exerciseDefinitions.every((d: any) => 
+    d && typeof d === 'object' && typeof d.id === 'string' && typeof d.name === 'string'
+  );
+  const workoutsValid = data.workouts.every((w: any) => 
+    w && typeof w === 'object' && typeof w.id === 'string' && typeof w.name === 'string'
+  );
+
+  if (!defsValid || !workoutsValid) {
+    return null;
+  }
+
+  return {
+    exerciseDefinitions: data.exerciseDefinitions,
+    workouts: data.workouts,
+    logs: data.logs,
+    appState: data.appState
+  };
+}
+
 export function loadInitialFitnessData(): {
   defs: ExerciseDefinition[];
   workouts: Workout[];
   logs: Record<string, SessionLog>;
   appState: AppState;
 } {
+  // 1. Check canonical database snapshot
   const snapshotKey = localStorage.getItem('gl_database_snapshot');
+  let hasValidSnapshot = false;
+
   if (snapshotKey !== null) {
     try {
       const parsedSnapshot = JSON.parse(snapshotKey);
-      if (parsedSnapshot && typeof parsedSnapshot === 'object') {
-        const snapshotData = parsedSnapshot.data || parsedSnapshot;
-        if (snapshotData && typeof snapshotData === 'object') {
-          const migrated = migrateV1ToV2({
-            rawDefs: Array.isArray(snapshotData.exerciseDefinitions) ? snapshotData.exerciseDefinitions : null,
-            rawWorkouts: Array.isArray(snapshotData.workouts) ? snapshotData.workouts : null,
-            rawLogs: (snapshotData.logs && typeof snapshotData.logs === 'object' && !Array.isArray(snapshotData.logs)) ? snapshotData.logs : null,
-            rawState: snapshotData.appState || null
-          });
-          return migrated;
+      const validated = validateSnapshotStructure(parsedSnapshot);
+      if (validated) {
+        hasValidSnapshot = true;
+        const migrated = migrateV1ToV2({
+          rawDefs: validated.exerciseDefinitions,
+          rawWorkouts: validated.workouts,
+          rawLogs: validated.logs,
+          rawState: validated.appState
+        });
+        return migrated;
+      } else {
+        // Snapshot failed structure or schema validation; preserve as recoverable backup
+        console.warn("Invalid snapshot structure in gl_database_snapshot; backing up and attempting recovery.");
+        try {
+          localStorage.setItem('gl_corrupt_snapshot_backup', snapshotKey);
+        } catch {
+          // Best effort backup
         }
       }
     } catch (e) {
-      console.error("Corrupted gl_database_snapshot, falling back to discrete keys:", e);
+      console.error("Corrupted gl_database_snapshot JSON, backing up and checking staging / discrete keys:", e);
+      try {
+        localStorage.setItem('gl_corrupt_snapshot_backup', snapshotKey);
+      } catch {
+        // Best effort backup
+      }
+    }
+  }
+
+  // 2. Check staging snapshot for crash recovery
+  const stagingKey = localStorage.getItem('gl_snapshot_staging');
+  if (stagingKey !== null && !hasValidSnapshot) {
+    try {
+      const parsedStaging = JSON.parse(stagingKey);
+      const validatedStaging = validateSnapshotStructure(parsedStaging);
+      if (validatedStaging) {
+        console.info("Recovered state from valid gl_snapshot_staging; promoting to canonical snapshot.");
+        try {
+          localStorage.setItem('gl_database_snapshot', stagingKey);
+          localStorage.removeItem('gl_snapshot_staging');
+        } catch {
+          // Proceed with recovered data
+        }
+        const migrated = migrateV1ToV2({
+          rawDefs: validatedStaging.exerciseDefinitions,
+          rawWorkouts: validatedStaging.workouts,
+          rawLogs: validatedStaging.logs,
+          rawState: validatedStaging.appState
+        });
+        return migrated;
+      }
+    } catch (e) {
+      console.warn("Failed to parse gl_snapshot_staging during recovery:", e);
     }
   }
 
@@ -332,7 +435,7 @@ export function loadInitialFitnessData(): {
   const versionKey = localStorage.getItem('gl_schema_version');
 
   // Check if first-time launch (none of the core keys exist in localStorage)
-  const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null && snapshotKey === null;
+  const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null && snapshotKey === null && stagingKey === null;
 
   if (isFirstInstall) {
     const seedDefs = [...INITIAL_EXERCISE_DEFINITIONS];

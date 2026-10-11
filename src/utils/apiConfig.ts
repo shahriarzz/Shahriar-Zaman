@@ -2,8 +2,13 @@ import { Capacitor } from '@capacitor/core';
 import { logger } from './logger';
 
 /**
- * Validates that an API URL is secure and well-formed.
- * Production environments strictly require HTTPS.
+ * Validates that an API base URL is secure and well-formed.
+ * Intended contract for VITE_API_BASE_URL:
+ * - Must be a valid absolute HTTP/HTTPS URL
+ * - Strictly requires HTTPS in production
+ * - Rejects embedded credentials (username/password)
+ * - Rejects query parameters (?...) and hash fragments (#...)
+ * - Requires a valid, non-empty hostname
  */
 export function isValidApiBaseUrl(candidate: unknown, isProduction: boolean = Boolean((import.meta as any).env?.PROD)): boolean {
   if (typeof candidate !== 'string') return false;
@@ -12,11 +17,36 @@ export function isValidApiBaseUrl(candidate: unknown, isProduction: boolean = Bo
 
   try {
     const parsed = new URL(trimmed);
+
+    // 1. Protocol validation: HTTPS required in production
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      logger.warn(`[API Config] Unsupported protocol '${parsed.protocol}'.`);
+      return false;
+    }
     if (isProduction && parsed.protocol !== 'https:') {
       logger.warn(`[API Config] Insecure protocol '${parsed.protocol}' rejected for production API endpoint.`);
       return false;
     }
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+
+    // 2. Reject embedded user credentials
+    if (parsed.username || parsed.password) {
+      logger.warn(`[API Config] Embedded credentials rejected in API URL: '${trimmed}'`);
+      return false;
+    }
+
+    // 3. Reject query parameters or hash fragments in base URLs
+    if (parsed.search || parsed.hash) {
+      logger.warn(`[API Config] Query strings and hash fragments are not permitted in base URLs: '${trimmed}'`);
+      return false;
+    }
+
+    // 4. Validate hostname
+    if (!parsed.hostname || parsed.hostname.length === 0) {
+      logger.warn(`[API Config] Missing hostname in API URL: '${trimmed}'`);
+      return false;
+    }
+
+    return true;
   } catch {
     logger.warn(`[API Config] Malformed API URL: '${trimmed}'`);
     return false;

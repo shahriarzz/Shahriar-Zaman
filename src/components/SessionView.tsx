@@ -5,7 +5,7 @@ import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
-import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay, parseStrictWeight, parseStrictReps } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
@@ -59,22 +59,21 @@ export function calculateSessionPRs({
     const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
     const exName = resolvedEx.name || 'Exercise';
     const todaySets = sessionSets[exDefId] || [];
-    const doneToday = todaySets.filter(s => {
-      if (!s.done) return false;
-      const rawW = parseFloat(s.weight);
-      const rawR = parseInt(s.reps, 10);
-      return Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 && Number.isFinite(rawR) && rawR > 0 && rawR <= 1000;
+    const validDoneToday: { w: number; r: number }[] = [];
+    todaySets.forEach(s => {
+      if (!s.done) return;
+      const w = parseStrictWeight(s.weight, 0.0001, 5000);
+      const r = parseStrictReps(s.reps, 1, 1000);
+      if (w !== null && r !== null) {
+        validDoneToday.push({ w, r });
+      }
     });
-    if (doneToday.length === 0) return;
+    if (validDoneToday.length === 0) return;
 
     // 1. Find heaviest weight lifted today, and highest reps at that max weight
     let todayMaxWeight = 0;
     let todayMaxReps = 0;
-    doneToday.forEach(s => {
-      const rawW = parseFloat(s.weight);
-      const w = Number.isFinite(rawW) && rawW > 0 ? rawW : 0;
-      const rawR = parseInt(s.reps, 10);
-      const r = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
+    validDoneToday.forEach(({ w, r }) => {
       if (w > todayMaxWeight) {
         todayMaxWeight = w;
         todayMaxReps = r;
@@ -89,11 +88,7 @@ export function calculateSessionPRs({
     let todayMaxE1RM = 0;
     let bestE1RMWeight = 0;
     let bestE1RMReps = 0;
-    doneToday.forEach(s => {
-      const rawW = parseFloat(s.weight);
-      const w = Number.isFinite(rawW) && rawW > 0 ? rawW : 0;
-      const rawR = parseInt(s.reps, 10);
-      const r = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
+    validDoneToday.forEach(({ w, r }) => {
       const e1rm = calculateE1RM(w, r);
       if (e1rm > todayMaxE1RM) {
         todayMaxE1RM = e1rm;
@@ -383,8 +378,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
               <div className="space-y-4">
                 {setsForEx.map((s: SetLog, si: number) => {
-                  const isExtremeWeight = (parseFloat(s.weight) || 0) > 500;
-                  const isExtremeReps = (parseInt(s.reps) || 0) > 100;
+                  const parsedW = parseStrictWeight(s.weight, 0, 5000);
+                  const parsedR = parseStrictReps(s.reps, 0, 1000);
+                  const isExtremeWeight = parsedW !== null && parsedW > 500;
+                  const isExtremeReps = parsedR !== null && parsedR > 100;
                   const isExtreme = isExtremeWeight || isExtremeReps;
 
                   return (
@@ -898,8 +895,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const exName = ex ? resolveWorkoutExercise(ex, exerciseDefinitions).name : 'Exercise';
       (sets as SetLog[]).forEach((s: SetLog) => {
         if (s.done) {
-          const w = parseFloat(s.weight) || 0;
-          const r = parseInt(s.reps, 10) || 0;
+          const w = parseStrictWeight(s.weight, 0.0001, 5000) || 0;
+          const r = parseStrictReps(s.reps, 1, 1000) || 0;
           if (w > 500 || r > 100) {
             extremeSets.push({ exName, weight: w, reps: r });
           }

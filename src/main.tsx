@@ -1,9 +1,12 @@
 import {StrictMode, Component, ErrorInfo, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
-import '@fontsource/dm-sans';
-import '@fontsource/bebas-neue';
-import '@fontsource/jetbrains-mono';
+import '@fontsource/dm-sans/400.css';
+import '@fontsource/dm-sans/500.css';
+import '@fontsource/dm-sans/700.css';
+import '@fontsource/bebas-neue/400.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/600.css';
 import './index.css';
 import { ErrorFallback } from './components/ui';
 

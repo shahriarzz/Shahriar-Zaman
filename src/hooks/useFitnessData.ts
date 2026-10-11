@@ -16,8 +16,22 @@ export interface VersionedFitnessSnapshot {
 }
 
 /**
- * Unified atomic persistence function writing a single versioned snapshot payload
+ * Unified persistence function writing a single versioned snapshot payload
  * with staged commit protection against interrupted writes or quota exhaustion.
+ *
+ * Staged-Write & Recovery Policy:
+ * 1. Write the new versioned payload to `gl_snapshot_staging`.
+ * 2. Write the canonical payload to `gl_database_snapshot`.
+ * 3. Verify that `gl_database_snapshot` was written successfully and matches serialized.
+ * 4. Only once the canonical write is verified, remove `gl_snapshot_staging`.
+ * 5. On failure (e.g. quota exhaustion during step 2): do NOT delete `gl_snapshot_staging`.
+ *    Startup recovery (`loadInitialFitnessData`) detects `gl_snapshot_staging` if the canonical
+ *    snapshot was corrupted or interrupted mid-write, and safely promotes it.
+ *
+ * Legacy Discrete Storage Mirrors:
+ * The discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`, `gl_schema_version`)
+ * are maintained as a best-effort mirror for backward compatibility with v1.x loaders,
+ * external backup scripts, and offline recovery if snapshot corruption occurs.
  */
 export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): void {
   const versionedPayload: VersionedFitnessSnapshot = {
@@ -28,14 +42,16 @@ export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): void 
 
   try {
     const serialized = JSON.stringify(versionedPayload);
-    // 1. Stage the write to guarantee atomic replacement
+    // 1. Stage the write first
     localStorage.setItem('gl_snapshot_staging', serialized);
     // 2. Commit the canonical snapshot atomically
     localStorage.setItem('gl_database_snapshot', serialized);
-    // 3. Remove staging artifact
-    localStorage.removeItem('gl_snapshot_staging');
+    // 3. Verify canonical write succeeded before removing staging
+    if (localStorage.getItem('gl_database_snapshot') === serialized) {
+      localStorage.removeItem('gl_snapshot_staging');
+    }
 
-    // 4. Best-effort mirror to legacy discrete keys for backwards-compatibility
+    // 4. Best-effort mirror to legacy discrete keys
     try {
       localStorage.setItem('gl_exercise_definitions', JSON.stringify(snapshot.exerciseDefinitions));
       localStorage.setItem('gl_workouts', JSON.stringify(snapshot.workouts));
@@ -43,15 +59,12 @@ export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): void 
       localStorage.setItem('gl_state', JSON.stringify(snapshot.appState));
       localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
     } catch {
-      // Discrete key mirroring failure is non-fatal; gl_database_snapshot is the authoritative source
+      // Discrete key mirroring failure is non-fatal; gl_database_snapshot is authoritative
     }
   } catch (e) {
-    console.warn("Storage write failure; preserving previous valid snapshot:", e);
-    try {
-      localStorage.removeItem('gl_snapshot_staging');
-    } catch {
-      // Ignored
-    }
+    console.warn("Storage write failure; preserving previous valid snapshot / staging copy for recovery:", e);
+    // Do NOT delete gl_snapshot_staging here! If gl_database_snapshot write failed or threw
+    // (e.g. quota exceeded), gl_snapshot_staging may contain a valid recoverable snapshot.
   }
 }
 

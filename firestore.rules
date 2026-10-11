@@ -6,9 +6,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Health check test connection path
+    // Health check test connection path (authenticated users only)
     match /test/{document=**} {
-      allow read: if true;
+      allow read: if request.auth != null;
     }
 
     // User Profile
