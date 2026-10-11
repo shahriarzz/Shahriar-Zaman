@@ -94,14 +94,25 @@ export function sanitizeSetLog(set: RawSetLog | null | undefined, fallbackId: st
     ? String(set.id).trim()
     : (fallbackId && fallbackId.trim().length > 0 ? fallbackId.trim() : 'set_0');
   const rawWeight = set?.weight !== undefined ? set.weight : (set?.weightKg !== undefined ? set.weightKg : '');
-  const weight = typeof rawWeight === 'number' ? String(rawWeight) : String(rawWeight || '');
-  const reps = typeof set?.reps === 'number' ? String(set.reps) : String(set?.reps || '');
+  let weightStr = typeof rawWeight === 'number' ? String(rawWeight) : String(rawWeight || '');
+  const rawNumW = Number(weightStr);
+  const numW = parseFloat(weightStr);
+  if (weightStr.trim().length > 0 && (!Number.isFinite(rawNumW) || !Number.isFinite(numW) || rawNumW < 0 || rawNumW > 5000 || numW < 0 || numW > 5000)) {
+    weightStr = '';
+  }
+
+  let repsStr = typeof set?.reps === 'number' ? String(set.reps) : String(set?.reps || '');
+  const rawNumR = Number(repsStr);
+  const numR = parseInt(repsStr, 10);
+  if (repsStr.trim().length > 0 && (!Number.isFinite(rawNumR) || !Number.isFinite(numR) || rawNumR < 0 || rawNumR > 1000 || numR < 0 || numR > 1000)) {
+    repsStr = '';
+  }
   const done = Boolean(set?.done ?? set?.completed);
 
   return {
     id,
-    weight: weight.trim(),
-    reps: reps.trim(),
+    weight: weightStr.trim(),
+    reps: repsStr.trim(),
     done
   };
 }
@@ -209,7 +220,10 @@ export function sanitizeWorkout(raw: any, fallbackId: string = ''): Workout {
   const rawExercises = Array.isArray(raw?.exercises) ? raw.exercises : [];
   const exercises: WorkoutExercise[] = rawExercises.map((e: any) => ({
     exerciseDefinitionId: String(e?.exerciseDefinitionId || e?.exerciseId || e?.id || '').trim(),
-    sets: Number(e?.sets) > 0 ? Number(e.sets) : 3,
+    sets: (() => {
+      const numSets = Number(e?.sets);
+      return Number.isFinite(numSets) && numSets >= 1 && numSets <= 50 ? Math.floor(numSets) : 3;
+    })(),
     reps: String(e?.reps || '10–12').trim(),
     rest: String(e?.rest || '90s').trim(),
     note: String(e?.note || '').trim(),
@@ -307,8 +321,9 @@ export function calculateSetVolume(set: Partial<SetLog> | null | undefined): num
   if (!set || !set.done) return 0;
   const w = parseFloat(String(set.weight));
   const r = parseInt(String(set.reps), 10);
-  if (Number.isNaN(w) || w <= 0 || Number.isNaN(r) || r <= 0) return 0;
-  return w * r;
+  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(r) || r <= 0 || w > 5000 || r > 1000) return 0;
+  const vol = w * r;
+  return Number.isFinite(vol) ? vol : 0;
 }
 
 /**
@@ -324,18 +339,18 @@ export function calculateSetsVolume(sets: (Partial<SetLog> | null | undefined)[]
  * Calculates Estimated 1RM (e1RM) using the standard Epley formula:
  * e1RM = weight * (1 + reps / 30) for reps > 1, or weight for reps === 1.
  * Capped at 30 reps for realism.
- * Invariant: weight and reps must be strictly positive.
+ * Invariant: weight and reps must be strictly positive and finite.
  */
 export function calculateE1RM(weight: number | string, reps: number | string): number {
-  const w = typeof weight === 'number' ? weight : parseFloat(weight);
-  const r = typeof reps === 'number' ? reps : parseInt(reps, 10);
+  const w = typeof weight === 'number' ? weight : parseFloat(String(weight));
+  const r = typeof reps === 'number' ? reps : parseInt(String(reps), 10);
 
-  if (Number.isNaN(w) || w <= 0 || Number.isNaN(r) || r <= 0) return 0;
+  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(r) || r <= 0 || w > 5000) return 0;
   if (r === 1) return Math.round(w * 10) / 10;
 
-  const effectiveReps = Math.min(r, 30);
+  const effectiveReps = Math.min(Math.max(1, r), 30);
   const e1rm = w * (1 + effectiveReps / 30);
-  return Math.round(e1rm * 10) / 10;
+  return Number.isFinite(e1rm) ? Math.round(e1rm * 10) / 10 : 0;
 }
 
 export function getAdjustedCycleStart(workoutCycleDay: number, referenceDate: Date | string = new Date()): string {
@@ -430,7 +445,11 @@ export function getWeightSparklineData(
 }
 
 export function getRelativeTimeString(startTime: number, now: number = Date.now()): string {
+  if (!Number.isFinite(startTime) || startTime <= 0) return 'recently';
+  // Clamp or explicitly handle future timestamps so it cannot display negative minutes ago
+  if (startTime > now) return 'just now';
   const elapsedMin = Math.floor((now - startTime) / 60000);
+  if (elapsedMin < 1) return 'just now';
   return elapsedMin < 60 
     ? `${elapsedMin} min ago` 
     : `${Math.floor(elapsedMin / 60)}h ago`;
@@ -444,7 +463,7 @@ export function getRelativeTimeString(startTime: number, now: number = Date.now(
  * 1300000 -> "1.3M"
  */
 export function formatCompactWeight(value: number): string {
-  if (!value || isNaN(value) || value <= 0) return '0';
+  if (!Number.isFinite(value) || value <= 0) return '0';
   if (value < 1000) {
     return Math.round(value).toLocaleString();
   }

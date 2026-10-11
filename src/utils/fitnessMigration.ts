@@ -304,6 +304,27 @@ export function loadInitialFitnessData(): {
   logs: Record<string, SessionLog>;
   appState: AppState;
 } {
+  const snapshotKey = localStorage.getItem('gl_database_snapshot');
+  if (snapshotKey !== null) {
+    try {
+      const parsedSnapshot = JSON.parse(snapshotKey);
+      if (parsedSnapshot && typeof parsedSnapshot === 'object') {
+        const snapshotData = parsedSnapshot.data || parsedSnapshot;
+        if (snapshotData && typeof snapshotData === 'object') {
+          const migrated = migrateV1ToV2({
+            rawDefs: Array.isArray(snapshotData.exerciseDefinitions) ? snapshotData.exerciseDefinitions : null,
+            rawWorkouts: Array.isArray(snapshotData.workouts) ? snapshotData.workouts : null,
+            rawLogs: (snapshotData.logs && typeof snapshotData.logs === 'object' && !Array.isArray(snapshotData.logs)) ? snapshotData.logs : null,
+            rawState: snapshotData.appState || null
+          });
+          return migrated;
+        }
+      }
+    } catch (e) {
+      console.error("Corrupted gl_database_snapshot, falling back to discrete keys:", e);
+    }
+  }
+
   const defsKey = localStorage.getItem('gl_exercise_definitions');
   const workoutsKey = localStorage.getItem('gl_workouts');
   const logsKey = localStorage.getItem('gl_logs');
@@ -311,7 +332,7 @@ export function loadInitialFitnessData(): {
   const versionKey = localStorage.getItem('gl_schema_version');
 
   // Check if first-time launch (none of the core keys exist in localStorage)
-  const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null;
+  const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null && snapshotKey === null;
 
   if (isFirstInstall) {
     const seedDefs = [...INITIAL_EXERCISE_DEFINITIONS];
@@ -320,6 +341,17 @@ export function loadInitialFitnessData(): {
     const seedState: AppState = { cycleStart: dk() };
 
     try {
+      const versionedPayload = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        timestamp: Date.now(),
+        data: {
+          exerciseDefinitions: seedDefs,
+          workouts: seedWorkouts,
+          logs: seedLogs,
+          appState: seedState
+        }
+      };
+      localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
       localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
       localStorage.setItem('gl_exercise_definitions', JSON.stringify(seedDefs));
       localStorage.setItem('gl_workouts', JSON.stringify(seedWorkouts));
@@ -402,8 +434,19 @@ export function loadInitialFitnessData(): {
     rawState
   });
 
-  // Save migrated data and version tag
+  // Save migrated data and version tag atomically
   try {
+    const versionedPayload = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      timestamp: Date.now(),
+      data: {
+        exerciseDefinitions: migrated.defs,
+        workouts: migrated.workouts,
+        logs: migrated.logs,
+        appState: migrated.appState
+      }
+    };
+    localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
     localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
     localStorage.setItem('gl_exercise_definitions', JSON.stringify(migrated.defs));
     localStorage.setItem('gl_workouts', JSON.stringify(migrated.workouts));

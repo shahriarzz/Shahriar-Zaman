@@ -128,14 +128,16 @@ async function startServer() {
   };
   const verifyFirebaseToken = asyncHandler(async (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!authHeader) {
       req.user = void 0;
       return next();
     }
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Malformed authorization header. Expected Bearer <token>" });
+    }
     const idToken = authHeader.split("Bearer ")[1]?.trim();
     if (!idToken) {
-      req.user = void 0;
-      return next();
+      return res.status(401).json({ error: "Empty bearer token provided" });
     }
     let apiKey = cachedFirebaseApiKey || process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
     if (!apiKey) {
@@ -151,8 +153,7 @@ async function startServer() {
       }
     }
     if (!apiKey) {
-      req.user = void 0;
-      return next();
+      return res.status(503).json({ error: "Authentication service temporarily unconfigured to verify tokens" });
     }
     try {
       const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
@@ -161,21 +162,17 @@ async function startServer() {
         body: JSON.stringify({ idToken })
       });
       if (!response.ok) {
-        console.warn("Google identity toolkit token validation returned non-ok status");
-        req.user = void 0;
-        return next();
+        return res.status(401).json({ error: "Invalid or expired Firebase ID token" });
       }
       const decoded = await response.json();
       if (decoded.users && decoded.users.length > 0) {
         req.user = decoded.users[0];
-      } else {
-        req.user = void 0;
+        return next();
       }
-      next();
+      return res.status(401).json({ error: "User account not found for provided token" });
     } catch (err) {
       console.error("Token verification exception:", err);
-      req.user = void 0;
-      next();
+      return res.status(500).json({ error: "Failed to verify authentication token" });
     }
   });
   app.get(["/api/health", "/health"], (req, res) => {

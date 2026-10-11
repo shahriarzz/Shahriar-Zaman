@@ -415,8 +415,10 @@ export function buildFitnessIndex(
         let maxSetDetailInSession = '';
 
         doneSets.forEach(s => {
-          const w = parseFloat(s.weight) || 0;
-          const r = parseInt(s.reps, 10) || 0;
+          const rawW = parseFloat(s.weight);
+          const w = Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 ? rawW : 0;
+          const rawR = parseInt(s.reps, 10);
+          const r = Number.isFinite(rawR) && rawR > 0 && rawR <= 1000 ? rawR : 0;
           const setVol = calculateSetVolume(s);
           exSessionVol += setVol;
 
@@ -811,13 +813,19 @@ export function isNewPersonalBest(
   candidate: { weight: number; reps: number | string },
   previous: { weight: number | string; reps: number | string } | null | undefined
 ): boolean {
-  const cWeight = typeof candidate?.weight === 'number' ? candidate.weight : (parseFloat(String(candidate?.weight)) || 0);
-  const cReps = typeof candidate?.reps === 'number' ? candidate.reps : (parseInt(String(candidate?.reps), 10) || 0);
+  const rawCWeight = typeof candidate?.weight === 'number' ? candidate.weight : parseFloat(String(candidate?.weight));
+  const cWeight = Number.isFinite(rawCWeight) && rawCWeight > 0 && rawCWeight <= 5000 ? rawCWeight : 0;
+  const rawCReps = typeof candidate?.reps === 'number' ? candidate.reps : parseInt(String(candidate?.reps), 10);
+  const cReps = Number.isFinite(rawCReps) && rawCReps > 0 && rawCReps <= 1000 ? rawCReps : 0;
+
   if (cWeight <= 0 || cReps <= 0) return false;
   if (!previous) return true;
 
-  const pWeight = typeof previous.weight === 'number' ? previous.weight : (parseFloat(String(previous.weight)) || 0);
-  const pReps = typeof previous.reps === 'number' ? previous.reps : (parseInt(String(previous.reps), 10) || 0);
+  const rawPWeight = typeof previous.weight === 'number' ? previous.weight : parseFloat(String(previous.weight));
+  const pWeight = Number.isFinite(rawPWeight) ? rawPWeight : 0;
+  const rawPReps = typeof previous.reps === 'number' ? previous.reps : parseInt(String(previous.reps), 10);
+  const pReps = Number.isFinite(rawPReps) ? rawPReps : 0;
+
   if (pWeight <= 0) return true;
 
   if (cWeight > pWeight) return true;

@@ -1,23 +1,54 @@
 import { Capacitor } from '@capacitor/core';
+import { logger } from './logger';
+
+/**
+ * Validates that an API URL is secure and well-formed.
+ * Production environments strictly require HTTPS.
+ */
+export function isValidApiBaseUrl(candidate: unknown, isProduction: boolean = Boolean((import.meta as any).env?.PROD)): boolean {
+  if (typeof candidate !== 'string') return false;
+  const trimmed = candidate.trim();
+  if (!trimmed) return false;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (isProduction && parsed.protocol !== 'https:') {
+      logger.warn(`[API Config] Insecure protocol '${parsed.protocol}' rejected for production API endpoint.`);
+      return false;
+    }
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    logger.warn(`[API Config] Malformed API URL: '${trimmed}'`);
+    return false;
+  }
+}
 
 /**
  * Resolves the API base URL for network calls.
  * 
- * - In local web / preview environment: Returns '' so requests use relative URLs
- *   handled directly by Vite dev server or the same-origin Express server.
- * - In Capacitor native runtime (Android/iOS): WebView runs on http://localhost or
- *   https://gainlog.app, so relative URLs do not hit the Express server.
- *   Uses VITE_API_BASE_URL if configured, or falls back to the deployed backend URL.
+ * - In local web browser / same-origin environment: Returns '' so requests use relative URLs
+ *   handled directly by Vite dev server or Express server.
+ * - In native Capacitor builds: Requires an explicitly configured VITE_API_BASE_URL.
+ *   If absent or invalid, returns '' and allows the client-side coaching fallback to serve
+ *   the athlete reliably without silently leaking requests to development backends.
  */
 export function getApiBaseUrl(): string {
+  const isProd = Boolean((import.meta as any).env?.PROD);
+  const isNative = Capacitor.isNativePlatform();
   const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+
   if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.trim().replace(/\/+$/, '');
+    const cleanUrl = envUrl.trim().replace(/\/+$/, '');
+    if (isValidApiBaseUrl(cleanUrl, isProd)) {
+      return cleanUrl;
+    }
+    logger.warn(`[API Config] Configured VITE_API_BASE_URL '${envUrl}' failed validation.`);
   }
 
-  if (Capacitor.isNativePlatform()) {
-    // Canonical backend endpoint for native mobile app runtime
-    return 'https://ais-dev-cdzggnhvzeexocyfbuet7z-917271568182.asia-southeast1.run.app';
+  if (isNative) {
+    // Native runtime without an explicitly configured, validated production endpoint.
+    // We intentionally return empty string rather than silently defaulting to a dev backend.
+    return '';
   }
 
   // Web same-origin
@@ -25,10 +56,19 @@ export function getApiBaseUrl(): string {
 }
 
 /**
- * Builds a fully qualified or relative API endpoint URL.
+ * Builds an API endpoint URL.
+ * In native builds without a configured remote API server, returns '' to prompt the caller
+ * to use the client-side rule-based coaching fallback directly.
  */
 export function buildApiUrl(endpoint: string): string {
+  const isNative = Capacitor.isNativePlatform();
   const base = getApiBaseUrl();
+
+  if (isNative && !base) {
+    // Native build without configured backend URL
+    return '';
+  }
+
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   return `${base}${cleanEndpoint}`;
 }

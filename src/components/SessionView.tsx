@@ -59,15 +59,22 @@ export function calculateSessionPRs({
     const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
     const exName = resolvedEx.name || 'Exercise';
     const todaySets = sessionSets[exDefId] || [];
-    const doneToday = todaySets.filter(s => s.done && (parseFloat(s.weight) || 0) > 0 && (parseInt(s.reps, 10) || 0) > 0);
+    const doneToday = todaySets.filter(s => {
+      if (!s.done) return false;
+      const rawW = parseFloat(s.weight);
+      const rawR = parseInt(s.reps, 10);
+      return Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 && Number.isFinite(rawR) && rawR > 0 && rawR <= 1000;
+    });
     if (doneToday.length === 0) return;
 
     // 1. Find heaviest weight lifted today, and highest reps at that max weight
     let todayMaxWeight = 0;
     let todayMaxReps = 0;
     doneToday.forEach(s => {
-      const w = parseFloat(s.weight) || 0;
-      const r = parseInt(s.reps, 10) || 0;
+      const rawW = parseFloat(s.weight);
+      const w = Number.isFinite(rawW) && rawW > 0 ? rawW : 0;
+      const rawR = parseInt(s.reps, 10);
+      const r = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
       if (w > todayMaxWeight) {
         todayMaxWeight = w;
         todayMaxReps = r;
@@ -83,8 +90,10 @@ export function calculateSessionPRs({
     let bestE1RMWeight = 0;
     let bestE1RMReps = 0;
     doneToday.forEach(s => {
-      const w = parseFloat(s.weight) || 0;
-      const r = parseInt(s.reps, 10) || 0;
+      const rawW = parseFloat(s.weight);
+      const w = Number.isFinite(rawW) && rawW > 0 ? rawW : 0;
+      const rawR = parseInt(s.reps, 10);
+      const r = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
       const e1rm = calculateE1RM(w, r);
       if (e1rm > todayMaxE1RM) {
         todayMaxE1RM = e1rm;
@@ -792,7 +801,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         headers['Authorization'] = `Bearer ${idToken}`;
       }
 
-      const response = await fetch(buildApiUrl('/api/fitness/advice'), {
+      const targetApiUrl = buildApiUrl('/api/fitness/advice');
+      if (!targetApiUrl) {
+        const clientAdvice = generateClientCoachingFallback(ex.name, ex.reps || '', history as any);
+        setAiAdvice(prev => ({ ...prev, [exDefId]: clientAdvice }));
+        return;
+      }
+
+      const response = await fetch(targetApiUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({

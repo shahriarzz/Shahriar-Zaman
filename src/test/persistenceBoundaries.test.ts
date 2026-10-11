@@ -546,7 +546,7 @@ describe('Persistence Boundaries Test Suite (Transitions & Failure Recovery)', (
     expect(sanitized.sets['orphan_ex_999']).toHaveLength(2);
     expect(sanitized.sets['orphan_ex_999'][0].id).toBeDefined();
     expect(sanitized.sets['orphan_ex_999'][0].weight).toBe('');
-    expect(sanitized.sets['orphan_ex_999'][1].weight).toBe('not_a_number');
+    expect(sanitized.sets['orphan_ex_999'][1].weight).toBe('');
 
     // Feed orphaned exercise log to buildFitnessIndex
     const index = buildFitnessIndex({ [sanitized.id]: sanitized }, defsMap);

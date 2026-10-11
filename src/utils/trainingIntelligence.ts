@@ -878,8 +878,10 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
 
       (sets as SetLog[]).forEach((set, sIdx) => {
         if (!set.done) return;
-        const w = parseFloat(set.weight) || 0;
-        const r = parseInt(set.reps, 10) || 0;
+        const rawW = parseFloat(set.weight);
+        const w = Number.isFinite(rawW) && rawW > 0 && rawW <= 5000 ? rawW : 0;
+        const rawR = parseInt(set.reps, 10);
+        const r = Number.isFinite(rawR) && rawR > 0 && rawR <= 1000 ? rawR : 0;
         if (w <= 0 || r <= 0) return;
 
         const effectiveReps = Math.min(r, 30);

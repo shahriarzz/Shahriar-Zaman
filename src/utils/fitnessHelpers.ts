@@ -1,6 +1,5 @@
 import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
 import { SessionLog, SetLog, Workout, WorkoutType, WorkoutExercise, ExerciseDefinition, Exercise } from '../types/fitness';
-import { generateId as genId } from './generateId';
 
 // Re-export canonical calculations and resolver functions
 export {
@@ -16,12 +15,7 @@ export {
   resolveWorkoutExercise
 } from './exerciseResolver';
 
-export function generateId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-}
+export { generateId } from './generateId';
 
 export const WORKOUT_COLORS: Record<WorkoutType, string> = {
   push: '#f59e0b',

@@ -164,18 +164,26 @@ async function startServer() {
       Promise.resolve(fn(req, res, next)).catch(next);
     };
 
-  // Helper to verify Firebase ID Token in Express (resilient to missing config / guest mode)
+  /**
+   * Authentication contract:
+   * - Optional auth: Guest/offline users without Authorization header are permitted, protected by IP rate limiting.
+   * - If an Authorization header is provided, it MUST be valid. Invalid or expired tokens are rejected with HTTP 401.
+   * - Invalid tokens can never silently become unauthenticated or authenticated requests.
+   */
   const verifyFirebaseToken = asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader) {
       req.user = undefined;
       return next();
     }
 
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Malformed authorization header. Expected Bearer <token>' });
+    }
+
     const idToken = authHeader.split('Bearer ')[1]?.trim();
     if (!idToken) {
-      req.user = undefined;
-      return next();
+      return res.status(401).json({ error: 'Empty bearer token provided' });
     }
 
     let apiKey = cachedFirebaseApiKey || process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
@@ -193,8 +201,8 @@ async function startServer() {
     }
 
     if (!apiKey) {
-      req.user = undefined;
-      return next();
+      // If server does not have Firebase API key to verify tokens, reject token rather than accepting blindly
+      return res.status(503).json({ error: 'Authentication service temporarily unconfigured to verify tokens' });
     }
 
     try {
@@ -205,22 +213,19 @@ async function startServer() {
       });
 
       if (!response.ok) {
-        console.warn("Google identity toolkit token validation returned non-ok status");
-        req.user = undefined;
-        return next();
+        return res.status(401).json({ error: 'Invalid or expired Firebase ID token' });
       }
 
       const decoded = await response.json() as { users?: FirebaseUser[] };
       if (decoded.users && decoded.users.length > 0) {
         req.user = decoded.users[0];
-      } else {
-        req.user = undefined;
+        return next();
       }
-      next();
+
+      return res.status(401).json({ error: 'User account not found for provided token' });
     } catch (err: unknown) {
       console.error("Token verification exception:", err);
-      req.user = undefined;
-      next();
+      return res.status(500).json({ error: 'Failed to verify authentication token' });
     }
   });
 

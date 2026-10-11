@@ -16,7 +16,7 @@ import { cn } from './lib/utils';
 import { AmbientBackground, ToastContainer, Card, TYPOGRAPHY } from './components/ui';
 
 function AppContent() {
-  const { loading, activeSession, clearActiveSession, syncStatus } = useFitness();
+  const { loading, activeSession, clearActiveSession, syncStatus, user } = useFitness();
   const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -83,28 +83,43 @@ function AppContent() {
     }
   }, [activeSession, confirm, clearActiveSession]);
 
-  // Set up safe native hardware back button support on Android
+  // Set up safe native hardware back button support on Android with robust lifecycle guard
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    let isCleanedUp = false;
     let sub: PluginListenerHandle | null = null;
+
     const initBackButton = async () => {
-      sub = await CapApp.addListener('backButton', async () => {
-        if (activeTab === 'session') {
-          await leaveSession('dashboard');
-        } else if (activeTab !== 'dashboard') {
-          setActiveTab('dashboard');
+      try {
+        const handle = await CapApp.addListener('backButton', async () => {
+          if (activeTab === 'session') {
+            await leaveSession('dashboard');
+          } else if (activeTab !== 'dashboard') {
+            setActiveTab('dashboard');
+          } else {
+            CapApp.minimizeApp();
+          }
+        });
+
+        if (isCleanedUp) {
+          // If effect was unmounted/re-run while addListener was in-flight, immediately remove it!
+          handle.remove();
         } else {
-          CapApp.minimizeApp();
+          sub = handle;
         }
-      });
+      } catch (err) {
+        console.warn("Failed to register native back button listener:", err);
+      }
     };
 
     initBackButton();
 
     return () => {
+      isCleanedUp = true;
       if (sub && typeof sub.remove === 'function') {
         sub.remove();
+        sub = null;
       }
     };
   }, [activeTab, leaveSession]);
@@ -116,7 +131,7 @@ function AppContent() {
         return {
           dotColor: 'bg-zinc-600',
           statusText: 'Local Offline Protocol',
-          connectionText: 'DISABLED',
+          connectionText: 'OFFLINE',
           connectionColor: 'text-zinc-500'
         };
       }
@@ -136,13 +151,19 @@ function AppContent() {
             connectionColor: 'text-red-400'
           };
         case 'synced':
+          return {
+            dotColor: 'bg-emerald-500',
+            statusText: 'Cloud Sync Verified',
+            connectionText: 'SYNCED',
+            connectionColor: 'text-emerald-400'
+          };
         case 'idle':
         default:
           return {
-            dotColor: 'bg-green-500 animate-pulse',
-            statusText: 'Secure Link Active',
-            connectionText: 'SUCCESS',
-            connectionColor: 'text-green-400'
+            dotColor: 'bg-zinc-500',
+            statusText: user ? 'Cloud Ready' : 'Local Offline Mode',
+            connectionText: user ? 'STANDBY' : 'OFFLINE',
+            connectionColor: 'text-zinc-400'
           };
       }
     };

@@ -97,7 +97,7 @@ function generateSyntheticDataset(logCount: number): {
   });
 
   const logs: Record<string, SessionLog> = {};
-  const baseTimestamp = new Date('2025-01-01T10:00:00Z').getTime();
+  const baseTimestamp = new Date('2010-01-01T10:00:00Z').getTime();
   const dayMs = 24 * 60 * 60 * 1000;
 
   for (let i = 0; i < logCount; i++) {

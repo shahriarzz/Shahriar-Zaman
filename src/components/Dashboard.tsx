@@ -90,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         {/* Stats Grid */}
         <Grid cols={2} colsMd={4} gap="md">
           <StatCard
-            label="Training Streak"
+            label="Scheduled Training Streak"
             value={trainingStreak.currentStreak}
             unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
             sublabel={`Best: ${trainingStreak.longestStreak}d`}

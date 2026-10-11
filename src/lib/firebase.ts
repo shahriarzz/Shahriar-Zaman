@@ -49,10 +49,24 @@ const actualConfig = {
   firestoreDatabaseId: (import.meta as any).env.VITE_FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId
 };
 
-const isFirebaseConfigured = !!actualConfig.apiKey && 
-  actualConfig.apiKey.trim() !== "" && 
-  !actualConfig.apiKey.includes("YOUR_") && 
-  actualConfig.apiKey !== "undefined";
+const isValidConfigField = (val: unknown): boolean =>
+  typeof val === 'string' &&
+  val.trim() !== '' &&
+  !val.includes('YOUR_') &&
+  val !== 'undefined';
+
+const isFirebaseConfigured = Boolean(
+  isValidConfigField(actualConfig.apiKey) &&
+  isValidConfigField(actualConfig.projectId) &&
+  isValidConfigField(actualConfig.appId)
+);
+
+export type FirebaseConfigState = 'configured' | 'incomplete' | 'offline_by_default';
+export const firebaseConfigState: FirebaseConfigState = isFirebaseConfigured
+  ? 'configured'
+  : (isValidConfigField(actualConfig.apiKey) || isValidConfigField(actualConfig.projectId))
+    ? 'incomplete'
+    : 'offline_by_default';
 
 // Real implementation variables typed fully
 let dbInstance: Firestore;
