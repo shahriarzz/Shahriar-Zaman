@@ -1,13 +1,37 @@
 # GAINLOG System Architecture & Architectural Contract
 
-## 1. System Map
+> **Document Status**: Active Architectural Contract  
+> **Last Verified Date**: 2026-10-12  
+> **Test Verification Evidence**: 24 Vitest suites, 346 tests passing (`npx vitest run`)  
+> **Maintenance Rule**: Any authorized architectural change MUST update this document in the same commit.
 
-GAINLOG is a local-first, offline-capable progressive overload training engine with selective Firestore cloud synchronization. The system is composed of the following core modules:
+---
+
+## 1. Audit Summary of Architectural Claims
+
+Before detailing the contracts, the following classification records the verification status of claims in this document against the current codebase:
+
+| Claim Category | Prior Claim | Verified Reality in Implementation | Classification |
+|---|---|---|---|
+| **Indexing Performance** | "Runs in linear time O(N), executing in <40 ms for 5,000 logs" | In `buildFitnessIndex()`: input logs are sorted via O(N log N), sets are traversed in O(S), and exercise/PR lists are sorted in O(E log E). Benchmark in `performanceBenchmark.test.ts` yields ~22.8 ms (100 logs), ~63.8 ms (1,000 logs), and ~247.1 ms (5,000 logs). The sub-40 ms claim for 5,000 logs is contradicted by empirical measurements. | **STALE / CORRECTED** |
+| **Indexing Structure** | "Single-pass index traversal over session logs" | Initial pass iterates chronologically over valid sorted logs to populate exercise maps, PR maps, date aggregations, and lifetime counts without secondary full log passes. | **SUPPORTED** |
+| **Completion Predicate** | "Strictly checks `log.complete === true`" | Enforced in `src/utils/fitnessCalculations.ts` (`isCompletedSession`), filtering invalid truthy values (`"true"`, `1`). Excludes incomplete sessions across all selectors and derived indices. | **SUPPORTED** |
+| **PR Pipeline** | "Single PR pipeline and event count" | Historical PR indexing in `buildFitnessIndex()` tracks separate `weightPR` and `e1RMPR` records. Pre-session comparison in `calculateSessionPRs()` snapshots against pre-session index. Session summary consolidates dual PRs into exactly 1 visible event. | **SUPPORTED & CLARIFIED** |
+| **Cycle Advancement** | "8-day date-based cycle; rest days advance naturally" | Evaluated via `differenceInCalendarDays` modulo 8 + 1. Days 4 and 8 (recovery) advance with calendar days; skipped workouts do not freeze the cycle; bonus workouts do not advance the cycle anchor. | **SUPPORTED** |
+| **Sync Conflict Resolution** | "Deterministic merge via `updatedAt` timestamps and UID tombstones" | Verified in `fitnessSyncHelpers.ts` (`resolveLocalCloudRecord`). Local wins if timestamps equal but content differs. Deletion tombstones are strictly scoped per Firebase UID (`gl_deleted_ids_${uid}`). | **SUPPORTED** |
+| **Multi-Tenant Device Isolation** | "Complete isolation between accounts on shared device" | Tombstones and cloud sync data are partitioned per UID. However, the local storage snapshot key `gl_database_snapshot` is device-scoped. Full local partition requires sign-out `resetToDefaultData()`. | **QUALIFIED / UNVERIFIED LIMITATION** |
+
+---
+
+## 2. System Map
+
+GAINLOG is a local-first, offline-capable progressive overload training engine with selective Firestore cloud synchronization. The application is composed of the following core layers:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          Application Root                              │
 │                    (index.html → src/App.tsx)                          │
+│        Entry point, tab navigation, global dialogs, toast alerts       │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
@@ -24,7 +48,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        FitnessDerivedContext                           │
 │               (src/context/FitnessDerivedContext.tsx)                  │
-│  • Constructs canonical FitnessIndex via buildFitnessIndex() in O(N)   │
+│  • Constructs canonical FitnessIndex via buildFitnessIndex()           │
 │  • Computes training intelligence insights (trainingIntelligence.ts)   │
 │  • Exposes pure memoized selectors (fitnessDerivedSelectors.ts)        │
 └───────────────────────────────────┬────────────────────────────────────┘
@@ -45,39 +69,42 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 ### Module Responsibilities
 
 1. **Application Entry & Root Composition** (`src/App.tsx`, `src/main.tsx`):
-   Mounts providers (`FitnessProvider` → `FitnessDerivedProvider` → `ConfirmProvider` → `ToastContainer`), manages active navigation tab (`dashboard`, `session`, `history`, `analytics`, `calendar`, `manage`), and catches unexpected execution halts via `ErrorFallback.tsx`.
+   Mounts providers (`FitnessProvider` → `FitnessDerivedProvider` → `ConfirmProvider` → `ToastContainer`), manages active navigation tab (`dashboard`, `session`, `history`, `analytics`, `calendar`, `manage`), and catches execution halts via `ErrorFallback.tsx`.
 2. **Local Persistence & Migration** (`src/hooks/useFitnessData.ts`, `src/utils/fitnessMigration.ts`):
-   Loads, migrates (V1 → V2), and persists the atomic database snapshot payload (`gl_database_snapshot`) using staging-commit protection (`gl_snapshot_staging`) with best-effort discrete key mirroring for backwards compatibility.
+   Loads, migrates (V1 → V2), and persists the atomic database snapshot payload (`gl_database_snapshot`) using staging-commit protection (`gl_snapshot_staging`) with discrete key mirroring for backwards compatibility.
 3. **Cloud Synchronization & Service Boundary** (`src/hooks/useFitnessSync.ts`, `src/services/fitnessFirestore.ts`, `src/utils/fitnessSyncHelpers.ts`):
-   Manages Firestore auth listeners, bidirectional batched replication (<= 400 items/batch), UID-isolated deletion tombstones (`gl_deleted_ids_${uid}`), conflict resolution via deterministic `updatedAt` timestamps, and in-flight sync queuing (`syncQueuedRef`).
+   Manages Firestore auth listeners, bidirectional batched replication (<= 400 operations/batch), UID-isolated deletion tombstones (`gl_deleted_ids_${uid}`), deterministic conflict resolution via `updatedAt` timestamps, and in-flight sync queuing (`syncQueuedRef`).
 4. **Active Workout State** (`src/hooks/useActiveSession.ts`):
    Maintains transient in-progress workout keystrokes, active timer, and set completions in `gl_active_session`. Completely isolated from historical logs and indexing until user explicitly finishes the session.
 5. **Canonical Derived Index** (`src/utils/fitnessDerivedSelectors.ts`):
-   Executes a single O(N) traversal over session logs in `buildFitnessIndex()` to construct memoized exercise indices, PR records, date-to-volume maps, and completed-set totals.
-6. **Training Intelligence & Calculations** (`src/utils/trainingIntelligence.ts`, `src/utils/fitnessCalculations.ts`):
-   Computes protocol adherence, training streak across recovery days, 28-day frequency, strength trends, and multi-factor performance score on top of `FitnessIndex`.
+   Transforms raw session logs into an indexed, multi-faceted data structure (`FitnessIndex`) providing pre-aggregated exercise indices, PR records, date-to-volume maps, and completed-set totals.
+6. **Training Intelligence & Selectors** (`src/utils/trainingIntelligence.ts`, `src/utils/fitnessCalculations.ts`):
+   Computes protocol adherence, training streak across recovery days, 28-day frequency, strength trends, and multi-factor performance scores on top of `FitnessIndex`.
 7. **Design Tokens & Shared Primitives** (`src/styles/tokens.ts`, `src/components/ui/`):
    Centralizes application visual design: `SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, `SHADOW`, `GAP`, and modular primitives (`Card`, `StatCard`, `Section`, `Button`, `Dialog`, etc.).
+8. **Tests & Build Configuration** (`src/test/`, `vite.config.ts`, `package.json`, `.github/workflows/ci.yml`, `android/app/build.gradle`):
+   Automated regression suite (24 test suites), Vite bundler, GitHub Actions CI workflow with required artifact checks, and Capacitor Android release signing setup.
 
 ---
 
-## 2. Ownership and Sources of Truth
+## 3. Ownership and Sources of Truth
 
 | Concern | Canonical Owner | Source of Truth | Consumers Must Not |
 |---|---|---|---|
-| **Exercise identity** | `src/utils/exerciseResolver.ts` (`resolveExercise()`) | Canonical `ExerciseDefinition` records (`id`, `name`, `target`, `tags`) in `FitnessContext` / `defsMap` | Create independent IDs, invent ad-hoc names, or resolve using uncanonical fallback strings |
-| **Workout templates** | `src/hooks/useFitnessWorkouts.ts` | Canonical `Workout` records in `FitnessContext` / `workouts` | Maintain competing workout copies or mutate template structures directly in UI components |
-| **Completed training history** | `src/hooks/useFitnessLogs.ts` (`addLog()`, `deleteLog()`) | Persisted `SessionLog` map in `FitnessContext` / `logs` | Reconstruct history from UI state, filter un-sanitized raw inputs, or count incomplete sessions |
-| **Active workout** | `src/hooks/useActiveSession.ts` | Transient active-session state (`gl_active_session`) | Treat an unfinished draft as completed history or write keystrokes directly into `logs` |
-| **Derived fitness statistics** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`) | Memoized `FitnessIndex` in `FitnessDerivedContext` | Reimplement calculations or aggregate volumes/sets independently in screen components |
-| **PR and e1RM records** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`), `src/components/SessionView.tsx` (`calculateSessionPRs()`) | Canonical `WeightPRRecord` and `E1RMPRRecord` pipelines in `FitnessIndex` | Compare against inconsistent local history, count dual PRs as 2 events, or use un-sanitized values |
+| **Exercise identity** | `src/utils/exerciseResolver.ts` (`resolveExercise()`, `createExerciseDefinitionMap()`) | Canonical `ExerciseDefinition` records (`id`, `name`, `target`, `tags`) in `FitnessContext` / `defsMap` | Create independent identities, invent ad-hoc names, or resolve using uncanonical fallback strings |
+| **Workout templates** | `src/hooks/useFitnessWorkouts.ts` (`saveWorkout()`, `deleteWorkout()`, `sanitizeWorkout()`) | Canonical `Workout` records in `FitnessContext` / `workouts` | Maintain competing workout copies, mutate template structures directly in UI components, or bypass `sanitizeWorkout` |
+| **Completed training history** | `src/hooks/useFitnessLogs.ts` (`addLog()`, `deleteLog()`, `sanitizeSessionLog()`) | Persisted `SessionLog` map in `FitnessContext` / `logs` | Reconstruct history from UI state, filter un-sanitized raw inputs, or count incomplete sessions |
+| **Active workout** | `src/hooks/useActiveSession.ts` (`startActiveSession()`, `updateActiveSessionSets()`, `clearActiveSession()`) | Transient active-session state (`gl_active_session`) | Treat an unfinished draft as completed history, write keystrokes directly into `logs`, or inflate analytics |
+| **Derived fitness statistics** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`, canonical selectors) | Memoized `FitnessIndex` in `FitnessDerivedContext` | Reimplement calculations or aggregate volumes/sets independently in screen components |
+| **Historical PR records** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`) | Canonical `weightPRsMap` and `e1RMPRsMap` in `FitnessIndex` | Re-scan raw logs for PRs or use un-sanitized weight/reps values |
+| **Session Summary PR detection** | `src/components/SessionView.tsx` (`calculateSessionPRs()`) | Current session's valid done sets snapshot against pre-session canonical index (`getWeightPRForExercise`, `getE1RMPRForExercise`) | Compare against in-session mutations or emit dual PR events for a single exercise |
 | **Cycle progression** | `src/utils/fitnessCalculations.ts` (`getCycleDay()`, `getAdjustedCycleStart()`) | Canonical `appState.cycleStart` anchor date string in `FitnessContext` | Infer the cycle from a separate UI-only rule, freeze cycle on missed days, or advance on bonus workouts |
-| **Sync conflicts & deletions** | `src/utils/fitnessSyncHelpers.ts` (`resolveLocalCloudRecord()`, `trackDeletedId()`) | Per-record `updatedAt` timestamps and UID-partitioned tombstones (`gl_deleted_ids_${uid}`) | Bypass tombstones, mix cross-account tombstones, or discard queued follow-up sync requests |
-| **Design tokens & shared UI** | `src/styles/tokens.ts`, `src/components/ui/` | Token definitions (`SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, etc.) | Hardcode arbitrary styling classes, invent one-off dialogs/modals, or duplicate shared layouts |
+| **Sync conflicts & deletions** | `src/utils/fitnessSyncHelpers.ts` (`resolveLocalCloudRecord()`, `trackDeletedId()`, `commitBatchOperations()`) | Per-record `updatedAt` timestamps and UID-partitioned tombstones (`gl_deleted_ids_${uid}`) | Bypass tombstones, mix cross-account tombstones, or discard queued follow-up sync requests |
+| **Design tokens & shared UI** | `src/styles/tokens.ts`, `src/components/ui/` | Token definitions (`SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, etc.) and component primitives | Hardcode arbitrary styling classes, invent one-off dialogs/modals, or duplicate shared layouts |
 
 ---
 
-## 3. Dependency Rules
+## 4. Dependency Rules
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -116,8 +143,8 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 
 ### Layering Rules
 
-1. **Downwards Dependency Flow**:
-   Components consume hooks, selectors, and UI primitives. UI components must NEVER be imported by calculation, selector, persistence, or sync modules.
+1. **Strict Downward Dependency Flow**:
+   UI components consume hooks, selectors, and UI primitives. UI components must NEVER be imported by calculation, selector, persistence, or sync modules (enforced in `src/test/architectureContract.test.ts`).
 2. **Pure Calculation Isolation**:
    Pure calculation modules (`fitnessCalculations.ts`, `exerciseResolver.ts`, `trainingIntelligence.ts`) must NOT import React, React hooks, or UI state.
 3. **No Direct UI Calculation of Canonical Metrics**:
@@ -126,10 +153,12 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
    All log writes must pass through `sanitizeSessionLog()` and `addLog()` before durable storage or Firestore upload.
 5. **No Cross-Feature Re-implementation**:
    Screens must not bypass shared hooks (e.g. `useCalendarGrid`) to re-compute date grids or log groupings.
+6. **No Leaking Transient State**:
+   Active workout drafts (`gl_active_session`) must never enter `FitnessContext.logs` until durability succeeds.
 
 ---
 
-## 4. Critical Data Flows
+## 5. Critical Data Flows
 
 ### A. App Initialization & Hydration
 ```
@@ -143,7 +172,7 @@ FitnessContext State Hydrated (initialData)
     │
     ├─────────────────────────────────────────────┐
     ▼                                             ▼
-buildFitnessIndex() (O(N) single pass)      Firebase Auth State Change (useFitnessSync)
+buildFitnessIndex()                         Firebase Auth State Change (useFitnessSync)
     │                                             │
     ▼                                             ▼
 FitnessDerivedContext Ready                Download & Merge Cloud Data (resolveLocalCloudRecord)
@@ -176,34 +205,37 @@ updateCycleStart() (If completing out-of-order scheduled core workout)
     ▼
 clearActiveSession() (Remove gl_active_session) → Render Completion Summary
 ```
-- **Failure Rule**: If `addLog()` fails or throws, `clearActiveSession()` is NOT called. The active session draft is preserved in `localStorage` (`gl_active_session`) to prevent data loss.
+- **Failure Rule**: If `addLog()` throws or fails, `clearActiveSession()` is NOT called. The active session draft is preserved in `localStorage` (`gl_active_session`) to prevent data loss.
 
-### C. Fitness Calculation & Derived Metrics
+### C. Fitness Calculation & Algorithmic Complexity
 ```
 logs (Record<string, SessionLog>)
     │
     ▼ (Filter: isCompletedSession(l) && l.date <= todayStr)
-buildFitnessIndex() (Single O(N) traversal over session logs)
-    │
-    ├─ sortedLogsDescending, sortedLogsAscending
-    ├─ exerciseIndex (Map: sessions, maxW, volume, weightPR, e1RMPR, progression)
-    ├─ weightPRs, e1RMPRs (Canonical PR arrays)
-    ├─ completedSetsByDate (done: true sets from completed sessions)
-    ├─ plannedSetsByDate (all programmed/logged set rows)
-    ├─ volumeByDate, volumeByMuscle, frequencyByMuscle
-    └─ lifetimeStats (totalSessions, totalVolume, totalSets, calendarTrainingStreak)
+buildFitnessIndex()
+    ├─ Step 1: Filter valid logs: O(N)
+    ├─ Step 2: Sort logs by date descending / ID descending: O(N log N)
+    ├─ Step 3: Single chronological traversal over logs and sets: O(N + S)
+    ├─ Step 4: Exercise frequency and PR sorting: O(E log E)
+    ├─ Step 5: Distinct dates sorting & longest streak: O(D log D)
+    └─ Overall Index Complexity: O(N log N + S + E log E + D log D)
     │
     ▼
-trainingIntelligence.ts Algorithms
-    ├─ calculateTrainingStreak() (Scheduled protocol streak across rest days)
-    ├─ calculateAdherence() (Scheduled core workout adherence; rest days excluded)
-    ├─ calculateTrainingFrequency() (Rolling 28-day sessions/week)
-    ├─ calculateStrengthTrend() (Median e1RM change across comparable lifts)
-    └─ calculatePerformanceScore() (Multi-factor evaluation with declared windows)
+Downstream Canonical Selectors
+    ├─ selectLifetimeStats(index): O(1)
+    ├─ selectWeightPRs(index), selectE1RMPRs(index): O(1)
+    ├─ selectExerciseIndex(index, exId): O(1)
+    ├─ selectExercise1RMProgression(index, exId): O(1)
+    └─ selectTimeRangeAnalytics(index, ...): O(L_range + S_range) (Filters index logs within requested date window)
     │
     ▼
 Consumed by Dashboard, HistoryView, AnalyticsView, Calendar
 ```
+
+#### Benchmark Timings (from `performanceBenchmark.test.ts`)
+- **100 logs**: `buildFitnessIndex`: ~22.8 ms; Selectors: ~0.20 ms; Analytics: ~153.7 ms.
+- **1,000 logs**: `buildFitnessIndex`: ~63.8 ms; Selectors: ~0.06 ms; Analytics: ~117.3 ms.
+- **5,000 logs**: `buildFitnessIndex`: ~247.1 ms; Selectors: ~0.02 ms; Analytics: ~190.0 ms.
 
 ### D. Cloud Synchronization & Conflict Resolution
 ```
@@ -212,14 +244,17 @@ Local Mutation (setExerciseDefinitions / setWorkouts / setLogs / setAppState)
     ▼
 syncDataBackground(uid)
     │
-    ├─ 1. Purge offline deletions (delete doc; remove from gl_deleted_ids_${uid})
-    ├─ 2. Fetch cloud collections (getDocs)
-    ├─ 3. Filter cloud docs against active tombstones (prevent resurrection)
-    ├─ 4. Deterministic Merge:
+    ├─ 0. Purge offline deletions (delete doc; remove from gl_deleted_ids_${uid})
+    ├─ 1. Parallel fetch cloud collections (getDocs)
+    ├─ 2. Filter cloud docs against active tombstones (prevent resurrection)
+    ├─ 3. Deterministic Merge (resolveLocalCloudRecord):
     │     - If local.updatedAt > cloud.updatedAt → local wins (upload to cloud)
-    │     - If cloud.updatedAt >= local.updatedAt → cloud wins (apply to local)
-    │     - If deleted in tombstone → tombstone wins (purge from cloud)
-    └─ 5. Batch writes executed (commitBatchOperations, <= 400 operations)
+    │     - If cloud.updatedAt > local.updatedAt → cloud wins (apply to local)
+    │     - If local.updatedAt === cloud.updatedAt:
+    │         - Content identical → equal (no upload)
+    │         - Content differs → local wins (upload to cloud)
+    │     - If tombstoned → tombstone wins (purge from cloud)
+    └─ 4. Batch writes executed (commitBatchOperations, <= 400 operations/batch)
 ```
 - **Concurrency Rule**: If a sync request arrives while `isSyncingRef.current` is true, `syncQueuedRef.current = true`. Exactly one follow-up sync runs after the current sync finishes.
 
@@ -239,31 +274,86 @@ Cycle Day (1-8):
   - Rest days (Days 4 and 8) naturally advance without requiring a completed session log.
   - Skipped days do not pause or freeze the cycle.
   - Bonus workouts (`isCore === false`) do not advance or alter `cycleStart`.
+  - Completing an out-of-order core workout recalculates `cycleStart` via `getAdjustedCycleStart(workout.cycleDay, new Date())`.
 
 ---
 
-## 5. Testable Invariants
+## 6. Date, Calendar & Timezone Semantics
+
+1. **Date Representation & Timezone Boundary**:
+   - Dates in logs, cycle anchors, and weight logs are represented strictly as `YYYY-MM-DD` calendar strings generated via `dk()` (`format(d, 'yyyy-MM-dd')` from `date-fns`).
+   - All string date comparisons use lexicographical or calendar date comparisons, avoiding UTC/local midnight conversion shifts.
+   - Display formatting uses `formatDateStr()` (e.g. `"Oct 24"`), constructing dates from year/month/day components without timezone offsets.
+2. **Session Completion Date**:
+   - When a session finishes, `date: dk()` records the user's current local calendar date.
+3. **Upper Date Boundary (Future Dates)**:
+   - In `buildFitnessIndex()`: `isCompleted = isCompletedSession(log) && (!log.date || log.date <= todayStr)`.
+   - Any log with `date > todayStr` (future-dated) is excluded from completed sessions, lifetime volume, PRs, streaks, and adherence.
+   - In weight tracking: `getSortedWeightEntries` filters out any weight entry where `date > todayStr`.
+4. **Rolling Windows**:
+   - `getRollingDateRange(now, days)`: returns `{ start: dk(subDays(validNow, days - 1)), end: dk(validNow) }`. The interval is inclusive of `now`, spanning exactly `days` calendar dates.
+   - `getPreviousDateRange(start, days)`: returns the preceding interval of length `days` immediately prior to `start`.
+   - 28-day training frequency: `(completedSessions / 28) * 7` sessions per week compared to the preceding 28 days.
+   - Performance Score evaluation window: compares the rolling 30-day window against the previous 30-day window.
+5. **Cycle Anchor**:
+   - Stored in `appState.cycleStart` as `YYYY-MM-DD`.
+   - If missing or invalid, deterministically falls back to anchor to the target date as Day 1.
+
+---
+
+## 7. Cloud Synchronization & Failure Contracts
+
+1. **Local-First Durability & Graceful Degradation**:
+   - The primary data store is local `localStorage` via `gl_database_snapshot`.
+   - If a cloud read, write, or authentication operation fails (network offline, Firestore down, rules error), `useFitnessSync` sets `syncStatus = 'failed'` and exposes a user-friendly error notice.
+   - Local training functionality, active session recording, and historical metrics remain fully operational in offline mode.
+2. **Deterministic Timestamp Conflict Resolution**:
+   - Every record carries an integer `updatedAt` millisecond timestamp.
+   - Local records with strictly newer `updatedAt` are uploaded to the cloud.
+   - Cloud records with strictly newer `updatedAt` update local state.
+   - If `local.updatedAt === cloud.updatedAt`:
+     - If stringified contents match: considered equal; no action taken.
+     - If contents differ: local version is preferred as tie-breaker (`winner: 'local'`) and queued for upload to reconcile cloud.
+3. **Deletion Propagation & Tombstone Lifetime**:
+   - Deletions are tracked in UID-scoped tombstones in `localStorage` under `gl_deleted_ids_${uid}`.
+   - Deletion of an item adds its ID to the tracker.
+   - During sync, remote deletion is attempted. If successful, the ID is removed from the tracker. If failed, it remains in the tracker to retry on next connection.
+   - Incoming cloud records matching active tombstones are dropped immediately, preventing deleted items from resurrecting upon reconnect.
+4. **Retry Mechanism & Network Awareness**:
+   - Sync retry on connection uses exponential backoff (2000 ms, 4000 ms) up to 3 attempts.
+   - If `!navigator.onLine` or Firestore reports `unavailable`, retry backoff pauses and registers a `window.addEventListener('online')` handler to resume sync when connectivity returns.
+   - Concurrency protection: `isSyncingRef` prevents overlapping background sync passes; `syncQueuedRef` ensures that rapid consecutive mutations execute exactly one consolidated follow-up sync.
+5. **Account Isolation & Sign-Out**:
+   - Tombstones are keyed per Firebase UID (`gl_deleted_ids_${uid}`).
+   - On `logout()`, the user's tombstone storage is cleared, and `resetToDefaultData()` wipes the in-memory state.
+6. **Explicitly Unverified Behaviors & Known Limitations**:
+   - *Device Storage Multi-Tenant Partition*: If User A and User B share the same physical browser profile without signing out, local storage keys are shared. True local multi-account isolation without sign-out is not supported.
+   - *Firestore Write Queue Depth*: Under prolonged offline usage with thousands of offline modifications, memory and storage bounds of the pending mutation queue are subject to browser local storage limits (~5-10 MB).
+
+---
+
+## 8. Testable Invariants
 
 | # | Invariant Rule | Implementation Path | Verification Test Path | Status |
 |---|---|---|---|---|
-| 1 | **Single Completion Predicate**: A session is completed if and only if `isCompletedSession(log)` returns `true` (`log.complete === true`). Malformed flags (`completed`, `1`, `"true"`) evaluate to `false`. | `src/utils/fitnessCalculations.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/canonicalFitnessPipeline.test.ts` | **ENFORCED** |
-| 2 | **Incomplete Sessions Isolation**: Incomplete sessions contribute 0 to volume, PRs, completed sets, streaks, or completion metrics. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts`, `src/test/sessionDataContract.test.ts` | **ENFORCED** |
-| 3 | **Active-Session Isolation**: In-progress edits in `useActiveSession` never enter `FitnessIndex` or historical metrics until persisted via `addLog()`. | `src/hooks/useActiveSession.ts`, `src/context/FitnessContext.tsx` | `src/test/sessionViewIdentity.test.ts` | **ENFORCED** |
-| 4 | **Exercise Identity Integrity**: `exerciseDefinitionId` is the single canonical key. Orphaned or missing definitions resolve to `Unknown Exercise`, never crash, and never output raw UUIDs as names. | `src/utils/exerciseResolver.ts` | `src/test/canonicalDataContract.test.ts` | **ENFORCED** |
-| 5 | **Sets Accounting Distinction**: `completedSetsByDate` strictly counts `done: true` sets from completed sessions. `plannedSetsByDate` counts programmed/logged set rows across all sessions. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts` | **ENFORCED** |
-| 6 | **PR & e1RM Pipeline**: e1RM uses the standard Epley formula with a 30-rep cap. In Session Summary, a set that establishes both a weight PR and an e1RM PR counts as exactly 1 visible PR event. | `src/utils/fitnessCalculations.ts`, `src/components/SessionView.tsx` | `src/test/sessionPRRegression.test.ts` | **ENFORCED** |
-| 7 | **Scheduled Core Adherence**: Adherence measures completion of the scheduled core workout for that cycle day. Bonus workouts do not satisfy core obligations; scheduled rest days do not enter the denominator. | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **ENFORCED** |
-| 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts` | **ENFORCED** |
-| 9 | **Cross-Surface Consistency**: Equivalent metrics and time windows produce identical numbers across Dashboard, History, Analytics, and Calendar. | `src/context/FitnessDerivedContext.tsx` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/pipelineConsistencyRegression.test.ts` | **ENFORCED** |
-| 10 | **Distinct Semantic Values for Data Availability**: Missing data, zero values, and unavailable metrics remain semantically distinct (`available: false` vs score `0`). | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **ENFORCED** |
-| 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Atomic writes use `gl_snapshot_staging` before committing `gl_database_snapshot`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts` | **ENFORCED** |
-| 12 | **Account Isolation & Tombstone Scoping**: Tombstones are scoped to Firebase UID (`gl_deleted_ids_${uid}`). Logging out or switching accounts clears tombstones and isolates storage. | `src/utils/fitnessSyncHelpers.ts`, `src/hooks/useFitnessSync.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/lifecycleDestructiveSyncBoundary.test.ts` | **ENFORCED** |
-| 13 | **Token & Primitive Ownership**: Design tokens in `src/styles/tokens.ts` and primitives in `src/components/ui/` own presentation rules. Modals trap focus and restore scroll cleanly. | `src/styles/tokens.ts`, `src/components/ui/` | `src/test/statCardRegression.test.tsx`, `src/test/supportingCodeAudit.test.ts` | **ENFORCED** |
-| 14 | **Performance Guarantees**: `buildFitnessIndex()` runs in linear time O(N), executing in <40 ms for 5,000 session logs. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/performanceBenchmark.test.ts` | **ENFORCED** |
+| 1 | **Single Completion Predicate**: A session is completed if and only if `isCompletedSession(log)` returns `true` (`log.complete === true`). Malformed flags (`completed`, `1`, `"true"`) evaluate to `false`. | `src/utils/fitnessCalculations.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
+| 2 | **Incomplete Sessions Isolation**: Incomplete sessions contribute 0 to volume, PRs, completed sets, streaks, or completion metrics. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts`, `src/test/sessionDataContract.test.ts` | **VERIFIED & TESTED** |
+| 3 | **Active-Session Isolation**: In-progress edits in `useActiveSession` never enter `FitnessIndex` or historical metrics until persisted via `addLog()`. | `src/hooks/useActiveSession.ts`, `src/context/FitnessContext.tsx` | `src/test/sessionViewIdentity.test.ts` | **VERIFIED & TESTED** |
+| 4 | **Exercise Identity Integrity**: `exerciseDefinitionId` is the single canonical key. Orphaned or missing definitions resolve to `Unknown Exercise`, never crash, and never output raw UUIDs as names. | `src/utils/exerciseResolver.ts` | `src/test/canonicalDataContract.test.ts`, `src/test/historyResolution.test.ts` | **VERIFIED & TESTED** |
+| 5 | **Sets Accounting Distinction**: `completedSetsByDate` strictly counts `done: true` sets from completed sessions. `plannedSetsByDate` counts programmed/logged set rows across all sessions. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
+| 6 | **PR Pipeline & Consolidation**: Historical index tracks independent weight and e1RM PRs. Session summary compares against pre-session index and consolidates a set establishing both weight and e1RM records into exactly 1 visible PR event. | `src/utils/fitnessDerivedSelectors.ts`, `src/components/SessionView.tsx` | `src/test/sessionPRRegression.test.ts`, `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
+| 7 | **Scheduled Core Adherence**: Adherence measures completion of the scheduled core workout for that cycle day. Bonus workouts do not satisfy core obligations; scheduled rest days do not enter the denominator. | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
+| 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts` | **VERIFIED & TESTED** |
+| 9 | **Cross-Surface Consistency**: Equivalent metrics and time windows produce identical numbers across Dashboard, History, Analytics, and Calendar. | `src/context/FitnessDerivedContext.tsx` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/pipelineConsistencyRegression.test.ts` | **VERIFIED & TESTED** |
+| 10 | **Distinct Semantic Values for Data Availability**: Missing data, zero values, and unavailable metrics remain semantically distinct (`available: false` vs score `0`). | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
+| 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Atomic writes use `gl_snapshot_staging` before committing `gl_database_snapshot`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts` | **VERIFIED & TESTED** |
+| 12 | **Account Isolation & Tombstone Scoping**: Tombstones are scoped to Firebase UID (`gl_deleted_ids_${uid}`). Logging out or switching accounts clears tombstones and isolates storage. | `src/utils/fitnessSyncHelpers.ts`, `src/hooks/useFitnessSync.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/lifecycleDestructiveSyncBoundary.test.ts` | **VERIFIED & TESTED** |
+| 13 | **Token & Primitive Ownership**: Design tokens in `src/styles/tokens.ts` and primitives in `src/components/ui/` own presentation rules. Modals trap focus and restore scroll cleanly. Pure calculations never import UI. | `src/styles/tokens.ts`, `src/components/ui/` | `src/test/statCardRegression.test.tsx`, `src/test/architectureContract.test.ts` | **VERIFIED & TESTED** |
+| 14 | **Performance & Algorithmic Complexity**: `buildFitnessIndex()` runs in O(N log N + S + E log E + D log D) time. Benchmarks demonstrate ~23 ms for 100 logs, ~64 ms for 1,000 logs, and ~247 ms for 5,000 logs on standard V8. Downstream selectors execute in <1 ms. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/performanceBenchmark.test.ts` | **MEASURED & BENCHMARKED (QUALIFIED)** |
 
 ---
 
-## 6. Architecture Change Protocol
+## 9. Architecture Change Protocol
 
 Any engineer or AI coding agent modifying the codebase must treat a proposed modification as an **Architectural Change** if it:
 1. Moves responsibility between modules (e.g. moving calculation logic into a UI component).
@@ -272,11 +362,11 @@ Any engineer or AI coding agent modifying the codebase must treat a proposed mod
 4. Alters persistence, snapshot staging, sync retry, or conflict resolution behavior.
 5. Modifies public interfaces of `FitnessContext` or `FitnessDerivedContext`.
 6. Changes calculation semantics for volume, e1RM, streaks, adherence, or performance scores.
-7. Weakens any of the 14 testable invariants above.
+7. Modifies or weakens any of the 14 testable invariants above.
 
-### Mandatory Stop-and-Report Gate
+### A. Mandatory Stop-and-Report Gate (Unauthorized Requests)
 
-When an architectural change is requested or identified, the agent **MUST STOP IMMEDIATELY** before writing code and provide the following structured report:
+When a requested change conflicts with an existing invariant, dependency rule, or data contract **WITHOUT prior maintainer authorization**, the engineer or AI agent **MUST STOP IMMEDIATELY** before writing code and output the following structured report:
 
 ```markdown
 ### ARCHITECTURAL CONFLICT REPORT
@@ -290,9 +380,18 @@ When an architectural change is requested or identified, the agent **MUST STOP I
 - **Decision Required**: Specific question requiring maintainer approval before proceeding.
 ```
 
+### B. Approved Architectural Change Workflow
+
+When an architectural change is **explicitly authorized** by the maintainer:
+1. Document affected data contracts, migration risks, and backward compatibility paths.
+2. Implement necessary schema migrations in `fitnessMigration.ts` (e.g. incrementing `CURRENT_SCHEMA_VERSION`).
+3. Add regression tests validating both legacy and new behavior before altering implementation.
+4. Update `ARCHITECTURE.md` to reflect the new canonical owner, dependency rule, data flow, or invariant status.
+5. Verify complete build and test suite passes (`npm run build`, `npx vitest run`).
+
 ---
 
-## 7. References & Source Locations
+## 10. References & Source Locations
 
 - **Canonical Data Models**: `src/types/fitness.ts`
 - **Initial Training Protocol & Workouts**: `src/types/initialData.ts`
@@ -308,3 +407,4 @@ When an architectural change is requested or identified, the agent **MUST STOP I
 - **CI / Build Workflow**: `.github/workflows/ci.yml`
 - **Android Release & Signing Configuration**: `android/app/build.gradle`
 - **Performance Benchmark Test Suite**: `src/test/performanceBenchmark.test.ts`
+- **Architecture Contract Verification Test**: `src/test/architectureContract.test.ts`
