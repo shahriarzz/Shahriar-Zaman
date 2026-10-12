@@ -59,25 +59,54 @@ const TONE_CONFIG: Record<ToastTone, {
 
 export const ToastContainer: React.FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timersRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   useEffect(() => {
     const handleToast = (item: ToastItem) => {
-      setToasts((prev) => [...prev.slice(-3), item]); // keep maximum 4 active toasts
+      // Clear previous timer for this exact item ID if it exists
+      if (timersRef.current.has(item.id)) {
+        clearTimeout(timersRef.current.get(item.id)!);
+        timersRef.current.delete(item.id);
+      }
+
+      setToasts((prev) => {
+        // Enforce maximum 4 active toasts: if pruning earlier toasts, clear their timers
+        const updated = [...prev, item];
+        if (updated.length > 4) {
+          const evicted = updated.slice(0, updated.length - 4);
+          evicted.forEach(e => {
+            if (timersRef.current.has(e.id)) {
+              clearTimeout(timersRef.current.get(e.id)!);
+              timersRef.current.delete(e.id);
+            }
+          });
+          return updated.slice(-4);
+        }
+        return updated;
+      });
 
       const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== item.id));
+        timersRef.current.delete(item.id);
       }, item.duration || 4500);
 
-      return () => clearTimeout(timer);
+      timersRef.current.set(item.id, timer);
     };
 
     listeners.add(handleToast);
     return () => {
       listeners.delete(handleToast);
+      // Clean up all active toast timers on unmount
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current.clear();
     };
   }, []);
 
   const removeToast = (id: string) => {
+    if (timersRef.current.has(id)) {
+      clearTimeout(timersRef.current.get(id)!);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 

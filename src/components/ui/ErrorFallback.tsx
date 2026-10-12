@@ -31,19 +31,43 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) 
           </div>
         </div>
 
-        {error && (
-          <pre
-            className={cn(
-              SURFACE.recessed,
-              BORDER.standard,
-              RADIUS.card,
-              "p-4 border font-mono text-xs text-red-300 overflow-x-auto whitespace-pre-wrap max-h-60 leading-relaxed select-all"
-            )}
-          >
-            {error.toString()}
-            {error.stack ? `\n\n${error.stack}` : ''}
-          </pre>
-        )}
+        {error && (() => {
+          const isDev = Boolean((import.meta as any).env?.DEV);
+          const errorRefId = `ERR-${Math.abs(
+            (error.message || '').split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
+          ).toString(16).toUpperCase()}`;
+
+          return isDev ? (
+            <pre
+              className={cn(
+                SURFACE.recessed,
+                BORDER.standard,
+                RADIUS.card,
+                "p-4 border font-mono text-xs text-red-300 overflow-x-auto whitespace-pre-wrap max-h-60 leading-relaxed select-all"
+              )}
+            >
+              {error.toString()}
+              {error.stack ? `\n\n${error.stack}` : ''}
+            </pre>
+          ) : (
+            <div
+              className={cn(
+                SURFACE.recessed,
+                BORDER.standard,
+                RADIUS.card,
+                "p-4 border space-y-2 text-xs font-mono"
+              )}
+            >
+              <div className="flex items-center justify-between text-zinc-400">
+                <span>INCIDENT REFERENCE</span>
+                <span className="text-red-400 font-bold">{errorRefId}</span>
+              </div>
+              <p className="text-zinc-300">
+                A system error occurred. Your training logs and saved protocols remain safely preserved.
+              </p>
+            </div>
+          );
+        })()}
 
         <div className="flex justify-end gap-3 pt-2">
           <Button

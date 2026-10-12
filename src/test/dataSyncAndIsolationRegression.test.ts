@@ -352,6 +352,48 @@ describe('Phase A — High-Priority Data / Sync & Isolation Regressions', () => 
       expect(freshData.logs).toEqual({});
       expect(freshData.workouts.length).toBeGreaterThan(0); // Default templates seeded
     });
+
+    it('strictly partitions deletion tombstones by Firebase UID across Account A and Account B', () => {
+      const uidA = 'user_alpha_123';
+      const uidB = 'user_beta_456';
+
+      // Record offline deletion in Account A
+      trackDeletedId('logs', 'log_userA_deleted', uidA);
+      trackDeletedId('defs', 'def_userA_deleted', uidA);
+
+      // Account A tracker must contain its deletions
+      const trackerA = getDeletedIdsTracker(uidA);
+      expect(trackerA.logs).toContain('log_userA_deleted');
+      expect(trackerA.defs).toContain('def_userA_deleted');
+
+      // Account B tracker MUST NOT contain Account A tombstones!
+      const trackerB = getDeletedIdsTracker(uidB);
+      expect(trackerB.logs).not.toContain('log_userA_deleted');
+      expect(trackerB.defs).not.toContain('def_userA_deleted');
+      expect(trackerB.logs).toEqual([]);
+
+      // Account B records its own deletion
+      trackDeletedId('workouts', 'wo_userB_deleted', uidB);
+      expect(getDeletedIdsTracker(uidB).workouts).toContain('wo_userB_deleted');
+      expect(getDeletedIdsTracker(uidA).workouts).not.toContain('wo_userB_deleted');
+
+      // Clearing Account A tombstones leaves Account B untouched
+      clearDeletedIdsTracker(uidA);
+      expect(getDeletedIdsTracker(uidA).logs).toEqual([]);
+      expect(getDeletedIdsTracker(uidB).workouts).toContain('wo_userB_deleted');
+    });
+
+    it('prevents anonymous tombstones from corrupting newly logged in account data', () => {
+      // User operates anonymously and deletes something
+      trackDeletedId('logs', 'anon_deleted_log', null);
+      expect(getDeletedIdsTracker().logs).toContain('anon_deleted_log');
+
+      // First sign-in into Account C: clear anonymous tombstones
+      clearDeletedIdsTracker();
+      const uidC = 'user_charlie_789';
+      expect(getDeletedIdsTracker().logs).toEqual([]);
+      expect(getDeletedIdsTracker(uidC).logs).toEqual([]);
+    });
   });
 
   // 8. Sync retry mechanism

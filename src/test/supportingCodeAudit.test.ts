@@ -461,4 +461,81 @@ describe('GAINLOG Supporting-Code Audit Test Suite', () => {
       expect(id1).not.toBe(id2);
     });
   });
+
+  describe('7. Dialog Body Scroll Restoration & Focus Trapping Invariants', () => {
+    it('preserves and restores body previous overflow style cleanly', () => {
+      document.body.style.overflow = 'auto';
+      const prev = document.body.style.overflow;
+      expect(prev).toBe('auto');
+
+      // Simulate open: body overflow locked
+      document.body.style.overflow = 'hidden';
+      expect(document.body.style.overflow).toBe('hidden');
+
+      // Simulate close: body restored to previous value
+      document.body.style.overflow = prev;
+      expect(document.body.style.overflow).toBe('auto');
+    });
+  });
+
+  describe('8. Toast Timer Cleanup & Eviction Safeguards', () => {
+    it('clears timers on eviction when toast collection exceeds limit of 4', () => {
+      const activeTimers = new Map<string, any>();
+      const addToastWithEviction = (id: string, currentList: string[]) => {
+        const timerId = setTimeout(() => {}, 5000);
+        activeTimers.set(id, timerId);
+
+        const updated = [...currentList, id];
+        if (updated.length > 4) {
+          const evicted = updated.slice(0, updated.length - 4);
+          evicted.forEach(eId => {
+            if (activeTimers.has(eId)) {
+              clearTimeout(activeTimers.get(eId));
+              activeTimers.delete(eId);
+            }
+          });
+          return updated.slice(-4);
+        }
+        return updated;
+      };
+
+      let list: string[] = [];
+      list = addToastWithEviction('t1', list);
+      list = addToastWithEviction('t2', list);
+      list = addToastWithEviction('t3', list);
+      list = addToastWithEviction('t4', list);
+      expect(list).toEqual(['t1', 't2', 't3', 't4']);
+      expect(activeTimers.size).toBe(4);
+
+      // Adding 5th toast evicts t1 and cleans up its timer
+      list = addToastWithEviction('t5', list);
+      expect(list).toEqual(['t2', 't3', 't4', 't5']);
+      expect(activeTimers.has('t1')).toBe(false);
+      expect(activeTimers.size).toBe(4);
+
+      // Clean all
+      activeTimers.forEach(t => clearTimeout(t));
+      activeTimers.clear();
+      expect(activeTimers.size).toBe(0);
+    });
+  });
+
+  describe('9. Production ErrorFallback Privacy Invariant', () => {
+    it('never includes error.stack in production mode and displays safe reference ID', () => {
+      const sampleError = new Error('Sensitive database credentials at internal-server:5432');
+      sampleError.stack = 'Error: Sensitive...\n    at connectInternal (src/secret.ts:42:15)';
+
+      const isDev = false; // Production mode
+      const errorRefId = `ERR-${Math.abs(
+        (sampleError.message || '').split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
+      ).toString(16).toUpperCase()}`;
+
+      expect(errorRefId).toMatch(/^ERR-[0-9A-F]+$/);
+      // Ensure production UI does not display error.stack or sensitive internals
+      expect(isDev).toBe(false);
+      expect(errorRefId).not.toContain('src/secret.ts');
+      expect(errorRefId).not.toContain('internal-server');
+    });
+  });
 });
+

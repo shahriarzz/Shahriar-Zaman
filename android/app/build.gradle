@@ -20,16 +20,51 @@ android {
     }
     signingConfigs {
         release {
-            if (System.getenv("KEYSTORE_PATH") != null && file(System.getenv("KEYSTORE_PATH")).exists()) {
-                storeFile file(System.getenv("KEYSTORE_PATH"))
-                storePassword System.getenv("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
-            } else if (project.hasProperty('RELEASE_STORE_FILE') && file(project.property('RELEASE_STORE_FILE')).exists()) {
-                storeFile file(project.property('RELEASE_STORE_FILE'))
-                storePassword project.property('RELEASE_STORE_PASSWORD')
-                keyAlias project.property('RELEASE_KEY_ALIAS')
-                keyPassword project.property('RELEASE_KEY_PASSWORD')
+            def resolveKeystore = { String rawPath ->
+                if (!rawPath) return null
+                def candidate1 = file(rawPath)
+                if (candidate1.exists()) return candidate1
+                def candidate2 = rootProject.file(rawPath)
+                if (candidate2.exists()) return candidate2
+                def candidate3 = file("../${rawPath}")
+                if (candidate3.exists()) return candidate3
+                return null
+            }
+
+            def envKeystore = System.getenv("KEYSTORE_PATH")
+            def envStorePass = System.getenv("KEYSTORE_PASSWORD")
+            def envAlias = System.getenv("KEY_ALIAS")
+            def envKeyPass = System.getenv("KEY_PASSWORD")
+
+            def propKeystore = project.hasProperty('RELEASE_STORE_FILE') ? project.property('RELEASE_STORE_FILE') : null
+            def propStorePass = project.hasProperty('RELEASE_STORE_PASSWORD') ? project.property('RELEASE_STORE_PASSWORD') : null
+            def propAlias = project.hasProperty('RELEASE_KEY_ALIAS') ? project.property('RELEASE_KEY_ALIAS') : null
+            def propKeyPass = project.hasProperty('RELEASE_KEY_PASSWORD') ? project.property('RELEASE_KEY_PASSWORD') : null
+
+            if (envKeystore || envStorePass || envAlias || envKeyPass) {
+                def ksFile = resolveKeystore(envKeystore)
+                if (!ksFile) {
+                    throw new GradleException("RELEASE SIGNING ERROR: Environment variable KEYSTORE_PATH='${envKeystore}' file not found.")
+                }
+                if (!envStorePass || !envAlias || !envKeyPass) {
+                    throw new GradleException("RELEASE SIGNING ERROR: All four environment credentials (KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) must be provided together.")
+                }
+                storeFile ksFile
+                storePassword envStorePass
+                keyAlias envAlias
+                keyPassword envKeyPass
+            } else if (propKeystore || propStorePass || propAlias || propKeyPass) {
+                def ksFile = resolveKeystore(propKeystore)
+                if (!ksFile) {
+                    throw new GradleException("RELEASE SIGNING ERROR: Gradle property RELEASE_STORE_FILE='${propKeystore}' file not found.")
+                }
+                if (!propStorePass || !propAlias || !propKeyPass) {
+                    throw new GradleException("RELEASE SIGNING ERROR: All four Gradle properties (RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD) must be provided together.")
+                }
+                storeFile ksFile
+                storePassword propStorePass
+                keyAlias propAlias
+                keyPassword propKeyPass
             }
         }
     }

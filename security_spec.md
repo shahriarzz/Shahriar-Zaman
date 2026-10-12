@@ -1,28 +1,24 @@
 # Security Specification for GAINLOG
 
-## 1. Data Invariants
-- A user can only access and modify their own documents under `/users/{userId}`.
-- All workout types must be from the allowed `WorkoutType` enum.
-- Log dates and workout IDs must be valid strings.
-- Timestamps and record IDs are strictly enforced per user.
+## 1. Security Architecture & Boundary Model
+GAINLOG employs defense-in-depth security with explicit boundaries between server-side Firestore security rules and client/API data validation:
 
-## 2. The Dirty Dozen Payloads
-1. **Identity Theft (Write)**: Attempt to write to `/users/anotherUser/workouts/wo1` as `authenticatedUser`.
-2. **Ghost Field Injection**: Adding `isVerified: true` to a Workout document.
-3. **Resource Poisoning**: Setting `exercise.note` to a 500KB string.
-4. **Invalid State Transition**: Manually setting `complete: true` on a log with 0 sets.
-5. **Path Poisoning**: Using `../` or long junk strings as `workoutId`.
-6. **Type Spoofing**: Setting `Workout.type` to `ultra-elite-coach`.
-7. **Date Corruption**: Setting `cycleStart` to `invalid-date-string`.
-8. **Owner Mutation**: Trying to update a Workout but changing the `userId` in the payload (if it were stored there).
-9. **Bulk Scrape**: Querying `/users` collection without a specific `userId` filter.
-10. **Shadow Key Update**: Updating a log but including unauthorized keys like `systemAudit: "passed"`.
-11. **Negative Duration**: Setting `duration: -100` in a session log.
-12. **Missing Required Fields**: Creating a Workout without a `name`.
+### A. Server-Side Enforced Boundaries (`firestore.rules`)
+- **Default Deny**: All unauthenticated access and unknown document collections are denied (`allow read, write: if false`).
+- **User Ownership & Isolation**: A user can strictly only read and write documents inside their own subtree (`/users/{userId}/**` where `request.auth.uid == userId`).
+- **Account Data Segregation**: Cross-user document reads, bulk scraping across `/users`, and identity-spoofed writes across distinct user IDs are strictly rejected by the Firestore engine.
+- **Deletions on Root Profile**: Root user profile documents cannot be deleted (`allow delete: if false`).
+- **Health Check Path**: The `/test/{document=**}` health check requires authenticated requests (`request.auth != null`).
 
-## 3. Test Runner (Draft)
-```typescript
-// firestore.rules.test.ts
-// This file simulates the rejection of these payloads.
-// Implementation follows standard Firebase security rules testing patterns.
-```
+### B. Client & API-Side Enforced Sanitization & Invariant Validation
+Payload structural constraints and application invariants are validated deterministically via `fitnessCalculations.ts` (`sanitizeWorkout`, `sanitizeSessionLog`, `sanitizeExerciseDefinition`, `validateAndSanitizeFitnessData`):
+1. **Allowed Workout Types**: Type values outside the `WorkoutType` enum are normalized to standard supported types.
+2. **String & Note Length Caps**: Defensive length caps prevent resource poisoning (notes clamped, payload sizes bounded).
+3. **Finite Numeric Enforcement**: Weights, reps, and durations strictly require finite values within biological bounds; negative durations and malformed exponential values (`1e309`, `Infinity`, `NaN`) are sanitized.
+4. **Orphan & State Transition Protection**: Session logs and workout definitions maintain strict structural integrity before persistence or sync.
+5. **No Secret Leaks**: Zero service credentials, secret API keys, or stack traces are bundled or transmitted to untrusted environments.
+
+## 2. Invariant Verification & Test Coverage
+- Cloud isolation and UID-based tombstone partitioning are verified in `src/test/dataSyncAndIsolationRegression.test.ts` and `src/test/lifecycleDestructiveSyncBoundary.test.ts`.
+- Payload sanitization boundaries and extreme value resilience are verified in `src/test/persistenceBoundaries.test.ts` and `src/test/canonicalDataContract.test.ts`.
+

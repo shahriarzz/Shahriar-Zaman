@@ -66,6 +66,7 @@ export function useFitnessSync({
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
+  const syncQueuedRef = useRef(false);
   const previousUidRef = useRef<string | null>(null);
 
   // Auth listener
@@ -79,11 +80,17 @@ export function useFitnessSync({
       const currentUid = u ? u.uid : null;
 
       // When switching accounts or logging out from an existing account, isolate data by resetting local state
+      // This strictly prevents Account A's workout data or tombstones from being merged or uploaded into Account B
       if (prevUid && prevUid !== currentUid) {
+        clearDeletedIdsTracker(prevUid);
         clearDeletedIdsTracker();
         if (resetToDefaultData) {
           resetToDefaultData();
         }
+      } else if (!prevUid && currentUid) {
+        // First login: check if local state already has local/anonymous workouts/logs that shouldn't leak
+        // Tombstones from anonymous mode are cleared to avoid purging the new account's cloud records
+        clearDeletedIdsTracker();
       }
       previousUidRef.current = currentUid;
 
@@ -110,7 +117,9 @@ export function useFitnessSync({
 
   const logout = useCallback(async () => {
     try {
+      const currentUid = auth.currentUser?.uid || previousUidRef.current;
       await auth.signOut();
+      clearDeletedIdsTracker(currentUid);
       clearDeletedIdsTracker();
       if (resetToDefaultData) {
         resetToDefaultData();
@@ -120,21 +129,25 @@ export function useFitnessSync({
     }
   }, [resetToDefaultData]);
 
-  // Sync logic
+  // Sync logic with guaranteed queued follow-up execution
   const syncDataBackground = useCallback(async (uid: string) => {
-    if (isSyncingRef.current) return;
+    if (isSyncingRef.current) {
+      // Queue a follow-up sync to ensure latest changes are not discarded
+      syncQueuedRef.current = true;
+      return;
+    }
     isSyncingRef.current = true;
     setSyncStatus('syncing');
     setSyncError(null);
 
     try {
-      // 0. Purge offline deleted items (failed deletions stay in queue for retry)
-      const deletedTracker = getDeletedIdsTracker();
+      // 0. Purge offline deleted items for this UID (failed deletions stay in queue for retry)
+      const deletedTracker = getDeletedIdsTracker(uid);
       if (deletedTracker.defs.length > 0) {
         for (const defId of [...deletedTracker.defs]) {
           try {
             await deleteExerciseDefinition(uid, defId);
-            removeDeletedId('defs', defId);
+            removeDeletedId('defs', defId, uid);
           } catch (e) {
             console.warn(`Cloud deletion failed for def ${defId}, retaining in retry queue:`, e);
           }
@@ -144,7 +157,7 @@ export function useFitnessSync({
         for (const woId of [...deletedTracker.workouts]) {
           try {
             await deleteWorkout(uid, woId);
-            removeDeletedId('workouts', woId);
+            removeDeletedId('workouts', woId, uid);
           } catch (e) {
             console.warn(`Cloud deletion failed for workout ${woId}, retaining in retry queue:`, e);
           }
@@ -154,7 +167,7 @@ export function useFitnessSync({
         for (const logId of [...deletedTracker.logs]) {
           try {
             await deleteLog(uid, logId);
-            removeDeletedId('logs', logId);
+            removeDeletedId('logs', logId, uid);
           } catch (e) {
             console.warn(`Cloud deletion failed for log ${logId}, retaining in retry queue:`, e);
           }
@@ -170,7 +183,7 @@ export function useFitnessSync({
       ]);
 
       // Filter cloud records against active tombstones to prevent resurrection
-      const activeTracker = getDeletedIdsTracker();
+      const activeTracker = getDeletedIdsTracker(uid);
       const cloudDefs = rawCloudDefs.filter(d => !activeTracker.defs.includes(d.id));
       const cloudWorkouts = rawCloudWorkouts.filter(w => !activeTracker.workouts.includes(w.id));
       const cloudLogsMap: Record<string, SessionLog> = {};
@@ -229,6 +242,13 @@ export function useFitnessSync({
       throw err;
     } finally {
       isSyncingRef.current = false;
+      // If a concurrent sync request was queued while this sync was in progress, execute the follow-up
+      if (syncQueuedRef.current) {
+        syncQueuedRef.current = false;
+        setTimeout(() => {
+          syncDataBackground(uid).catch(() => {});
+        }, 50);
+      }
     }
   }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
 
@@ -272,7 +292,7 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = [...exerciseDefsRef.current];
-        const tombstones = getDeletedIdsTracker().defs;
+        const tombstones = getDeletedIdsTracker(user.uid).defs;
         changes.forEach(change => {
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);
@@ -313,7 +333,7 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = [...workoutsRef.current];
-        const tombstones = getDeletedIdsTracker().workouts;
+        const tombstones = getDeletedIdsTracker(user.uid).workouts;
         changes.forEach(change => {
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);
@@ -354,7 +374,7 @@ export function useFitnessSync({
       (changes) => {
         let hasChanges = false;
         const current = { ...logsRef.current };
-        const tombstones = getDeletedIdsTracker().logs;
+        const tombstones = getDeletedIdsTracker(user.uid).logs;
         changes.forEach(change => {
           const id = change.doc.id;
           const isTombstoned = tombstones.includes(id);

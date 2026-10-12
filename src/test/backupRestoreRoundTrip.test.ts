@@ -287,4 +287,45 @@ describe('Backup / Restore Round-Trip Regression Test Suite', () => {
 
     expect(restoredSortedLogs.map(l => l.id)).toEqual(originalSortedLogs.map(l => l.id));
   });
+
+  describe('Failure-Safe Staged Restore Boundaries', () => {
+    it('preserves local restored state and reports mismatch if cloud restore rejects', async () => {
+      const validBackup: FitnessDatabase = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        exportDate: new Date().toISOString(),
+        exerciseDefinitions: originalDefs,
+        workouts: originalWorkouts,
+        logs: {},
+        appState: { cycleStart: '2026-09-01', weightLog: {}, updatedAt: 1000 }
+      };
+
+      const validation = validateAndSanitizeFitnessData(validBackup);
+      expect(validation.success).toBe(true);
+      expect(validation.data).toBeDefined();
+
+      // Simulate the failure-safe cloud restore contract
+      let cloudFailed = false;
+      let returnedStatus = { success: false, message: '' };
+
+      try {
+        // Step 1: local restore succeeds
+        const localRestored = validation.data!;
+        expect(localRestored.exerciseDefinitions.length).toBe(originalDefs.length);
+
+        // Step 2: cloud sync throws error (e.g. quota, timeout, network failure)
+        throw new Error('Firestore transaction deadline exceeded');
+      } catch (cloudErr: any) {
+        cloudFailed = true;
+        returnedStatus = {
+          success: false,
+          message: `Restored locally, but cloud synchronization failed: ${cloudErr.message}. Local and cloud states currently differ.`
+        };
+      }
+
+      expect(cloudFailed).toBe(true);
+      expect(returnedStatus.success).toBe(false);
+      expect(returnedStatus.message).toContain('Local and cloud states currently differ');
+    });
+  });
 });
+

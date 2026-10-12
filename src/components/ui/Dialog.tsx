@@ -22,28 +22,85 @@ export const Dialog: React.FC<DialogProps> = ({
   closeOnEscape = true,
   closeOnBackdropClick = true,
 }) => {
-  // Lock background scroll when dialog is active
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // Preserve and restore the body's previous inline "overflow" value rather than always resetting to empty string
   useEffect(() => {
     if (isOpen) {
+      openerRef.current = document.activeElement as HTMLElement | null;
+      const previousOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+
+      return () => {
+        document.body.style.overflow = previousOverflow;
+        if (openerRef.current && typeof openerRef.current.focus === 'function') {
+          openerRef.current.focus();
+        }
+      };
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  // Escape key handler
+  // Focus management: initial focus and focus trap
   useEffect(() => {
-    if (!isOpen || !closeOnEscape || !onClose) return;
+    if (!isOpen) return;
+
+    // Initial focus on first interactive element or dialog container
+    const timer = setTimeout(() => {
+      if (dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        } else {
+          dialogRef.current.focus();
+        }
+      }
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && closeOnEscape && onClose) {
+        e.stopPropagation();
         onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable: HTMLElement[] = Array.from(
+          dialogRef.current.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        const visibleFocusable = focusable.filter(el => el.offsetParent !== null);
+
+        if (visibleFocusable.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const first = visibleFocusable[0];
+        const last = visibleFocusable[visibleFocusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first || !dialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            last?.focus();
+          }
+        } else {
+          if (document.activeElement === last || !dialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, closeOnEscape, onClose]);
 
   const sizeClasses = {
@@ -73,6 +130,8 @@ export const Dialog: React.FC<DialogProps> = ({
 
           {/* Canonical Dialog Surface */}
           <motion.div
+            ref={dialogRef}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}

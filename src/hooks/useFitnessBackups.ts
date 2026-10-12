@@ -126,14 +126,11 @@ export function useFitnessBackups({
         try {
           await saveAppState(user.uid, restoredAppState, true);
           await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
-          await saveExerciseDefinitionsBatch(user.uid, restoredDefs);
-          await saveWorkoutsBatch(user.uid, restoredWorkouts);
-          await saveLogsBatch(user.uid, restoredLogs);
         } catch (cloudError: any) {
           console.error("Cloud synchronization failed during restore:", cloudError);
           return {
-            success: true,
-            message: `Restored locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}.`
+            success: false,
+            message: `Restored locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. Local and cloud states currently differ.`
           };
         }
       }
@@ -201,14 +198,11 @@ export function useFitnessBackups({
         try {
           await saveAppState(user.uid, restoredAppState, true);
           await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
-          await saveExerciseDefinitionsBatch(user.uid, restoredDefs);
-          await saveWorkoutsBatch(user.uid, restoredWorkouts);
-          await saveLogsBatch(user.uid, restoredLogs);
         } catch (cloudError: any) {
           console.error("Cloud synchronization failed during import:", cloudError);
           return {
-            success: true,
-            message: `Imported backup locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}.`
+            success: false,
+            message: `Imported backup locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. Local and cloud states currently differ.`
           };
         }
       }

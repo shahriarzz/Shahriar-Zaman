@@ -1,5 +1,4 @@
-import { format, differenceInCalendarDays, parseISO, subDays, isValid } from 'date-fns';
-import { SessionLog, SetLog, Workout, WorkoutType, WorkoutExercise, ExerciseDefinition, Exercise } from '../types/fitness';
+import { WorkoutType } from '../types/fitness';
 
 // Re-export canonical calculations and resolver functions
 export {

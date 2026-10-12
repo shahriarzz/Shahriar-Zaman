@@ -1,4 +1,4 @@
-import { db, writeBatch, collection, getDocs } from '../lib/firebase';
+import { db, doc, writeBatch, collection, getDocs } from '../lib/firebase';
 import { ExerciseDefinition, Workout, SessionLog, AppState, WeightLogEntry } from '../types/fitness';
 import { normalizeWeightEntry } from './fitnessCalculations';
 
@@ -17,16 +17,25 @@ export async function commitBatchOperations<T>(
   }
 }
 
-// Tracker for offline deletions to prevent deleted items from resurrecting on reconnect
+// Tracker for offline deletions to prevent deleted items from resurrecting on reconnect.
+// Tombstones are strictly partitioned by Firebase UID so deletions in one account never affect another.
 export interface DeletedIdsTracker {
   defs: string[];
   workouts: string[];
   logs: string[];
 }
 
-export function getDeletedIdsTracker(): DeletedIdsTracker {
+function getTombstoneStorageKey(uid?: string | null): string {
+  if (uid && typeof uid === 'string' && uid.trim()) {
+    return `gl_deleted_ids_${uid.trim()}`;
+  }
+  return 'gl_deleted_ids_anon';
+}
+
+export function getDeletedIdsTracker(uid?: string | null): DeletedIdsTracker {
   try {
-    const saved = localStorage.getItem('gl_deleted_ids');
+    const key = getTombstoneStorageKey(uid);
+    const saved = localStorage.getItem(key) || (uid ? null : localStorage.getItem('gl_deleted_ids'));
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
@@ -39,33 +48,43 @@ export function getDeletedIdsTracker(): DeletedIdsTracker {
   return { defs: [], workouts: [], logs: [] };
 }
 
-export function saveDeletedIdsTracker(tracker: DeletedIdsTracker): void {
+export function saveDeletedIdsTracker(tracker: DeletedIdsTracker, uid?: string | null): void {
   try {
-    localStorage.setItem('gl_deleted_ids', JSON.stringify(tracker));
+    const key = getTombstoneStorageKey(uid);
+    localStorage.setItem(key, JSON.stringify(tracker));
+    if (!uid) {
+      localStorage.setItem('gl_deleted_ids', JSON.stringify(tracker));
+    }
   } catch (e) {
     console.warn("Failed to save deleted ids tracker", e);
   }
 }
 
-export function trackDeletedId(type: 'defs' | 'workouts' | 'logs', id: string): void {
-  const tracker = getDeletedIdsTracker();
+export function trackDeletedId(type: 'defs' | 'workouts' | 'logs', id: string, uid?: string | null): void {
+  const tracker = getDeletedIdsTracker(uid);
   if (!tracker[type].includes(id)) {
     tracker[type].push(id);
-    saveDeletedIdsTracker(tracker);
+    saveDeletedIdsTracker(tracker, uid);
   }
 }
 
-export function removeDeletedId(type: 'defs' | 'workouts' | 'logs', id: string): void {
-  const tracker = getDeletedIdsTracker();
+export function removeDeletedId(type: 'defs' | 'workouts' | 'logs', id: string, uid?: string | null): void {
+  const tracker = getDeletedIdsTracker(uid);
   if (tracker[type].includes(id)) {
     tracker[type] = tracker[type].filter(item => item !== id);
-    saveDeletedIdsTracker(tracker);
+    saveDeletedIdsTracker(tracker, uid);
   }
 }
 
-export function clearDeletedIdsTracker(): void {
+export function clearDeletedIdsTracker(uid?: string | null): void {
   try {
-    localStorage.removeItem('gl_deleted_ids');
+    if (uid) {
+      localStorage.removeItem(getTombstoneStorageKey(uid));
+    } else {
+      // Clear anonymous and fallback keys, or all tombstone keys if explicit wildcard
+      localStorage.removeItem('gl_deleted_ids_anon');
+      localStorage.removeItem('gl_deleted_ids');
+    }
   } catch {}
 }
 
@@ -75,32 +94,53 @@ export const syncCloudDataWithRestored = async (
   restoredWorkouts: Workout[],
   restoredLogs: Record<string, SessionLog>
 ) => {
-  // 1. Query current cloud exercise definitions & purge orphans
+  // Staged, failure-safe cloud restore:
+  // STEP 1: Upload all restored definitions, workouts, and logs FIRST.
+  // If an upload fails, existing cloud data has not been prematurely destroyed.
   const defsColRef = collection(db, 'users', uid, 'exerciseDefinitions');
+  await commitBatchOperations<ExerciseDefinition>(restoredDefs, (batch, d) => {
+    batch.set(doc(defsColRef, d.id), d);
+  });
+
+  const workoutsColRef = collection(db, 'users', uid, 'workouts');
+  await commitBatchOperations<Workout>(restoredWorkouts, (batch, w) => {
+    batch.set(doc(workoutsColRef, w.id), w);
+  });
+
+  const logsColRef = collection(db, 'users', uid, 'logs');
+  const logEntries = Object.entries(restoredLogs);
+  await commitBatchOperations<[string, SessionLog]>(logEntries, (batch, [id, log]) => {
+    batch.set(doc(logsColRef, id), log);
+  });
+
+  // STEP 2: Only after all restored items are successfully written to the cloud,
+  // query current cloud collections and purge any orphaned documents absent from the restored snapshot.
   const cloudDefsSnap = await getDocs(defsColRef);
   const restoredDefIds = new Set(restoredDefs.map(d => d.id));
   const orphanedDefDocs = cloudDefsSnap.docs.filter(d => !restoredDefIds.has(d.id));
-  await commitBatchOperations(orphanedDefDocs, (batch, docSnap) => {
-    batch.delete(docSnap.ref);
-  });
+  if (orphanedDefDocs.length > 0) {
+    await commitBatchOperations(orphanedDefDocs, (batch, docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+  }
 
-  // 2. Query all current cloud workouts & purge orphans
-  const workoutsColRef = collection(db, 'users', uid, 'workouts');
   const cloudWorkoutsSnap = await getDocs(workoutsColRef);
   const restoredWorkoutIds = new Set(restoredWorkouts.map(w => w.id));
   const orphanedWorkoutDocs = cloudWorkoutsSnap.docs.filter(d => !restoredWorkoutIds.has(d.id));
-  await commitBatchOperations(orphanedWorkoutDocs, (batch, docSnap) => {
-    batch.delete(docSnap.ref);
-  });
+  if (orphanedWorkoutDocs.length > 0) {
+    await commitBatchOperations(orphanedWorkoutDocs, (batch, docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+  }
 
-  // 3. Query all current cloud logs & purge orphans
-  const logsColRef = collection(db, 'users', uid, 'logs');
   const cloudLogsSnap = await getDocs(logsColRef);
   const restoredLogIds = new Set(Object.keys(restoredLogs));
   const orphanedLogDocs = cloudLogsSnap.docs.filter(d => !restoredLogIds.has(d.id));
-  await commitBatchOperations(orphanedLogDocs, (batch, docSnap) => {
-    batch.delete(docSnap.ref);
-  });
+  if (orphanedLogDocs.length > 0) {
+    await commitBatchOperations(orphanedLogDocs, (batch, docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+  }
 };
 
 export const areLogsEqual = (a: SessionLog, b: SessionLog): boolean => {
