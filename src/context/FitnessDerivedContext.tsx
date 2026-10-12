@@ -146,8 +146,10 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
         checkDayChange();
       }
     };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    }
     if (typeof window !== 'undefined') {
-      window.addEventListener('visibilitychange', onVisibilityOrFocus);
       window.addEventListener('focus', onVisibilityOrFocus);
     }
 
@@ -167,8 +169,10 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     scheduleNextMidnight();
 
     return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      }
       if (typeof window !== 'undefined') {
-        window.removeEventListener('visibilitychange', onVisibilityOrFocus);
         window.removeEventListener('focus', onVisibilityOrFocus);
       }
       if (timerId) clearTimeout(timerId);
