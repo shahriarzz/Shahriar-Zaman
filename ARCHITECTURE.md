@@ -391,11 +391,27 @@ When an architectural change is **explicitly authorized** by the maintainer:
 
 ---
 
-## 10. References & Source Locations
+## 10. Documentation System & Source Locations
 
-- **Canonical Data Models**: `src/types/fitness.ts`
+### A. Core Consolidated Documentation System
+
+GAINLOG enforces a consolidated 4-document core documentation system alongside `security_spec.md`. Each document has strict single-responsibility boundaries and serves as an immutable source of truth for its domain:
+
+| Document | Role & Authority | Primary Responsibilities |
+|---|---|---|
+| **`PRD.md`** | Canonical Product Source of Truth | Feature requirements, target personas, 8-day cycle protocol, PR rules, UX workflows, non-goals. |
+| **`ARCHITECTURE.md`** | Canonical System & Technical Contract | System map, layer hierarchy, downward dependency rules, 14 testable invariants, change protocol. |
+| **`AGENTS.md`** | AI Developer Operating Contract | Mandatory reading order, 6 high-risk subsystems, stop-and-approve gating, verification checklists. |
+| **`DATA_MODEL.md`** | Domain Entity & Storage Contract | TypeScript schemas, validation bounds, storage keys (`gl_database_snapshot`), migrations, Firestore model. |
+| **`security_spec.md`** | Security & Isolation Specification | Server-side Firestore rules (`/users/{uid}/**`), client-side sanitization, account segregation. |
+
+### B. Codebase References & Source Locations
+
+- **Product Requirements & Features**: `PRD.md`
+- **Agent Governance & Gating Rules**: `AGENTS.md`
+- **Data Entities, Storage Keys & Migrations**: `DATA_MODEL.md`, `src/types/fitness.ts`, `src/utils/fitnessMigration.ts`
 - **Initial Training Protocol & Workouts**: `src/types/initialData.ts`
-- **Local Persistence & Migration**: `src/hooks/useFitnessData.ts`, `src/utils/fitnessMigration.ts`
+- **Local Persistence & Durability**: `src/hooks/useFitnessData.ts`, `src/utils/fitnessMigration.ts`
 - **Canonical Fitness Calculations**: `src/utils/fitnessCalculations.ts`
 - **Derived Selectors & Indexing**: `src/utils/fitnessDerivedSelectors.ts`
 - **Training Intelligence Algorithms**: `src/utils/trainingIntelligence.ts`
@@ -408,3 +424,4 @@ When an architectural change is **explicitly authorized** by the maintainer:
 - **Android Release & Signing Configuration**: `android/app/build.gradle`
 - **Performance Benchmark Test Suite**: `src/test/performanceBenchmark.test.ts`
 - **Architecture Contract Verification Test**: `src/test/architectureContract.test.ts`
+
