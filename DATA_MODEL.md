@@ -193,7 +193,7 @@ export interface VersionedFitnessSnapshot {
 
 All inputs passing through JSON imports, network responses, and data mutations are validated via pure sanitization functions in `src/utils/fitnessCalculations.ts`:
 
-### Verified Sanitization Functions & Bounds
+### 2.1 Verified Sanitization Functions & Bounds
 
 | Field / Attribute | Target Type | Valid Range / Parsing Rules | Sanitization Function | Fallback / Behavior |
 |---|---|---|---|---|
@@ -209,7 +209,45 @@ All inputs passing through JSON imports, network responses, and data mutations a
 | **Exercise Definition** | `ExerciseDefinition` | `id`, `name`, `target`, `equipment`, `instructions` | `sanitizeExerciseDefinition()` | `name` defaults to `'Exercise'`, `target` defaults to `'General'`. |
 | **Updated Timestamp** | `number` | Finite number `>= 0` | All sanitizers | Coerced to `Number(updatedAt) \|\| 0`. |
 
-### Inferred & Unverified Constraints (Explicit Labels)
+### 2.2 Boundary A: Import & Migration Validation (`src/utils/fitnessMigration.ts`)
+- **JSON Structure Check**: `validateAndSanitizeFitnessData(parsed)` checks that `parsed` is a non-null object and not an array. Non-JSON text or malformed structures return `{ success: false, message: 'Invalid JSON file structure.' }`.
+- **Schema Version Gating**: Inspects `parsed.schemaVersion ?? parsed.version` (defaults to 1). If `version > CURRENT_SCHEMA_VERSION` (`version > 2`), the importer strictly rejects the file with an explicit error message requiring an app update.
+- **Payload Shape Detection**:
+  - If `version === 2` and `Array.isArray(parsed.exerciseDefinitions)`: extracts definitions, workouts, logs, and appState directly.
+  - If `Array.isArray(parsed.workouts)`: treats as legacy v1 backup and passes through `migrateV1ToV2()`, extracting exercise definitions automatically from workout items.
+  - If neither array exists, rejects with an unrecognized backup format error.
+- **Normalization & Sanitization**:
+  - Every workout exercise is passed through `canonicalizeWorkoutExercise()`.
+  - Every session log is passed through `sanitizeSessionLog()`.
+  - `appState.cycleStart` is normalized; legacy `bodyWeightLogs` arrays are mapped to `weightLog` dictionaries.
+- **Orphan Reference Healing**: Maps all exercise definitions. If a workout or log references an unknown `exerciseDefinitionId`, a fallback definition is synthesized (`name: 'Exercise'`, `target: 'General'`) to prevent dangling foreign keys.
+- **Unenforced Import Boundaries**: Freeform string fields (`instructions`, `notes`, `restNotes`) are not length-capped or sanitized for markup; non-standard workout IDs are preserved as strings without UUID validation.
+
+### 2.3 Boundary B: Local Persistence & Storage Validation (`src/hooks/useFitnessData.ts`)
+- **Runtime vs Compile-Time Reality**: TypeScript interfaces (`ExerciseDefinition`, `Workout`, `SessionLog`) provide **compile-time checking only**. At runtime, JavaScript state updates (`setWorkouts`, `setLogs`) do not perform automated schema validation on internal memory mutations.
+- **Write Path Validation**: `persistFitnessDatabase()` does not re-sanitize the database on every write; it assumes upstream mutations were sanitized at the action boundary (`addLog`, `finishSession`). It stringifies the current in-memory state and performs staged writing with read-back verification.
+- **Read Path Validation**: `loadInitialFitnessData()` runs `validateSnapshotStructure(candidate)`:
+  - Validates `schemaVersion` is a positive finite number `<= CURRENT_SCHEMA_VERSION`.
+  - Checks top-level array/object types: `Array.isArray(exerciseDefinitions)`, `Array.isArray(workouts)`, `typeof logs === 'object'`, `typeof appState === 'object'`.
+  - Performs shallow item checks: confirms every definition has `typeof d.id === 'string'` and `typeof d.name === 'string'`; every workout has `typeof w.id === 'string'` and `typeof w.name === 'string'`.
+  - Does **not** validate deep nested log sets or weight numbers during snapshot load; deep log sanitization occurs downstream via `migrateV1ToV2()`.
+- **Corruption Quarantine**: If JSON parsing fails or `validateSnapshotStructure()` returns null, the raw string is saved to `gl_corrupt_snapshot_backup`, and the loader falls back to `gl_snapshot_staging`, then discrete keys.
+
+### 2.4 Boundary C: Cloud Synchronization & Firestore Rules (`src/services/fitnessFirestore.ts`, `firestore.rules`)
+- **Client-Side Outbound (Write)**: Writes in-memory documents directly (`saveExerciseDefinition`, `saveWorkout`, `saveLog`, `saveAppState`). `saveLog` strips the `id` field from the body because the Firestore document ID is the log ID.
+- **Client-Side Inbound (Read)**:
+  - `getExerciseDefinitions()` passes each document through `sanitizeExerciseDefinition()`.
+  - `getWorkouts()` passes each document through `sanitizeWorkout()`.
+  - `getLogs()` passes each document through `sanitizeSessionLog()`.
+  - `getAppState()` casts directly to `AppState` without running a deep sanitizer.
+  - Real-time snapshot listeners pass individual changes through their respective entity sanitizers.
+- **Server-Side Security Rules Responsibilities (`firestore.rules`)**:
+  - Enforces authenticated access (`request.auth != null`).
+  - Enforces strict user isolation: a user can only read or write under `/users/{userId}/**` where `request.auth.uid == userId`.
+  - Denies deletion of root user profile documents (`allow delete: if false;`).
+  - **Unenforced Server-Side Boundaries**: `firestore.rules` does **NOT** validate document schemas, property names, data types, biological numeric limits, or orphan relationships. Server-side rules enforce identity and access control; data validity is strictly the client's responsibility.
+
+### 2.5 Inferred & Unverified Constraints (Explicit Labels)
 - **String Length Limits**: The code trims notes and names (`.trim()`), but does **not** enforce fixed maximum character truncation (e.g. no hard 500-character cap in code). Length limits are documentation guidelines, not active code-enforced boundaries.
 - **RPE (Rate of Perceived Exertion)**: RPE is **not** an active field in canonical `SetLog` or `SessionLog`. It is supported only in `RawSetLog` as an optional input during migration and is not persisted in v2.
 

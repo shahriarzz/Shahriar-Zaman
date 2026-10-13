@@ -62,40 +62,44 @@ GAINLOG is a local-first, distraction-free strength training log designed for se
 
 ## 3. Core Feature Specifications
 
-GAINLOG is navigated via a permanent bottom navigation bar featuring 5 primary views (`src/components/Layout.tsx`):
+GAINLOG is navigated via a fixed bottom navigation bar (and desktop header) featuring **4 primary navigation views** (`src/components/Layout.tsx`):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                           GAINLOG Tab Navigation                       │
-├─────────────┬───────────┬───────────┬───────────┬──────────────────────┤
-│  Dashboard  │  Session  │  History  │ Analytics │        Manage        │
-└─────────────┴───────────┴───────────┴───────────┴──────────────────────┘
+│                        GAINLOG Primary Navigation                      │
+├───────────────────┬───────────────────┬───────────────────┬────────────┤
+│  Dashboard (Dash) │      History      │     Analytics     │   Manage   │
+└───────────────────┴───────────────────┴───────────────────┴────────────┘
 ```
+
+*Note on Special Views*:
+- **Active Workout Session (`SessionView`)**: A dedicated full-screen workflow view. It is **not** a primary tab on the navigation bar. It is entered when a lifter starts or resumes a workout, and exited upon completion or explicit abandonment.
+- **Calendar**: Embedded directly within the Dashboard view (`src/components/Calendar.tsx`), not a standalone navigation tab.
 
 ### 3.1 Dashboard (`src/components/Dashboard.tsx`)
 - **Today's Scheduled Session**: Identifies the expected workout according to the 8-day cycle and current date.
 - **Cycle Status Indicator**: Displays active cycle day (e.g. "Day 1 of 8: Push A" or "Day 4 of 8: Recovery").
-- **Quick Action**: Single-tap button to start the scheduled workout or resume an active session draft.
+- **Quick Action**: Single-tap button ("Start Workout") to launch today's routine into the Session view, or "Resume Active Workout" banner if a draft session is already in-flight.
 - **Training Frequency & Streak**: High-level indicator of active consecutive adherence across workouts and rest days.
-- **Recent Milestones & Active Session Banner**: Resume active workout if in-flight.
+- **Recent Milestones**: High-level recap of recent volume and newly established PRs.
 - **Integrated Calendar Section**: Embedded monthly calendar component (`<Calendar />`) visualizing completed workouts, rest days, and cycle day mapping with date selection filtering.
 
-### 3.2 Session Execution (`src/components/SessionView.tsx`)
-- **Active Session Draft State**: Persists live workout progress in `gl_active_session` (`ActiveSession`). Navigating away or refreshing does not lose entered sets or elapsed time.
+### 3.2 Active Session Workflow (`src/components/SessionView.tsx`)
+- **Workflow Role**: A dedicated execution view entered exclusively from the Dashboard (or routine selection).
+- **Entry Points**:
+  - Tapping "Start Workout" on today's scheduled workout card or a bonus routine.
+  - Tapping the "Resume Active Workout" card on the Dashboard when an in-flight draft is detected.
+- **Exit & Abandonment Points**:
+  - **Completion**: Tapping "Finish Workout" validates parameters, sanitizes the log, commits the local snapshot, advances the cycle anchor (if completing a core routine), clears the active draft, presents the Post-Workout Summary, and returns to the Dashboard.
+  - **Cancellation**: Tapping "Cancel Workout" presents a confirmation prompt. If confirmed, `clearActiveSession()` purges the draft and navigates back to Dashboard.
+  - **Tab Switching / Hardware Back**: Attempting to switch tabs or pressing the Android hardware back button triggers a confirmation dialog ("Abandon Active Session?"). The user can choose to abort (clearing draft and navigating away) or stay in the session.
+- **In-Flight Draft Persistence**: Live workout progress is persisted to `gl_active_session` (`ActiveSession`). Navigating away or browser restarts preserve uncommitted sets and elapsed duration.
 - **Exercise List & Set Check-Off**:
   - Displays planned exercise prescriptions (sets count, target rep range, rest interval, notes).
   - Weight and rep input fields store user-entered values.
-  - Tapping the "Done" checkmark marks the set complete (`done: true`) and triggers the rest timer.
-- **Integrated Rest Timer**:
-  - Countdown timer with presets (60s, 90s, 120s, 180s) and custom duration adjustments.
-  - Sound cues (Web Audio API synthetic chime) and native haptic feedback (`@capacitor/haptics`).
-- **PR Detection**:
-  - Detects weight and e1RM PRs during set completion compared against the pre-session canonical index.
-  - Emits real-time visual feedback when a benchmark is broken.
-- **Completion Flow**:
-  - "Finish Workout" button requires explicit confirmation.
-  - Synchronously writes and verifies local database snapshot (`gl_database_snapshot`) before clearing the active draft.
-  - Presents a Post-Workout Summary displaying duration, total volume (kg), completed sets, and new PRs achieved.
+  - Tapping the "Done" checkmark marks the set complete (`done: true`) and triggers the rest countdown timer.
+- **Integrated Rest Timer**: Countdown timer with presets (60s, 90s, 120s, 180s), Web Audio synthesized chimes, and native haptic feedback (`@capacitor/haptics`).
+- **Real-Time PR Detection**: Compares completed sets against pre-session canonical history, alerting the lifter to new weight and e1RM records.
 
 ### 3.3 History (`src/components/HistoryView.tsx`)
 - **Chronological Log Listing**: Reverse-chronological list of all completed workouts grouped by month and date.

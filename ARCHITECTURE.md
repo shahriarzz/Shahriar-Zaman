@@ -56,12 +56,9 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                            UI View Layer                               │
-│  • Dashboard (src/components/Dashboard.tsx)                            │
-│  • Session Execution (src/components/SessionView.tsx)                  │
-│  • History & Reports (src/components/HistoryView.tsx)                  │
-│  • Analytics (src/components/AnalyticsView.tsx)                        │
-│  • Calendar (src/components/Calendar.tsx + useCalendarGrid.ts)         │
-│  • Management & Vault (src/components/ManageView.tsx)                  │
+│  • Primary Tabs: Dashboard, History, Analytics, Manage                 │
+│  • Session Workflow: Session Execution (src/components/SessionView.tsx)│
+│  • Embedded Component: Calendar (src/components/Calendar.tsx)          │
 │  • Shared UI Primitives & Tokens (src/components/ui/, tokens.ts)       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -69,9 +66,9 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 ### Module Responsibilities
 
 1. **Application Entry & Root Composition** (`src/App.tsx`, `src/main.tsx`):
-   Mounts providers (`FitnessProvider` → `FitnessDerivedProvider` → `ConfirmProvider` → `ToastContainer`), manages active navigation tab (`dashboard`, `session`, `history`, `analytics`, `calendar`, `manage`), and catches execution halts via `ErrorFallback.tsx`.
+   Mounts providers (`FitnessProvider` → `FitnessDerivedProvider` → `ConfirmProvider` → `ToastContainer`), manages the 4 primary navigation tabs (`dashboard`, `history`, `analytics`, `manage`), routes the dedicated session workflow view (`session`), and catches execution halts via `ErrorFallback.tsx`.
 2. **Local Persistence & Migration** (`src/hooks/useFitnessData.ts`, `src/utils/fitnessMigration.ts`):
-   Loads, migrates (V1 → V2), and persists the atomic database snapshot payload (`gl_database_snapshot`) using staging-commit protection (`gl_snapshot_staging`) with discrete key mirroring for backwards compatibility.
+   Loads, migrates (V1 → V2), and persists the versioned database snapshot payload (`gl_database_snapshot`) using staged writes with read-back verification (`gl_snapshot_staging`) and best-effort discrete key mirroring for backwards compatibility.
 3. **Cloud Synchronization & Service Boundary** (`src/hooks/useFitnessSync.ts`, `src/services/fitnessFirestore.ts`, `src/utils/fitnessSyncHelpers.ts`):
    Manages Firestore auth listeners, bidirectional batched replication (<= 400 operations/batch), UID-isolated deletion tombstones (`gl_deleted_ids_${uid}`), deterministic conflict resolution via `updatedAt` timestamps, and in-flight sync queuing (`syncQueuedRef`).
 4. **Active Workout State** (`src/hooks/useActiveSession.ts`):
@@ -83,7 +80,10 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 7. **Design Tokens & Shared Primitives** (`src/styles/tokens.ts`, `src/components/ui/`):
    Centralizes application visual design: `SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, `SHADOW`, `GAP`, and modular primitives (`Card`, `StatCard`, `Section`, `Button`, `Dialog`, etc.).
 8. **Tests & Build Configuration** (`src/test/`, `vite.config.ts`, `package.json`, `.github/workflows/ci.yml`, `android/app/build.gradle`):
-   Automated regression suite (24 test suites), Vite bundler, GitHub Actions CI workflow with required artifact checks, and Capacitor Android release signing setup.
+   Automated regression suite (24 test suites, 346 tests), Vite bundler, and GitHub Actions CI workflow (`ci.yml`):
+   - **`validate`**: Runs `npm ci`, `npm run lint` (`tsc --noEmit`), `npm test` (Vitest), and `npm run build`.
+   - **`android-build`**: Builds the Android debug APK (`./gradlew assembleDebug`) and uploads artifacts. Runs unconditionally after `validate` succeeds.
+   - **`android-release-validation`**: Guarded explicitly by repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`. Requires secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Decodes release keystore and verifies `./gradlew bundleRelease`. If enabled with missing secrets, halts with a specific error message. When disabled (or in standard PR/fork runs), skips cleanly without impacting ordinary build/test validation.
 
 ---
 
@@ -193,7 +193,7 @@ calculateSessionPRs() (Snapshot PRs against pre-session canonical history)
 sanitizeSessionLog() (Enforce finite numbers, integer reps, deterministic set IDs)
     │
     ▼
-addLog() (Atomically writes nextLogs in memory, updates logsRef synchronously)
+addLog() (Writes nextLogs in state and synchronously updates logsRef)
     │
     ├─────────────────────────────────────────────┐
     ▼                                             ▼
@@ -346,7 +346,7 @@ Cycle Day (1-8):
 | 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts` | **VERIFIED & TESTED** |
 | 9 | **Cross-Surface Consistency**: Equivalent metrics and time windows produce identical numbers across Dashboard, History, Analytics, and Calendar. | `src/context/FitnessDerivedContext.tsx` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/pipelineConsistencyRegression.test.ts` | **VERIFIED & TESTED** |
 | 10 | **Distinct Semantic Values for Data Availability**: Missing data, zero values, and unavailable metrics remain semantically distinct (`available: false` vs score `0`). | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
-| 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Atomic writes use `gl_snapshot_staging` before committing `gl_database_snapshot`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts` | **VERIFIED & TESTED** |
+| 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Staged writes verify `gl_database_snapshot` before clearing `gl_snapshot_staging`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts` | **VERIFIED & TESTED** |
 | 12 | **Account Isolation & Tombstone Scoping**: Tombstones are scoped to Firebase UID (`gl_deleted_ids_${uid}`). Logging out or switching accounts clears tombstones and isolates storage. | `src/utils/fitnessSyncHelpers.ts`, `src/hooks/useFitnessSync.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/lifecycleDestructiveSyncBoundary.test.ts` | **VERIFIED & TESTED** |
 | 13 | **Token & Primitive Ownership**: Design tokens in `src/styles/tokens.ts` and primitives in `src/components/ui/` own presentation rules. Modals trap focus and restore scroll cleanly. Pure calculations never import UI. | `src/styles/tokens.ts`, `src/components/ui/` | `src/test/statCardRegression.test.tsx`, `src/test/architectureContract.test.ts` | **VERIFIED & TESTED** |
 | 14 | **Performance & Algorithmic Complexity**: `buildFitnessIndex()` runs in O(N log N + S + E log E + D log D) time. Benchmarks demonstrate ~23 ms for 100 logs, ~64 ms for 1,000 logs, and ~247 ms for 5,000 logs on standard V8. Downstream selectors execute in <1 ms. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/performanceBenchmark.test.ts` | **MEASURED & BENCHMARKED (QUALIFIED)** |

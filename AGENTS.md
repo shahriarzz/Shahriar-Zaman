@@ -163,7 +163,7 @@ Before declaring any task complete:
 | Subsystem | Primary Vitest Suite | Critical Invariants Verified |
 |---|---|---|
 | **Pipeline & Calculations** | `src/test/canonicalFitnessPipeline.test.ts`<br>`src/test/pipelineConsistencyRegression.test.ts` | Incomplete log filtering, zero-volume handling, PR consolidation, cross-surface metric identity |
-| **Persistence & Snapshot** | `src/test/persistenceBoundaries.test.ts`<br>`src/test/backupRestoreRoundTrip.test.ts` | Two-phase staging commit, corrupt snapshot recovery, quarantine backup, atomic rollback |
+| **Persistence & Snapshot** | `src/test/persistenceBoundaries.test.ts`<br>`src/test/backupRestoreRoundTrip.test.ts` | Two-phase staging commit, corrupt snapshot recovery, quarantine backup, staged rollback |
 | **Cloud Sync & Auth** | `src/test/dataSyncAndIsolationRegression.test.ts`<br>`src/test/lifecycleDestructiveSyncBoundary.test.ts` | UID subtree path isolation, tombstone persistence, timestamp tie-breaker, offline queueing |
 | **Session Lifecycle & PRs** | `src/test/sessionDataContract.test.ts`<br>`src/test/sessionViewIdentity.test.ts`<br>`src/test/sessionPRRegression.test.ts` | Active draft preservation, pre-session PR comparison, one-visible PR event rule |
 | **Training Intelligence** | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`<br>`src/test/recoveryCycleAdvancement.test.ts` | 8-day cycle modulo arithmetic, rest day automatic progression, streak across recovery days |
@@ -176,4 +176,9 @@ Before declaring any task complete:
 
 - **Capacitor Configuration**: App ID is `com.gainlog.app`. Native web directory is `dist`. When changing native plugins, sync via `npx cap sync android`.
 - **Status Bar & Haptics**: Native interactions must use `@capacitor/status-bar` and `@capacitor/haptics`. Never bypass native plugin wrappers with browser-only vibration hacks on Android.
-- **CI Workflow Validation**: CI runs `.github/workflows/ci.yml` verifying `npm ci`, `npm run lint`, `npm test`, `npm run build`, and `./gradlew assembleDebug`. Ensure changes never break the Gradle Android build.
+- **CI Workflow & Release Enablement**:
+  - Regular validation (`validate`) runs `npm ci`, `npm run lint`, `npm test`, and `npm run build`.
+  - Android debug APK build (`android-build`) runs `./gradlew assembleDebug`.
+  - Android signed release bundle (`android-release-validation`) is controlled by the repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`.
+  - Required secrets for release signing: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+  - If `ANDROID_RELEASE_ENABLED` is `'true'` but secrets are missing, the job fails with a clear, non-sensitive diagnostic. When disabled or on PRs/forks, the release job is skipped cleanly without impacting debug builds or tests.

@@ -83,7 +83,7 @@ jobs:
     name: Android Signed Release Validation
     runs-on: ubuntu-latest
     needs: validate
-    if: "${{ vars.KEYSTORE_BASE64 != '' }}"
+    if: "${{ vars.ANDROID_RELEASE_ENABLED == 'true' }}"
     env:
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -93,6 +93,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate release signing secrets
+        run: |
+          MISSING=""
+          [ -z "$KEYSTORE_BASE64" ] && MISSING="$MISSING ANDROID_KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PASSWORD" ] && MISSING="$MISSING ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && MISSING="$MISSING ANDROID_KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ] && MISSING="$MISSING ANDROID_KEY_PASSWORD"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Android release signing is enabled (ANDROID_RELEASE_ENABLED=true) but required secrets are missing:$MISSING"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

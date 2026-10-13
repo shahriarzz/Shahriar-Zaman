@@ -9,6 +9,7 @@ GAINLOG employs defense-in-depth security with explicit boundaries between serve
 - **Account Data Segregation**: Cross-user document reads, bulk scraping across `/users`, and identity-spoofed writes across distinct user IDs are strictly rejected by the Firestore engine.
 - **Deletions on Root Profile**: Root user profile documents cannot be deleted (`allow delete: if false`).
 - **Health Check Path**: The `/test/{document=**}` health check requires authenticated requests (`request.auth != null`).
+- **Server-Side Boundary Scope**: Firestore rules strictly enforce authentication, UID subtree path scoping, and root deletion denial. They do **not** enforce document schema properties, field types, numeric ranges, or orphan relationships; data validity is enforced on the client.
 
 ### B. Client & API-Side Enforced Sanitization & Invariant Validation
 Payload structural constraints and application invariants are validated deterministically via `fitnessCalculations.ts` (`sanitizeWorkout`, `sanitizeSessionLog`, `sanitizeExerciseDefinition`, `validateAndSanitizeFitnessData`):
