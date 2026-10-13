@@ -62,34 +62,36 @@ GAINLOG is a local-first, distraction-free strength training log designed for se
 
 ## 3. Core Feature Specifications
 
-GAINLOG is navigated via a permanent bottom navigation bar featuring 6 primary views:
+GAINLOG is navigated via a permanent bottom navigation bar featuring 5 primary views (`src/components/Layout.tsx`):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                            GAINLOG Views                               │
-├─────────────┬───────────┬───────────┬───────────┬──────────┬───────────┤
-│  Dashboard  │  Session  │  History  │ Analytics │ Calendar │  Manage   │
-└─────────────┴───────────┴───────────┴───────────┴──────────┴───────────┘
+│                           GAINLOG Tab Navigation                       │
+├─────────────┬───────────┬───────────┬───────────┬──────────────────────┤
+│  Dashboard  │  Session  │  History  │ Analytics │        Manage        │
+└─────────────┴───────────┴───────────┴───────────┴──────────────────────┘
 ```
 
 ### 3.1 Dashboard (`src/components/Dashboard.tsx`)
 - **Today's Scheduled Session**: Identifies the expected workout according to the 8-day cycle and current date.
 - **Cycle Status Indicator**: Displays active cycle day (e.g. "Day 1 of 8: Push A" or "Day 4 of 8: Recovery").
-- **Quick Action**: Single-tap button to start the scheduled workout or resume an active session.
+- **Quick Action**: Single-tap button to start the scheduled workout or resume an active session draft.
 - **Training Frequency & Streak**: High-level indicator of active consecutive adherence across workouts and rest days.
-- **Recent Milestones**: High-level recap of recent volume and newly established PRs.
+- **Recent Milestones & Active Session Banner**: Resume active workout if in-flight.
+- **Integrated Calendar Section**: Embedded monthly calendar component (`<Calendar />`) visualizing completed workouts, rest days, and cycle day mapping with date selection filtering.
 
 ### 3.2 Session Execution (`src/components/SessionView.tsx`)
-- **Active Session Draft State**: Persists live workout progress in `gl_active_session`. Navigating away or refreshing does not lose entered sets or elapsed time.
+- **Active Session Draft State**: Persists live workout progress in `gl_active_session` (`ActiveSession`). Navigating away or refreshing does not lose entered sets or elapsed time.
 - **Exercise List & Set Check-Off**:
-  - Displays prescribed target sets, target reps, target weights, and RPE cues.
-  - Tapping the "Done" checkmark marks the set complete and automatically triggers the rest timer.
+  - Displays planned exercise prescriptions (sets count, target rep range, rest interval, notes).
+  - Weight and rep input fields store user-entered values.
+  - Tapping the "Done" checkmark marks the set complete (`done: true`) and triggers the rest timer.
 - **Integrated Rest Timer**:
   - Countdown timer with presets (60s, 90s, 120s, 180s) and custom duration adjustments.
-  - Configurable sound alert (`restTimerSound`) and haptic vibration (`restTimerVibrate`).
+  - Sound cues (Web Audio API synthetic chime) and native haptic feedback (`@capacitor/haptics`).
 - **PR Detection**:
   - Detects weight and e1RM PRs during set completion compared against the pre-session canonical index.
-  - Emits real-time visual feedback when a benchmark is shattered.
+  - Emits real-time visual feedback when a benchmark is broken.
 - **Completion Flow**:
   - "Finish Workout" button requires explicit confirmation.
   - Synchronously writes and verifies local database snapshot (`gl_database_snapshot`) before clearing the active draft.
@@ -98,7 +100,7 @@ GAINLOG is navigated via a permanent bottom navigation bar featuring 6 primary v
 ### 3.3 History (`src/components/HistoryView.tsx`)
 - **Chronological Log Listing**: Reverse-chronological list of all completed workouts grouped by month and date.
 - **Exercise Identity Resolution**: Resolves exercise IDs to canonical definitions via `src/utils/exerciseResolver.ts`. If an exercise was deleted, falls back gracefully to "Unknown Exercise" without crashing.
-- **Detailed Drill-Down**: Tapping any workout expands the set-by-set breakdown (set number, weight lifted, reps completed, RPE, and warmup flags).
+- **Detailed Drill-Down**: Tapping any workout expands the set-by-set breakdown (set ordinal, weight lifted, reps completed, done state).
 - **Log Management**: Allows editing workout notes or deleting accidentally recorded logs (with confirmation).
 
 ### 3.4 Analytics & Intelligence (`src/components/AnalyticsView.tsx`)
@@ -110,18 +112,13 @@ GAINLOG is navigated via a permanent bottom navigation bar featuring 6 primary v
   - Multi-factor score evaluating volume, intensity, frequency, and progressive overload over a rolling 30-day window compared to the preceding 30-day baseline.
   - Strict semantic handling: Displays `available: false` ("Data unavailable") when training history is insufficient, never falsely rendering score `0`.
 
-### 3.5 Calendar (`src/components/Calendar.tsx`)
-- **Monthly Grid Visualizer**: Full monthly calendar displaying completed workouts, rest days, and missed workouts with distinct status indicators.
-- **8-Day Cycle Projection**: Shows past and projected cycle days across the month based on `appState.cycleStart`.
-- **Day Inspector**: Tapping any calendar day filters and displays workouts logged on that specific date.
-
-### 3.6 Manage & Vault (`src/components/ManageView.tsx`)
-- **Custom Exercise Library**: Search, add, edit, or delete custom exercise definitions with category and equipment tags.
+### 3.5 Manage & Vault (`src/components/ManageView.tsx`)
+- **Custom Exercise Library**: Search, add, edit, or delete custom exercise definitions with target muscle and equipment fields.
 - **Workout Routine Editor**: Customize sets, exercises, target reps, and rest timers for the 8 cycle workouts or create bonus routines.
 - **Cycle Editor**: Modify the anchor date (`appState.cycleStart`) to re-sync the training schedule.
 - **Data Vault**:
-  - **Export JSON**: Download a complete, uncompressed backup of all exercises, routines, logs, and settings.
-  - **Import JSON**: Validate and restore data from an existing backup with full two-phase staging safety.
+  - **Export JSON**: Download a complete, uncompressed backup of all exercise definitions, workouts, logs, and settings (`FitnessDatabase`).
+  - **Import JSON**: Validate and restore data from an existing backup with two-phase staging safety.
   - **Reset to Defaults**: Clear all records and restore initial canonical data.
 - **Cloud Account**: Firebase Auth sign-in/sign-out to sync data across devices.
 
@@ -157,7 +154,7 @@ GAINLOG implements an evidence-based 8-day training cycle:
 
 1. **Pre-Session Baseline Comparison**: PRs achieved during a session are evaluated exclusively against the pre-session canonical index. Completing multiple sets within the same session does not create a chain of self-referential PRs.
 2. **Dual-PR Consolidation (One-Visible-Event Rule)**: If a single set breaks both the absolute **Weight PR** and the calculated **e1RM PR**, the UI consolidates these into **exactly one visible PR event** per exercise in the session summary.
-3. **Warmup Exclusion**: Sets flagged as `isWarmup: true` are excluded from PR calculations and volume aggregations.
+3. **Completed Sets Filter**: Only sets marked with `done: true` within completed sessions (`complete: true`) enter volume and PR indexing.
 
 ---
 

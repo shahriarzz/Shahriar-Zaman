@@ -2,253 +2,390 @@
 
 > **Target Repository**: [Shahriar-Zaman/gainlog](https://github.com/shahriarzz/Shahriar-Zaman)  
 > **Status**: Active Domain Contract  
-> **Source of Truth**: TypeScript definitions in `src/types/fitness.ts`, migrations in `src/utils/fitnessMigration.ts`, sanitization in `src/utils/fitnessCalculations.ts`.
+> **Authority**: TypeScript definitions in `src/types/fitness.ts`, migrations in `src/utils/fitnessMigration.ts`, sanitization in `src/utils/fitnessCalculations.ts`, local persistence in `src/hooks/useFitnessData.ts`, and cloud sync in `src/services/fitnessFirestore.ts`.
 
 ---
 
-## 1. Domain Entities & Canonical Interfaces
+## 1. Domain Entities & TypeScript Schemas
 
-GAINLOG organizes training data around 6 primary domain entities, unified under `DatabaseSnapshot`:
+The canonical source of truth for all domain entities is `src/types/fitness.ts`.
 
+### 1.1 `WorkoutType`
+Canonical enumeration of supported workout categories:
+```typescript
+export type WorkoutType = 
+  | 'push' 
+  | 'pull' 
+  | 'hybrid' 
+  | 'rest' 
+  | 'date' 
+  | 'upper' 
+  | 'lower' 
+  | 'custom';
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                           DatabaseSnapshot                             │
-│                  (Unified Atomic Local Storage State)                  │
-├───────────────────┬───────────────────┬────────────────────────────────┤
-│ exercises:        │ workouts:         │ logs:                          │
-│ ExerciseDefinition[]│ Workout[]       │ SessionLog[]                   │
-├───────────────────┴───────────────────┴────────────────────────────────┤
-│ appState: AppState                                                     │
-│ version: number (CURRENT_SCHEMA_VERSION = 2)                            │
-└────────────────────────────────────────────────────────────────────────┘
-```
 
-### 1.1 `ExerciseDefinition`
+---
+
+### 1.2 `ExerciseDefinition`
 Defines an exercise in the user's library:
 ```typescript
-interface ExerciseDefinition {
-  id: string;               // Stable UUID or canonical key (e.g. 'bench_press')
-  name: string;             // Display name (1-100 characters)
-  category: ExerciseCategory; // 'push' | 'pull' | 'legs' | 'core' | 'cardio' | 'other'
-  equipment?: EquipmentType;  // 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other'
-  notes?: string;           // Optional user notes (max 500 characters)
-  isCustom?: boolean;       // True if created by user; false for initial canonical definitions
-  createdAt: string;        // ISO-8601 string (e.g. '2026-10-12T10:00:00.000Z')
-  updatedAt: string;        // ISO-8601 string
-}
-```
-
-### 1.2 `Workout`
-Defines a template or routine within the training cycle:
-```typescript
-interface Workout {
-  id: string;               // Stable UUID (e.g. 'push_a')
-  name: string;             // Display name (e.g. 'Push A')
-  type: WorkoutType;        // 'push' | 'pull' | 'hybrid' | 'recovery' | 'custom'
-  isCore: boolean;          // True for canonical 8-day cycle workouts; false for bonus/custom sessions
-  cycleDay?: number;        // Day in the 8-day cycle (1 through 8)
-  exercises: WorkoutExercise[]; // Planned exercise prescriptions
-  notes?: string;           // Optional workout notes (max 1000 characters)
-  createdAt: string;        // ISO-8601 string
-  updatedAt: string;        // ISO-8601 string
-}
-
-interface WorkoutExercise {
-  id: string;               // Unique ID within workout template
-  exerciseId: string;       // Foreign key referencing ExerciseDefinition.id
-  targetSets: WorkoutSet[]; // Prescribed sets
-  restSeconds?: number;     // Prescribed rest timer between sets (default: 90)
-  notes?: string;           // Exercise-specific technique cues
-}
-
-interface WorkoutSet {
-  setNumber: number;        // 1-indexed set ordinal (1, 2, 3...)
-  targetReps: number;       // Prescribed rep count (integer 1-500)
-  targetWeight?: number;    // Target load in kilograms (finite 0-1500)
-  targetRpe?: number;       // Prescribed Rate of Perceived Exertion (1-10)
-}
-```
-
-### 1.3 `SessionLog`
-Represents an executed workout session:
-```typescript
-interface SessionLog {
-  id: string;               // Stable UUID
-  workoutId: string;        // Foreign key referencing Workout.id
-  workoutName: string;      // Denormalized workout title at time of execution
-  date: string;             // Workout date string ('YYYY-MM-DD')
-  startTime?: string;       // ISO-8601 timestamp
-  endTime?: string;         // ISO-8601 timestamp
-  durationMinutes: number;  // Finite duration (>= 0)
-  sets: SessionSet[];       // Executed sets
-  complete: boolean;        // Strictly true if session was finished; false if abandoned/draft
-  notes?: string;           // Post-workout reflection notes
-  createdAt: string;        // ISO-8601 string
-  updatedAt: string;        // ISO-8601 string
-}
-
-interface SessionSet {
-  id: string;               // Unique set UUID
-  exerciseId: string;       // Foreign key referencing ExerciseDefinition.id
-  exerciseName?: string;    // Denormalized name snapshot
-  setNumber: number;        // 1-indexed set ordinal
-  reps: number;             // Actual reps performed (non-negative integer)
-  weight: number;           // Actual load lifted in kilograms (finite number >= 0)
-  rpe?: number;             // Perceived Exertion (1-10)
-  done: boolean;            // Checkmark state in active session UI
-  isWarmup?: boolean;       // Warmup sets excluded from volume and PR indexing
-}
-```
-
-### 1.4 `AppState`
-Tracks global configuration and cycle anchoring:
-```typescript
-interface AppState {
-  cycleStart: string;       // ISO-8601 date string ('YYYY-MM-DD') anchoring Day 1 of the 8-day cycle
-  theme?: 'dark' | 'light' | 'system'; // Active visual theme
-  unit?: 'kg' | 'lbs';      // Display weight unit (calculations canonically in kg)
-  restTimerSound?: boolean; // Audio alert toggle
-  restTimerVibrate?: boolean; // Haptic alert toggle
-  updatedAt: string;        // ISO-8601 string
-}
-```
-
-### 1.5 `FitnessIndex`
-The canonical in-memory index computed by `buildFitnessIndex()` from completed `SessionLog`s:
-```typescript
-interface FitnessIndex {
-  exerciseMap: Map<string, ExerciseDefinition>; // Fast lookup by ID
-  workoutMap: Map<string, Workout>;             // Fast lookup by ID
-  logsByDate: Map<string, SessionLog[]>;        // Date-keyed lookup ('YYYY-MM-DD')
-  exercisePRs: Map<string, {                     // Historical bests per exercise
-    weightPR?: { weight: number; reps: number; date: string; logId: string };
-    e1RMPR?: { e1RM: number; weight: number; reps: number; date: string; logId: string };
-  }>;
-  totalVolumeByExercise: Map<string, number>;   // Lifetime volume (weight * reps)
-  lifetimeStats: {
-    totalWorkouts: number;                      // Count of complete sessions
-    totalSets: number;                          // Count of complete working sets
-    totalVolumeKg: number;                      // Lifetime load
-    activeStreakDays: number;                   // Consecutive active/rest cycle adherence
-  };
+export interface ExerciseDefinition {
+  id: string;               // Unique exercise identifier (e.g. 'ex-1', UUID, or canonical slug)
+  name: string;             // Display name (e.g. 'Barbell Bench Press')
+  target: string;           // Target muscle or group (e.g. 'Chest', 'Triceps', 'General')
+  equipment?: string;       // Equipment type (e.g. 'Barbell', 'Dumbbell', 'Cable', 'Bodyweight')
+  instructions?: string;    // Technique notes or setup cues
+  tags?: string[];          // Categorization tags (e.g. ['compound', 'push'])
+  updatedAt?: number;       // Epoch milliseconds timestamp (e.g. 1776000000000)
 }
 ```
 
 ---
 
-## 2. Field Invariants & Biological Bounds
+### 1.3 `WorkoutExercise`
+Prescribes an exercise within a `Workout` template:
+```typescript
+export interface WorkoutExercise {
+  exerciseDefinitionId: string; // Foreign key referencing ExerciseDefinition.id
+  sets: number;                 // Planned working sets (integer, 1–50, default: 3)
+  reps: string;                 // Planned rep range target (string, e.g. '8–10', '10–12')
+  rest?: string;                // Planned rest interval (e.g. '90s', '2m')
+  note?: string;                // Specific execution notes
+  tags?: string[];              // Optional exercise tags
+}
+```
 
-All inputs passing through API boundaries, JSON imports, or local state transitions are validated and sanitized via `src/utils/fitnessCalculations.ts`:
+*Note*: The component helper type `Exercise` is defined as:
+```typescript
+export type Exercise = ExerciseDefinition & WorkoutExercise & { id: string };
+```
 
-| Field / Attribute | Type | Valid Range / Bounds | Sanitization Fallback |
+---
+
+### 1.4 `CardioFinisher`
+Optional cardio finisher attached to a workout template:
+```typescript
+export interface CardioFinisher {
+  name: string;     // Cardio movement name (e.g. 'Incline Treadmill Walk')
+  detail: string;   // Intensity or parameters (e.g. '12% incline, 3.5 mph')
+  duration: string; // Duration description (e.g. '15 mins')
+}
+```
+
+---
+
+### 1.5 `Workout`
+Defines a workout routine template:
+```typescript
+export interface Workout {
+  id: string;                       // Unique workout identifier (e.g. 'push_a')
+  name: string;                     // Routine title (e.g. 'Push A — Chest & Triceps')
+  badge: string;                    // Short badge label (e.g. 'PUSH', 'CORE')
+  type: WorkoutType;                // Workout classification
+  exercises: WorkoutExercise[];     // Array of planned exercise prescriptions
+  cardio?: CardioFinisher | null;   // Optional cardio finisher prescription
+  cycleDay?: number | null;         // Day in the 8-day cycle (integer 1–8, or null for non-cycle routines)
+  isCore?: boolean;                 // True for primary 8-day cycle workouts; false for bonus/custom workouts
+  restNotes?: string[];             // Active recovery notes for rest/recovery days
+  updatedAt?: number;               // Epoch milliseconds timestamp
+}
+```
+
+---
+
+### 1.6 `SetLog`
+Represents an executed set within a session:
+```typescript
+export interface SetLog {
+  id: string;       // Unique set identifier (deterministic e.g. 'set_0', 'exDefId_set_0')
+  weight: string;   // Actual load lifted as numeric string (e.g. '80', '82.5', or '' if blank)
+  reps: string;     // Repetitions performed as integer string (e.g. '8', or '' if blank)
+  done: boolean;    // Completion checkbox status in active session
+}
+```
+*Design Note*: Weights and reps are stored canonically as strings to preserve user input formatting (decimals, empty draft states) without premature zero-coercion.
+
+---
+
+### 1.7 `SessionLog`
+Represents a recorded workout session:
+```typescript
+export interface SessionLog {
+  id: string;                     // Unique session log identifier
+  workoutId: string;              // Foreign key referencing Workout.id
+  date: string;                   // Local workout calendar date string ('YYYY-MM-DD')
+  sets: Record<string, SetLog[]>; // Map of exerciseDefinitionId -> array of completed/attempted SetLog entries
+  complete: boolean;              // True if explicitly finished; false if abandoned/draft
+  durationMinutes: number;        // Elapsed session duration in integer minutes (>= 0)
+  updatedAt?: number;             // Epoch milliseconds timestamp
+}
+```
+
+---
+
+### 1.8 `AppState` & `WeightLogEntry`
+Tracks global training configuration, cycle anchor, and body weight logs:
+```typescript
+export interface WeightLogEntry {
+  weight: number;     // Body weight in kilograms (finite number)
+  updatedAt: number;  // Epoch milliseconds timestamp
+}
+
+export interface AppState {
+  cycleStart: string;                                   // Calendar date string ('YYYY-MM-DD') anchoring Day 1 of the 8-day cycle
+  weightLog?: Record<string, number | WeightLogEntry>;  // Map of 'YYYY-MM-DD' -> kg number OR { weight, updatedAt }
+  updatedAt?: number;                                   // Epoch milliseconds timestamp
+}
+```
+
+---
+
+### 1.9 `ActiveSession` (Draft Session State)
+Maintained in `src/hooks/useActiveSession.ts` to persist in-progress workout state:
+```typescript
+export interface ActiveSession {
+  workoutId: string;                      // Workout template being executed
+  startTime: number;                      // Epoch milliseconds timestamp when workout started
+  sessionSets: Record<string, SetLog[]>;  // Active draft sets per exerciseDefinitionId
+}
+```
+
+---
+
+### 1.10 Canonical `FitnessDatabase` vs Local Storage Wrapper
+
+There is an important distinction between the canonical domain database structure and its local-storage persistence wrapper:
+
+#### A. Canonical Domain / Export Payload (`FitnessDatabase`)
+Defined in `src/types/fitness.ts`, used by JSON exports, imports, and checkpoint backups:
+```typescript
+export interface FitnessDatabase {
+  schemaVersion: number;              // Current schema version = 2
+  exportDate?: string;                // ISO-8601 string of export creation time
+  exerciseDefinitions: ExerciseDefinition[];
+  workouts: Workout[];
+  logs: Record<string, SessionLog>;   // Keyed by SessionLog.id
+  appState: AppState;
+}
+```
+
+#### B. Local Storage Persistence Wrapper (`VersionedFitnessSnapshot`)
+Defined in `src/hooks/useFitnessData.ts`, written to `gl_database_snapshot` and `gl_snapshot_staging`:
+```typescript
+export interface FitnessDatabaseSnapshot {
+  exerciseDefinitions: ExerciseDefinition[];
+  workouts: Workout[];
+  logs: Record<string, SessionLog>;
+  appState: AppState;
+}
+
+export interface VersionedFitnessSnapshot {
+  schemaVersion: number;              // CURRENT_SCHEMA_VERSION = 2
+  timestamp: number;                  // Epoch milliseconds from Date.now()
+  data: FitnessDatabaseSnapshot;      // Inner domain snapshot
+}
+```
+*Note*: `validateSnapshotStructure()` in `src/utils/fitnessMigration.ts` accommodates both the wrapped `{ schemaVersion, timestamp, data }` format and an unnested `{ schemaVersion, exerciseDefinitions, workouts, logs, appState }` object.
+
+---
+
+## 2. Field Invariants & Sanitization Bounds
+
+All inputs passing through JSON imports, network responses, and data mutations are validated via pure sanitization functions in `src/utils/fitnessCalculations.ts`:
+
+### Verified Sanitization Functions & Bounds
+
+| Field / Attribute | Target Type | Valid Range / Parsing Rules | Sanitization Function | Fallback / Behavior |
+|---|---|---|---|---|
+| **Weight** | `string` (in `SetLog`) | `0 <= weight <= 5,000` (numeric string or finite number, regex `/^\d+(\.\d+)?$/`) | `parseStrictWeight()` | Rejects negative, non-numeric (e.g. `'12abc'`), and `> 5,000`. Sets invalid values to `''`. |
+| **Reps** | `string` (in `SetLog`) | `0 <= reps <= 1,000` (integer only, regex `/^\d+$/`) | `parseStrictReps()` | Rejects decimals (e.g. `'5.5'`), negative, and non-numeric. Sets invalid values to `''`. |
+| **Workout Sets** | `number` | `1 <= sets <= 50` (integer) | `sanitizeWorkout()` | Non-finite or out-of-range defaults to `3`. |
+| **Workout Reps / Rest** | `string` | Freeform prescription string | `sanitizeWorkout()` | Default reps: `'10–12'`; default rest: `'90s'`. |
+| **Workout Type** | `WorkoutType` | Must match `'push' \| 'pull' \| 'hybrid' \| 'rest' \| 'date' \| 'upper' \| 'lower' \| 'custom'` | `sanitizeWorkout()` | Invalid or unlisted types normalize to `'custom'`. |
+| **Cycle Day** | `number \| null` | Integer `1 <= cycleDay <= 8`, or `null` | `sanitizeWorkout()` | Out-of-range or non-integer becomes `null`. |
+| **Session Duration** | `number` | Finite number `>= 0` (integer minutes) | `sanitizeSessionLog()` | `Math.floor(durationMin)`. Negative or non-finite defaults to `0`. |
+| **Session Date** | `string` | Regex `/^\d{4}-\d{2}-\d{2}$/`, valid calendar date via `isValid(parseISO())` | `sanitizeSessionLog()` | Invalid date becomes empty string `''` (never silently defaults to today). |
+| **Session Completion** | `boolean` | Strictly boolean `=== true` | `sanitizeSessionLog()` | Coerced to `false` if `id`, `workoutId`, or `date` is empty or invalid. |
+| **Exercise Definition** | `ExerciseDefinition` | `id`, `name`, `target`, `equipment`, `instructions` | `sanitizeExerciseDefinition()` | `name` defaults to `'Exercise'`, `target` defaults to `'General'`. |
+| **Updated Timestamp** | `number` | Finite number `>= 0` | All sanitizers | Coerced to `Number(updatedAt) \|\| 0`. |
+
+### Inferred & Unverified Constraints (Explicit Labels)
+- **String Length Limits**: The code trims notes and names (`.trim()`), but does **not** enforce fixed maximum character truncation (e.g. no hard 500-character cap in code). Length limits are documentation guidelines, not active code-enforced boundaries.
+- **RPE (Rate of Perceived Exertion)**: RPE is **not** an active field in canonical `SetLog` or `SessionLog`. It is supported only in `RawSetLog` as an optional input during migration and is not persisted in v2.
+
+---
+
+## 3. Storage Key Registry & Persistence Lifecycle
+
+All local persistence in GAINLOG is managed across browser `localStorage`.
+
+### Real Storage Key Registry
+
+| Storage Key | Lifecycle & Ownership | Contents | Authoritative Source |
 |---|---|---|---|
-| **Weight** | `number` | `0 <= weight <= 1,500` (finite, non-NaN) | Clamped to bounds; `NaN`/negative becomes `0` |
-| **Reps** | `number` | `0 <= reps <= 500` (integer only) | Clamped to bounds; rounded to integer (`Math.round`) |
-| **Duration (minutes)** | `number` | `0 <= duration <= 1,440` (finite) | Non-finite or negative clamped to `0` |
-| **RPE** | `number` | `1 <= rpe <= 10` (finite) | Omitted or clamped to `1-10` |
-| **Date String** | `string` | `YYYY-MM-DD` (valid calendar date) | Fallback to current local date (`formatDate(new Date())`) |
-| **String / Notes** | `string` | Exercise note: ≤ 500 chars<br>Workout note: ≤ 1,000 chars<br>Log note: ≤ 2,000 chars | Trimmed and sliced to length limits |
-| **Session Completion** | `boolean` | Strictly `=== true` | Non-boolean truthy values coerced; strictly requires explicit finish |
+| **`gl_database_snapshot`** | Primary Canonical Store | JSON string of `VersionedFitnessSnapshot` (`{ schemaVersion: 2, timestamp, data }`) | `src/hooks/useFitnessData.ts` |
+| **`gl_snapshot_staging`** | Two-Phase Commit Buffer | Staged JSON string written and verified before removing staging | `src/hooks/useFitnessData.ts` |
+| **`gl_corrupt_snapshot_backup`** | Quarantine Buffer | Quarantined JSON backup of corrupted/invalid snapshot detected during boot | `src/utils/fitnessMigration.ts` |
+| **`gl_exercise_definitions`** | Legacy Mirror Key | JSON array of `ExerciseDefinition[]` | `src/hooks/useFitnessData.ts` |
+| **`gl_workouts`** | Legacy Mirror Key | JSON array of `Workout[]` | `src/hooks/useFitnessData.ts` |
+| **`gl_logs`** | Legacy Mirror Key | JSON object of `Record<string, SessionLog>` | `src/hooks/useFitnessData.ts` |
+| **`gl_state`** | Legacy Mirror Key | JSON object of `AppState` | `src/hooks/useFitnessData.ts` |
+| **`gl_schema_version`** | Legacy Mirror Key | String representation of schema version (`"2"`) | `src/hooks/useFitnessData.ts` |
+| **`gl_active_session`** | Active Workout Draft | JSON string of `ActiveSession` (`{ workoutId, startTime, sessionSets }`) | `src/hooks/useActiveSession.ts` |
+| **`gl_auto_backups`** | Local Checkpoint Vault | JSON array of `AutoBackupEntry[]` (capped at 8 most recent snapshots) | `src/hooks/useFitnessBackups.ts` |
+| **`gl_deleted_ids_${uid}`** | Scoped Sync Tombstones | JSON object `{ defs: string[], workouts: string[], logs: string[] }` | `src/utils/fitnessSyncHelpers.ts` |
+| **`gl_deleted_ids_anon`** | Unauthenticated Tombstones | JSON object of tombstones for unauthenticated/offline sessions | `src/utils/fitnessSyncHelpers.ts` |
+| **`gl_deleted_ids`** | Legacy Fallback Tombstones | Fallback tombstone key for backward compatibility | `src/utils/fitnessSyncHelpers.ts` |
+
+### Removed & Non-Existent Keys
+- GAINLOG does **not** read or write `gl_theme`, `gl_auth_cache`, or `gl_migration_backup`.
+- Discrete legacy keys are strictly `gl_exercise_definitions` (not `gl_exercises`) and `gl_state` (not `gl_app_state`).
 
 ---
 
-## 3. Storage Key Registry & Two-Phase Durability
+## 4. Durability, Staging & Crash Recovery Contract
 
-GAINLOG persists data in browser `localStorage` using a defensive two-phase staging mechanism:
+### A. Two-Phase Staging Protocol (`persistFitnessDatabase`)
+1. Serialize `VersionedFitnessSnapshot` to JSON.
+2. Write serialized string to `gl_snapshot_staging`.
+3. Write serialized string to canonical key `gl_database_snapshot`.
+4. Verify write by reading `localStorage.getItem('gl_database_snapshot') === serialized`.
+5. Only after verification succeeds, delete `gl_snapshot_staging`.
+6. Best-effort mirror data to discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`, `gl_schema_version`). Discrete key mirroring failure is caught and non-fatal.
+7. If an error occurs (e.g. storage quota exceeded during canonical write), `gl_snapshot_staging` is **not deleted**, preserving the staged data for boot recovery.
 
-```
-                  Two-Phase Persistence Commit Flow
-                  ──────────────────────────────────
-1. Create New DatabaseSnapshot payload
-                    │
-                    ▼
-2. Write to Staging Key: "gl_snapshot_staging"
-                    │
-                    ▼
-3. Verify integrity (parse and validate JSON)
-                    │
-                    ├─► [Integrity Verified] ──► 4. Commit to: "gl_database_snapshot"
-                    │                                   │
-                    │                                   ▼
-                    │                            5. Mirror legacy keys (backward compat)
-                    │
-                    └─► [Write/Parse Failed] ──► Rollback; preserve active session draft
-```
+### B. Startup Recovery Protocol (`loadInitialFitnessData`)
+1. **Canonical Check**: Inspect `gl_database_snapshot`. If JSON parses and `validateSnapshotStructure()` passes, migrate/return data.
+2. **Quarantine on Failure**: If parsing or validation fails, copy the corrupted raw value to `gl_corrupt_snapshot_backup`.
+3. **Staging Recovery**: If canonical snapshot is missing or corrupted, inspect `gl_snapshot_staging`. If valid, promote it to `gl_database_snapshot`, delete staging, and return recovered data.
+4. **Discrete Key Fallback**: If neither snapshot nor staging is valid, attempt recovery by parsing discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`).
+5. **Fresh Install Seed**: If all storage keys are empty (first install), initialize initial seed data from `src/types/initialData.ts` and commit both canonical snapshot and discrete mirrors.
 
-### Storage Key Registry
-
-| Storage Key | Lifecycle / Role | Contents | Invariant Protection |
-|---|---|---|---|
-| **`gl_database_snapshot`** | Primary Canonical Store | Full JSON `DatabaseSnapshot` (v2) | Single canonical state store (Invariant 1) |
-| **`gl_snapshot_staging`** | Two-Phase Commit Buffer | Staged snapshot during write operations | Write verification before commit (Invariant 2) |
-| **`gl_active_session`** | Active Draft Buffer | Current running workout draft | Recoverable on crash; cleared ONLY after verified snapshot commit |
-| **`gl_deleted_ids_${uid}`** | Firestore Sync Tombstones | Array of `{ id, deletedAt, collection }` | Scoped per Firebase UID; prevents cloud resurrection (Invariant 12) |
-| **`gl_corrupt_snapshot_backup`** | Quarantine Buffer | Corrupted payload isolated for forensics | Auto-recovery on load (Invariant 8) |
-| **`gl_exercises`** (Legacy) | Read-Fallback Mirror | JSON array of `ExerciseDefinition` | Backward-compatibility mirror |
-| **`gl_workouts`** (Legacy) | Read-Fallback Mirror | JSON array of `Workout` | Backward-compatibility mirror |
-| **`gl_logs`** (Legacy) | Read-Fallback Mirror | JSON array of `SessionLog` | Backward-compatibility mirror |
-| **`gl_app_state`** (Legacy) | Read-Fallback Mirror | JSON object of `AppState` | Backward-compatibility mirror |
+### C. Atomicity Reality
+Browser `localStorage` does **not** provide multi-key atomic transactions. The two-phase staging ensures that the single canonical snapshot (`gl_database_snapshot`) is verified before clearing staging. Discrete mirror keys are maintained sequentially on a best-effort basis and must never be treated as the authoritative primary store.
 
 ---
 
-## 4. Schema Versioning & Migration Rules
+## 5. Backup, Export & Import Contract
 
-- **Current Version**: `CURRENT_SCHEMA_VERSION = 2` (defined in `src/utils/fitnessMigration.ts`).
-- **Version 1**: Discrete local storage keys (`gl_exercises`, `gl_workouts`, `gl_logs`, `gl_app_state`).
-- **Version 2**: Unified atomic snapshot (`gl_database_snapshot`).
-
-### Migration Guarantees
-1. **Hydration Detection**: On startup, `migrateToUnifiedSnapshot()` inspects `gl_database_snapshot`. If missing or version < 2, it automatically aggregates legacy keys into a v2 snapshot.
-2. **Non-Destructive Staging**: The aggregated snapshot is staged to `gl_snapshot_staging`, validated, and committed to `gl_database_snapshot`. Legacy keys are preserved as read-fallbacks.
-3. **Quarantine on Corruption**: If `gl_database_snapshot` cannot be parsed, it is quarantined to `gl_corrupt_snapshot_backup`, and the system attempts recovery from `gl_snapshot_staging` or legacy keys. If all fail, defaults from `src/types/initialData.ts` are initialized.
-4. **Future Version Bumps**: Any schema version increment (e.g. v2 → v3) MUST provide an explicit upgrade transformer in `src/utils/fitnessMigration.ts` with comprehensive round-trip tests in `src/test/persistenceBoundaries.test.ts`.
-
----
-
-## 5. Cloud Firestore Data Model & Sync Contract
-
-When authenticated via Firebase Auth, GAINLOG synchronizes state with Firestore:
-
-### Document Hierarchy
-All cloud documents are strictly isolated within the authenticated user's private subtree:
-```
-/users/{userId}/exercises/{exerciseId}
-/users/{userId}/workouts/{workoutId}
-/users/{userId}/logs/{logId}
-/users/{userId}/appState/current
-```
-
-### Sync & Conflict Rules
-1. **Batch Limit**: Writes and deletes are grouped into batches of ≤ 400 operations (staying well within the Firestore 500-operation ceiling).
-2. **Conflict Resolution**: Deterministic timestamp comparison based on `updatedAt`:
-   - If `cloud.updatedAt > local.updatedAt`: Cloud record replaces local.
-   - If `local.updatedAt > cloud.updatedAt`: Local record uploaded to cloud.
-   - If `local.updatedAt === cloud.updatedAt`: If content differs, **local wins** (offline lifter priority).
-3. **Tombstone Propagation**: Deletions recorded in `gl_deleted_ids_${uid}` are dispatched to Firestore as deletes. Cloud documents deleted remotely are removed locally without resurrection.
-4. **Sign-Out Isolation**: Signing out purges user tombstones and resets in-memory collections to defaults, preventing cross-tenant leakage on shared devices.
-
----
-
-## 6. Backup & Restore Specification
-
-The Data Management vault (`src/components/manage/DataMaintenanceSection.tsx`) supports JSON backup export and import:
-
-### Backup JSON Payload Structure
+### 5.1 Export JSON Format
+Generated by `exportBackup()` in `src/hooks/useFitnessBackups.ts`:
 ```json
 {
-  "version": 2,
-  "exportedAt": "2026-10-12T12:00:00.000Z",
-  "data": {
-    "exercises": [ ... ],
-    "workouts": [ ... ],
-    "logs": [ ... ],
-    "appState": { ... }
+  "schemaVersion": 2,
+  "exportDate": "2026-10-13T01:00:00.000Z",
+  "exerciseDefinitions": [
+    {
+      "id": "bench_press",
+      "name": "Barbell Bench Press",
+      "target": "Chest",
+      "equipment": "Barbell",
+      "instructions": "Retract scapulae and press to lockout.",
+      "tags": ["compound", "push"],
+      "updatedAt": 1776000000000
+    }
+  ],
+  "workouts": [
+    {
+      "id": "push_a",
+      "name": "Push A",
+      "badge": "PUSH",
+      "type": "push",
+      "cycleDay": 1,
+      "isCore": true,
+      "exercises": [
+        {
+          "exerciseDefinitionId": "bench_press",
+          "sets": 3,
+          "reps": "8–10",
+          "rest": "90s",
+          "note": "",
+          "tags": []
+        }
+      ],
+      "cardio": null,
+      "restNotes": [],
+      "updatedAt": 1776000000000
+    }
+  ],
+  "logs": {
+    "log-uuid-1": {
+      "id": "log-uuid-1",
+      "workoutId": "push_a",
+      "date": "2026-10-12",
+      "sets": {
+        "bench_press": [
+          { "id": "set_0", "weight": "80", "reps": "10", "done": true },
+          { "id": "set_1", "weight": "80", "reps": "8", "done": true }
+        ]
+      },
+      "complete": true,
+      "durationMinutes": 45,
+      "updatedAt": 1776000000000
+    }
+  },
+  "appState": {
+    "cycleStart": "2026-10-01",
+    "weightLog": {
+      "2026-10-12": { "weight": 78.5, "updatedAt": 1776000000000 }
+    },
+    "updatedAt": 1776000000000
   }
 }
 ```
 
-### Validation & Import Rules
-1. **Payload Inspection**: The import validator checks for required keys (`data.exercises`, `data.workouts`, `data.logs`, `data.appState`).
-2. **Biological Sanitization**: Every imported log and workout is passed through `validateAndSanitizeFitnessData()` to normalize numbers, dates, and types.
-3. **Atomic Overwrite**: The sanitized payload is written via two-phase staging (`gl_snapshot_staging` → `gl_database_snapshot`).
-4. **Active Session Preservation**: An ongoing workout session in `gl_active_session` is preserved during backup import unless explicitly overwritten.
+### 5.2 Import & Migration Behavior (`importBackup`)
+1. **JSON Parsing**: Validates valid JSON structure; rejects non-object or array root payloads.
+2. **Schema Version Detection**: Inspects `parsed.schemaVersion ?? parsed.version` (defaults to 1 if omitted).
+3. **Version Rejection**: If `version > CURRENT_SCHEMA_VERSION` (version > 2), the import fails cleanly with an unsupported version message.
+4. **V1 Legacy Normalization**: If `version === 1` or `workouts` array is present without `exerciseDefinitions`, `migrateV1ToV2()` extracts exercise definitions directly from workout exercises.
+5. **Orphan Reference Protection**: If a workout or log references an `exerciseDefinitionId` missing from `exerciseDefinitions`, a fallback definition is synthesized (`name: 'Exercise'`, `target: 'General'`) to prevent broken foreign-key relationships.
+6. **Pre-Import Checkpoint**: Before applying the new data, a checkpoint snapshot is pushed to `gl_auto_backups` with change type `'manual'` and description `'Pre-Import Savepoint'`.
+7. **Tombstone Cleanup**: `clearDeletedIdsTracker()` clears local tombstones so imported items are not deleted upon subsequent cloud synchronization.
+8. **Active Session Preservation**: `importBackup()` updates `exerciseDefinitions`, `workouts`, `logs`, and `appState`, but does **not** clear or overwrite `gl_active_session`. An in-progress workout draft remains preserved in localStorage.
+
+---
+
+## 6. Cloud Firestore Data Model & Sync Contract
+
+When authenticated via Firebase Auth, GAINLOG synchronizes training data with Cloud Firestore.
+
+### 6.1 Document & Subcollection Hierarchy
+All user data is strictly scoped under `/users/{userId}`:
+```
+/users/{userId}                                     (Root user document: stores AppState fields)
+  ├── cycleStart: string                            (YYYY-MM-DD)
+  ├── weightLog: map<string, number | map>          (date -> weight or { weight, updatedAt })
+  ├── updatedAt: number                             (Epoch milliseconds)
+  │
+  ├── /exerciseDefinitions/{exerciseDefId}          (Subcollection: ExerciseDefinition documents)
+  │     ├── id, name, target, equipment, instructions, tags, updatedAt
+  │
+  ├── /workouts/{workoutId}                         (Subcollection: Workout documents)
+  │     ├── id, name, badge, type, exercises, cardio, cycleDay, isCore, restNotes, updatedAt
+  │
+  └── /logs/{logId}                                 (Subcollection: SessionLog documents)
+        ├── workoutId, date, sets, complete, durationMinutes, updatedAt
+        (Note: log.id is omitted from document body; Firestore doc ID represents id)
+```
+
+*Architectural Boundary Note*: `AppState` is stored directly on the root user document `/users/{userId}`, **not** in a separate subcollection (`/users/{userId}/appState/current` does not exist).
+
+### 6.2 Cloud Sync Protocols & Invariants
+1. **Batch Chunking**: `commitBatchOperations` chunks all batch writes and deletes to **400 operations per batch** (under Firestore's 500-operation limit).
+2. **Deterministic Conflict Resolution (`resolveLocalCloudRecord`)**:
+   - Compares integer millisecond timestamps (`local.updatedAt` vs `cloud.updatedAt`).
+   - If `local.updatedAt > cloud.updatedAt`: Local record uploaded to cloud (`winner: 'local'`).
+   - If `cloud.updatedAt > local.updatedAt`: Cloud record replaces local (`winner: 'cloud'`).
+   - If timestamps are equal: If stringified content matches, considered equal. If content differs, **local wins** as tie-breaker (`winner: 'local'`) and is uploaded to cloud.
+3. **Tombstones & Resurrection Prevention**:
+   - Deletions in local UI register IDs in `gl_deleted_ids_${uid}` (`{ defs: [], workouts: [], logs: [] }`).
+   - Sync purges queued tombstones from Firestore first.
+   - Incoming cloud records matching active tombstones are filtered out immediately, preventing deleted items from resurrecting.
+4. **Retry & Network Awareness**:
+   - On initial connection failure, background sync retries up to 3 times with exponential backoff (2000 ms, 4000 ms).
+   - If `navigator.onLine === false` or Firestore reports `unavailable`, retry pauses and waits for the `window` `'online'` event.
+   - `isSyncingRef` mutex prevents concurrent sync passes; `syncQueuedRef` ensures that rapid consecutive local mutations trigger exactly one follow-up sync.
+5. **Account Isolation & Sign-Out**:
+   - When switching accounts (`prevUid !== currentUid`) or signing out (`logout()`), tombstones for `prevUid` are cleared.
+   - `resetToDefaultData()` wipes all user-specific local storage keys (`gl_database_snapshot`, `gl_snapshot_staging`, `gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`, `gl_deleted_ids`, `gl_auto_backups`, `gl_active_session`) and re-seeds fresh default data, guaranteeing zero data leakage between different lifters on the same device.

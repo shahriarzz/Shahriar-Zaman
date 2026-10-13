@@ -23,7 +23,7 @@ Payload structural constraints and application invariants are validated determin
 - Payload sanitization boundaries and extreme value resilience are verified in `src/test/persistenceBoundaries.test.ts` and `src/test/canonicalDataContract.test.ts`.
 
 ## 3. Documentation & Contract Cross-References
-- **Domain Entity Schemas & Numeric Bounds**: See `DATA_MODEL.md` (§2 for biological validation limits, §5 for Firestore collection hierarchy).
+- **Domain Entity Schemas & Numeric Bounds**: See `DATA_MODEL.md` (§2 for biological validation limits, §6 for Firestore collection hierarchy).
 - **System Boundaries & Invariants**: See `ARCHITECTURE.md` (§8 Invariants 10–12 for conflict resolution, batch limits, and account isolation).
 - **AI Agent Governance & Security Gating**: See `AGENTS.md` (§3 for High-Risk Subsystem 5 on Cloud Synchronization & Tombstones).
 
