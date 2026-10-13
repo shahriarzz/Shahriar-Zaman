@@ -83,7 +83,7 @@ jobs:
     name: Android Signed Release Validation
     runs-on: ubuntu-latest
     needs: validate
-    if: "${{ vars.ANDROID_RELEASE_ENABLED == 'true' }}"
+    if: github.event_name == 'push' && vars.ANDROID_RELEASE_ENABLED == 'true'
     env:
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}

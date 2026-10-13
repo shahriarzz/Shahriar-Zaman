@@ -537,7 +537,7 @@ export function loadInitialFitnessData(): {
     rawState
   });
 
-  // Save migrated data and version tag atomically
+  // Sequentially persist migrated data: canonical snapshot payload first, followed by the schema version tag and legacy discrete keys
   try {
     const versionedPayload = {
       schemaVersion: CURRENT_SCHEMA_VERSION,

@@ -83,7 +83,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
    Automated regression suite (24 test suites, 346 tests), Vite bundler, and GitHub Actions CI workflow (`ci.yml`):
    - **`validate`**: Runs `npm ci`, `npm run lint` (`tsc --noEmit`), `npm test` (Vitest), and `npm run build`.
    - **`android-build`**: Builds the Android debug APK (`./gradlew assembleDebug`) and uploads artifacts. Runs unconditionally after `validate` succeeds.
-   - **`android-release-validation`**: Guarded explicitly by repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`. Requires secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Decodes release keystore and verifies `./gradlew bundleRelease`. If enabled with missing secrets, halts with a specific error message. When disabled (or in standard PR/fork runs), skips cleanly without impacting ordinary build/test validation.
+   - **`android-release-validation`**: Guarded explicitly to run only on trusted `push` events when repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`. Pull requests (including same-repository PRs) never trigger this job. Requires secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Decodes release keystore and verifies `./gradlew bundleRelease`. If enabled on push with missing secrets, halts with a specific error message. When disabled or on pull requests, skips cleanly without impacting ordinary build/test validation.
 
 ---
 

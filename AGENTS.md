@@ -179,6 +179,6 @@ Before declaring any task complete:
 - **CI Workflow & Release Enablement**:
   - Regular validation (`validate`) runs `npm ci`, `npm run lint`, `npm test`, and `npm run build`.
   - Android debug APK build (`android-build`) runs `./gradlew assembleDebug`.
-  - Android signed release bundle (`android-release-validation`) is controlled by the repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`.
+  - Android signed release bundle (`android-release-validation`) runs exclusively on trusted `push` events when the repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`. Pull requests (including same-repository PRs) never trigger signed releases or expose signing secrets.
   - Required secrets for release signing: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
-  - If `ANDROID_RELEASE_ENABLED` is `'true'` but secrets are missing, the job fails with a clear, non-sensitive diagnostic. When disabled or on PRs/forks, the release job is skipped cleanly without impacting debug builds or tests.
+  - If `ANDROID_RELEASE_ENABLED` is `'true'` on a push event but secrets are missing, the job fails with a clear, non-sensitive diagnostic. When disabled or on pull requests, the release job is skipped cleanly without impacting debug builds or tests.
