@@ -1,6 +1,5 @@
 import { format, parseISO, subDays, differenceInCalendarDays, isValid } from 'date-fns';
 import { ExerciseDefinition } from '../types/fitness';
-import { INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 
 // -------------------------------------------------------------
 // 15 CANONICAL ANATOMICAL GROUPS
@@ -110,6 +109,7 @@ export function normalizeTargetFingerprint(target: string | null | undefined): s
 // -------------------------------------------------------------
 // CURATED EXERCISE PROFILES REGISTRY (BUILT-IN e1 TO e41)
 // With Fingerprint Guard to prevent silent misattribution
+// Stabilizer-audited: only dynamic primary/secondary contributors
 // -------------------------------------------------------------
 
 interface CuratedProfileDefinition {
@@ -134,7 +134,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'front_delts', role: 'primary' },
       { muscle: 'side_delts', role: 'secondary_strong' },
       { muscle: 'triceps', role: 'secondary_strong' },
-      { muscle: 'upper_back', role: 'secondary_moderate' },
     ],
   },
   // e3: Flat Machine Press ('Mid Chest')
@@ -146,12 +145,11 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'front_delts', role: 'secondary_moderate' },
     ],
   },
-  // e4: Cable Lateral Raise ('Side Delts')
+  // e4: Cable Lateral Raise ('Side Delts') - isolation
   e4: {
     targetFingerprint: 'side delts',
     involvements: [
       { muscle: 'side_delts', role: 'primary' },
-      { muscle: 'front_delts', role: 'secondary_moderate' },
     ],
   },
   // e5: V-Bar Pushdown ('Triceps')
@@ -175,7 +173,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'lats', role: 'primary' },
       { muscle: 'upper_back', role: 'secondary_strong' },
       { muscle: 'biceps', role: 'secondary_strong' },
-      { muscle: 'forearms', role: 'secondary_moderate' },
     ],
   },
   // e8: Seated Cable Row ('Mid-Back') - biceps are secondary_moderate in mid-back rows
@@ -236,7 +233,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     involvements: [
       { muscle: 'quads', role: 'primary' },
       { muscle: 'glutes', role: 'secondary_strong' },
-      { muscle: 'core', role: 'secondary_moderate' },
     ],
   },
   // e15: Romanian Deadlift ('Hamstrings/Back')
@@ -246,7 +242,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'hamstrings', role: 'primary' },
       { muscle: 'glutes', role: 'secondary_strong' },
       { muscle: 'lower_back', role: 'secondary_strong' },
-      { muscle: 'forearms', role: 'secondary_moderate' },
     ],
   },
   // e16: Plate Pinch Holds ('Grip/Forearm')
@@ -336,7 +331,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     targetFingerprint: 'biceps',
     involvements: [
       { muscle: 'biceps', role: 'primary' },
-      { muscle: 'forearms', role: 'secondary_moderate' },
     ],
   },
   // e27: Wrist Rotations (DB) ('Forearm Rot.')
@@ -359,7 +353,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     involvements: [
       { muscle: 'quads', role: 'primary' },
       { muscle: 'glutes', role: 'secondary_strong' },
-      { muscle: 'calves', role: 'secondary_moderate' },
     ],
   },
   // e30: Glute Kickback ('Glutes')
@@ -382,7 +375,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     targetFingerprint: 'abs/core',
     involvements: [
       { muscle: 'core', role: 'primary' },
-      { muscle: 'forearms', role: 'secondary_moderate' },
     ],
   },
   // e33: Behind-Back Curls ('Inner Forearm')
@@ -426,8 +418,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'lats', role: 'primary' },
       { muscle: 'upper_back', role: 'secondary_strong' },
       { muscle: 'biceps', role: 'secondary_strong' },
-      { muscle: 'forearms', role: 'secondary_moderate' },
-      { muscle: 'core', role: 'secondary_moderate' },
     ],
   },
   // e38: Close-Grip Bench Press ('Triceps')
@@ -436,7 +426,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     involvements: [
       { muscle: 'triceps', role: 'primary' },
       { muscle: 'chest', role: 'secondary_strong' },
-      { muscle: 'front_delts', role: 'secondary_moderate' },
     ],
   },
   // e39: Barbell Back Squat ('Quads/Glutes')
@@ -445,9 +434,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     involvements: [
       { muscle: 'quads', role: 'primary' },
       { muscle: 'glutes', role: 'secondary_strong' },
-      { muscle: 'lower_back', role: 'secondary_moderate' },
-      { muscle: 'calves', role: 'secondary_moderate' },
-      { muscle: 'core', role: 'secondary_moderate' },
     ],
   },
   // e40: Lying Leg Curl ('Hamstrings')
@@ -455,7 +441,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     targetFingerprint: 'hamstrings',
     involvements: [
       { muscle: 'hamstrings', role: 'primary' },
-      { muscle: 'calves', role: 'secondary_moderate' },
     ],
   },
   // e41: Standing Calf Raise ('Calves')
@@ -520,8 +505,9 @@ export function inferMuscleProfileFromTarget(targetStr: string | null | undefine
   if (/\b(lower back|erectors?|lumbar)\b/i.test(t)) {
     add('lower_back', 'primary');
   }
+  // Generic back fallback: ONLY runs if no specific back region was identified
   if (/\b(mid[- ]back|back)\b/i.test(t)) {
-    if (!addedMuscles.has('lats') && !addedMuscles.has('upper_back')) {
+    if (!addedMuscles.has('lats') && !addedMuscles.has('upper_back') && !addedMuscles.has('lower_back')) {
       add('upper_back', 'primary');
       add('lats', 'secondary_strong');
     }
@@ -621,11 +607,13 @@ export interface MuscleGroupBalance {
 }
 
 export interface AttributionCoverageSummary extends AttributionCoverageCounts {
-  coveragePercent: number;
+  coveragePercent: number | null;
 }
 
 export interface MuscleBalanceResult {
+  /** Top 6 ranked muscle groups */
   groups: MuscleGroupBalance[];
+  /** All 15 canonical anatomical groups including 0-exposure groups */
   allGroups: MuscleGroupBalance[];
   totalAttributedWSE: number;
   coverage: AttributionCoverageSummary;
@@ -656,7 +644,8 @@ export interface MuscleRecoveryResult {
 
 /**
  * Computes anatomical training distribution across all 15 muscle groups within [startDate, endDate].
- * Preserves zero-exposure groups in allGroups and returns top groups ranked by WSE descending.
+ * Preserves zero-exposure groups in allGroups and returns top 6 in groups.
+ * If totalEligibleSets === 0, coveragePercent is returned as null.
  */
 export function selectMuscleBalanceForRange(
   index: {
@@ -719,7 +708,7 @@ export function selectMuscleBalanceForRange(
 
   const coveragePercent = totalEligible > 0
     ? Math.round(((totalCurated + totalInferred) / totalEligible) * 1000) / 10
-    : 100;
+    : null;
 
   const coverage: AttributionCoverageSummary = {
     curatedSets: totalCurated,
@@ -730,7 +719,7 @@ export function selectMuscleBalanceForRange(
   };
 
   return {
-    groups: allGroups,
+    groups: allGroups.slice(0, 6),
     allGroups,
     totalAttributedWSE,
     coverage,
@@ -793,8 +782,8 @@ export function selectMuscleRecovery(
 
   const items: MuscleRecoveryItem[] = ALL_MUSCLE_GROUPS.map(muscle => {
     const resRaw = residualTotals[muscle];
-    const residualStimulus = Math.round(resRaw * 10) / 10;
-    const recentStimulus = Math.round(recentTotals[muscle] * 10) / 10;
+    const residualStimulus = Math.round(resRaw * 100) / 100;
+    const recentStimulus = Math.round(recentTotals[muscle] * 100) / 100;
     if (residualStimulus > maxResidual) maxResidual = residualStimulus;
 
     const trainedDateStr = lastTrainedInWindow[muscle];
@@ -828,6 +817,8 @@ export function selectMuscleRecovery(
       lifetimeLastTrainedDate,
     };
   }).sort((a, b) => b.residualStimulus - a.residualStimulus || a.label.localeCompare(b.label));
+
+  maxResidual = Math.round(maxResidual * 100) / 100;
 
   return {
     items,

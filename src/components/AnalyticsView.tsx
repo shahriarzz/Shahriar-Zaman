@@ -108,7 +108,9 @@ export const AnalyticsView: React.FC = () => {
     trainingStreak,
     adherenceInsight,
     performanceScore,
-    strengthTrend
+    strengthTrend,
+    currentDate,
+    todayStr
   } = useFitnessDerivedData();
 
   const {
@@ -138,8 +140,7 @@ export const AnalyticsView: React.FC = () => {
     : aggregated.mostFrequentExercises.slice(0, 3);
 
   const muscleBalanceDateRange = useMemo(() => {
-    const today = new Date();
-    const todayStr = format(today, 'yyyy-MM-dd');
+    const today = currentDate;
     if (timeRange === '7d') {
       return {
         startDate: format(subDays(today, 6), 'yyyy-MM-dd'),
@@ -166,7 +167,7 @@ export const AnalyticsView: React.FC = () => {
       endDate: todayStr,
       label: 'All Time'
     };
-  }, [timeRange, aggregated.firstLogDate]);
+  }, [timeRange, aggregated.firstLogDate, currentDate, todayStr]);
 
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
@@ -637,6 +638,7 @@ export const AnalyticsView: React.FC = () => {
           startDate={muscleBalanceDateRange.startDate}
           endDate={muscleBalanceDateRange.endDate}
           timeRangeLabel={muscleBalanceDateRange.label}
+          referenceDate={currentDate}
         />
       </Section>
 

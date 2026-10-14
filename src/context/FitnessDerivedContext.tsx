@@ -75,6 +75,8 @@ export interface FitnessDerivedData {
   getE1RMPRForExercise: (exerciseDefinitionId: string) => E1RMPRRecord | null;
   getStrengthTrendForRange: (currentRange: DateRange, comparisonRange: DateRange) => StrengthTrendInsight;
   getVolumeForRange: (startDate: Date | string, endDate: Date | string) => number;
+  currentDate: Date;
+  todayStr: string;
 }
 
 export const FitnessDerivedContext = createContext<FitnessDerivedData | null>(null);
@@ -82,50 +84,7 @@ export const FitnessDerivedContext = createContext<FitnessDerivedData | null>(nu
 export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { logs, workouts, exerciseDefinitions, appState } = useFitness();
 
-  // 1. Canonical Definition Map
-  const defsMap = useMemo(() => {
-    return createExerciseDefinitionMap(exerciseDefinitions);
-  }, [exerciseDefinitions]);
-
-  // 2. Workout Lookup Map
-  const workoutMap = useMemo(() => {
-    const map = new Map<string, Workout>();
-    (workouts || []).forEach(w => map.set(w.id, w));
-    return map;
-  }, [workouts]);
-
-  // 3. Core Workout by Cycle Day Map
-  const coreWorkoutByCycleDayMap = useMemo(() => {
-    const map = new Map<number, Workout>();
-    (workouts || []).forEach(w => {
-      if (w.isCore && typeof w.cycleDay === 'number') {
-        map.set(w.cycleDay, w);
-      }
-    });
-    return map;
-  }, [workouts]);
-
-  // 4. Priority & Compound Exercises for Strength Progression
-  const priorityExercises = useMemo(() => {
-    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
-  }, [exerciseDefinitions, workouts, defsMap]);
-
-  // 5. Canonical FitnessIndex (Single O(N) pass on logs/definitions change)
-  const index = useMemo(() => {
-    return buildFitnessIndex(logs, defsMap);
-  }, [logs, defsMap]);
-
-  // 6. Body Weight Biometrics summary
-  const weightSummary = useMemo(() => {
-    return selectWeightSummary(appState?.weightLog);
-  }, [appState?.weightLog]);
-
-  // 7. Muscle Distribution summary
-  const muscleDistribution = useMemo(() => {
-    return selectMuscleDistribution(index);
-  }, [index]);
-
-  // 8. Reactive Calendar Date Tracking (midnight and visibility updates)
+  // 1. Reactive Calendar Date Tracking (midnight and visibility updates)
   const [currentDate, setCurrentDate] = React.useState<Date>(() => new Date());
 
   React.useEffect(() => {
@@ -180,6 +139,49 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   const todayStr = useMemo(() => format(currentDate, 'yyyy-MM-dd'), [currentDate]);
+
+  // 2. Canonical Definition Map
+  const defsMap = useMemo(() => {
+    return createExerciseDefinitionMap(exerciseDefinitions);
+  }, [exerciseDefinitions]);
+
+  // 3. Workout Lookup Map
+  const workoutMap = useMemo(() => {
+    const map = new Map<string, Workout>();
+    (workouts || []).forEach(w => map.set(w.id, w));
+    return map;
+  }, [workouts]);
+
+  // 4. Core Workout by Cycle Day Map
+  const coreWorkoutByCycleDayMap = useMemo(() => {
+    const map = new Map<number, Workout>();
+    (workouts || []).forEach(w => {
+      if (w.isCore && typeof w.cycleDay === 'number') {
+        map.set(w.cycleDay, w);
+      }
+    });
+    return map;
+  }, [workouts]);
+
+  // 5. Priority & Compound Exercises for Strength Progression
+  const priorityExercises = useMemo(() => {
+    return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
+  }, [exerciseDefinitions, workouts, defsMap]);
+
+  // 6. Canonical FitnessIndex (Single O(N) pass on logs/definitions or calendar day boundary transition)
+  const index = useMemo(() => {
+    return buildFitnessIndex(logs, defsMap, currentDate);
+  }, [logs, defsMap, todayStr]);
+
+  // 7. Body Weight Biometrics summary
+  const weightSummary = useMemo(() => {
+    return selectWeightSummary(appState?.weightLog);
+  }, [appState?.weightLog]);
+
+  // 8. Muscle Distribution summary
+  const muscleDistribution = useMemo(() => {
+    return selectMuscleDistribution(index);
+  }, [index]);
 
   // 9. Canonical Cycle Day Calculations
   const nextCycleDay = useMemo(() => {
@@ -337,7 +339,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getWeightPRForExercise,
     getE1RMPRForExercise,
     getStrengthTrendForRange,
-    getVolumeForRange
+    getVolumeForRange,
+    currentDate,
+    todayStr
   }), [
     index,
     defsMap,
@@ -360,7 +364,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     getWeightPRForExercise,
     getE1RMPRForExercise,
     getStrengthTrendForRange,
-    getVolumeForRange
+    getVolumeForRange,
+    currentDate,
+    todayStr
   ]);
 
   return (

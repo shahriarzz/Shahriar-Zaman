@@ -99,10 +99,14 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
               <div className="flex items-center gap-1.5 text-zinc-300">
                 <span className="text-zinc-400">Attribution Coverage:</span>
                 <span className="font-mono font-medium tabular-nums text-white">
-                  {coverage.curatedSets + coverage.inferredSets} / {coverage.totalEligibleSets} sets
+                  {coverage.totalEligibleSets === 0
+                    ? '—'
+                    : `${coverage.curatedSets + coverage.inferredSets} / ${coverage.totalEligibleSets} sets`}
                 </span>
                 <span className="text-emerald-400 font-mono font-bold tabular-nums">
-                  ({coverage.coveragePercent}%)
+                  {coverage.coveragePercent !== null
+                    ? `(${coverage.coveragePercent}%)`
+                    : '(—)'}
                 </span>
               </div>
               <button
@@ -131,9 +135,13 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
           </div>
 
           {/* Muscle Groups Ranked List */}
-          {totalAttributedWSE === 0 ? (
+          {coverage.totalEligibleSets === 0 ? (
             <div className="py-8 text-center text-xs text-zinc-500">
-              No completed training sets recorded in this date range.
+              No eligible completed sets recorded in this period.
+            </div>
+          ) : totalAttributedWSE === 0 ? (
+            <div className="py-8 text-center text-xs text-zinc-500">
+              Completed sets exist, but no muscle attribution could be assigned.
             </div>
           ) : (
             <div className="space-y-3">

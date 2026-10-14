@@ -130,7 +130,7 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
 
   describe('4. Attribution Coverage Accounting & Denominator Invariant', () => {
     it('counts each completed set in totalEligibleSets exactly once even for multi-muscle exercises', () => {
-      // e37 (Weighted Pull-Up) has 5 muscle involvements: lats, upper_back, biceps, forearms, core
+      // e37 (Weighted Pull-Up) has 3 dynamic muscle involvements: lats, upper_back, biceps
       const log: SessionLog = {
         id: 'log-multi-1',
         workoutId: 'test-workout',
@@ -150,7 +150,7 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       const coverage = index.muscleAttributionCoverageByDate['2026-04-10'];
 
       expect(coverage).toBeDefined();
-      // Crucial: 3 completed sets must equal 3 in the denominator, NOT 15 (3 * 5)!
+      // Crucial: 3 completed sets must equal 3 in the denominator, NOT 9 (3 * 3)!
       expect(coverage.totalEligibleSets).toBe(3);
       expect(coverage.curatedSets).toBe(3);
       expect(coverage.inferredSets).toBe(0);
@@ -160,14 +160,10 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       // lats: 3 * 1.0 = 3.0 WSE
       // upper_back: 3 * 0.5 = 1.5 WSE
       // biceps: 3 * 0.5 = 1.5 WSE
-      // forearms: 3 * 0.25 = 0.75 WSE
-      // core: 3 * 0.25 = 0.75 WSE
       const stimulus = index.muscleStimulusByDate['2026-04-10'];
       expect(stimulus.lats).toBe(3.0);
       expect(stimulus.upper_back).toBe(1.5);
       expect(stimulus.biceps).toBe(1.5);
-      expect(stimulus.forearms).toBe(0.75);
-      expect(stimulus.core).toBe(0.75);
     });
 
     it('tracks mixed curated, inferred, and unclassified exercises transparently', () => {
@@ -202,6 +198,14 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       // Coverage = (1 curated + 1 inferred) / 3 total * 100 = 66.7%
       expect(balance.coverage.coveragePercent).toBe(66.7);
       expect(balance.coverage.unclassifiedSets).toBe(1);
+    });
+
+    it('returns coveragePercent as null when totalEligibleSets is 0 instead of false 100%', () => {
+      const emptyIndex = buildFitnessIndex([], defsMap, '2026-04-15');
+      const balance = selectMuscleBalanceForRange(emptyIndex, '2026-04-01', '2026-04-15');
+      expect(balance.coverage.totalEligibleSets).toBe(0);
+      expect(balance.coverage.coveragePercent).toBeNull();
+      expect(balance.totalAttributedWSE).toBe(0);
     });
   });
 
@@ -282,8 +286,8 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       const recovery = selectMuscleRecovery(index, '2026-04-14');
       const tricepItem = recovery.items.find(i => i.muscle === 'triceps')!;
 
-      // Residual = 1.0 * 1.0 + 1.0 * 0.5 + 1.0 * 0.25 = 1.75 -> rounded to 1.8
-      expect(tricepItem.residualStimulus).toBe(1.8);
+      // Residual = 1.0 * 1.0 + 1.0 * 0.5 + 1.0 * 0.25 = 1.75
+      expect(tricepItem.residualStimulus).toBe(1.75);
       expect(tricepItem.recentStimulus).toBe(3.0); // un-decayed total
       expect(tricepItem.relativeLabel).toBe('Today');
     });
@@ -377,6 +381,47 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       expect(index.setsByMuscle.Back).toBe(1);
       expect(index.lifetimeStats.currentStreak).toBe(2);
       expect(index.weightPRs.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('8. Conservative Back Region Inference Regressions', () => {
+    it('classifies "Lower Back" specifically as lower_back without generic upper_back or lats', () => {
+      const profile = inferMuscleProfileFromTarget('Lower Back');
+      expect(profile.source).toBe('inferred');
+      const muscles = profile.involvements.map(i => i.muscle);
+      expect(muscles).toEqual(['lower_back']);
+      expect(profile.involvements[0].role).toBe('primary');
+      expect(muscles).not.toContain('upper_back');
+      expect(muscles).not.toContain('lats');
+    });
+
+    it('classifies "Upper Back" specifically as upper_back without generic lats fallback', () => {
+      const profile = inferMuscleProfileFromTarget('Upper Back');
+      expect(profile.source).toBe('inferred');
+      const muscles = profile.involvements.map(i => i.muscle);
+      expect(muscles).toEqual(['upper_back']);
+      expect(profile.involvements[0].role).toBe('primary');
+      expect(muscles).not.toContain('lats');
+      expect(muscles).not.toContain('lower_back');
+    });
+
+    it('applies generic-back fallback to "Back" because no specific region was identified', () => {
+      const profile = inferMuscleProfileFromTarget('Back');
+      expect(profile.source).toBe('inferred');
+      const muscles = profile.involvements.map(i => i.muscle);
+      expect(muscles).toContain('upper_back');
+      expect(muscles).toContain('lats');
+      expect(muscles).not.toContain('lower_back');
+    });
+
+    it('classifies "Hamstrings/Back" with primary hamstrings and fallback back attribution without lower_back', () => {
+      const profile = inferMuscleProfileFromTarget('Hamstrings/Back');
+      expect(profile.source).toBe('inferred');
+      const muscles = profile.involvements.map(i => i.muscle);
+      expect(muscles).toContain('hamstrings');
+      expect(muscles).toContain('upper_back');
+      expect(muscles).toContain('lats');
+      expect(muscles).not.toContain('lower_back');
     });
   });
 });
