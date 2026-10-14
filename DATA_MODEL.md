@@ -189,6 +189,39 @@ export interface VersionedFitnessSnapshot {
 
 ---
 
+### 1.11 Derived Analytics Entities (`FitnessIndex` Extensions)
+
+The canonical index constructed in memory by `buildFitnessIndex()` in `src/utils/fitnessDerivedSelectors.ts` includes fine-grained muscle intelligence and workload recovery structures. These entities are **purely derived in-memory data structures** extending `FitnessIndex`; they require **zero changes to raw log storage schema, Firestore sync payloads, or migration versions**.
+
+#### A. 15 Canonical Anatomical Groups (`MuscleGroup`)
+Defined in `src/utils/muscleIntelligence.ts`:
+`'chest' | 'front_delts' | 'side_delts' | 'rear_delts' | 'lats' | 'upper_back' | 'lower_back' | 'biceps' | 'triceps' | 'forearms' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core'`
+
+#### B. Three-Tier Involvement Roles & Weighted Set Equivalents (WSE)
+- `primary`: 1.0 WSE
+- `secondary_strong`: 0.5 WSE
+- `secondary_moderate`: 0.25 WSE
+- Minor / Stabilizer: 0.0 WSE (excluded from attribution)
+
+#### C. Derived Index Fields
+```typescript
+export interface FitnessIndex {
+  // Existing canonical index fields ...
+  muscleStimulusByDate: Record<string, Record<MuscleGroup, number>>;
+  muscleAttributionCoverageByDate: Record<string, AttributionCoverageCounts>;
+  lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null>;
+}
+
+export interface AttributionCoverageCounts {
+  curatedSets: number;
+  inferredSets: number;
+  unclassifiedSets: number;
+  totalEligibleSets: number; // Denominator invariant: each completed set counted exactly once
+}
+```
+
+---
+
 ## 2. Field Invariants & Sanitization Bounds
 
 All inputs passing through JSON imports, network responses, and data mutations are validated via pure sanitization functions in `src/utils/fitnessCalculations.ts`:
@@ -262,7 +295,7 @@ All local persistence in GAINLOG is managed across browser `localStorage`.
 | Storage Key | Lifecycle & Ownership | Contents | Authoritative Source |
 |---|---|---|---|
 | **`gl_database_snapshot`** | Primary Canonical Store | JSON string of `VersionedFitnessSnapshot` (`{ schemaVersion: 2, timestamp, data }`) | `src/hooks/useFitnessData.ts` |
-| **`gl_snapshot_staging`** | Two-Phase Commit Buffer | Staged JSON string written and verified before removing staging | `src/hooks/useFitnessData.ts` |
+| **`gl_snapshot_staging`** | Snapshot Staging and Recovery Buffer | Staged JSON string written and verified before removing staging | `src/hooks/useFitnessData.ts` |
 | **`gl_corrupt_snapshot_backup`** | Quarantine Buffer | Quarantined JSON backup of corrupted/invalid snapshot detected during boot | `src/utils/fitnessMigration.ts` |
 | **`gl_exercise_definitions`** | Legacy Mirror Key | JSON array of `ExerciseDefinition[]` | `src/hooks/useFitnessData.ts` |
 | **`gl_workouts`** | Legacy Mirror Key | JSON array of `Workout[]` | `src/hooks/useFitnessData.ts` |
@@ -283,7 +316,7 @@ All local persistence in GAINLOG is managed across browser `localStorage`.
 
 ## 4. Durability, Staging & Crash Recovery Contract
 
-### A. Two-Phase Staging Protocol (`persistFitnessDatabase`)
+### A. Staged Snapshot Write and Recovery Protocol (`persistFitnessDatabase`)
 1. Serialize `VersionedFitnessSnapshot` to JSON.
 2. Write serialized string to `gl_snapshot_staging`.
 3. Write serialized string to canonical key `gl_database_snapshot`.

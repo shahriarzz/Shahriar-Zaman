@@ -115,6 +115,13 @@ GAINLOG is navigated via a fixed bottom navigation bar (and desktop header) feat
 - **Performance Score**:
   - Multi-factor score evaluating volume, intensity, frequency, and progressive overload over a rolling 30-day window compared to the preceding 30-day baseline.
   - Strict semantic handling: Displays `available: false` ("Data unavailable") when training history is insufficient, never falsely rendering score `0`.
+- **Muscle Balance & Recovery Analytics (`src/components/MuscleBalanceRecovery.tsx`)**:
+  - **15-Group Anatomical Distribution**: Calculates fine-grained muscle stimulus across 15 distinct muscle groups (`chest`, `front_delts`, `side_delts`, `rear_delts`, `lats`, `upper_back`, `lower_back`, `biceps`, `triceps`, `forearms`, `quads`, `hamstrings`, `glutes`, `calves`, `core`) using a three-tier Weighted Set Equivalents (WSE) model: Primary (1.0), Strong Secondary (0.5), and Moderate Secondary (0.25 WSE). Minor/stabilizer muscles are assigned 0.0 WSE and excluded.
+  - **Fingerprint-Guarded Curated Matching**: Built-in exercises (e1–e41) match curated profiles only when both ID and target fingerprint match. Modified targets fall back to conservative target-text inference.
+  - **Transparent Attribution Coverage**: Reports `(curated + inferred) / eligible completed sets * 100` with explicit breakdowns of curated, inferred, and unclassified counts. Each eligible set contributes to the denominator exactly once.
+  - **View All Expansion**: Defaults to top 6 muscle groups by WSE; expands to all 15 anatomical groups including zero-exposure groups to clearly expose unaddressed areas without conflating them with unclassified exercises.
+  - **14-Day Residual Stimulus Workload Model**: Computes exponentially decayed residual fatigue ($R_m = \sum_{d=0}^{13} \text{dailyWSE}_{m,d} \cdot 2^{-d / 2}$) consolidated per date over trailing 14 calendar dates. Plainly labeled as a recency-weighted workload heuristic, not measured physiological recovery.
+  - **Exposure Scope Separation**: Lifetime last exposure is preserved separately from the trailing 14-day window. Unaddressed muscles in the 14-day window show "No recent history" without implying the muscle has never been trained.
 
 ### 3.5 Manage & Vault (`src/components/ManageView.tsx`)
 - **Custom Exercise Library**: Search, add, edit, or delete custom exercise definitions with target muscle and equipment fields.

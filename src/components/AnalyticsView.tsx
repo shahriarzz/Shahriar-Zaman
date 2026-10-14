@@ -33,8 +33,10 @@ import {
   format,
   addMonths,
   subMonths,
+  subDays,
   isSameMonth
 } from 'date-fns';
+import { MuscleBalanceRecovery } from './MuscleBalanceRecovery';
 import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
@@ -134,6 +136,37 @@ export const AnalyticsView: React.FC = () => {
   const visibleExercises = showAllExercises
     ? aggregated.mostFrequentExercises
     : aggregated.mostFrequentExercises.slice(0, 3);
+
+  const muscleBalanceDateRange = useMemo(() => {
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    if (timeRange === '7d') {
+      return {
+        startDate: format(subDays(today, 6), 'yyyy-MM-dd'),
+        endDate: todayStr,
+        label: 'Last 7 Days'
+      };
+    }
+    if (timeRange === '30d') {
+      return {
+        startDate: format(subDays(today, 29), 'yyyy-MM-dd'),
+        endDate: todayStr,
+        label: 'Last 30 Days'
+      };
+    }
+    if (timeRange === '90d') {
+      return {
+        startDate: format(subDays(today, 89), 'yyyy-MM-dd'),
+        endDate: todayStr,
+        label: 'Last 90 Days'
+      };
+    }
+    return {
+      startDate: aggregated.firstLogDate || '1970-01-01',
+      endDate: todayStr,
+      label: 'All Time'
+    };
+  }, [timeRange, aggregated.firstLogDate]);
 
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
@@ -591,6 +624,20 @@ export const AnalyticsView: React.FC = () => {
             </Card>
           </Stack>
         </Stack>
+      </Section>
+
+      {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
+      <Section
+        eyebrow="Anatomical Distribution & Workload"
+        eyebrowColor="emerald"
+        title="Muscle Balance & Recovery"
+        padding="section"
+      >
+        <MuscleBalanceRecovery
+          startDate={muscleBalanceDateRange.startDate}
+          endDate={muscleBalanceDateRange.endDate}
+          timeRangeLabel={muscleBalanceDateRange.label}
+        />
       </Section>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}

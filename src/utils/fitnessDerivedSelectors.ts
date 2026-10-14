@@ -18,6 +18,7 @@ import {
 } from './fitnessCalculations';
 
 export type { SparklineData };
+
 import {
   createExerciseDefinitionMap,
   resolveExercise,
@@ -26,6 +27,50 @@ import {
   ResolvedExerciseMeta
 } from './exerciseResolver';
 import { calculateAdherence, calculateTrainingStreak, StreakInsight } from './trainingIntelligence';
+import {
+  MuscleGroup,
+  ALL_MUSCLE_GROUPS,
+  MUSCLE_GROUP_LABELS,
+  MuscleInvolvementRole,
+  MuscleInvolvement,
+  ROLE_WEIGHTS,
+  getRoleWeight,
+  AttributionSource,
+  ExerciseMuscleProfile,
+  AttributionCoverageCounts,
+  AttributionCoverageSummary,
+  MuscleGroupBalance,
+  MuscleBalanceResult,
+  MuscleRecoveryItem,
+  MuscleRecoveryResult,
+  resolveExerciseMuscleProfile,
+  selectMuscleBalanceForRange,
+  selectMuscleRecovery
+} from './muscleIntelligence';
+
+export type {
+  MuscleGroup,
+  MuscleInvolvementRole,
+  MuscleInvolvement,
+  AttributionSource,
+  ExerciseMuscleProfile,
+  AttributionCoverageCounts,
+  AttributionCoverageSummary,
+  MuscleGroupBalance,
+  MuscleBalanceResult,
+  MuscleRecoveryItem,
+  MuscleRecoveryResult
+};
+
+export {
+  ALL_MUSCLE_GROUPS,
+  MUSCLE_GROUP_LABELS,
+  ROLE_WEIGHTS,
+  getRoleWeight,
+  resolveExerciseMuscleProfile,
+  selectMuscleBalanceForRange,
+  selectMuscleRecovery
+};
 
 export const CYCLE_LENGTH = 8;
 
@@ -183,6 +228,9 @@ export interface FitnessIndex {
   lifetimeStats: LifetimeStats;
   weeklyVolumeMap: Record<string, number>;
   biggestWeek: { weekStr: string; volume: number };
+  muscleStimulusByDate: Record<string, Record<MuscleGroup, number>>;
+  muscleAttributionCoverageByDate: Record<string, AttributionCoverageCounts>;
+  lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null>;
 }
 
 /**
@@ -335,6 +383,14 @@ export function buildFitnessIndex(
     muscleOccurrence[cat] = new Set();
   });
 
+  const muscleStimulusByDate: Record<string, Record<MuscleGroup, number>> = {};
+  const muscleAttributionCoverageByDate: Record<string, AttributionCoverageCounts> = {};
+  const lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null> = {} as any;
+  ALL_MUSCLE_GROUPS.forEach(m => {
+    lifetimeLastTrainedDateByMuscle[m] = null;
+  });
+  const muscleProfileByExId = new Map<string, ExerciseMuscleProfile>();
+
   let totalLifetimeVolume = 0;
   let totalLifetimeSets = 0;
   let totalLifetimeMinutes = 0;
@@ -363,6 +419,23 @@ export function buildFitnessIndex(
         MUSCLE_CATEGORIES.forEach(cat => {
           muscleFrequencyByDate[log.date][cat] = 0;
         });
+      }
+
+      if (isCompleted) {
+        if (!muscleStimulusByDate[log.date]) {
+          muscleStimulusByDate[log.date] = {} as any;
+          ALL_MUSCLE_GROUPS.forEach(m => {
+            muscleStimulusByDate[log.date][m] = 0;
+          });
+        }
+        if (!muscleAttributionCoverageByDate[log.date]) {
+          muscleAttributionCoverageByDate[log.date] = {
+            curatedSets: 0,
+            inferredSets: 0,
+            unclassifiedSets: 0,
+            totalEligibleSets: 0
+          };
+        }
       }
     }
 
@@ -398,6 +471,40 @@ export function buildFitnessIndex(
 
         const doneSets = setList.filter(s => s && s.done);
         if (doneSets.length === 0) return;
+
+        // Resolve muscle profile once per exercise definition with fingerprint guard
+        let muscleProfile = muscleProfileByExId.get(normId);
+        if (!muscleProfile) {
+          const rawDef = defsMap.get(normId) || (exMeta ? { id: normId, name: exMeta.name, target: exMeta.target } : undefined);
+          muscleProfile = resolveExerciseMuscleProfile(rawDef);
+          muscleProfileByExId.set(normId, muscleProfile);
+        }
+
+        // Attribution coverage & stimulus accounting (each eligible set contributes to denominator exactly once)
+        if (log.date) {
+          const dateCoverage = muscleAttributionCoverageByDate[log.date];
+          if (dateCoverage) {
+            dateCoverage.totalEligibleSets += doneSets.length;
+            if (muscleProfile.source === 'curated') {
+              dateCoverage.curatedSets += doneSets.length;
+            } else if (muscleProfile.source === 'inferred') {
+              dateCoverage.inferredSets += doneSets.length;
+            } else {
+              dateCoverage.unclassifiedSets += doneSets.length;
+            }
+          }
+
+          const dayStimulus = muscleStimulusByDate[log.date];
+          if (dayStimulus && muscleProfile.involvements.length > 0) {
+            doneSets.forEach(() => {
+              muscleProfile.involvements.forEach(inv => {
+                const wse = getRoleWeight(inv.role);
+                dayStimulus[inv.muscle] = (dayStimulus[inv.muscle] || 0) + wse;
+                lifetimeLastTrainedDateByMuscle[inv.muscle] = log.date;
+              });
+            });
+          }
+        }
 
         totalLifetimeSets += doneSets.length;
         if (log.date) {
@@ -666,7 +773,10 @@ export function buildFitnessIndex(
     e1rmHistoryByExercise,
     lifetimeStats,
     weeklyVolumeMap,
-    biggestWeek
+    biggestWeek,
+    muscleStimulusByDate,
+    muscleAttributionCoverageByDate,
+    lifetimeLastTrainedDateByMuscle
   };
 }
 
