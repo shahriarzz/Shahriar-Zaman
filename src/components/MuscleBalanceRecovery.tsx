@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { ChevronDown, ChevronUp, Activity, Layers, Info } from 'lucide-react';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
@@ -41,9 +42,10 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
     return selectMuscleBalanceForRange(index, startDate, endDate);
   }, [index, startDate, endDate]);
 
-  // Compute 14-day Recovery Context from referenceDate (or today)
+  // Compute 14-day Recovery Context from referenceDate (or today in caller)
   const recoveryResult = useMemo(() => {
-    return selectMuscleRecovery(index, referenceDate);
+    const validRef = referenceDate || format(new Date(), 'yyyy-MM-dd');
+    return selectMuscleRecovery(index, validRef);
   }, [index, referenceDate]);
 
   const { allGroups, totalAttributedWSE, coverage } = balanceResult;
@@ -54,9 +56,9 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
     return Math.max(...allGroups.map(g => g.wse), 1);
   }, [allGroups]);
 
-  const maxResidual = useMemo(() => {
-    return Math.max(...recoveryResult.items.map(item => item.residualStimulus), 1);
-  }, [recoveryResult.items]);
+  // Use authoritative peak directly from recoveryResult
+  const maxResidual = recoveryResult.maxResidualStimulus;
+  const hasAnyResidual = maxResidual > 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -80,7 +82,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 </h3>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Multi-muscle attribution · {timeRangeLabel}
+                Multi-muscle attribution · {timeRangeLabel} · % of attributed WSE
               </p>
             </div>
 
@@ -124,12 +126,17 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
             </div>
 
             {showCoverageDetail && (
-              <div className="mt-2 pt-2 border-t border-zinc-800 text-[11px] text-zinc-400 flex flex-wrap items-center gap-2">
-                <span>Curated: <strong className="text-zinc-200 font-mono">{coverage.curatedSets}</strong></span>
-                <span aria-hidden="true" className="text-zinc-600">·</span>
-                <span>Inferred: <strong className="text-zinc-200 font-mono">{coverage.inferredSets}</strong></span>
-                <span aria-hidden="true" className="text-zinc-600">·</span>
-                <span>Unclassified: <strong className="text-zinc-400 font-mono">{coverage.unclassifiedSets}</strong></span>
+              <div className="mt-2 pt-2 border-t border-zinc-800 text-[11px] text-zinc-400 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>Curated: <strong className="text-zinc-200 font-mono">{coverage.curatedSets}</strong></span>
+                  <span aria-hidden="true" className="text-zinc-600">·</span>
+                  <span>Inferred: <strong className="text-zinc-200 font-mono">{coverage.inferredSets}</strong></span>
+                  <span aria-hidden="true" className="text-zinc-600">·</span>
+                  <span>Unclassified: <strong className="text-zinc-400 font-mono">{coverage.unclassifiedSets}</strong></span>
+                </div>
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  Attribution coverage measures how many eligible sets could be mapped to muscles; it does not measure the accuracy of the underlying biomechanical mapping.
+                </p>
               </div>
             )}
           </div>
@@ -261,60 +268,66 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
             Recency-weighted residual workload estimate · Derived from completed sets · Not measured physiological recovery.
           </p>
 
-          {/* Recovery Item List */}
-          <div className="space-y-3">
-            {recoveryResult.items.slice(0, 6).map((item, idx) => {
-              const hasRecent = item.lastTrainedInWindow !== null;
-              const fillPercent = maxResidual > 0 ? (item.residualStimulus / maxResidual) * 100 : 0;
+          {/* Recovery Item List or Empty State */}
+          {!hasAnyResidual ? (
+            <div className="py-8 text-center text-xs text-zinc-500">
+              No recent stimulus recorded in the 14-day window.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recoveryResult.items.slice(0, 6).map((item, idx) => {
+                const hasRecent = item.lastTrainedInWindow !== null;
+                const fillPercent = maxResidual > 0 ? (item.residualStimulus / maxResidual) * 100 : 0;
 
-              return (
-                <div key={item.muscle} className="group">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-4 font-mono text-[10px] text-zinc-500 tabular-nums text-right">
-                        #{idx + 1}
-                      </span>
-                      <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
-                        {item.label}
-                      </span>
+                return (
+                  <div key={item.muscle} className="group">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 font-mono text-[10px] text-zinc-500 tabular-nums text-right">
+                          #{idx + 1}
+                        </span>
+                        <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
+                          {item.label}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-right">
+                        {/* Recency Context */}
+                        <span className={cn(
+                          "text-[11px] font-mono tabular-nums",
+                          hasRecent ? "text-zinc-300" : "text-zinc-500"
+                        )}>
+                          {item.relativeLabel}
+                        </span>
+
+                        {/* Residual Score with 2-decimal precision */}
+                        <span className="w-18 font-mono font-bold text-xs text-emerald-400 tabular-nums">
+                          {item.residualStimulus.toFixed(2)} <span className="text-[10px] text-zinc-500 font-normal">res</span>
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 text-right">
-                      {/* Recency Context */}
-                      <span className={cn(
-                        "text-[11px] font-mono tabular-nums",
-                        hasRecent ? "text-zinc-300" : "text-zinc-500"
-                      )}>
-                        {item.relativeLabel}
-                      </span>
-
-                      {/* Residual Score */}
-                      <span className="w-16 font-mono font-bold text-xs text-emerald-400 tabular-nums">
-                        {item.residualStimulus.toFixed(1)} <span className="text-[10px] text-zinc-500 font-normal">res</span>
-                      </span>
+                    {/* Activity Bar */}
+                    <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
+                      {item.residualStimulus > 0 && (
+                        <div
+                          className="h-full bg-emerald-500/80 group-hover:bg-emerald-400 transition-all duration-300 rounded-full"
+                          style={{ width: `${Math.max(fillPercent, 3)}%` }}
+                        />
+                      )}
                     </div>
                   </div>
-
-                  {/* Activity Bar */}
-                  <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
-                    {item.residualStimulus > 0 && (
-                      <div
-                        className="h-full bg-emerald-500/80 group-hover:bg-emerald-400 transition-all duration-300 rounded-full"
-                        style={{ width: `${Math.max(fillPercent, 3)}%` }}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer Context / Lifetime History Info */}
         <div className="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
           <span>Decay model: 2-day half-life exponential residual</span>
           <span className="font-mono text-zinc-400">
-            Peak: {recoveryResult.items[0]?.label || 'None'}
+            {hasAnyResidual ? `Peak: ${recoveryResult.items[0]?.label}` : 'No recent stimulus'}
           </span>
         </div>
       </Card>

@@ -424,4 +424,128 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       expect(muscles).not.toContain('lower_back');
     });
   });
+
+  describe('9. Deterministic Date Validation & Error Rejection Contract', () => {
+    const emptyIndex = {
+      muscleStimulusByDate: {},
+      lifetimeLastTrainedDateByMuscle: {} as any,
+    };
+
+    it('rejects missing or falsy reference dates with TypeError', () => {
+      expect(() => selectMuscleRecovery(emptyIndex, '' as any)).toThrow(TypeError);
+      expect(() => selectMuscleRecovery(emptyIndex, null as any)).toThrow(TypeError);
+      expect(() => selectMuscleRecovery(emptyIndex, undefined as any)).toThrow(TypeError);
+    });
+
+    it('rejects invalid date format strings with RangeError', () => {
+      expect(() => selectMuscleRecovery(emptyIndex, 'not-a-date')).toThrow(RangeError);
+      expect(() => selectMuscleRecovery(emptyIndex, '2026/04/14')).toThrow(RangeError);
+      expect(() => selectMuscleRecovery(emptyIndex, '2026-4-14')).toThrow(RangeError);
+    });
+
+    it('rejects calendar-invalid dates (e.g. Feb 31 or April 31) with RangeError', () => {
+      expect(() => selectMuscleRecovery(emptyIndex, '2026-02-31')).toThrow(RangeError);
+      expect(() => selectMuscleRecovery(emptyIndex, '2026-04-31')).toThrow(RangeError);
+    });
+
+    it('rejects invalid Date instances with RangeError', () => {
+      expect(() => selectMuscleRecovery(emptyIndex, new Date('invalid'))).toThrow(RangeError);
+    });
+
+    it('is purely deterministic: identical inputs yield identical outputs', () => {
+      const res1 = selectMuscleRecovery(emptyIndex, '2026-04-14');
+      const res2 = selectMuscleRecovery(emptyIndex, '2026-04-14');
+      expect(res1).toEqual(res2);
+      expect(res1.referenceDate).toBe('2026-04-14');
+      expect(res1.windowEndDate).toBe('2026-04-14');
+      expect(res1.windowStartDate).toBe('2026-04-01');
+      expect(res1.maxResidualStimulus).toBe(0);
+    });
+
+    it('preserves small residual values with full precision for sorting and 2-decimal display', () => {
+      // 1 set of moderate secondary (0.25 WSE) trained 4 days ago (half-life = 2 days -> decay = 0.25)
+      // 0.25 * 0.25 = 0.0625 -> rounds to 0.06
+      const smallIndex = {
+        muscleStimulusByDate: {
+          '2026-04-10': { side_delts: 0.25 } as any,
+        },
+        lifetimeLastTrainedDateByMuscle: { side_delts: '2026-04-10' } as any,
+      };
+      const res = selectMuscleRecovery(smallIndex, '2026-04-14');
+      const sideDelts = res.items.find(i => i.muscle === 'side_delts')!;
+      expect(sideDelts.residualStimulus).toBe(0.06);
+      expect(res.maxResidualStimulus).toBe(0.06);
+    });
+  });
+
+  describe('10. Curated Profile Registry Quality Audit & Muscle Uniqueness', () => {
+    const validRoles = new Set(['primary', 'secondary_strong', 'secondary_moderate']);
+
+    it('contains all 41 built-in exercise profiles without duplicates or stabilizer inflation', () => {
+      const profileKeys = Object.keys(CURATED_EXERCISE_PROFILES);
+      expect(profileKeys.length).toBe(41);
+
+      profileKeys.forEach(exId => {
+        const profile = CURATED_EXERCISE_PROFILES[exId];
+        const def = INITIAL_EXERCISE_DEFINITIONS.find(d => d.id === exId);
+        expect(def).toBeDefined();
+
+        // Target fingerprint matches definition
+        expect(profile.targetFingerprint).toBe(normalizeTargetFingerprint(def!.target));
+
+        // Must have at least 1 involvement
+        expect(profile.involvements.length).toBeGreaterThan(0);
+
+        // Muscle uniqueness within profile (no duplicates)
+        const seenMuscles = new Set<string>();
+        profile.involvements.forEach(inv => {
+          expect(seenMuscles.has(inv.muscle)).toBe(false);
+          seenMuscles.add(inv.muscle);
+
+          // Role validity
+          expect(validRoles.has(inv.role)).toBe(true);
+
+          // Valid canonical muscle group
+          expect(ALL_MUSCLE_GROUPS).toContain(inv.muscle);
+        });
+      });
+    });
+
+    it('safely falls back to inference when exercise target was modified', () => {
+      const modifiedDef = {
+        id: 'e1',
+        name: 'Incline DB Press',
+        target: 'Biceps Isolation', // modified from 'Upper Chest'
+      };
+      const resolved = resolveExerciseMuscleProfile(modifiedDef);
+      expect(resolved.source).toBe('inferred');
+      expect(resolved.involvements.map(i => i.muscle)).toContain('biceps');
+    });
+  });
+
+  describe('11. Top 6 Groups vs Full 15 Groups Separation Contract', () => {
+    it('returns top 6 ranked in groups and full 15 in allGroups', () => {
+      const log: SessionLog = {
+        id: 'log-full',
+        workoutId: 'w',
+        date: '2026-04-10',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          e1: [{ id: 's1', weight: '60', reps: '10', done: true }],
+          e7: [{ id: 's2', weight: '50', reps: '10', done: true }],
+          e14: [{ id: 's3', weight: '30', reps: '10', done: true }],
+          e15: [{ id: 's4', weight: '80', reps: '10', done: true }],
+        },
+      };
+
+      const index = buildFitnessIndex([log], defsMap, '2026-04-14');
+      const balance = selectMuscleBalanceForRange(index, '2026-04-01', '2026-04-14');
+
+      expect(balance.groups).toHaveLength(6);
+      expect(balance.allGroups).toHaveLength(15);
+      // groups is exactly the top 6 slice of allGroups
+      expect(balance.groups).toEqual(balance.allGroups.slice(0, 6));
+    });
+  });
 });

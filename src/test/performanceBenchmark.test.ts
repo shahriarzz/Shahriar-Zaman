@@ -15,7 +15,9 @@ import {
   selectMuscleDistribution,
   selectExerciseFrequency,
   selectExercise1RMProgression,
-  selectTimeRangeAnalytics
+  selectTimeRangeAnalytics,
+  selectMuscleBalanceForRange,
+  selectMuscleRecovery
 } from '../utils/fitnessDerivedSelectors';
 import {
   createExerciseDefinitionMap,
@@ -155,6 +157,37 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         expect(index.sortedLogsDescending).toHaveLength(count);
         expect(index.lifetimeStats.totalSessions).toBe(count);
         expect(index.lifetimeStats.totalVolume).toBeGreaterThan(0);
+
+        // Verify muscle attribution index structures are populated
+        expect(index.muscleStimulusByDate).toBeDefined();
+        expect(index.muscleAttributionCoverageByDate).toBeDefined();
+        expect(index.lifetimeLastTrainedDateByMuscle).toBeDefined();
+
+        // Regression guard: index build must stay within performance budget
+        const budgetMs = count === 5000 ? 3000 : count === 1000 ? 1000 : 300;
+        expect(durationMs).toBeLessThan(budgetMs);
+      });
+
+      it(`measures Muscle Intelligence selectors execution with ${count} logs`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
+
+        const t0 = performance.now();
+        const balance30d = selectMuscleBalanceForRange(index, '2024-12-01', '2025-01-01');
+        const balanceAll = selectMuscleBalanceForRange(index, '2010-01-01', '2025-01-01');
+        const recovery = selectMuscleRecovery(index, '2025-01-01');
+        const t1 = performance.now();
+        const durationMs = t1 - t0;
+
+        console.log(`[PERF BENCHMARK] Muscle Intelligence Selectors (${count} logs): ${durationMs.toFixed(2)} ms`);
+
+        expect(balance30d.groups).toHaveLength(6);
+        expect(balance30d.allGroups).toHaveLength(15);
+        expect(balanceAll.allGroups).toHaveLength(15);
+        expect(recovery.items).toHaveLength(15);
+
+        // Pure selector pass budget: ensures no O(N^2) regressions
+        const budgetMs = count === 5000 ? 300 : count === 1000 ? 100 : 50;
+        expect(durationMs).toBeLessThan(budgetMs);
       });
 
       it(`measures canonical selectors execution with ${count} logs`, () => {

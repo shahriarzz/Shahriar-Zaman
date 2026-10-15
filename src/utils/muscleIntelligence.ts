@@ -736,13 +736,40 @@ export function selectMuscleRecovery(
     muscleStimulusByDate: Record<string, Record<MuscleGroup, number>>;
     lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null>;
   },
-  referenceDateInput: Date | string = new Date()
+  referenceDateInput: Date | string
 ): MuscleRecoveryResult {
-  const refDateObj = typeof referenceDateInput === 'string'
-    ? parseISO(referenceDateInput)
-    : referenceDateInput;
-  const validRef = isValid(refDateObj) ? refDateObj : new Date();
-  const refDateStr = format(validRef, 'yyyy-MM-dd');
+  if (!referenceDateInput) {
+    throw new TypeError('selectMuscleRecovery requires an explicit referenceDate (Date instance or YYYY-MM-DD string)');
+  }
+
+  let validRef: Date;
+  let refDateStr: string;
+
+  if (typeof referenceDateInput === 'string') {
+    const trimmed = referenceDateInput.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      throw new RangeError(`Invalid reference date format: "${referenceDateInput}". Expected YYYY-MM-DD.`);
+    }
+    const parsed = parseISO(trimmed);
+    if (!isValid(parsed) || isNaN(parsed.getTime())) {
+      throw new RangeError(`Invalid reference date: "${referenceDateInput}".`);
+    }
+    const formatted = format(parsed, 'yyyy-MM-dd');
+    if (formatted !== trimmed) {
+      throw new RangeError(`Calendar invalid reference date: "${referenceDateInput}" (resolved to ${formatted}).`);
+    }
+    validRef = parsed;
+    refDateStr = formatted;
+  } else if (referenceDateInput instanceof Date) {
+    if (!isValid(referenceDateInput) || isNaN(referenceDateInput.getTime())) {
+      throw new RangeError('Invalid Date object provided to selectMuscleRecovery.');
+    }
+    validRef = referenceDateInput;
+    refDateStr = format(validRef, 'yyyy-MM-dd');
+  } else {
+    throw new TypeError(`Unexpected referenceDate type: ${typeof referenceDateInput}. Expected Date or string.`);
+  }
+
   const windowStartDate = format(subDays(validRef, 13), 'yyyy-MM-dd');
 
   const residualTotals: Record<MuscleGroup, number> = {} as any;
