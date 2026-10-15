@@ -163,8 +163,8 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         expect(index.muscleAttributionCoverageByDate).toBeDefined();
         expect(index.lifetimeLastTrainedDateByMuscle).toBeDefined();
 
-        // Regression guard: index build must stay within performance budget
-        const budgetMs = count === 5000 ? 3000 : count === 1000 ? 1000 : 300;
+        // Regression guard: index build must stay within tightened performance budget
+        const budgetMs = count === 5000 ? 1000 : count === 1000 ? 350 : 150;
         expect(durationMs).toBeLessThan(budgetMs);
       });
 
@@ -186,7 +186,7 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         expect(recovery.items).toHaveLength(15);
 
         // Pure selector pass budget: ensures no O(N^2) regressions
-        const budgetMs = count === 5000 ? 300 : count === 1000 ? 100 : 50;
+        const budgetMs = count === 5000 ? 60 : count === 1000 ? 30 : 20;
         expect(durationMs).toBeLessThan(budgetMs);
       });
 

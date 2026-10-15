@@ -33,7 +33,7 @@ Before proposing, modifying, or executing any code or architecture change, the A
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 2. Read Relevant Sections of ARCHITECTURE.md                           │
-│    Inspect system map, downward layer rules, and 14 testable invariants│
+│    Inspect system map, downward layer rules, and 15 testable invariants│
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
@@ -63,7 +63,7 @@ Before proposing, modifying, or executing any code or architecture change, the A
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 7. Check Invariant Statuses Prior to Proposal                          │
-│    Ensure proposed changes do not violate any of the 14 invariants     │
+│    Ensure proposed changes do not violate any of the 15 invariants     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,7 +80,7 @@ Before proposing, modifying, or executing any code or architecture change, the A
 |---|---|---|---|
 | **1** | **Persistence & Snapshot Durability** | `src/hooks/useFitnessData.ts`<br>`src/utils/fitnessMigration.ts` | Invariant 2 (Snapshot Durability & Two-Phase Staging)<br>Invariant 8 (Snapshot Self-Healing & Quarantine) |
 | **2** | **Session Completion Gate** | `src/components/SessionView.tsx`<br>`src/hooks/useFitnessLogs.ts`<br>`src/hooks/useActiveSession.ts` | Invariant 3 (Session Completion Synchronous Verification)<br>Invariant 5 (Pre-Session PR Isolation & Consolidation) |
-| **3** | **Canonical Derived Pipeline & Indexing** | `src/utils/fitnessDerivedSelectors.ts`<br>`src/context/FitnessDerivedContext.tsx` | Invariant 1 (Single Canonical State Store)<br>Invariant 4 (Complete Session Predicate)<br>Invariant 14 (Performance & Algorithmic Reality) |
+| **3** | **Canonical Derived Pipeline & Indexing** | `src/utils/fitnessDerivedSelectors.ts`<br>`src/context/FitnessDerivedContext.tsx` | Invariant 1 (Single Canonical State Store)<br>Invariant 4 (Complete Session Predicate)<br>Invariant 14 (Performance & Algorithmic Reality)<br>Invariant 15 (Deterministic Muscle Intelligence & Selector Purity) |
 | **4** | **Training Intelligence & Adherence** | `src/utils/trainingIntelligence.ts`<br>`src/utils/fitnessCalculations.ts` | Invariant 6 (8-Day Date-Based Modulo Progression)<br>Invariant 7 (Rest-Day Natural Advancement & Bonus Isolation) |
 | **5** | **Cloud Synchronization & Tombstones** | `src/services/fitnessFirestore.ts`<br>`src/hooks/useFitnessSync.ts`<br>`src/utils/fitnessSyncHelpers.ts` | Invariant 10 (Deterministic Conflict Resolution & Local Bias)<br>Invariant 11 (Batch Limits & Network Retries)<br>Invariant 12 (Account Isolation & Tombstone Scoping) |
 | **6** | **Schema Versioning & Migrations** | `src/types/fitness.ts`<br>`src/utils/fitnessMigration.ts` | Invariant 9 (Deterministic Two-Phase Migration Contract) |
@@ -169,6 +169,7 @@ Before declaring any task complete:
 | **Training Intelligence** | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`<br>`src/test/recoveryCycleAdvancement.test.ts` | 8-day cycle modulo arithmetic, rest day automatic progression, streak across recovery days |
 | **Architecture Boundaries** | `src/test/architectureContract.test.ts` | Strict downward dependency imports (zero UI/hooks in calculations) |
 | **Performance Benchmarks** | `src/test/performanceBenchmark.test.ts` | Algorithmic reality: O(N log N + S + E log E + D log D) for 100, 1,000, and 5,000 logs |
+| **Muscle Intelligence** | `src/test/muscleIntelligence.test.ts`<br>`src/test/muscleBalanceRecovery.test.tsx` | Invariant 15: Deterministic reference date validation, full internal precision for residual stimulus, 15 anatomical groups, unclassified fallback, WSE attribution |
 
 ---
 

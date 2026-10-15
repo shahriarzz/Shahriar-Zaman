@@ -28,7 +28,7 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
     container.remove();
   });
 
-  function renderWithIndex(index: any, props: { startDate: string; endDate: string; referenceDate?: string }) {
+  function renderWithIndex(index: any, props: { startDate: string; endDate: string; referenceDate: string | Date }) {
     act(() => {
       root.render(
         <FitnessDerivedContext.Provider value={{ index } as any}>
@@ -36,7 +36,7 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
             startDate={props.startDate}
             endDate={props.endDate}
             timeRangeLabel="Last 14 Days"
-            referenceDate={props.referenceDate || '2026-04-14'}
+            referenceDate={props.referenceDate}
           />
         </FitnessDerivedContext.Provider>
       );
@@ -45,7 +45,7 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
 
   it('renders clean dash and empty state when 0 eligible sets exist', () => {
     const emptyIndex = buildFitnessIndex([], defsMap, '2026-04-14');
-    renderWithIndex(emptyIndex, { startDate: '2026-04-01', endDate: '2026-04-14' });
+    renderWithIndex(emptyIndex, { startDate: '2026-04-01', endDate: '2026-04-14', referenceDate: '2026-04-14' });
 
     // Coverage should show dash, not "0 / 0 sets (100%)"
     expect(container.textContent).toContain('Attribution Coverage:');
@@ -77,7 +77,7 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
     };
 
     const index = buildFitnessIndex([log], customDefsMap, '2026-04-14');
-    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14' });
+    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14', referenceDate: '2026-04-14' });
 
     // Completed sets exist, but 0 attribution
     expect(container.textContent).toContain('Completed sets exist, but no muscle attribution could be assigned.');
@@ -97,12 +97,12 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
     };
 
     const index = buildFitnessIndex([log], defsMap, '2026-04-14');
-    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14' });
+    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14', referenceDate: '2026-04-14' });
 
     // Before clicking Details
     expect(container.textContent).not.toContain('Curated:');
 
-    // Click Details button
+    // Click Details button (Button primitive)
     const detailsBtn = container.querySelector('button[aria-label="Toggle coverage breakdown details"]') as HTMLButtonElement;
     expect(detailsBtn).toBeDefined();
 
@@ -140,7 +140,7 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
     };
 
     const index = buildFitnessIndex([log], defsMap, '2026-04-14');
-    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14' });
+    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14', referenceDate: '2026-04-14' });
 
     // Initial state: top 6 visible
     expect(container.textContent).toContain('View All (15 Anatomical Groups)');
@@ -188,5 +188,54 @@ describe('MuscleBalanceRecovery Component UI & Interaction Suite', () => {
     // Peak label shows authoritative top muscle
     expect(container.textContent).toContain('Peak: Triceps');
     expect(container.textContent).not.toContain('No recent stimulus');
+  });
+
+  it('preserves small positive residual values and displays peak rather than zero-stimulus empty state', () => {
+    // 1 set trained 13 days ago: small residual stimulus (~0.0028 WSE)
+    // Rounds to 0.00 for display, but hasAnyResidual is true and Peak is identified
+    const logSmall: SessionLog = {
+      id: 'log-small-residual',
+      workoutId: 'w',
+      date: '2026-04-01', // Day 13 relative to 2026-04-14
+      complete: true,
+      durationMinutes: 30,
+      sets: {
+        e4: [{ id: 's1', weight: '10', reps: '12', done: true }], // e4 is Cable Lateral Raise: side_delts (primary)
+      },
+    };
+
+    const index = buildFitnessIndex([logSmall], defsMap, '2026-04-14');
+    renderWithIndex(index, { startDate: '2026-04-01', endDate: '2026-04-14', referenceDate: '2026-04-14' });
+
+    // Must NOT show "No recent stimulus recorded in the 14-day window"
+    expect(container.textContent).not.toContain('No recent stimulus recorded in the 14-day window.');
+
+    // Peak footer must identify the muscle with residual stimulus
+    expect(container.textContent).toContain('Peak: Side Delts');
+    expect(container.textContent).not.toContain('No recent stimulus');
+
+    // Displayed value rounds to 0.00 res
+    expect(container.textContent).toContain('0.00 res');
+  });
+
+  it('enforces component contract requiring explicit referenceDate without silent fallbacks', () => {
+    const emptyIndex = buildFitnessIndex([], defsMap, '2026-04-14');
+
+    // Supports explicit Date instance
+    renderWithIndex(emptyIndex, {
+      startDate: '2026-04-01',
+      endDate: '2026-04-14',
+      referenceDate: new Date('2026-04-14T00:00:00Z'),
+    });
+    expect(container.textContent).toContain('No recent stimulus');
+
+    // Rejects invalid date string by throwing RangeError via deterministic selector contract
+    expect(() => {
+      renderWithIndex(emptyIndex, {
+        startDate: '2026-04-01',
+        endDate: '2026-04-14',
+        referenceDate: 'invalid-date',
+      });
+    }).toThrow(RangeError);
   });
 });

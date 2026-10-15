@@ -13,7 +13,7 @@ Before detailing the contracts, the following classification records the verific
 
 | Claim Category | Prior Claim | Verified Reality in Implementation | Classification |
 |---|---|---|---|
-| **Indexing Performance** | "Runs in linear time O(N), executing in <40 ms for 5,000 logs" | In `buildFitnessIndex()`: input logs are sorted via O(N log N), sets are traversed in O(S), and exercise/PR lists are sorted in O(E log E). Benchmark in `performanceBenchmark.test.ts` yields ~22.8 ms (100 logs), ~63.8 ms (1,000 logs), and ~247.1 ms (5,000 logs). The sub-40 ms claim for 5,000 logs is contradicted by empirical measurements. | **STALE / CORRECTED** |
+| **Indexing Performance** | "Runs in linear time O(N), executing in <40 ms for 5,000 logs" | In `buildFitnessIndex()`: input logs are sorted via O(N log N), sets are traversed in O(S), and exercise/PR lists are sorted in O(E log E). Benchmark in `performanceBenchmark.test.ts` yields ~33 ms (100 logs), ~98 ms (1,000 logs), and ~341 ms (5,000 logs). The sub-40 ms claim for 5,000 logs is contradicted by empirical measurements. | **STALE / CORRECTED** |
 | **Indexing Structure** | "Single-pass index traversal over session logs" | Initial pass iterates chronologically over valid sorted logs to populate exercise maps, PR maps, date aggregations, and lifetime counts without secondary full log passes. | **SUPPORTED** |
 | **Completion Predicate** | "Strictly checks `log.complete === true`" | Enforced in `src/utils/fitnessCalculations.ts` (`isCompletedSession`), filtering invalid truthy values (`"true"`, `1`). Excludes incomplete sessions across all selectors and derived indices. | **SUPPORTED** |
 | **PR Pipeline** | "Single PR pipeline and event count" | Historical PR indexing in `buildFitnessIndex()` tracks separate `weightPR` and `e1RMPR` records. Pre-session comparison in `calculateSessionPRs()` snapshots against pre-session index. Session summary consolidates dual PRs into exactly 1 visible event. | **SUPPORTED & CLARIFIED** |
@@ -349,8 +349,8 @@ Cycle Day (1-8):
 | 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Staged writes verify `gl_database_snapshot` before clearing `gl_snapshot_staging`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts` | **VERIFIED & TESTED** |
 | 12 | **Account Isolation & Tombstone Scoping**: Tombstones are scoped to Firebase UID (`gl_deleted_ids_${uid}`). Logging out or switching accounts clears tombstones and isolates storage. | `src/utils/fitnessSyncHelpers.ts`, `src/hooks/useFitnessSync.ts` | `src/test/dataSyncAndIsolationRegression.test.ts`, `src/test/lifecycleDestructiveSyncBoundary.test.ts` | **VERIFIED & TESTED** |
 | 13 | **Token & Primitive Ownership**: Design tokens in `src/styles/tokens.ts` and primitives in `src/components/ui/` own presentation rules. Modals trap focus and restore scroll cleanly. Pure calculations never import UI. | `src/styles/tokens.ts`, `src/components/ui/` | `src/test/statCardRegression.test.tsx`, `src/test/architectureContract.test.ts` | **VERIFIED & TESTED** |
-| 14 | **Performance & Algorithmic Complexity**: `buildFitnessIndex()` runs in O(N log N + S + E log E + D log D) time. Benchmarks demonstrate ~23 ms for 100 logs, ~64 ms for 1,000 logs, and ~247 ms for 5,000 logs on standard V8. Downstream selectors execute in <1 ms. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/performanceBenchmark.test.ts` | **MEASURED & BENCHMARKED (QUALIFIED)** |
-| 15 | **Deterministic Muscle Intelligence & Selector Purity**: `selectMuscleRecovery()` and `selectMuscleBalanceForRange()` are strictly deterministic. `selectMuscleRecovery()` requires an explicit reference date, rejects invalid format or calendar dates (`RangeError`/`TypeError`) without fallback to `new Date()`, and evaluates the 14-day trailing window against that date. `selectMuscleBalanceForRange()` returns null coverage when eligible sets are zero. | `src/utils/muscleIntelligence.ts` | `src/test/muscleIntelligence.test.ts`, `src/test/muscleBalanceRecovery.test.tsx` | **VERIFIED & TESTED** |
+| 14 | **Performance & Algorithmic Complexity**: `buildFitnessIndex()` runs in O(N log N + S + E log E + D log D) time. Benchmarks demonstrate ~33 ms for 100 logs, ~98 ms for 1,000 logs, and ~341 ms for 5,000 logs on standard V8. Downstream selectors execute in <1 ms (Muscle Intelligence selectors in ~3-9 ms). | `src/utils/fitnessDerivedSelectors.ts` | `src/test/performanceBenchmark.test.ts` | **MEASURED & BENCHMARKED (QUALIFIED)** |
+| 15 | **Deterministic Muscle Intelligence & Selector Purity**: `selectMuscleRecovery()` and `selectMuscleBalanceForRange()` are strictly deterministic. `selectMuscleRecovery()` requires an explicit reference date, rejects invalid format or calendar dates (`RangeError`/`TypeError`) without fallback to `new Date()`, and evaluates the 14-day trailing window against that date with full internal floating-point precision for residual values, maximum determination, and ranking. `selectMuscleBalanceForRange()` strictly validates date formats, calendar validity, and rejects reversed date ranges (`startDate > endDate`), returning null coverage when eligible sets are zero. | `src/utils/muscleIntelligence.ts` | `src/test/muscleIntelligence.test.ts`, `src/test/muscleBalanceRecovery.test.tsx` | **VERIFIED & TESTED** |
 
 ---
 
@@ -363,7 +363,7 @@ Any engineer or AI coding agent modifying the codebase must treat a proposed mod
 4. Alters persistence, snapshot staging, sync retry, or conflict resolution behavior.
 5. Modifies public interfaces of `FitnessContext` or `FitnessDerivedContext`.
 6. Changes calculation semantics for volume, e1RM, streaks, adherence, or performance scores.
-7. Modifies or weakens any of the 14 testable invariants above.
+7. Modifies or weakens any of the 15 testable invariants above.
 
 ### A. Mandatory Stop-and-Report Gate (Unauthorized Requests)
 
@@ -401,7 +401,7 @@ GAINLOG enforces a consolidated 4-document core documentation system alongside `
 | Document | Role & Authority | Primary Responsibilities |
 |---|---|---|
 | **`PRD.md`** | Canonical Product Source of Truth | Feature requirements, target personas, 8-day cycle protocol, PR rules, UX workflows, non-goals. |
-| **`ARCHITECTURE.md`** | Canonical System & Technical Contract | System map, layer hierarchy, downward dependency rules, 14 testable invariants, change protocol. |
+| **`ARCHITECTURE.md`** | Canonical System & Technical Contract | System map, layer hierarchy, downward dependency rules, 15 testable invariants, change protocol. |
 | **`AGENTS.md`** | AI Developer Operating Contract | Mandatory reading order, 6 high-risk subsystems, stop-and-approve gating, verification checklists. |
 | **`DATA_MODEL.md`** | Domain Entity & Storage Contract | TypeScript schemas, validation bounds, storage keys (`gl_database_snapshot`), migrations, Firestore model. |
 | **`security_spec.md`** | Security & Isolation Specification | Server-side Firestore rules (`/users/{uid}/**`), client-side sanitization, account segregation. |

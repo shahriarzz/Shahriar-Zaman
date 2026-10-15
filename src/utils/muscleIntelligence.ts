@@ -638,6 +638,29 @@ export interface MuscleRecoveryResult {
   maxResidualStimulus: number;
 }
 
+/**
+ * Strictly validates a YYYY-MM-DD date string for format and calendar validity.
+ * Rejects invalid types with TypeError and invalid format/calendar dates with RangeError.
+ */
+export function validateDateString(dateInput: string, paramName: string): { parsed: Date; formatted: string } {
+  if (typeof dateInput !== 'string') {
+    throw new TypeError(`${paramName} must be a string in YYYY-MM-DD format`);
+  }
+  const trimmed = dateInput.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new RangeError(`Invalid ${paramName} format: "${dateInput}". Expected YYYY-MM-DD.`);
+  }
+  const parsed = parseISO(trimmed);
+  if (!isValid(parsed) || isNaN(parsed.getTime())) {
+    throw new RangeError(`Invalid ${paramName}: "${dateInput}".`);
+  }
+  const formatted = format(parsed, 'yyyy-MM-dd');
+  if (formatted !== trimmed) {
+    throw new RangeError(`Calendar invalid ${paramName}: "${dateInput}" (resolved to ${formatted}).`);
+  }
+  return { parsed, formatted };
+}
+
 // -------------------------------------------------------------
 // PURE SELECTORS
 // -------------------------------------------------------------
@@ -646,6 +669,7 @@ export interface MuscleRecoveryResult {
  * Computes anatomical training distribution across all 15 muscle groups within [startDate, endDate].
  * Preserves zero-exposure groups in allGroups and returns top 6 in groups.
  * If totalEligibleSets === 0, coveragePercent is returned as null.
+ * Strictly validates startDate and endDate formats and calendar validity, rejecting inverted ranges.
  */
 export function selectMuscleBalanceForRange(
   index: {
@@ -655,6 +679,18 @@ export function selectMuscleBalanceForRange(
   startDate: string,
   endDate: string
 ): MuscleBalanceResult {
+  const validStart = validateDateString(startDate, 'startDate');
+  const validEnd = validateDateString(endDate, 'endDate');
+
+  if (validStart.formatted > validEnd.formatted) {
+    throw new RangeError(
+      `Invalid date range: startDate "${startDate}" is after endDate "${endDate}".`
+    );
+  }
+
+  const startStr = validStart.formatted;
+  const endStr = validEnd.formatted;
+
   const stimulusTotals: Record<MuscleGroup, number> = {} as any;
   ALL_MUSCLE_GROUPS.forEach(m => {
     stimulusTotals[m] = 0;
@@ -665,10 +701,10 @@ export function selectMuscleBalanceForRange(
   let totalUnclassified = 0;
   let totalEligible = 0;
 
-  // Aggregate daily records within the requested interval [startDate, endDate]
+  // Aggregate daily records within the requested interval [startStr, endStr]
   const dates = Object.keys(index.muscleStimulusByDate || {}).sort();
   dates.forEach(d => {
-    if (d >= startDate && d <= endDate) {
+    if (d >= startStr && d <= endStr) {
       const dayStim = index.muscleStimulusByDate[d];
       if (dayStim) {
         ALL_MUSCLE_GROUPS.forEach(m => {
@@ -730,6 +766,7 @@ export function selectMuscleBalanceForRange(
  * Computes 14-day recency-weighted residual stimulus indicator using deterministic reference date.
  * Formula: R_m = sum_{d=0}^{13} dailyWSE_{m,d} * 2^(-d / 2)
  * All daily stimulus is summed per muscle before applying decay. Future dates are excluded.
+ * Preserves full internal precision for residualStimulus, maxResidualStimulus, and sorting.
  */
 export function selectMuscleRecovery(
   index: {
@@ -746,20 +783,9 @@ export function selectMuscleRecovery(
   let refDateStr: string;
 
   if (typeof referenceDateInput === 'string') {
-    const trimmed = referenceDateInput.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      throw new RangeError(`Invalid reference date format: "${referenceDateInput}". Expected YYYY-MM-DD.`);
-    }
-    const parsed = parseISO(trimmed);
-    if (!isValid(parsed) || isNaN(parsed.getTime())) {
-      throw new RangeError(`Invalid reference date: "${referenceDateInput}".`);
-    }
-    const formatted = format(parsed, 'yyyy-MM-dd');
-    if (formatted !== trimmed) {
-      throw new RangeError(`Calendar invalid reference date: "${referenceDateInput}" (resolved to ${formatted}).`);
-    }
-    validRef = parsed;
-    refDateStr = formatted;
+    const validated = validateDateString(referenceDateInput, 'referenceDate');
+    validRef = validated.parsed;
+    refDateStr = validated.formatted;
   } else if (referenceDateInput instanceof Date) {
     if (!isValid(referenceDateInput) || isNaN(referenceDateInput.getTime())) {
       throw new RangeError('Invalid Date object provided to selectMuscleRecovery.');
@@ -808,9 +834,9 @@ export function selectMuscleRecovery(
   let maxResidual = 0;
 
   const items: MuscleRecoveryItem[] = ALL_MUSCLE_GROUPS.map(muscle => {
-    const resRaw = residualTotals[muscle];
-    const residualStimulus = Math.round(resRaw * 100) / 100;
-    const recentStimulus = Math.round(recentTotals[muscle] * 100) / 100;
+    // Preserve full internal precision for sorting and maximum determination
+    const residualStimulus = residualTotals[muscle];
+    const recentStimulus = recentTotals[muscle];
     if (residualStimulus > maxResidual) maxResidual = residualStimulus;
 
     const trainedDateStr = lastTrainedInWindow[muscle];
@@ -844,8 +870,6 @@ export function selectMuscleRecovery(
       lifetimeLastTrainedDate,
     };
   }).sort((a, b) => b.residualStimulus - a.residualStimulus || a.label.localeCompare(b.label));
-
-  maxResidual = Math.round(maxResidual * 100) / 100;
 
   return {
     items,

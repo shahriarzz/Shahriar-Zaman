@@ -168,7 +168,7 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return getPriorityExercises(exerciseDefinitions || [], workouts || [], defsMap);
   }, [exerciseDefinitions, workouts, defsMap]);
 
-  // 6. Canonical FitnessIndex (Single O(N) pass on logs/definitions or calendar day boundary transition)
+  // 6. Canonical FitnessIndex (Deterministic O(N log N + S + E log E + D log D) pass on logs/definitions or calendar day boundary transition)
   const index = useMemo(() => {
     return buildFitnessIndex(logs, defsMap, currentDate);
   }, [logs, defsMap, todayStr]);

@@ -462,19 +462,105 @@ describe('Muscle Intelligence & Workload Recovery Analytics', () => {
       expect(res1.maxResidualStimulus).toBe(0);
     });
 
-    it('preserves small residual values with full precision for sorting and 2-decimal display', () => {
-      // 1 set of moderate secondary (0.25 WSE) trained 4 days ago (half-life = 2 days -> decay = 0.25)
-      // 0.25 * 0.25 = 0.0625 -> rounds to 0.06
+    it('preserves small residual values with full precision, distinguishing genuine small exposure from true zero', () => {
+      // 1 set of moderate secondary (0.25 WSE) trained 13 days ago (decay = 2^(-13/2) = 0.0110485)
+      // 0.25 * 0.0110485 = 0.0027621 WSE -> would round to 0.00 if rounded prematurely
+      const rawResidual = 0.25 * Math.pow(2, -13 / 2);
       const smallIndex = {
         muscleStimulusByDate: {
-          '2026-04-10': { side_delts: 0.25 } as any,
+          '2026-04-01': { side_delts: 0.25 } as any,
         },
-        lifetimeLastTrainedDateByMuscle: { side_delts: '2026-04-10' } as any,
+        lifetimeLastTrainedDateByMuscle: { side_delts: '2026-04-01' } as any,
       };
       const res = selectMuscleRecovery(smallIndex, '2026-04-14');
       const sideDelts = res.items.find(i => i.muscle === 'side_delts')!;
-      expect(sideDelts.residualStimulus).toBe(0.06);
-      expect(res.maxResidualStimulus).toBe(0.06);
+      const calves = res.items.find(i => i.muscle === 'calves')!;
+
+      // True zero vs small positive
+      expect(calves.residualStimulus).toBe(0);
+      expect(sideDelts.residualStimulus).toBeCloseTo(rawResidual, 6);
+      expect(sideDelts.residualStimulus).toBeGreaterThan(0);
+
+      // maxResidualStimulus retains full precision and is strictly positive
+      expect(res.maxResidualStimulus).toBeCloseTo(rawResidual, 6);
+      expect(res.maxResidualStimulus).toBeGreaterThan(0);
+
+      // Display rounding remains formatted to 2 decimals
+      expect(sideDelts.residualStimulus.toFixed(2)).toBe('0.00');
+    });
+
+    it('orders muscles by exact floating-point value when rounded 2-decimal display values are identical', () => {
+      // Muscle A has 0.0040 WSE residual; Muscle B has 0.0015 WSE residual
+      // Both round to "0.00" via toFixed(2), but Muscle A must be ranked ahead of Muscle B
+      const compareIndex = {
+        muscleStimulusByDate: {
+          '2026-04-01': {
+            chest: 0.362, // 0.362 * 2^(-13/2) ≈ 0.00400
+            lats: 0.136,  // 0.136 * 2^(-13/2) ≈ 0.00150
+          } as any,
+        },
+        lifetimeLastTrainedDateByMuscle: { chest: '2026-04-01', lats: '2026-04-01' } as any,
+      };
+      const res = selectMuscleRecovery(compareIndex, '2026-04-14');
+      const chestItem = res.items.find(i => i.muscle === 'chest')!;
+      const latsItem = res.items.find(i => i.muscle === 'lats')!;
+
+      expect(chestItem.residualStimulus.toFixed(2)).toBe('0.00');
+      expect(latsItem.residualStimulus.toFixed(2)).toBe('0.00');
+      expect(chestItem.residualStimulus).toBeGreaterThan(latsItem.residualStimulus);
+
+      // Top item must be chest because of exact unrounded ordering
+      expect(res.items[0].muscle).toBe('chest');
+      expect(res.items[1].muscle).toBe('lats');
+    });
+
+    it('strictly validates selectMuscleBalanceForRange dates and rejects invalid format and calendar dates', () => {
+      const balanceIndex = {
+        muscleStimulusByDate: {},
+        muscleAttributionCoverageByDate: {},
+      };
+
+      // Type validation
+      expect(() => selectMuscleBalanceForRange(balanceIndex, null as any, '2026-04-14')).toThrow(TypeError);
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-04-01', undefined as any)).toThrow(TypeError);
+
+      // Format validation
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '04-01-2026', '2026-04-14')).toThrow(RangeError);
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-04-01', 'not-a-date')).toThrow(RangeError);
+
+      // Calendar validity
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-02-30', '2026-04-14')).toThrow(RangeError);
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-04-01', '2026-04-31')).toThrow(RangeError);
+
+      // Reversed range (startDate > endDate)
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-04-15', '2026-04-14')).toThrow(RangeError);
+      expect(() => selectMuscleBalanceForRange(balanceIndex, '2026-05-01', '2026-04-01')).toThrow(
+        /Invalid date range: startDate .* is after endDate/
+      );
+    });
+
+    it('selectMuscleBalanceForRange correctly evaluates inclusive boundary dates', () => {
+      const balanceIndex = {
+        muscleStimulusByDate: {
+          '2026-04-01': { chest: 1.0 } as any, // start boundary
+          '2026-04-07': { triceps: 0.5 } as any, // inside
+          '2026-04-14': { lats: 2.0 } as any, // end boundary
+          '2026-04-15': { calves: 1.0 } as any, // outside
+        },
+        muscleAttributionCoverageByDate: {
+          '2026-04-01': { curatedSets: 1, inferredSets: 0, unclassifiedSets: 0, totalEligibleSets: 1 },
+          '2026-04-07': { curatedSets: 1, inferredSets: 0, unclassifiedSets: 0, totalEligibleSets: 1 },
+          '2026-04-14': { curatedSets: 2, inferredSets: 0, unclassifiedSets: 0, totalEligibleSets: 2 },
+          '2026-04-15': { curatedSets: 1, inferredSets: 0, unclassifiedSets: 0, totalEligibleSets: 1 },
+        },
+      };
+
+      const result = selectMuscleBalanceForRange(balanceIndex, '2026-04-01', '2026-04-14');
+      expect(result.totalAttributedWSE).toBe(3.5); // 1.0 + 0.5 + 2.0
+      expect(result.coverage.totalEligibleSets).toBe(4); // 1 + 1 + 2 (excludes 2026-04-15)
+
+      const calves = result.allGroups.find(g => g.muscle === 'calves')!;
+      expect(calves.wse).toBe(0); // 2026-04-15 excluded
     });
   });
 

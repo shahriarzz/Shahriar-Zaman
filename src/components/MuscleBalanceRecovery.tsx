@@ -15,16 +15,14 @@ import {
   Button,
   SURFACE,
   BORDER,
-  RADIUS,
-  SPACING,
-  TYPOGRAPHY
+  RADIUS
 } from './ui';
 
 interface MuscleBalanceRecoveryProps {
   startDate: string;
   endDate: string;
   timeRangeLabel?: string;
-  referenceDate?: Date | string;
+  referenceDate: Date | string;
 }
 
 export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
@@ -42,10 +40,9 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
     return selectMuscleBalanceForRange(index, startDate, endDate);
   }, [index, startDate, endDate]);
 
-  // Compute 14-day Recovery Context from referenceDate (or today in caller)
+  // Compute 14-day Recovery Context from mandatory referenceDate
   const recoveryResult = useMemo(() => {
-    const validRef = referenceDate || format(new Date(), 'yyyy-MM-dd');
-    return selectMuscleRecovery(index, validRef);
+    return selectMuscleRecovery(index, referenceDate);
   }, [index, referenceDate]);
 
   const { allGroups, totalAttributedWSE, coverage } = balanceResult;
@@ -111,22 +108,23 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     : '(—)'}
                 </span>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   haptics.selection();
                   setShowCoverageDetail(!showCoverageDetail);
                 }}
-                className="text-[11px] text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+                icon={<Info className="w-3.5 h-3.5" />}
                 aria-label="Toggle coverage breakdown details"
+                className="h-6 px-1.5 text-[11px] text-zinc-400 hover:text-white"
               >
-                <Info className="w-3.5 h-3.5" />
-                <span>{showCoverageDetail ? 'Hide' : 'Details'}</span>
-              </button>
+                {showCoverageDetail ? 'Hide' : 'Details'}
+              </Button>
             </div>
 
             {showCoverageDetail && (
-              <div className="mt-2 pt-2 border-t border-zinc-800 text-[11px] text-zinc-400 space-y-1.5">
+              <div className={cn("mt-2 pt-2 border-t text-[11px] text-zinc-400 space-y-1.5", BORDER.divider)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span>Curated: <strong className="text-zinc-200 font-mono">{coverage.curatedSets}</strong></span>
                   <span aria-hidden="true" className="text-zinc-600">·</span>
@@ -213,7 +211,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
 
         {/* View All (15) Toggle */}
         {allGroups.length > 6 && (
-          <div className="mt-4 pt-3 border-t border-zinc-800/60 flex justify-center">
+          <div className={cn("mt-4 pt-3 border-t flex justify-center", BORDER.subtle)}>
             <Button
               variant="ghost"
               size="sm"
@@ -324,7 +322,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
         </div>
 
         {/* Footer Context / Lifetime History Info */}
-        <div className="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
+        <div className={cn("mt-4 pt-3 border-t flex items-center justify-between text-[11px] text-zinc-500", BORDER.subtle)}>
           <span>Decay model: 2-day half-life exponential residual</span>
           <span className="font-mono text-zinc-400">
             {hasAnyResidual ? `Peak: ${recoveryResult.items[0]?.label}` : 'No recent stimulus'}
