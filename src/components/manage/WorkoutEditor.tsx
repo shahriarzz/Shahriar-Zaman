@@ -37,7 +37,8 @@ import {
   SURFACE,
   RADIUS,
   SPACING,
-  INTERACTIVE
+  INTERACTIVE,
+  EDITOR_HEADER
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -278,7 +279,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   return (
     <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
       {/* Top Breadcrumb Navigation */}
-      <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4", BORDER.standard)}>
+      <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -288,7 +289,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
           >
             Back to Program Cycle
           </Button>
-          <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
+          <div className={EDITOR_HEADER.divider} />
           <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
             {workout.cycleDay ? `Day ${workout.cycleDay}` : 'Auxiliary'}
           </span>
@@ -486,7 +487,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {/* Exercise Index Badge */}
-                      <div className={cn("w-7 h-7 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0 border", RADIUS.sm, SURFACE.recessed, BORDER.standard)}>
+                      <div className={cn("w-7 h-7 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0 border", RADIUS.badge, SURFACE.recessed, BORDER.standard)}>
                         {index + 1}
                       </div>
 

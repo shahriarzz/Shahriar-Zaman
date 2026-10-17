@@ -32,7 +32,8 @@ import {
   TYPOGRAPHY,
   SHADOW,
   GAP,
-  STACK_SPACING
+  STACK_SPACING,
+  CHART_THEME
 } from './ui';
 
 interface HistoryViewProps {
@@ -537,7 +538,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     </div>
 
                     {/* Routine split and Peaks */}
-                    <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.divider)}>
+                    <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.standard)}>
                       {/* Training Split Distribution */}
                       <div className="space-y-3">
                         <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
@@ -555,7 +556,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                     className="h-full bg-orange-500" 
                                     style={{
                                       width: `${percentage}%`,
-                                      backgroundColor: WORKOUT_COLORS[type] || '#f97316'
+                                      backgroundColor: WORKOUT_COLORS[type] || SEMANTIC_COLORS.orange
                                     }} 
                                   />
                                 </div>
@@ -962,11 +963,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);
                           const isSessionPR = (index.weightPRs || []).some(pr => pr.exerciseDefinitionId === exId && pr.date === session.date);
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
-                          const exColor = WORKOUT_COLORS[workout?.type as keyof typeof WORKOUT_COLORS] || '#f59e0b';
+                          const exColor = WORKOUT_COLORS[workout?.type as keyof typeof WORKOUT_COLORS] || SEMANTIC_COLORS.amber;
 
                           return (
                             <div key={exId} className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}>
                               <button
+                                type="button"
+                                aria-expanded={isSelected}
                                 onClick={() => {
                                   haptics.selection();
                                   setSelectedExKey(isSelected ? null : exKey);
@@ -1041,17 +1044,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                       <div className="h-32 w-full pt-1">
                                         <ResponsiveContainer width="100%" height="100%">
                                           <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -15, bottom: 4 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
                                             <XAxis 
                                               dataKey="date" 
-                                              stroke="#71717a" 
+                                              stroke={CHART_THEME.axisText} 
                                               fontSize={9} 
                                               tickLine={false} 
                                               axisLine={false}
                                               tickFormatter={(val) => val.split('-').slice(1).join('/')}
                                             />
                                             <YAxis 
-                                              stroke="#71717a" 
+                                              stroke={CHART_THEME.axisText} 
                                               fontSize={9} 
                                               tickLine={false} 
                                               axisLine={false}
@@ -1060,15 +1063,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             />
                                             <Tooltip
                                               contentStyle={{
-                                                backgroundColor: '#09090b',
-                                                borderColor: '#27272a',
+                                                backgroundColor: CHART_THEME.background,
+                                                borderColor: CHART_THEME.border,
                                                 borderRadius: '12px',
                                                 fontSize: '10px',
                                                 fontFamily: 'monospace',
-                                                color: '#fff'
+                                                color: CHART_THEME.text
                                               }}
                                               itemStyle={{ color: exColor }}
-                                              labelStyle={{ color: '#a1a1aa' }}
+                                              labelStyle={{ color: CHART_THEME.labelText }}
                                               formatter={(value) => [`${value}kg`, 'Peak Weight']}
                                               labelFormatter={(label) => `Date: ${label}`}
                                             />
@@ -1112,7 +1115,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               <div className="flex items-center gap-3">
                                                 <div className="flex gap-1 flex-wrap">
                                                   {h.sets.map((s, sIdx) => (
-                                                    <span key={sIdx} className={cn("bg-zinc-950 px-1.5 py-0.5 border text-zinc-400", BORDER.standard, RADIUS.sm, TYPOGRAPHY.micro)}>
+                                                    <span key={sIdx} className={cn("bg-zinc-950 px-1.5 py-0.5 border text-zinc-400", BORDER.standard, RADIUS.badge, TYPOGRAPHY.micro)}>
                                                       {s.weight ? `${s.weight}kg×${s.reps}` : `${s.reps}r`}
                                                     </span>
                                                   ))}

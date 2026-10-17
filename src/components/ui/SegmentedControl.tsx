@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -28,7 +28,7 @@ export function SegmentedControl<T extends string>({
   size = 'sm',
   className
 }: SegmentedControlProps<T>) {
-  const accentHex = colorOverride || getAccentColor(accent) || '#10b981';
+  const accentHex = colorOverride || getAccentColor(accent) || SEMANTIC_COLORS.emerald;
 
   return (
     <div

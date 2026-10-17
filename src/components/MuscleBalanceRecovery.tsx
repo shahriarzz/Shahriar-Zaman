@@ -93,7 +93,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
           </div>
 
           {/* Transparent Attribution Coverage Banner (Unboxed, clean metadata) */}
-          <div className={cn("p-2.5 mb-4 border", SURFACE.recessed, BORDER.subtle, RADIUS.md)}>
+          <div className={cn("p-2.5 mb-4 border", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 text-zinc-300">
                 <span className="text-zinc-400">Attribution Coverage:</span>
@@ -124,7 +124,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
             </div>
 
             {showCoverageDetail && (
-              <div className={cn("mt-2 pt-2 border-t text-[11px] text-zinc-400 space-y-1.5", BORDER.divider)}>
+              <div className={cn("mt-2 pt-2 border-t text-[11px] text-zinc-400 space-y-1.5", BORDER.standard)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span>Curated: <strong className="text-zinc-200 font-mono">{coverage.curatedSets}</strong></span>
                   <span aria-hidden="true" className="text-zinc-600">·</span>

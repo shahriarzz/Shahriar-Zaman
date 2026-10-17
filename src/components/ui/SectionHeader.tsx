@@ -3,6 +3,7 @@ import { cn } from '../../lib/utils';
 import {
   SemanticColor,
   getAccentColor,
+  SEMANTIC_COLORS,
   TYPOGRAPHY
 } from '../../styles/tokens';
 
@@ -32,7 +33,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   headingLevel,
   className
 }) => {
-  const eyebrowHex = colorOverride || getAccentColor(eyebrowColor as SemanticColor) || '#71717a';
+  const eyebrowHex = colorOverride || getAccentColor(eyebrowColor as SemanticColor) || SEMANTIC_COLORS.zinc;
 
   const titleClasses: Record<SectionSize, string> = {
     page: TYPOGRAPHY.titlePage,

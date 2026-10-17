@@ -144,7 +144,7 @@ export const Dialog: React.FC<DialogProps> = ({
               BORDER.standard,
               RADIUS.panel,
               SHADOW.modal,
-              SPACING.modal,
+              SPACING.section,
               "border",
               sizeClasses[size],
               className

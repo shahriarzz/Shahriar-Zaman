@@ -20,20 +20,15 @@ export const BORDER = {
   strong: 'border-zinc-700',
   interactive: 'border-zinc-800 hover:border-zinc-700',
   hover: 'hover:border-zinc-700',
-  divider: 'border-zinc-800',
   canvasHalo: 'border-[#09090e]',
 } as const;
 
 export const RADIUS = {
-  button: 'rounded-xl',
-  card: 'rounded-2xl',
-  panel: 'rounded-3xl',
-  pill: 'rounded-full',
-  input: 'rounded-xl',
-  sm: 'rounded-lg',
-  md: 'rounded-xl',
-  lg: 'rounded-2xl',
-  xl: 'rounded-3xl',
+  badge: 'rounded-lg',    // badges, compact tags, micro indicators
+  button: 'rounded-xl',   // buttons, interactive controls, inputs
+  card: 'rounded-2xl',     // cards, container surfaces
+  panel: 'rounded-3xl',   // dialogs, modals, floating panels
+  pill: 'rounded-full',   // circular avatars, status dots, fully rounded pills
 } as const;
 
 export const SPACING = {
@@ -42,12 +37,10 @@ export const SPACING = {
   standard: 'p-5',
   section: 'p-6',
   hero: 'p-8',
-  modal: 'p-6',
   badgeSm: 'px-2 py-0.5',
   badgeMd: 'px-2.5 py-1',
   segmentedSm: 'px-3 py-1',
   segmentedMd: 'px-4 py-1.5',
-  navItem: 'py-2 px-3.5 min-h-[44px]',
 } as const;
 
 export type SpacingIntent = keyof typeof SPACING;
@@ -60,11 +53,6 @@ export const NAV = {
 export const EDITOR_HEADER = {
   container: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b pb-4',
   divider: 'h-4 w-px bg-zinc-800 hidden sm:block',
-} as const;
-
-export const PAGE_SPACING = {
-  container: 'space-y-6 md:space-y-8 pb-16',
-  section: 'space-y-4 md:space-y-6',
 } as const;
 
 export const CONTROL_HEIGHT = {
@@ -103,23 +91,129 @@ export const SHADOW = {
 } as const;
 
 // Central color-semantic map — resolves a semantic name to its actual color value.
+// Standardized semantic definitions:
+// - orange: primary action / achievement / brand
+// - emerald: data visualization / analytics / success
+// - amber: warning / caution / partial
+// - red: destructive / error / failed / missed
+// - indigo: intelligence / strength trend (approved canonical system color)
+// - zinc: neutral / unclassified / placeholder
 export const SEMANTIC_COLORS = {
-  orange: '#f97316',   // primary action / achievement / brand
-  emerald: '#10b981',  // data visualization / analytics / success
-  amber: '#eab308',    // warning / caution / partial
-  red: '#ef4444',      // destructive / error / failed / missed
-  indigo: '#6366f1',   // intelligence / strength trend
-  zinc: '#71717a',     // neutral — no meaning
+  orange: '#f97316',
+  emerald: '#10b981',
+  amber: '#eab308',
+  red: '#ef4444',
+  indigo: '#6366f1',
+  zinc: '#71717a',
 } as const;
 
-export type SemanticColor = keyof typeof SEMANTIC_COLORS | WorkoutType;
+export type SemanticColorKey = keyof typeof SEMANTIC_COLORS;
+export type SemanticColor = SemanticColorKey | WorkoutType;
+
+export interface SemanticColorConfig {
+  hex: string;
+  role: string;
+  text: string;
+  textLight: string;
+  bg: string;
+  bgSubtle: string;
+  border: string;
+  borderSubtle: string;
+  compound: string;
+}
+
+export const SEMANTIC_PALETTE: Record<SemanticColorKey, SemanticColorConfig> = {
+  orange: {
+    hex: SEMANTIC_COLORS.orange,
+    role: 'primary action / achievement / brand',
+    text: 'text-orange-500',
+    textLight: 'text-orange-400',
+    bg: 'bg-orange-500',
+    bgSubtle: 'bg-orange-500/10',
+    border: 'border-orange-500',
+    borderSubtle: 'border-orange-500/30',
+    compound: 'text-orange-500 bg-orange-500/10 border-orange-500/30',
+  },
+  emerald: {
+    hex: SEMANTIC_COLORS.emerald,
+    role: 'data visualization / analytics / success',
+    text: 'text-emerald-500',
+    textLight: 'text-emerald-400',
+    bg: 'bg-emerald-500',
+    bgSubtle: 'bg-emerald-500/10',
+    border: 'border-emerald-500',
+    borderSubtle: 'border-emerald-500/30',
+    compound: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+  },
+  amber: {
+    hex: SEMANTIC_COLORS.amber,
+    role: 'warning / caution / partial',
+    text: 'text-amber-500',
+    textLight: 'text-amber-400',
+    bg: 'bg-amber-500',
+    bgSubtle: 'bg-amber-500/10',
+    border: 'border-amber-500',
+    borderSubtle: 'border-amber-500/30',
+    compound: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+  },
+  red: {
+    hex: SEMANTIC_COLORS.red,
+    role: 'destructive / error / failed / missed',
+    text: 'text-red-500',
+    textLight: 'text-red-400',
+    bg: 'bg-red-500',
+    bgSubtle: 'bg-red-500/10',
+    border: 'border-red-500',
+    borderSubtle: 'border-red-500/30',
+    compound: 'text-red-400 bg-red-500/10 border-red-500/30',
+  },
+  indigo: {
+    hex: SEMANTIC_COLORS.indigo,
+    role: 'intelligence / strength trend',
+    text: 'text-indigo-500',
+    textLight: 'text-indigo-400',
+    bg: 'bg-indigo-500',
+    bgSubtle: 'bg-indigo-500/10',
+    border: 'border-indigo-500',
+    borderSubtle: 'border-indigo-500/30',
+    compound: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
+  },
+  zinc: {
+    hex: SEMANTIC_COLORS.zinc,
+    role: 'neutral / unclassified / placeholder',
+    text: 'text-zinc-500',
+    textLight: 'text-zinc-400',
+    bg: 'bg-zinc-700',
+    bgSubtle: 'bg-zinc-900/50',
+    border: 'border-zinc-800',
+    borderSubtle: 'border-zinc-800/50',
+    compound: 'text-zinc-400 bg-zinc-900/50 border-zinc-800',
+  },
+} as const;
+
+// Canonical shared chart theme for visualization consistency
+export const CHART_THEME = {
+  grid: '#27272a',        // zinc-800
+  axisText: '#71717a',    // zinc-500
+  labelText: '#a1a1aa',   // zinc-400
+  zincText: '#a1a1aa',    // zinc-400
+  background: '#09090e',  // SURFACE.canvas
+  border: '#27272a',      // BORDER.standard
+  text: '#ffffff',
+  emerald: SEMANTIC_COLORS.emerald,
+  emeraldLight: '#34d399',
+  orange: SEMANTIC_COLORS.orange,
+  indigo: SEMANTIC_COLORS.indigo,
+  zinc: SEMANTIC_COLORS.zinc,
+} as const;
 
 export const SEMANTIC_UI = {
-  primary: 'text-orange-500 bg-orange-500/10 border-orange-500/30',
-  success: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-  warning: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-  destructive: 'text-red-400 bg-red-500/10 border-red-500/30',
-  neutral: 'text-zinc-400 bg-zinc-900/50 border-zinc-800',
+  primary: SEMANTIC_PALETTE.orange.compound,
+  success: SEMANTIC_PALETTE.emerald.compound,
+  warning: SEMANTIC_PALETTE.amber.compound,
+  destructive: SEMANTIC_PALETTE.red.compound,
+  intelligence: SEMANTIC_PALETTE.indigo.compound,
+  neutral: SEMANTIC_PALETTE.zinc.compound,
   mutedText: 'text-zinc-500',
   disabledText: 'text-zinc-600',
   focus: 'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 outline-none',
@@ -143,34 +237,25 @@ export const TYPOGRAPHY = {
   // Headings & Titles
   eyebrow: 'font-mono text-[9px] uppercase tracking-[0.25em] font-bold',
   titlePage: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
-  pageTitle: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
   titleSection: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
-  sectionTitle: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
   titleSubsection: 'font-display text-lg uppercase tracking-wide text-white leading-none',
-  subsectionTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none',
   cardTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none',
   
   // Card & Stat Tokens
-  cardLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
-  cardValue: 'font-mono text-2xl font-bold tracking-tight text-white',
-  cardUnit: 'font-mono text-xs text-zinc-500 font-normal',
   label: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
-  statLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
   unit: 'font-mono text-xs text-zinc-500 font-normal',
+  cardValue: 'font-mono text-2xl font-bold tracking-tight text-white',
   statValue: 'font-display text-3xl sm:text-[2rem] uppercase tracking-tight text-white leading-none tabular-nums',
   statValueHero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none tabular-nums',
   
   // Text & Body
   body: 'font-sans text-sm text-zinc-400 leading-relaxed',
   bodySecondary: 'font-sans text-xs text-zinc-400 leading-normal',
-  supporting: 'font-sans text-xs text-zinc-400 leading-normal',
   metadata: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider',
   caption: 'font-mono text-[9px] text-zinc-500 uppercase tracking-wide',
   micro: 'font-mono text-[8px] uppercase tracking-widest font-bold',
   
   // Controls & States
-  buttonLabel: 'font-mono text-xs uppercase tracking-wider font-bold',
-  buttonText: 'font-mono text-xs uppercase tracking-wider font-bold',
   buttonSm: 'font-mono text-[11px] uppercase tracking-wider font-bold',
   buttonMd: 'font-mono text-xs uppercase tracking-wider font-bold',
   buttonLg: 'font-mono text-xs uppercase tracking-wider font-bold',
@@ -180,12 +265,9 @@ export const TYPOGRAPHY = {
   segmentedSm: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   segmentedMd: 'font-mono text-xs uppercase tracking-wider font-bold',
   dialogFooter: 'font-mono text-[10px] text-zinc-500 uppercase tracking-widest',
-  inputLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
-  formLabel: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
-  errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
-  formError: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
   helperText: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
-  formHelper: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
+  errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
+  successText: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
   formSuccess: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
   navLabel: 'font-mono text-[10px] uppercase tracking-wider font-bold',
 

@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, SEMANTIC_UI, INTERACTIVE, SURFACE, RADIUS, GAP, SHADOW, NAV } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -98,9 +98,9 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.divider, SURFACE.canvasHeader)}>
+      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.standard, SURFACE.canvasHeader)}>
         <div className="flex items-center gap-2">
-          <div className={cn("w-8 h-8 bg-orange-500 flex items-center justify-center", RADIUS.sm)}>
+          <div className={cn("w-8 h-8 bg-orange-500 flex items-center justify-center", RADIUS.badge)}>
             <Dumbbell size={18} className="text-black stroke-[3px]" />
           </div>
           <span className="font-display text-xl tracking-widest font-black uppercase">

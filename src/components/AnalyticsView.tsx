@@ -64,19 +64,9 @@ import {
   STACK_SPACING,
   TYPOGRAPHY,
   SHADOW,
-  SEMANTIC_COLORS
+  SEMANTIC_COLORS,
+  CHART_THEME
 } from './ui';
-
-// Semantic chart color constants derived from token system
-const CHART_THEME = {
-  emerald: SEMANTIC_COLORS.emerald,
-  emeraldLight: '#34d399',
-  orange: SEMANTIC_COLORS.orange,
-  zinc: SEMANTIC_COLORS.zinc,
-  zincText: '#a1a1aa',
-  grid: '#27272a',
-  background: '#09090e'
-};
 
 // Unified heatmap intensity scale used for both matrix cells and legend
 const HEATMAP_INTENSITY_STEPS = [
@@ -476,7 +466,7 @@ export const AnalyticsView: React.FC = () => {
                     stroke={CHART_THEME.emerald}
                     strokeWidth={3}
                     dot={{ fill: CHART_THEME.emerald, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
-                    activeDot={{ r: 6, fill: CHART_THEME.emeraldLight, stroke: '#ffffff', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: CHART_THEME.emeraldLight, stroke: CHART_THEME.text, strokeWidth: 2 }}
                   />
                 </LineChart>
               </ResponsiveContainer>

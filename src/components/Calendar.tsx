@@ -38,7 +38,8 @@ import {
   SURFACE,
   RADIUS,
   INTERACTIVE,
-  GAP
+  GAP,
+  SEMANTIC_COLORS
 } from './ui';
 
 interface CalendarProps {
@@ -106,14 +107,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
       if (!log.complete) {
         return {
-          color: '#f59e0b',
+          color: SEMANTIC_COLORS.amber,
           label: totalSets > 0 ? `${doneSets}/${totalSets} sets` : 'partial',
           isPartial: true,
           log
         };
       }
       return {
-        color: WORKOUT_COLORS[wo?.type || 'push'] || '#10b981',
+        color: WORKOUT_COLORS[wo?.type || 'push'] || SEMANTIC_COLORS.emerald,
         label: wo?.type || 'session',
         isComplete: true,
         log
@@ -123,10 +124,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     if (isFuture) {
       if (expectedWo) {
         if (expectedWo.type === 'rest') {
-          return { color: '#10b981', label: 'rest', isFuture: true, expectedWo };
+          return { color: SEMANTIC_COLORS.emerald, label: 'rest', isFuture: true, expectedWo };
         }
         return {
-          color: WORKOUT_COLORS[expectedWo.type] || '#f59e0b',
+          color: WORKOUT_COLORS[expectedWo.type] || SEMANTIC_COLORS.amber,
           label: expectedWo.name,
           isFuture: true,
           expectedWo
@@ -137,10 +138,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
     if (expectedWo) {
       if (expectedWo.type === 'rest') {
-        return { color: '#10b981', label: 'rest', isRest: true, expectedWo };
+        return { color: SEMANTIC_COLORS.emerald, label: 'rest', isRest: true, expectedWo };
       }
       if (!isSameDay(date, today)) {
-        return { color: '#ef4444', label: 'missed', isMissed: true, expectedWo };
+        return { color: SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
       }
     }
 
@@ -307,9 +308,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               { label: 'Push', color: WORKOUT_COLORS.push },
               { label: 'Pull', color: WORKOUT_COLORS.pull },
               { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-              { label: 'Rest', color: '#10b981' },
-              { label: 'Missed', color: '#ef4444' },
-              { label: 'Incomplete', color: '#f59e0b' },
+              { label: 'Rest', color: SEMANTIC_COLORS.emerald },
+              { label: 'Missed', color: SEMANTIC_COLORS.red },
+              { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
             ].map(l => (
               <div key={l.label} className="flex items-center gap-2">
                 <div
@@ -456,7 +457,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                   key={`set-${exId}-${idx}`}
                                   className={cn(
                                     "border px-2 py-1 flex items-center gap-1.5",
-                                    RADIUS.sm,
+                                    RADIUS.badge,
                                     TYPOGRAPHY.metadata,
                                     s.done
                                       ? cn(SURFACE.default, BORDER.strong, "text-white")
@@ -543,7 +544,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                                   <p className={TYPOGRAPHY.caption}>{meta?.target || ''}</p>
                                 </div>
                                 <div className="text-right">
-                                  <span className={cn("font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5", RADIUS.sm)}>
+                                  <span className={cn("font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5", RADIUS.badge)}>
                                     {ex.sets} × {ex.reps}
                                   </span>
                                 </div>
@@ -641,7 +642,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
                 {/* 5. SECONDARY SECTION: Stats Cards (Volume, Time, Sets Completed) */}
                 {selectedLog && (
-                  <div className={cn("space-y-3 pt-3 border-t", BORDER.divider)}>
+                  <div className={cn("space-y-3 pt-3 border-t", BORDER.standard)}>
                     <span className={cn(TYPOGRAPHY.label, "block")}>
                       Session Summary
                     </span>
