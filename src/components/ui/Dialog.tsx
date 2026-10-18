@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { RADIUS, BORDER, SURFACE, SHADOW, SPACING, TYPOGRAPHY } from '../../styles/tokens';
+import { RADIUS, BORDER, SURFACE, SHADOW, SPACING, TYPOGRAPHY, MOTION_CONFIG } from '../../styles/tokens';
 
 export interface DialogProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ export const Dialog: React.FC<DialogProps> = ({
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   // Preserve and restore the body's previous inline "overflow" value rather than always resetting to empty string
   useEffect(() => {
@@ -118,9 +119,10 @@ export const Dialog: React.FC<DialogProps> = ({
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           {/* Canonical Backdrop */}
           <motion.div
-            initial={{ opacity: 0 }}
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}
             onClick={() => {
               if (closeOnBackdropClick && onClose) {
                 onClose();
@@ -134,10 +136,10 @@ export const Dialog: React.FC<DialogProps> = ({
           <motion.div
             ref={dialogRef}
             tabIndex={-1}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            initial={shouldReduceMotion ? false : MOTION_CONFIG.dialogSurface.initial}
+            animate={MOTION_CONFIG.dialogSurface.animate}
+            exit={shouldReduceMotion ? undefined : MOTION_CONFIG.dialogSurface.exit}
+            transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.dialogSurface.transition}
             role="dialog"
             aria-modal="true"
             className={cn(

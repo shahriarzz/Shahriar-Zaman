@@ -1,6 +1,8 @@
 import { WorkoutType } from '../types/fitness';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 
+export const CANVAS_HEX = '#09090e';
+
 export const SURFACE = {
   subtle: 'bg-zinc-900/30',   // subtle section backgrounds
   default: 'bg-zinc-900/60',   // standard card background
@@ -74,74 +76,92 @@ export const ICON_SIZE = {
 // MOTION & TRANSITION TOKENS
 // -------------------------------------------------------------
 
-// Duration values in ms corresponding to canonical use cases
+/**
+ * Canonical duration scale in milliseconds.
+ * - fast (150ms): Micro-interactions, value opacity transitions
+ * - standard (200ms): Interactive hovers, color transitions, accordion collapses
+ * - relaxed (250ms): View and section entrances, modal surfaces, completion pulses
+ * - deliberate (300ms): Rotational transforms, drawer slides
+ */
 export const DURATION = {
-  fast: 150,       // Micro-interactions, value opacity transitions
-  standard: 200,   // Standard hover, tab, accordion toggles
-  relaxed: 250,    // Entrances, smooth expansions
-  deliberate: 300, // Rotations, drawer slides, sticky transitions
+  fast: 150,
+  standard: 200,
+  relaxed: 250,
+  deliberate: 300,
 } as const;
 
-// Reusable Tailwind CSS transition utility tokens
-// Standardized on specific properties (colors, transform, opacity) rather than broad transition-all
-// Includes motion-reduce:transition-none to respect accessibility preferences
+// Reusable Tailwind CSS transition utility tokens.
+// Standardized on property-specific transitions with motion-reduce:transition-none for accessibility.
 export const TRANSITION = {
   colors: 'transition-colors duration-200 motion-reduce:transition-none',
-  colorsFast: 'transition-colors duration-150 motion-reduce:transition-none',
   transform: 'transition-transform duration-300 motion-reduce:transition-none',
-  transformStandard: 'transition-transform duration-200 motion-reduce:transition-none',
   opacity: 'transition-opacity duration-150 motion-reduce:transition-none',
-  opacityStandard: 'transition-opacity duration-200 motion-reduce:transition-none',
   interactive: 'transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none',
+  width: 'transition-[width] duration-300 motion-reduce:transition-none',
 } as const;
 
-// Reusable Framer Motion configurations
-// Strictly compositor-friendly properties (opacity, transform) with small displacements (6-8px)
+/**
+ * Reusable Motion configurations.
+ * 
+ * Architecture Note on Compositor Performance vs Layout Reflow:
+ * 1. Compositor-friendly entrances:
+ *    - `entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`: operate strictly on GPU-accelerated
+ *      properties (opacity, translateY, scale) with small displacements (6-10px) to prevent layout reflow.
+ * 2. Layout-affecting accordion collapses:
+ *    - `collapse`: animates `height: 0` to `height: 'auto'` with overflow clipping. Reserved exclusively
+ *      for progressive drawer disclosure where content layout expansion is functionally required.
+ */
 export const MOTION_CONFIG = {
-  // Section & view entrance (subtle fade & rise: ~6-8px, 200-250ms)
+  // Section entrance (subtle fade & rise: ~6px, 250ms relaxed)
   entrance: {
     initial: { opacity: 0, y: 6 },
     animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: 6 },
-    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
   },
   // View/modal drill-down entrance (e.g. Program Editor, Fullscreen views)
   viewEntrance: {
     initial: { opacity: 0, y: 8 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: 8 },
-    transition: { duration: 0.22, ease: 'easeOut' },
+    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
   },
-  // Accordion drawer expansion (200ms)
+  // Dialog modal surface entrance (spring with subtle scale & rise)
+  dialogSurface: {
+    initial: { opacity: 0, scale: 0.95, y: 10 },
+    animate: { opacity: 1, scale: 1, y: 0 },
+    exit: { opacity: 0, scale: 0.95, y: 10 },
+    transition: { type: 'spring' as const, damping: 25, stiffness: 350 },
+  },
+  // Calendar day detail side-panel entrance
+  calendarPanel: {
+    initial: { opacity: 0, x: 16 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0, x: 16 },
+    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
+  },
+  // Accordion drawer expansion (200ms standard)
   collapse: {
     initial: { height: 0, opacity: 0 },
     animate: { height: 'auto', opacity: 1 },
     exit: { height: 0, opacity: 0 },
-    transition: { duration: 0.2, ease: 'easeInOut' },
-  },
-  // Accordion relaxed expansion (250ms)
-  collapseRelaxed: {
-    initial: { height: 0, opacity: 0 },
-    animate: { height: 'auto', opacity: 1 },
-    exit: { height: 0, opacity: 0 },
-    transition: { duration: 0.25, ease: 'easeInOut' },
+    transition: { duration: DURATION.standard / 1000, ease: 'easeInOut' },
   },
   // Restrained interactive feedback for controls (Calendar days, micro-buttons)
   tapRestrained: { scale: 0.985 },
   hoverRestrained: { scale: 1.015 },
-  pressTransition: { type: 'spring', stiffness: 400, damping: 25 },
+  pressTransition: { type: 'spring' as const, stiffness: 400, damping: 25 },
   // Subtle completion celebration / pulse
   pulseSubtle: {
     scale: [1, 1.015, 1],
-    transition: { duration: 0.25, ease: 'easeOut' },
+    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
   },
   // Stagger delays for section sequences (subtle 40ms intervals, capped to avoid waiting)
   staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
 } as const;
 
 export const INTERACTIVE = {
-  hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors',
-  active: 'active:scale-[0.99] transition-transform',
+  hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors motion-reduce:transition-none',
+  active: 'active:scale-[0.99] transition-transform motion-reduce:transition-none',
   focus: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950',
   disabled: 'opacity-40 cursor-not-allowed pointer-events-none select-none',
 } as const;
@@ -154,7 +174,7 @@ export const FOCUS = {
 export const SHADOW = {
   elevation: 'shadow-md',
   panel: 'shadow-2xl',
-  modal: 'shadow-2xl',
+  modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
   // accentGlow reserved exclusively for active/selected/achievement states — never decorative
   accentGlow: (hex: string) => `shadow-[0_0_20px_${hex}40]`,
 } as const;
@@ -265,7 +285,7 @@ export const CHART_THEME = {
   grid: '#27272a',        // zinc-800 (structural grid lines & borders)
   axisText: '#71717a',    // zinc-500 (axis ticks & markers)
   labelText: '#a1a1aa',   // zinc-400 (secondary descriptions & tooltips)
-  background: '#09090e',  // SURFACE.canvas
+  background: CANVAS_HEX, // Shared canvas background
   text: '#ffffff',
   emerald: SEMANTIC_COLORS.emerald,
   emeraldLight: '#34d399',
@@ -288,7 +308,7 @@ export const SEMANTIC_UI = {
   focus: 'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 outline-none',
   selected: 'border-orange-500 bg-orange-500/10 text-white shadow-[0_0_15px_rgba(249,115,22,0.15)]',
   activeSurface: 'bg-zinc-800/80',
-  hoverSurface: 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-all',
+  hoverSurface: 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-colors duration-200 motion-reduce:transition-none',
 } as const;
 
 export function getAccentColor(accent?: SemanticColor | null): string | undefined {
@@ -370,3 +390,17 @@ export const STACK_SPACING = {
 } as const;
 
 export type StackSpacing = keyof typeof STACK_SPACING;
+
+/**
+ * Narrow, audited allowlist of documented token pairs that intentionally share
+ * appearance values due to distinct semantic roles.
+ */
+export const DOCUMENTED_SEMANTIC_TOKEN_ALLOWLIST = {
+  'SHADOW.panel === SHADOW.modal':
+    'Floating slide-over panels and centered modal dialogs share the topmost shadow-2xl elevation tier.',
+  'TYPOGRAPHY.titleSubsection === TYPOGRAPHY.cardTitle':
+    'Structural section headings and modal/container card titles share the display text-lg scale for visual hierarchy.',
+  'TYPOGRAPHY.badgeMd === TYPOGRAPHY.segmentedSm':
+    'Metadata badge labels and compact segmented control items share the mono 10px uppercase tracking-wider scale.',
+} as const;
+

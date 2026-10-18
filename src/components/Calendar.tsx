@@ -277,7 +277,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   {/* Date Number Badge */}
                   <span
                     className={cn(
-                      "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full transition-all font-bold",
+                      "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
+                      TRANSITION.colors,
                       isToday
                         ? "bg-emerald-500 text-black font-black shadow-[0_0_8px_rgba(16,185,129,0.4)]"
                         : isSelected
@@ -296,7 +297,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   {status && (
                     <div
                       className={cn(
-                        "w-1.5 h-1.5 rounded-full mt-1 transition-all",
+                        "w-1.5 h-1.5 rounded-full mt-1",
+                        TRANSITION.opacity,
                         status.isFuture ? "opacity-70" : "opacity-100"
                       )}
                       style={{ backgroundColor: status.color }}
@@ -335,10 +337,11 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
       <AnimatePresence mode="wait">
         {selectedDate ? (
           <motion.div
-            key="detail"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            key={selectedDateStr || 'detail'}
+            initial={shouldReduceMotion ? false : MOTION_CONFIG.calendarPanel.initial}
+            animate={MOTION_CONFIG.calendarPanel.animate}
+            exit={shouldReduceMotion ? undefined : MOTION_CONFIG.calendarPanel.exit}
+            transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.calendarPanel.transition}
             className="w-full lg:w-96 flex flex-col"
           >
             <Card variant="elevated" padding="none" className="overflow-hidden h-full flex flex-col">
@@ -702,8 +705,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
         ) : (
           <motion.div
             key="placeholder"
-            initial={{ opacity: 0 }}
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}
             className="hidden lg:flex flex-col w-96"
           >
             <Card variant="standard" padding="section" className="h-full flex items-center justify-center min-h-[380px]">
