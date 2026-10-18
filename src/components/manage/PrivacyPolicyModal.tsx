@@ -10,19 +10,19 @@ interface PrivacyPolicyModalProps {
 
 export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, onClose }) => {
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} size="lg" className="max-h-[85vh] flex flex-col p-0 overflow-hidden">
+    <Dialog isOpen={isOpen} onClose={onClose} size="2xl" className="max-h-[85vh] flex flex-col p-0 overflow-hidden">
       {/* Header */}
-      <DialogHeader className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/40 flex-row items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-            <Shield size={18} />
-          </div>
-          <div>
-            <h3 className={cn(TYPOGRAPHY.titleSection, "text-white")}>Privacy Policy & Data Safety</h3>
-            <p className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>Effective: October 2026 · GAINLOG Protocol</p>
-          </div>
+      <DialogHeader
+        className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/40 items-center shrink-0"
+        icon={<Shield size={18} className="text-emerald-400" />}
+        action={
+          <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={16} />} aria-label="Close dialog" />
+        }
+      >
+        <div>
+          <h3 className={cn(TYPOGRAPHY.titleSection, "text-white")}>Privacy Policy & Data Safety</h3>
+          <p className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>Effective: October 2026 · GAINLOG Protocol</p>
         </div>
-        <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={16} />} aria-label="Close dialog" />
       </DialogHeader>
 
       {/* Scrollable Content */}
@@ -97,7 +97,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
       </DialogBody>
 
       {/* Footer */}
-      <DialogFooter className="px-6 py-3.5 mt-0 border-t border-zinc-800 bg-zinc-900/40">
+      <DialogFooter className="px-6 py-3.5 mt-0 border-t border-zinc-800 bg-zinc-900/40 shrink-0">
         <Button variant="primary" size="sm" onClick={onClose}>
           Got It
         </Button>

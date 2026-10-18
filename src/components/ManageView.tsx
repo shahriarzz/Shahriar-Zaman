@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Shield, ExternalLink } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { ProgramIdentityCard } from './manage/ProgramIdentityCard';
@@ -6,25 +7,37 @@ import { AccountSection } from './manage/AccountSection';
 import { DataMaintenanceSection } from './manage/DataMaintenanceSection';
 import { PrivacyPolicyModal } from './manage/PrivacyPolicyModal';
 import { ProgramEditor } from './manage/ProgramEditor';
-import { SectionHeader, Stack, Button, TYPOGRAPHY } from './ui';
+import { SectionHeader, Stack, Button, TYPOGRAPHY, MOTION_CONFIG } from './ui';
 import { cn } from '../lib/utils';
 
 export const ManageView: React.FC = () => {
   const { workouts } = useFitness();
   const [isEditingProgram, setIsEditingProgram] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
-
-  // If in drill-down Program Editor flow, render ProgramEditor
-  if (isEditingProgram) {
-    return (
-      <div className="pt-4 pb-12">
-        <ProgramEditor onBackToManage={() => setIsEditingProgram(false)} />
-      </div>
-    );
-  }
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    <Stack spacing="xl" className="pt-4 pb-12">
+    <AnimatePresence mode="wait" initial={false}>
+      {isEditingProgram ? (
+        <motion.div
+          key="program-editor"
+          initial={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.initial}
+          animate={MOTION_CONFIG.viewEntrance.animate}
+          exit={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.exit}
+          transition={MOTION_CONFIG.viewEntrance.transition}
+          className="pt-4 pb-12"
+        >
+          <ProgramEditor onBackToManage={() => setIsEditingProgram(false)} />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="manage-main"
+          initial={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.initial}
+          animate={MOTION_CONFIG.viewEntrance.animate}
+          exit={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.exit}
+          transition={MOTION_CONFIG.viewEntrance.transition}
+        >
+          <Stack spacing="xl" className="pt-4 pb-12">
       {/* Top Page Header */}
       <SectionHeader
         eyebrow="System & Training"
@@ -68,6 +81,9 @@ export const ManageView: React.FC = () => {
         isOpen={showPrivacyPolicy}
         onClose={() => setShowPrivacyPolicy(false)}
       />
-    </Stack>
+          </Stack>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

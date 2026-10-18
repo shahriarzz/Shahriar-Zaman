@@ -130,7 +130,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         </p>
       )}
       {typeof success === 'string' && (
-        <p className={TYPOGRAPHY.formSuccess}>
+        <p className={TYPOGRAPHY.successText}>
           {success}
         </p>
       )}

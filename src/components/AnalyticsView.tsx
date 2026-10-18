@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -65,7 +66,8 @@ import {
   TYPOGRAPHY,
   SHADOW,
   SEMANTIC_COLORS,
-  CHART_THEME
+  CHART_THEME,
+  MOTION_CONFIG
 } from './ui';
 
 // Unified heatmap intensity scale used for both matrix cells and legend
@@ -93,6 +95,7 @@ export const AnalyticsView: React.FC = () => {
   const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(new Date());
   const [showAllRecords, setShowAllRecords] = useState<boolean>(false);
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
+  const shouldReduceMotion = useReducedMotion();
 
   const {
     trainingStreak,
@@ -187,450 +190,480 @@ export const AnalyticsView: React.FC = () => {
       />
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
-      <Grid cols={2} colsLg={4} gap="md">
-        {/* 1. Scheduled Training Streak */}
-        <StatCard
-          label="Scheduled Training Streak"
-          value={trainingStreak.currentStreak}
-          unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
-          icon={<Flame size={16} />}
-          accent="orange"
-          sublabel="Respects recovery days"
-          trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
-        />
+      <motion.div
+        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
+        animate={MOTION_CONFIG.entrance.animate}
+        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(0) }}
+      >
+        <Grid cols={2} colsLg={4} gap="md">
+          {/* 1. Scheduled Training Streak */}
+          <StatCard
+            label="Scheduled Training Streak"
+            value={trainingStreak.currentStreak}
+            unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
+            icon={<Flame size={16} />}
+            accent="orange"
+            sublabel="Respects recovery days"
+            trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
+          />
 
-        {/* 2. Adherence Rate */}
-        <StatCard
-          label="Adherence Rate"
-          value={adherenceInsight.percent}
-          unit="%"
-          icon={<Activity size={16} />}
-          accent="emerald"
-          sublabel={
-            adherenceInsight.pendingScheduledWorkouts > 0
-              ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
-              : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
-          }
-        />
+          {/* 2. Adherence Rate */}
+          <StatCard
+            label="Adherence Rate"
+            value={adherenceInsight.percent}
+            unit="%"
+            icon={<Activity size={16} />}
+            accent="emerald"
+            sublabel={
+              adherenceInsight.pendingScheduledWorkouts > 0
+                ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
+                : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
+            }
+          />
 
-        {/* 3. Window Volume with Period-over-Period Trend */}
-        <StatCard
-          label="Window Volume"
-          value={aggregated.rangeVolume}
-          formatValue={formatCompactWeight}
-          unit="kg"
-          icon={<Dumbbell size={16} />}
-          accent="emerald"
-          sublabel={`${timeRange.toUpperCase()} completed volume`}
-          trend={
-            aggregated.volumePeriodChangePct !== null ? (
-              <span
-                className={cn(
-                  "font-bold flex items-center gap-0.5",
-                  aggregated.volumePeriodChangePct > 0
-                    ? "text-emerald-400"
-                    : (aggregated.volumePeriodChangePct < 0 ? "text-red-400" : "text-zinc-400")
-                )}
-              >
-                {aggregated.volumePeriodChangePct > 0 ? (
-                  <TrendingUp size={12} />
-                ) : aggregated.volumePeriodChangePct < 0 ? (
-                  <TrendingDown size={12} />
-                ) : null}
-                {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
-              </span>
-            ) : undefined
-          }
-        />
+          {/* 3. Window Volume with Period-over-Period Trend */}
+          <StatCard
+            label="Window Volume"
+            value={aggregated.rangeVolume}
+            formatValue={formatCompactWeight}
+            unit="kg"
+            icon={<Dumbbell size={16} />}
+            accent="emerald"
+            sublabel={`${timeRange.toUpperCase()} completed volume`}
+            trend={
+              aggregated.volumePeriodChangePct !== null ? (
+                <span
+                  className={cn(
+                    "font-bold flex items-center gap-0.5",
+                    aggregated.volumePeriodChangePct > 0
+                      ? "text-emerald-400"
+                      : (aggregated.volumePeriodChangePct < 0 ? "text-red-400" : "text-zinc-400")
+                  )}
+                >
+                  {aggregated.volumePeriodChangePct > 0 ? (
+                    <TrendingUp size={12} />
+                  ) : aggregated.volumePeriodChangePct < 0 ? (
+                    <TrendingDown size={12} />
+                  ) : null}
+                  {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
+                </span>
+              ) : undefined
+            }
+          />
 
-        {/* 4. Performance Score */}
-        <StatCard
-          label="Performance Score"
-          value={performanceScore.score}
-          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
-          isUnavailable={performanceScore.score === null}
-          unavailableLabel="Building baseline"
-          icon={<Award size={16} />}
-          accent={
-            performanceScore.score === null
-              ? 'zinc'
-              : performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
-              ? 'emerald'
-              : performanceScore.status === 'Good'
-              ? 'amber'
-              : 'red'
-          }
-        />
-      </Grid>
+          {/* 4. Performance Score */}
+          <StatCard
+            label="Performance Score"
+            value={performanceScore.score}
+            sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
+            isUnavailable={performanceScore.score === null}
+            unavailableLabel="Building baseline"
+            icon={<Award size={16} />}
+            accent={
+              performanceScore.score === null
+                ? 'zinc'
+                : performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
+                ? 'emerald'
+                : performanceScore.status === 'Good'
+                ? 'amber'
+                : 'red'
+            }
+          />
+        </Grid>
+      </motion.div>
 
       {/* 3. SECTION 2: TRAINING ACTIVITY (HEATMAP & 1RM PROGRESSION) */}
-      <Section
-        eyebrow="Adherence Matrix"
-        eyebrowColor="emerald"
-        title="Monthly Intensity Heatmap"
-        padding="section"
-        action={
-          <div className={cn("flex items-center", GAP.sm)}>
-            <span className={cn(TYPOGRAPHY.label, "text-zinc-300 mr-2")}>
-              {format(heatmapData.monthStart, 'MMMM yyyy')}
-            </span>
-            <Button
-              variant="secondary"
-              size="icon"
-              className={RADIUS.pill}
-              onClick={() => {
-                haptics.selection();
-                setCurrentHeatmapMonth(subMonths(currentHeatmapMonth, 1));
-              }}
-              icon={<ChevronLeft size={16} />}
-              aria-label="Previous Month"
-            />
-            <Button
-              variant="secondary"
-              size="icon"
-              className={RADIUS.pill}
-              onClick={() => {
-                haptics.selection();
-                setCurrentHeatmapMonth(addMonths(currentHeatmapMonth, 1));
-              }}
-              icon={<ChevronRight size={16} />}
-              aria-label="Next Month"
-            />
-          </div>
-        }
+      <motion.div
+        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
+        animate={MOTION_CONFIG.entrance.animate}
+        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(1) }}
       >
-        <Stack spacing="lg">
-          {/* Heatmap Grid */}
-          <Stack spacing="xs">
-            {/* Weekday headers */}
-            <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-              <span>Sun</span>
+        <Section
+          eyebrow="Adherence Matrix"
+          eyebrowColor="emerald"
+          title="Monthly Intensity Heatmap"
+          padding="section"
+          action={
+            <div className={cn("flex items-center", GAP.sm)}>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 mr-2")}>
+                {format(heatmapData.monthStart, 'MMMM yyyy')}
+              </span>
+              <Button
+                variant="secondary"
+                size="icon"
+                className={RADIUS.pill}
+                onClick={() => {
+                  haptics.selection();
+                  setCurrentHeatmapMonth(subMonths(currentHeatmapMonth, 1));
+                }}
+                icon={<ChevronLeft size={16} />}
+                aria-label="Previous Month"
+              />
+              <Button
+                variant="secondary"
+                size="icon"
+                className={RADIUS.pill}
+                onClick={() => {
+                  haptics.selection();
+                  setCurrentHeatmapMonth(addMonths(currentHeatmapMonth, 1));
+                }}
+                icon={<ChevronRight size={16} />}
+                aria-label="Next Month"
+              />
             </div>
+          }
+        >
+          <Stack spacing="lg">
+            {/* Heatmap Grid */}
+            <Stack spacing="xs">
+              {/* Weekday headers */}
+              <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+              </div>
 
-            {/* Days grid */}
-            <div className={cn("grid grid-cols-7", GAP.xs)}>
-              {heatmapData.days.map((day, dayIdx) => {
-                const dateStr = format(day, 'yyyy-MM-dd');
-                const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
-                const vol = heatmapData.logVolMap[dateStr] || 0;
-                const detail = heatmapData.dayDetailMap[dateStr];
-                const intensity = getHeatmapIntensity(vol, heatmapData.maxDayVol);
+              {/* Days grid */}
+              <div className={cn("grid grid-cols-7", GAP.xs)}>
+                {heatmapData.days.map((day, dayIdx) => {
+                  const dateStr = format(day, 'yyyy-MM-dd');
+                  const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
+                  const vol = heatmapData.logVolMap[dateStr] || 0;
+                  const detail = heatmapData.dayDetailMap[dateStr];
+                  const intensity = getHeatmapIntensity(vol, heatmapData.maxDayVol);
 
-                const cycleDay = getCycleDayForDate(day);
-                const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+                  const cycleDay = getCycleDayForDate(day);
+                  const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
 
-                let tooltipText = `${dateStr}`;
-                if (detail && detail.workoutNames.length > 0) {
-                  tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg, ${detail.doneSets} sets)`;
-                } else if (expectedWo?.type === 'rest') {
-                  tooltipText = `${dateStr} • Scheduled Rest (${expectedWo.name})`;
-                } else if (expectedWo) {
-                  tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
-                } else {
-                  tooltipText = `${dateStr} • Rest`;
-                }
+                  let tooltipText = `${dateStr}`;
+                  if (detail && detail.workoutNames.length > 0) {
+                    tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg, ${detail.doneSets} sets)`;
+                  } else if (expectedWo?.type === 'rest') {
+                    tooltipText = `${dateStr} • Scheduled Rest (${expectedWo.name})`;
+                  } else if (expectedWo) {
+                    tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
+                  } else {
+                    tooltipText = `${dateStr} • Rest`;
+                  }
 
-                return (
-                  <div
-                    key={`day-${dateStr}-${dayIdx}`}
-                    title={tooltipText}
-                    className={cn(
-                      "aspect-square border flex flex-col items-center justify-center transition-all p-1 relative group cursor-default",
-                      RADIUS.button,
-                      isCurrentMonth
-                        ? cn(
-                            intensity.bg,
-                            intensity.border,
-                            intensity.text,
-                            intensity.glow && SHADOW.accentGlow(SEMANTIC_COLORS.emerald)
-                          )
-                        : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
-                    )}
-                  >
-                    <span className={cn(TYPOGRAPHY.label, "leading-none")}>{format(day, 'd')}</span>
-                    {vol > 0 && isCurrentMonth && (
-                      <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80")}>
-                        {(vol / 1000).toFixed(1)}k
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={`day-${dateStr}-${dayIdx}`}
+                      title={tooltipText}
+                      className={cn(
+                        "aspect-square border flex flex-col items-center justify-center transition-all p-1 relative group cursor-default",
+                        RADIUS.button,
+                        isCurrentMonth
+                          ? cn(
+                              intensity.bg,
+                              intensity.border,
+                              intensity.text,
+                              intensity.glow && SHADOW.accentGlow(SEMANTIC_COLORS.emerald)
+                            )
+                          : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
+                      )}
+                    >
+                      <span className={cn(TYPOGRAPHY.label, "leading-none")}>{format(day, 'd')}</span>
+                      {vol > 0 && isCurrentMonth && (
+                        <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80")}>
+                          {(vol / 1000).toFixed(1)}k
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Stack>
+
+            {/* Legend + Summary derived directly from single intensity scale */}
+            <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
+              <div className={cn("flex items-center", GAP.sm)}>
+                <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>Less</span>
+                <div className={cn("flex", GAP.xs)}>
+                  {HEATMAP_INTENSITY_STEPS.map((step) => (
+                    <span
+                      key={`step-${step.level}`}
+                      className={cn("w-3.5 h-3.5 border", RADIUS.button, step.bg, step.border)}
+                    />
+                  ))}
+                </div>
+                <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>More</span>
+              </div>
+
+              <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center", GAP.sm)}>
+                <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
+                <span className="text-zinc-500">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
+                <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
+              </div>
             </div>
           </Stack>
-
-          {/* Legend + Summary derived directly from single intensity scale */}
-          <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
-            <div className={cn("flex items-center", GAP.sm)}>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>Less</span>
-              <div className={cn("flex", GAP.xs)}>
-                {HEATMAP_INTENSITY_STEPS.map((step) => (
-                  <span
-                    key={`step-${step.level}`}
-                    className={cn("w-3.5 h-3.5 border", RADIUS.button, step.bg, step.border)}
-                  />
-                ))}
-              </div>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>More</span>
-            </div>
-
-            <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center", GAP.sm)}>
-              <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
-              <span className="text-zinc-500">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
-              <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
-            </div>
-          </div>
-        </Stack>
-      </Section>
+        </Section>
+      </motion.div>
 
       {/* 4. SECTION 3: STRENGTH PROGRESSION (1RM TREND) */}
-      <Section
-        eyebrow="Strength Progression"
-        eyebrowColor="emerald"
-        title="Estimated 1RM Progression"
-        padding="section"
-        action={
-          priorityExercises.length > 0 ? (
-            <div className={cn("flex items-center max-w-[220px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none", GAP.sm)}>
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
-              <div className={cn("flex", GAP.xs)}>
-                {priorityExercises.map((ex, idx) => (
-                  <Button
-                    key={ex.id ? `p-ex-${ex.id}-${idx}` : `p-ex-${idx}`}
-                    size="sm"
-                    variant={active1RMExerciseId === ex.id ? 'success' : 'secondary'}
-                    onClick={() => {
-                      haptics.selection();
-                      setSelected1RMExerciseId(ex.id);
-                    }}
-                    className="whitespace-nowrap shrink-0"
-                  >
-                    {ex.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : undefined
-        }
+      <motion.div
+        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
+        animate={MOTION_CONFIG.entrance.animate}
+        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(2) }}
       >
-        <Stack spacing="lg">
-          {aggregated.active1RMTrend.length > 0 ? (
-            <div className="h-64 sm:h-72 w-full">
+        <Section
+          eyebrow="Strength Progression"
+          eyebrowColor="emerald"
+          title="Estimated 1RM Progression"
+          padding="section"
+          action={
+            priorityExercises.length > 0 ? (
+              <div className={cn("flex items-center max-w-[220px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none", GAP.sm)}>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
+                <div className={cn("flex", GAP.xs)}>
+                  {priorityExercises.map((ex, idx) => (
+                    <Button
+                      key={ex.id ? `p-ex-${ex.id}-${idx}` : `p-ex-${idx}`}
+                      size="sm"
+                      variant={active1RMExerciseId === ex.id ? 'success' : 'secondary'}
+                      onClick={() => {
+                        haptics.selection();
+                        setSelected1RMExerciseId(ex.id);
+                      }}
+                      className="whitespace-nowrap shrink-0"
+                    >
+                      {ex.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : undefined
+          }
+        >
+          <Stack spacing="lg">
+            {aggregated.active1RMTrend.length > 0 ? (
+              <div className="h-64 sm:h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
+                    <XAxis
+                      dataKey="displayDate"
+                      stroke={CHART_THEME.axisText}
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      dy={6}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      stroke={CHART_THEME.axisText}
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      width={48}
+                      tickFormatter={(v) => `${Math.round(v)}kg`}
+                      domain={['dataMin - 5', 'dataMax + 5']}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <ChartTooltip>
+                              <p className="text-zinc-400 font-bold">{data.date}</p>
+                              <p className="text-emerald-400 font-black text-sm">
+                                Est. 1RM: {data.epley1RM} kg
+                              </p>
+                              <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
+                            </ChartTooltip>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="epley1RM"
+                      stroke={CHART_THEME.emerald}
+                      strokeWidth={3}
+                      dot={{ fill: CHART_THEME.emerald, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: CHART_THEME.emeraldLight, stroke: CHART_THEME.text, strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyState
+                icon={TrendingUp}
+                title="No lift progression data"
+                description="No completed sets recorded for this movement in the selected range."
+              />
+            )}
+
+            {/* Summary metrics beneath chart */}
+            <Grid cols={1} colsMd={2} gap="md">
+              <StatCard
+                label="Average Session Length"
+                value={aggregated.avgDuration}
+                unit="min"
+                isUnavailable={aggregated.avgDuration <= 0}
+                icon={<Clock size={20} />}
+                accent="emerald"
+                sublabel={aggregated.avgDuration > 0 ? 'Measured duration' : 'No duration recorded'}
+              />
+
+              <AchievementCard
+                title="Biggest Week Ever"
+                value={aggregated.biggestWeek.volume > 0 ? `${formatCompactWeight(aggregated.biggestWeek.volume)} kg` : '0 kg'}
+                subtitle={aggregated.biggestWeek.weekStr}
+                icon={<Trophy size={18} />}
+              />
+            </Grid>
+          </Stack>
+        </Section>
+      </motion.div>
+
+      {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES, ROUTINES) */}
+      <motion.div
+        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
+        animate={MOTION_CONFIG.entrance.animate}
+        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(3) }}
+      >
+        <Section
+          eyebrow="Anatomical Load Distribution"
+          eyebrowColor="emerald"
+          title="Muscle Group Targeting"
+          padding="section"
+          action={
+            <SegmentedControl<MuscleMetric>
+              options={[
+                { value: 'volume', label: 'Volume' },
+                { value: 'sets', label: 'Sets' },
+                { value: 'frequency', label: 'Freq' }
+              ]}
+              value={muscleMetric}
+              onChange={(m) => {
+                haptics.selection();
+                setMuscleMetric(m);
+              }}
+              accent="emerald"
+              size="sm"
+            />
+          }
+        >
+          <Stack spacing="lg">
+            {/* Horizontal Bar Chart without redundant Cell layers */}
+            <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
-                  <XAxis
-                    dataKey="displayDate"
-                    stroke={CHART_THEME.zincText}
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                    dy={6}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    stroke={CHART_THEME.zincText}
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                    width={48}
-                    tickFormatter={(v) => `${Math.round(v)}kg`}
-                    domain={['dataMin - 5', 'dataMax + 5']}
-                  />
+                <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} horizontal={false} />
+                  <XAxis type="number" stroke={CHART_THEME.axisText} fontSize={10} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="category" type="category" stroke={CHART_THEME.axisText} fontSize={11} axisLine={false} tickLine={false} width={80} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
-                        const data = payload[0].payload;
+                        const d = payload[0].payload;
                         return (
                           <ChartTooltip>
-                            <p className="text-zinc-400 font-bold">{data.date}</p>
-                            <p className="text-emerald-400 font-black text-sm">
-                              Est. 1RM: {data.epley1RM} kg
-                            </p>
-                            <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
+                            <span className="text-zinc-400 uppercase">{d.category}: </span>
+                            <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
                           </ChartTooltip>
                         );
                       }
                       return null;
                     }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="epley1RM"
-                    stroke={CHART_THEME.emerald}
-                    strokeWidth={3}
-                    dot={{ fill: CHART_THEME.emerald, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
-                    activeDot={{ r: 6, fill: CHART_THEME.emeraldLight, stroke: CHART_THEME.text, strokeWidth: 2 }}
-                  />
-                </LineChart>
+                  <Bar dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
-          ) : (
-            <EmptyState
-              icon={TrendingUp}
-              title="No lift progression data"
-              description="No completed sets recorded for this movement in the selected range."
-            />
-          )}
 
-          {/* Summary metrics beneath chart */}
-          <Grid cols={1} colsMd={2} gap="md">
-            <StatCard
-              label="Average Session Length"
-              value={aggregated.avgDuration}
-              unit="min"
-              isUnavailable={aggregated.avgDuration <= 0}
-              icon={<Clock size={20} />}
-              accent="emerald"
-              sublabel={aggregated.avgDuration > 0 ? 'Measured duration' : 'No duration recorded'}
-            />
+            {/* Most Frequent Exercises inside one unified compact Card */}
+            <Stack spacing="sm" className={cn("pt-4 border-t", BORDER.subtle)}>
+              <div className="flex items-center justify-between">
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
+                  Most Frequent Exercises
+                </span>
+                {aggregated.mostFrequentExercises.length > 3 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllExercises(!showAllExercises)}
+                    icon={showAllExercises ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    iconPosition="right"
+                  >
+                    {showAllExercises ? 'Show Top 3' : `View All (${aggregated.mostFrequentExercises.length})`}
+                  </Button>
+                )}
+              </div>
 
-            <AchievementCard
-              title="Biggest Week Ever"
-              value={aggregated.biggestWeek.volume > 0 ? `${formatCompactWeight(aggregated.biggestWeek.volume)} kg` : '0 kg'}
-              subtitle={aggregated.biggestWeek.weekStr}
-              icon={<Trophy size={18} />}
-            />
-          </Grid>
-        </Stack>
-      </Section>
+              <Card surface="recessed" variant="standard" padding="standard">
+                {visibleExercises.length > 0 ? (
+                  <div className={cn("divide-y", BORDER.subtle)}>
+                    {visibleExercises.map((ex, idx) => (
+                      <div
+                        key={`freq-ex-${ex.name}-${idx}`}
+                        className={cn(
+                          "flex items-center justify-between py-2.5 first:pt-0 last:pb-0",
+                          GAP.sm
+                        )}
+                      >
+                        <div className={cn("flex items-center min-w-0", GAP.sm)}>
+                          <span className={cn(
+                            "w-6 h-6 flex items-center justify-center font-mono font-bold text-xs shrink-0 border",
+                            RADIUS.button,
+                            idx === 0
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                          )}>
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white break-words">{ex.name}</p>
+                            <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
+                              {ex.count} {ex.count === 1 ? 'session' : 'sessions'} logged
+                            </p>
+                          </div>
+                        </div>
 
-      {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES, ROUTINES) */}
-      <Section
-        eyebrow="Anatomical Load Distribution"
-        eyebrowColor="emerald"
-        title="Muscle Group Targeting"
-        padding="section"
-        action={
-          <SegmentedControl<MuscleMetric>
-            options={[
-              { value: 'volume', label: 'Volume' },
-              { value: 'sets', label: 'Sets' },
-              { value: 'frequency', label: 'Freq' }
-            ]}
-            value={muscleMetric}
-            onChange={(m) => {
-              haptics.selection();
-              setMuscleMetric(m);
-            }}
-            accent="emerald"
-            size="sm"
-          />
-        }
-      >
-        <Stack spacing="lg">
-          {/* Horizontal Bar Chart without redundant Cell layers */}
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} horizontal={false} />
-                <XAxis type="number" stroke={CHART_THEME.zincText} fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis dataKey="category" type="category" stroke={CHART_THEME.zincText} fontSize={11} axisLine={false} tickLine={false} width={80} />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const d = payload[0].payload;
-                      return (
-                        <ChartTooltip>
-                          <span className="text-zinc-400 uppercase">{d.category}: </span>
-                          <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
-                        </ChartTooltip>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Most Frequent Exercises inside one unified compact Card */}
-          <Stack spacing="sm" className={cn("pt-4 border-t", BORDER.subtle)}>
-            <div className="flex items-center justify-between">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
-                Most Frequent Exercises
-              </span>
-              {aggregated.mostFrequentExercises.length > 3 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAllExercises(!showAllExercises)}
-                  icon={showAllExercises ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  iconPosition="right"
-                >
-                  {showAllExercises ? 'Show Top 3' : `View All (${aggregated.mostFrequentExercises.length})`}
-                </Button>
-              )}
-            </div>
-
-            <Card surface="recessed" variant="standard" padding="standard">
-              {visibleExercises.length > 0 ? (
-                <div className={cn("divide-y", BORDER.subtle)}>
-                  {visibleExercises.map((ex, idx) => (
-                    <div
-                      key={`freq-ex-${ex.name}-${idx}`}
-                      className={cn(
-                        "flex items-center justify-between py-2.5 first:pt-0 last:pb-0",
-                        GAP.sm
-                      )}
-                    >
-                      <div className={cn("flex items-center min-w-0", GAP.sm)}>
-                        <span className={cn(
-                          "w-6 h-6 flex items-center justify-center font-mono font-bold text-xs shrink-0 border",
-                          RADIUS.button,
-                          idx === 0
-                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                            : "bg-zinc-900 border-zinc-800 text-zinc-400"
-                        )}>
-                          #{idx + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white break-words">{ex.name}</p>
-                          <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
-                            {ex.count} {ex.count === 1 ? 'session' : 'sessions'} logged
-                          </p>
+                        <div className="text-right shrink-0">
+                          <span className="font-mono font-bold text-xs text-zinc-300">
+                            {(ex.volume / 1000).toFixed(1)}k kg
+                          </span>
                         </div>
                       </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="font-mono font-bold text-xs text-zinc-300">
-                          {(ex.volume / 1000).toFixed(1)}k kg
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className={cn(TYPOGRAPHY.body, "text-zinc-500 text-center py-2")}>
-                  No exercise logs recorded in this period.
-                </p>
-              )}
-            </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={cn(TYPOGRAPHY.body, "text-zinc-500 text-center py-2")}>
+                    No exercise logs recorded in this period.
+                  </p>
+                )}
+              </Card>
+            </Stack>
           </Stack>
-        </Stack>
-      </Section>
+        </Section>
+      </motion.div>
 
       {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
-      <Section
-        eyebrow="Anatomical Distribution & Workload"
-        eyebrowColor="emerald"
-        title="Muscle Balance & Recovery"
-        padding="section"
+      <motion.div
+        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
+        animate={MOTION_CONFIG.entrance.animate}
+        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(4) }}
       >
-        <MuscleBalanceRecovery
-          startDate={muscleBalanceDateRange.startDate}
-          endDate={muscleBalanceDateRange.endDate}
-          timeRangeLabel={muscleBalanceDateRange.label}
-          referenceDate={currentDate}
-        />
-      </Section>
+        <Section
+          eyebrow="Anatomical Distribution & Workload"
+          eyebrowColor="emerald"
+          title="Muscle Balance & Recovery"
+          padding="section"
+        >
+          <MuscleBalanceRecovery
+            startDate={muscleBalanceDateRange.startDate}
+            endDate={muscleBalanceDateRange.endDate}
+            timeRangeLabel={muscleBalanceDateRange.label}
+            referenceDate={currentDate}
+          />
+        </Section>
+      </motion.div>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}
       <Section

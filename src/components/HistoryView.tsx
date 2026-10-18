@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus, Sparkles } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
@@ -33,7 +33,9 @@ import {
   SHADOW,
   GAP,
   STACK_SPACING,
-  CHART_THEME
+  CHART_THEME,
+  TRANSITION,
+  MOTION_CONFIG
 } from './ui';
 
 interface HistoryViewProps {
@@ -54,6 +56,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   const [editSessionState, setEditSessionState] = useState<SessionLog | null>(null);
   const [editVerified, setEditVerified] = useState(false);
   const [activeMonthTab, setActiveMonthTab] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   // Sync initialDate search and auto-expand it if provided
   useEffect(() => {
@@ -553,7 +556,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                 </div>
                                 <div className={cn("h-1.5 w-full rounded-full overflow-hidden", SURFACE.recessed)}>
                                   <div 
-                                    className="h-full bg-orange-500" 
+                                    className="h-full" 
                                     style={{
                                       width: `${percentage}%`,
                                       backgroundColor: WORKOUT_COLORS[type] || SEMANTIC_COLORS.orange
@@ -624,13 +627,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                   className="overflow-hidden transition-all"
                 >
                   {/* 1. Days list bar */}
-                  <div
-                    onClick={() => {
-                      haptics.light();
-                      setExpandedDate(isExpanded ? null : session.id);
-                    }}
-                    className="w-full text-left p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-800/30 transition-all duration-200"
-                  >
+                    <div
+                      onClick={() => {
+                        haptics.light();
+                        setExpandedDate(isExpanded ? null : session.id);
+                      }}
+                      className={cn(
+                        "w-full text-left p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-800/30",
+                        TRANSITION.interactive
+                      )}
+                    >
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -708,7 +714,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400", SURFACE.recessed, BORDER.standard)}>
                         <ChevronRight 
                           size={16} 
-                          className={cn("transition-transform duration-300", isExpanded && "rotate-90 text-orange-500")} 
+                          className={cn(TRANSITION.transform, isExpanded && "rotate-90 text-orange-500")} 
                         />
                       </div>
                     </div>
@@ -718,10 +724,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                      initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                      animate={MOTION_CONFIG.collapse.animate}
+                      exit={shouldReduceMotion ? false : MOTION_CONFIG.collapse.exit}
+                      transition={MOTION_CONFIG.collapse.transition}
                       className={cn("border-t p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
                     >
                       {editingLogId === session.id && editSessionState ? (
@@ -1007,7 +1013,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   )}
                                   <ChevronRight 
                                     size={14} 
-                                    className={cn("text-zinc-500 transition-transform absolute right-4 top-1/2 -translate-y-1/2 duration-300", isSelected && "rotate-90")} 
+                                    className={cn("text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2", TRANSITION.transform, isSelected && "rotate-90")} 
                                     style={isSelected ? { color: exColor } : undefined}
                                   />
                                 </div>
@@ -1017,10 +1023,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                               <AnimatePresence>
                                 {isSelected && (
                                   <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
+                                    initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                                    animate={MOTION_CONFIG.collapse.animate}
+                                    exit={shouldReduceMotion ? false : MOTION_CONFIG.collapse.exit}
+                                    transition={MOTION_CONFIG.collapse.transition}
                                     className={cn("border-t p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
                                   >
                                     <div className="flex items-center justify-between">
@@ -1064,7 +1070,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             <Tooltip
                                               contentStyle={{
                                                 backgroundColor: CHART_THEME.background,
-                                                borderColor: CHART_THEME.border,
+                                                borderColor: CHART_THEME.grid,
                                                 borderRadius: '12px',
                                                 fontSize: '10px',
                                                 fontFamily: 'monospace',

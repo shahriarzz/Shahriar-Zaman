@@ -132,8 +132,8 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     targetFingerprint: 'shoulders overall',
     involvements: [
       { muscle: 'front_delts', role: 'primary' },
+      { muscle: 'side_delts', role: 'secondary_strong' },
       { muscle: 'triceps', role: 'secondary_strong' },
-      { muscle: 'side_delts', role: 'secondary_moderate' },
     ],
   },
   // e3: Flat Machine Press ('Mid Chest')
@@ -166,13 +166,13 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'forearms', role: 'primary' },
     ],
   },
-  // e7: Lat Pulldown (Wide) ('Lats Width') - biceps are secondary_strong; upper_back is secondary_moderate
+  // e7: Lat Pulldown (Wide) ('Lats Width') - biceps are secondary_strong in pulldowns
   e7: {
     targetFingerprint: 'lats width',
     involvements: [
       { muscle: 'lats', role: 'primary' },
+      { muscle: 'upper_back', role: 'secondary_strong' },
       { muscle: 'biceps', role: 'secondary_strong' },
-      { muscle: 'upper_back', role: 'secondary_moderate' },
     ],
   },
   // e8: Seated Cable Row ('Mid-Back') - biceps are secondary_moderate in mid-back rows
@@ -185,20 +185,22 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'biceps', role: 'secondary_moderate' },
     ],
   },
-  // e9: Face Pulls ('Rear Delts') - posterior deltoid primary with upper back (rhomboids/traps) dynamic synergist
+  // e9: Face Pulls ('Rear Delts')
   e9: {
     targetFingerprint: 'rear delts',
     involvements: [
       { muscle: 'rear_delts', role: 'primary' },
       { muscle: 'upper_back', role: 'secondary_strong' },
+      { muscle: 'side_delts', role: 'secondary_moderate' },
     ],
   },
-  // e10: Straight-Arm Pulldown ('Lats/V-Taper') - pure shoulder extension; triceps acts isometrically and is excluded
+  // e10: Straight-Arm Pulldown ('Lats/V-Taper')
   e10: {
     targetFingerprint: 'lats/v-taper',
     involvements: [
       { muscle: 'lats', role: 'primary' },
       { muscle: 'upper_back', role: 'secondary_moderate' },
+      { muscle: 'triceps', role: 'secondary_moderate' },
     ],
   },
   // e11: Hammer Curls ('Forearm/Bicep')
@@ -234,16 +236,12 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     ],
   },
   // e15: Romanian Deadlift ('Hamstrings/Back')
-  // Biomechanical Rationale: Dynamic hip extension powered by hamstrings (primary) and glutes (secondary_strong).
-  // Spinal erectors (lower_back) maintain an isometric contraction against spinal flexion under heavy load;
-  // attributed as secondary_moderate (0.25 WSE) to account for substantial recovery demand without equating
-  // isometric stabilization to dynamic prime hip extension synergists (glutes).
   e15: {
     targetFingerprint: 'hamstrings/back',
     involvements: [
       { muscle: 'hamstrings', role: 'primary' },
       { muscle: 'glutes', role: 'secondary_strong' },
-      { muscle: 'lower_back', role: 'secondary_moderate' },
+      { muscle: 'lower_back', role: 'secondary_strong' },
     ],
   },
   // e16: Plate Pinch Holds ('Grip/Forearm')
@@ -267,8 +265,8 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     targetFingerprint: 'shoulders mass',
     involvements: [
       { muscle: 'front_delts', role: 'primary' },
+      { muscle: 'side_delts', role: 'secondary_strong' },
       { muscle: 'triceps', role: 'secondary_strong' },
-      { muscle: 'side_delts', role: 'secondary_moderate' },
     ],
   },
   // e19: DB Lateral Raise ('Side Delts')
@@ -293,12 +291,12 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'triceps', role: 'primary' },
     ],
   },
-  // e22: Reverse BB Curl ('Top Forearm') - pronated grip mechanically disadvantages biceps brachii
+  // e22: Reverse BB Curl ('Top Forearm')
   e22: {
     targetFingerprint: 'top forearm',
     involvements: [
       { muscle: 'forearms', role: 'primary' },
-      { muscle: 'biceps', role: 'secondary_moderate' },
+      { muscle: 'biceps', role: 'secondary_strong' },
     ],
   },
   // e23: Chest Supported Row ('Mid-Back') - biceps are secondary_moderate in rows
@@ -321,9 +319,6 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
     ],
   },
   // e25: Single-Arm Cable Fly ('Rear Delts')
-  // Ambiguity Resolution: Verified against initialData.ts (target: 'Rear Delts', workout: Pull Day B / pull-b,
-  // execution note: 'Stand upright; pull cable across body'). This is a single-arm standing reverse cable fly
-  // performing horizontal shoulder abduction targeting the posterior deltoid, NOT an anterior chest fly.
   e25: {
     targetFingerprint: 'rear delts',
     involvements: [
@@ -382,11 +377,12 @@ export const CURATED_EXERCISE_PROFILES: Record<string, CuratedProfileDefinition>
       { muscle: 'core', role: 'primary' },
     ],
   },
-  // e33: Behind-Back Curls ('Inner Forearm') - behind-the-back barbell wrist curls (wrist flexion only)
+  // e33: Behind-Back Curls ('Inner Forearm')
   e33: {
     targetFingerprint: 'inner forearm',
     involvements: [
       { muscle: 'forearms', role: 'primary' },
+      { muscle: 'biceps', role: 'secondary_moderate' },
     ],
   },
   // e34: Cable Curl (Rope) ('Biceps/Peak')
@@ -468,23 +464,7 @@ export function inferMuscleProfileFromTarget(targetStr: string | null | undefine
   }
 
   const t = targetStr.trim().toLowerCase();
-  if (
-    !t ||
-    t === 'general' ||
-    t === 'unknown' ||
-    t === 'unlisted' ||
-    t === 'other' ||
-    t === 'misc' ||
-    t === 'miscellaneous' ||
-    t === 'full body' ||
-    t === 'cardio' ||
-    t === 'conditioning' ||
-    t === 'warmup' ||
-    t === 'warm-up' ||
-    t === 'mobility' ||
-    t === 'stretching' ||
-    t === 'recovery'
-  ) {
+  if (!t || t === 'general' || t === 'unknown' || t === 'unlisted') {
     return { source: 'unclassified', involvements: [] };
   }
 

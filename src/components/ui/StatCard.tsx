@@ -6,7 +6,8 @@ import {
   SemanticColor,
   SEMANTIC_COLORS,
   getAccentColor,
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  TRANSITION
 } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { useCountUp } from '../../hooks/useCountUp';
@@ -187,6 +188,22 @@ export const StatCard: React.FC<StatCardProps> = ({
     return formatAnimatedValue(animatedNumber, parsed);
   }, [effectiveUnavailable, parsed, animatedNumber, disableAnimation, value]);
 
+  const prevDisplayRef = React.useRef<string | null>(null);
+  const [isValueChanging, setIsValueChanging] = React.useState(false);
+
+  React.useEffect(() => {
+    if (prevDisplayRef.current === null) {
+      prevDisplayRef.current = displayString;
+      return;
+    }
+    if (prevDisplayRef.current !== displayString) {
+      prevDisplayRef.current = displayString;
+      setIsValueChanging(true);
+      const timer = setTimeout(() => setIsValueChanging(false), 150);
+      return () => clearTimeout(timer);
+    }
+  }, [displayString]);
+
   const trendColorClass = trendDirection === 'positive'
     ? 'text-emerald-400'
     : trendDirection === 'negative'
@@ -256,6 +273,8 @@ export const StatCard: React.FC<StatCardProps> = ({
             className={cn(
               STAT_NUMBER_VARIANTS[size],
               "min-w-0 max-w-full break-words whitespace-normal",
+              TRANSITION.opacity,
+              isValueChanging ? "opacity-50" : "opacity-100",
               effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
             )}
           >

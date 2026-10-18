@@ -82,8 +82,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
 
   const sizeClasses: Record<ButtonSize, string> = {
     sm: cn('h-8 min-h-[32px] px-3', GAP.xs, TYPOGRAPHY.buttonSm),
-    md: cn('h-10 min-h-[40px] px-5 gap-2', TYPOGRAPHY.buttonMd),
-    lg: cn('h-12 min-h-[48px] px-8', GAP.sm, TYPOGRAPHY.buttonLg),
+    md: cn('h-10 min-h-[40px] px-5 gap-2', TYPOGRAPHY.button),
+    lg: cn('h-12 min-h-[48px] px-8', GAP.sm, TYPOGRAPHY.button),
     icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-2 justify-center',
   };
 

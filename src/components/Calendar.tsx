@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Calendar as CalendarIcon
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
@@ -39,7 +39,9 @@ import {
   RADIUS,
   INTERACTIVE,
   GAP,
-  SEMANTIC_COLORS
+  SEMANTIC_COLORS,
+  MOTION_CONFIG,
+  TRANSITION
 } from './ui';
 
 interface CalendarProps {
@@ -51,6 +53,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const { index, workoutMap, coreWorkoutByCycleDayMap, getCycleDayForDate, resolveExerciseMeta } = useFitnessDerivedData();
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   // 1. Shared Calendar Grid hook for month dates and log mapping consuming canonical FitnessIndex
   const {
@@ -252,14 +255,16 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               return (
                 <motion.button
                   key={dateStr}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
+                  whileHover={shouldReduceMotion ? undefined : MOTION_CONFIG.hoverRestrained}
+                  whileTap={shouldReduceMotion ? undefined : MOTION_CONFIG.tapRestrained}
+                  transition={MOTION_CONFIG.pressTransition}
                   onClick={() => {
                     haptics.selection();
                     setSelectedDate(day);
                   }}
                   className={cn(
-                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border transition-all duration-200 flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    TRANSITION.interactive,
                     RADIUS.card,
                     !isCurrentMonthDay && "opacity-20 pointer-events-none",
                     isSelected

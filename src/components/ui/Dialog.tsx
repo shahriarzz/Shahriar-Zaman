@@ -7,7 +7,7 @@ export interface DialogProps {
   isOpen: boolean;
   onClose?: () => void;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   className?: string;
   closeOnEscape?: boolean;
   closeOnBackdropClick?: boolean;
@@ -107,7 +107,9 @@ export const Dialog: React.FC<DialogProps> = ({
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
-    full: 'max-w-2xl',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    full: 'max-w-full',
   };
 
   return (
@@ -163,6 +165,7 @@ export interface DialogHeaderProps extends React.HTMLAttributes<HTMLDivElement> 
   title?: string;
   description?: string;
   icon?: React.ReactNode;
+  action?: React.ReactNode;
   isDanger?: boolean;
 }
 
@@ -171,49 +174,57 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({
   title,
   description,
   icon,
+  action,
   isDanger,
   children,
   className,
   ...props
 }) => {
   return (
-    <div className={cn("flex items-start gap-4", className)} {...props}>
-      {icon && (
-        <div
-          className={cn(
-            "p-3 flex-shrink-0 border",
-            RADIUS.card,
-            isDanger
-              ? "bg-red-500/10 text-red-500 border-red-500/20"
-              : "bg-orange-500/10 text-orange-500 border-orange-500/20"
-          )}
-        >
-          {icon}
-        </div>
-      )}
-      <div className="flex-1 space-y-1.5 min-w-0">
-        {eyebrow && (
-          <p className={TYPOGRAPHY.eyebrow}>
-            {eyebrow}
-          </p>
-        )}
-        {title && (
-          <h2
+    <div className={cn("flex items-start justify-between gap-4", className)} {...props}>
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        {icon && (
+          <div
             className={cn(
-              "text-base font-sans font-semibold tracking-tight",
-              isDanger ? "text-red-400" : "text-zinc-100"
+              "p-2.5 flex-shrink-0 border",
+              RADIUS.card,
+              isDanger
+                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                : "bg-orange-500/10 text-orange-500 border-orange-500/20"
             )}
           >
-            {title}
-          </h2>
-        )}
-        {description && (
-          <div className="text-xs text-zinc-400 font-mono leading-relaxed uppercase tracking-wider whitespace-pre-wrap">
-            {description}
+            {icon}
           </div>
         )}
-        {children}
+        <div className="flex-1 space-y-1.5 min-w-0">
+          {eyebrow && (
+            <p className={TYPOGRAPHY.eyebrow}>
+              {eyebrow}
+            </p>
+          )}
+          {title && (
+            <h2
+              className={cn(
+                "text-base font-sans font-semibold tracking-tight",
+                isDanger ? "text-red-400" : "text-zinc-100"
+              )}
+            >
+              {title}
+            </h2>
+          )}
+          {description && (
+            <div className="text-xs text-zinc-400 font-mono leading-relaxed uppercase tracking-wider whitespace-pre-wrap">
+              {description}
+            </div>
+          )}
+          {children}
+        </div>
       </div>
+      {action && (
+        <div className="shrink-0 flex items-center">
+          {action}
+        </div>
+      )}
     </div>
   );
 };

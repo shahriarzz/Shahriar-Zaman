@@ -70,6 +70,75 @@ export const ICON_SIZE = {
   hero: 32,
 } as const;
 
+// -------------------------------------------------------------
+// MOTION & TRANSITION TOKENS
+// -------------------------------------------------------------
+
+// Duration values in ms corresponding to canonical use cases
+export const DURATION = {
+  fast: 150,       // Micro-interactions, value opacity transitions
+  standard: 200,   // Standard hover, tab, accordion toggles
+  relaxed: 250,    // Entrances, smooth expansions
+  deliberate: 300, // Rotations, drawer slides, sticky transitions
+} as const;
+
+// Reusable Tailwind CSS transition utility tokens
+// Standardized on specific properties (colors, transform, opacity) rather than broad transition-all
+// Includes motion-reduce:transition-none to respect accessibility preferences
+export const TRANSITION = {
+  colors: 'transition-colors duration-200 motion-reduce:transition-none',
+  colorsFast: 'transition-colors duration-150 motion-reduce:transition-none',
+  transform: 'transition-transform duration-300 motion-reduce:transition-none',
+  transformStandard: 'transition-transform duration-200 motion-reduce:transition-none',
+  opacity: 'transition-opacity duration-150 motion-reduce:transition-none',
+  opacityStandard: 'transition-opacity duration-200 motion-reduce:transition-none',
+  interactive: 'transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none',
+} as const;
+
+// Reusable Framer Motion configurations
+// Strictly compositor-friendly properties (opacity, transform) with small displacements (6-8px)
+export const MOTION_CONFIG = {
+  // Section & view entrance (subtle fade & rise: ~6-8px, 200-250ms)
+  entrance: {
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 6 },
+    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+  },
+  // View/modal drill-down entrance (e.g. Program Editor, Fullscreen views)
+  viewEntrance: {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 8 },
+    transition: { duration: 0.22, ease: 'easeOut' },
+  },
+  // Accordion drawer expansion (200ms)
+  collapse: {
+    initial: { height: 0, opacity: 0 },
+    animate: { height: 'auto', opacity: 1 },
+    exit: { height: 0, opacity: 0 },
+    transition: { duration: 0.2, ease: 'easeInOut' },
+  },
+  // Accordion relaxed expansion (250ms)
+  collapseRelaxed: {
+    initial: { height: 0, opacity: 0 },
+    animate: { height: 'auto', opacity: 1 },
+    exit: { height: 0, opacity: 0 },
+    transition: { duration: 0.25, ease: 'easeInOut' },
+  },
+  // Restrained interactive feedback for controls (Calendar days, micro-buttons)
+  tapRestrained: { scale: 0.985 },
+  hoverRestrained: { scale: 1.015 },
+  pressTransition: { type: 'spring', stiffness: 400, damping: 25 },
+  // Subtle completion celebration / pulse
+  pulseSubtle: {
+    scale: [1, 1.015, 1],
+    transition: { duration: 0.25, ease: 'easeOut' },
+  },
+  // Stagger delays for section sequences (subtle 40ms intervals, capped to avoid waiting)
+  staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
+} as const;
+
 export const INTERACTIVE = {
   hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors',
   active: 'active:scale-[0.99] transition-transform',
@@ -101,7 +170,7 @@ export const SHADOW = {
 export const SEMANTIC_COLORS = {
   orange: '#f97316',
   emerald: '#10b981',
-  amber: '#eab308',
+  amber: '#f59e0b',
   red: '#ef4444',
   indigo: '#6366f1',
   zinc: '#71717a',
@@ -132,7 +201,7 @@ export const SEMANTIC_PALETTE: Record<SemanticColorKey, SemanticColorConfig> = {
     bgSubtle: 'bg-orange-500/10',
     border: 'border-orange-500',
     borderSubtle: 'border-orange-500/30',
-    compound: 'text-orange-500 bg-orange-500/10 border-orange-500/30',
+    compound: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
   },
   emerald: {
     hex: SEMANTIC_COLORS.emerald,
@@ -193,16 +262,16 @@ export const SEMANTIC_PALETTE: Record<SemanticColorKey, SemanticColorConfig> = {
 
 // Canonical shared chart theme for visualization consistency
 export const CHART_THEME = {
-  grid: '#27272a',        // zinc-800
-  axisText: '#71717a',    // zinc-500
-  labelText: '#a1a1aa',   // zinc-400
-  zincText: '#a1a1aa',    // zinc-400
+  grid: '#27272a',        // zinc-800 (structural grid lines & borders)
+  axisText: '#71717a',    // zinc-500 (axis ticks & markers)
+  labelText: '#a1a1aa',   // zinc-400 (secondary descriptions & tooltips)
   background: '#09090e',  // SURFACE.canvas
-  border: '#27272a',      // BORDER.standard
   text: '#ffffff',
   emerald: SEMANTIC_COLORS.emerald,
   emeraldLight: '#34d399',
   orange: SEMANTIC_COLORS.orange,
+  amber: SEMANTIC_COLORS.amber,
+  red: SEMANTIC_COLORS.red,
   indigo: SEMANTIC_COLORS.indigo,
   zinc: SEMANTIC_COLORS.zinc,
 } as const;
@@ -238,8 +307,8 @@ export const TYPOGRAPHY = {
   eyebrow: 'font-mono text-[9px] uppercase tracking-[0.25em] font-bold',
   titlePage: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
   titleSection: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
-  titleSubsection: 'font-display text-lg uppercase tracking-wide text-white leading-none',
-  cardTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none',
+  titleSubsection: 'font-display text-lg uppercase tracking-wide text-white leading-none', // Structural section headers
+  cardTitle: 'font-display text-lg uppercase tracking-wide text-white leading-none', // Card containers & modal section titles
   
   // Card & Stat Tokens
   label: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
@@ -257,9 +326,7 @@ export const TYPOGRAPHY = {
   
   // Controls & States
   buttonSm: 'font-mono text-[11px] uppercase tracking-wider font-bold',
-  buttonMd: 'font-mono text-xs uppercase tracking-wider font-bold',
-  buttonLg: 'font-mono text-xs uppercase tracking-wider font-bold',
-  badgeText: 'font-mono text-[10px] uppercase tracking-wider font-bold',
+  button: 'font-mono text-xs uppercase tracking-wider font-bold',
   badgeSm: 'font-mono text-[9px] uppercase tracking-wider font-bold',
   badgeMd: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   segmentedSm: 'font-mono text-[10px] uppercase tracking-wider font-bold',
@@ -268,7 +335,6 @@ export const TYPOGRAPHY = {
   helperText: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
   errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
   successText: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
-  formSuccess: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
   navLabel: 'font-mono text-[10px] uppercase tracking-wider font-bold',
 
   // Tables & Lists

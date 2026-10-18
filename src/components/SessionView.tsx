@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -166,7 +166,7 @@ import {
   SectionHeader,
   SEMANTIC_COLORS
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER, RADIUS } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -255,14 +255,15 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
   const doneCount = setsForEx.slice(0, ex.sets).filter(s => s.done).length;
   const totalSets = ex.sets;
+  const shouldReduceMotion = useReducedMotion();
 
   return (
     <motion.div
       key={ex.id}
-      animate={justCompleted ? { scale: [1, 1.015, 1] } : {}}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      animate={justCompleted && !shouldReduceMotion ? MOTION_CONFIG.pulseSubtle : {}}
       className={cn(
-        "bg-zinc-900/80 border overflow-hidden transition-all",
+        "bg-zinc-900/80 border overflow-hidden",
+        TRANSITION.interactive,
         RADIUS.card,
         isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : BORDER.standard
       )}
@@ -1100,7 +1101,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
       <header 
-        className={cn("sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b -mx-4 px-4 pb-6 mb-6 session-sticky-header transition-all duration-300", BORDER.subtle, SURFACE.canvasHeader)}
+        className={cn(
+          "sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b -mx-4 px-4 pb-6 mb-6 session-sticky-header",
+          TRANSITION.colors,
+          BORDER.subtle,
+          SURFACE.canvasHeader
+        )}
         style={{
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
