@@ -108,14 +108,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
       }}
       className={cn(
         "inline-flex items-center justify-center select-none cursor-pointer",
-        TRANSITION.colors,
+        TRANSITION.button,
         FOCUS.visible,
         RADIUS.button,
         variantClasses[variant] || variantClasses.secondary,
         sizeClasses[size],
         fullWidth && "w-full",
         (disabled || loading) && "opacity-40 cursor-not-allowed pointer-events-none",
-        !disabled && !loading && "active:scale-[0.98] transition-transform motion-reduce:transition-none",
+        !disabled && !loading && "active:scale-[0.98]",
         className
       )}
       {...props}

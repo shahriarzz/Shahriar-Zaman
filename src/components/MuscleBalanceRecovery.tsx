@@ -198,7 +198,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
                       {!isZero && (
                         <div
-                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.width, TRANSITION.colors)}
+                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.progressBar)}
                           style={{ width: `${Math.max(fillPercent, 2)}%` }}
                         />
                       )}
@@ -310,7 +310,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
                       {item.residualStimulus > 0 && (
                         <div
-                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.width, TRANSITION.colors)}
+                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.progressBar)}
                           style={{ width: `${Math.max(fillPercent, 3)}%` }}
                         />
                       )}

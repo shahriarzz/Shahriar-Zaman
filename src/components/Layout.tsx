@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
@@ -8,12 +8,20 @@ import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRA
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
-const NavigationActiveIndicator: React.FC = () => (
-  <motion.div
-    layoutId="nav-pill"
-    className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"
-  />
-);
+const NavigationActiveIndicator: React.FC = () => {
+  const shouldReduceMotion = useReducedMotion();
+  if (shouldReduceMotion) {
+    return (
+      <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+    );
+  }
+  return (
+    <motion.div
+      layoutId="nav-pill"
+      className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"
+    />
+  );
+};
 
 interface NavItemProps {
   id: ActiveTab;

@@ -81,13 +81,11 @@ export const ICON_SIZE = {
  * - fast (150ms): Micro-interactions, value opacity transitions
  * - standard (200ms): Interactive hovers, color transitions, accordion collapses
  * - relaxed (250ms): View and section entrances, modal surfaces, completion pulses
- * - deliberate (300ms): Rotational transforms, drawer slides
  */
 export const DURATION = {
   fast: 150,
   standard: 200,
   relaxed: 250,
-  deliberate: 300,
 } as const;
 
 // Reusable Tailwind CSS transition utility tokens.
@@ -98,6 +96,8 @@ export const TRANSITION = {
   opacity: 'transition-opacity duration-150 motion-reduce:transition-none',
   interactive: 'transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none',
   width: 'transition-[width] duration-300 motion-reduce:transition-none',
+  button: 'transition-[background-color,border-color,color,transform] duration-200 motion-reduce:transition-none',
+  progressBar: 'transition-[width,background-color] duration-300 motion-reduce:transition-none',
 } as const;
 
 /**
