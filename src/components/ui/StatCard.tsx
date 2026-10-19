@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useReducedMotion } from 'motion/react';
 import { Card, CardProps } from './Card';
 import { Badge } from './Badge';
 import { cn } from '../../lib/utils';
@@ -7,7 +8,8 @@ import {
   SEMANTIC_COLORS,
   getAccentColor,
   TYPOGRAPHY,
-  TRANSITION
+  TRANSITION,
+  DURATION
 } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { useCountUp } from '../../hooks/useCountUp';
@@ -188,21 +190,31 @@ export const StatCard: React.FC<StatCardProps> = ({
     return formatAnimatedValue(animatedNumber, parsed);
   }, [effectiveUnavailable, parsed, animatedNumber, disableAnimation, value]);
 
-  const prevDisplayRef = React.useRef<string | null>(null);
+  const motionReduced = useReducedMotion();
+  const shouldReduceMotion = Boolean(
+    motionReduced ||
+    (typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  );
+  const prevTargetRef = React.useRef<string | number | null | undefined>(null);
+  const isFirstMountRef = React.useRef(true);
   const [isValueChanging, setIsValueChanging] = React.useState(false);
 
   React.useEffect(() => {
-    if (prevDisplayRef.current === null) {
-      prevDisplayRef.current = displayString;
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      prevTargetRef.current = value;
       return;
     }
-    if (prevDisplayRef.current !== displayString) {
-      prevDisplayRef.current = displayString;
+    if (prevTargetRef.current !== value) {
+      prevTargetRef.current = value;
+      if (shouldReduceMotion) return;
       setIsValueChanging(true);
-      const timer = setTimeout(() => setIsValueChanging(false), 150);
+      const timer = setTimeout(() => setIsValueChanging(false), DURATION.fast);
       return () => clearTimeout(timer);
     }
-  }, [displayString]);
+  }, [value, shouldReduceMotion]);
 
   const trendColorClass = trendDirection === 'positive'
     ? 'text-emerald-400'
@@ -274,7 +286,7 @@ export const StatCard: React.FC<StatCardProps> = ({
               STAT_NUMBER_VARIANTS[size],
               "min-w-0 max-w-full break-words whitespace-normal",
               TRANSITION.opacity,
-              isValueChanging ? "opacity-50" : "opacity-100",
+              isValueChanging && !shouldReduceMotion && "opacity-50",
               effectiveUnavailable && "text-zinc-500 font-mono tracking-normal"
             )}
           >

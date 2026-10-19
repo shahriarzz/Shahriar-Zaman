@@ -468,10 +468,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
 
                 return (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.25 }}
+                    initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                    animate={MOTION_CONFIG.collapse.animate}
+                    exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
+                    transition={MOTION_CONFIG.collapse.transition}
                     className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
                   >
                     {/* Summary Grid: Sessions, Volume, PRs, Strength Trend */}
@@ -624,7 +624,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                   variant={isExpanded ? "elevated" : "default"}
                   accent={isExpanded ? "orange" : undefined}
                   padding="none"
-                  className="overflow-hidden transition-all"
+                  className="overflow-hidden"
                 >
                   {/* 1. Days list bar */}
                     <div
@@ -726,7 +726,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <motion.div
                       initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                       animate={MOTION_CONFIG.collapse.animate}
-                      exit={shouldReduceMotion ? false : MOTION_CONFIG.collapse.exit}
+                      exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
                       transition={MOTION_CONFIG.collapse.transition}
                       className={cn("border-t p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
                     >
@@ -826,7 +826,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white",
+                                                TRANSITION.colors,
                                                 RADIUS.button,
                                                 isExtremeW ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
                                               )}
@@ -849,7 +850,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                 });
                                               }}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white transition-all",
+                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white",
+                                                TRANSITION.colors,
                                                 RADIUS.button,
                                                 isExtremeR ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
                                               )}
@@ -1025,7 +1027,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   <motion.div
                                     initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                                     animate={MOTION_CONFIG.collapse.animate}
-                                    exit={shouldReduceMotion ? false : MOTION_CONFIG.collapse.exit}
+                                    exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
                                     transition={MOTION_CONFIG.collapse.transition}
                                     className={cn("border-t p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
                                   >

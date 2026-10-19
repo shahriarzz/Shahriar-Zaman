@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -37,7 +37,8 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center transition-all relative group select-none outline-none",
+        "flex flex-col items-center justify-center relative group select-none outline-none",
+        TRANSITION.colors,
         NAV.item,
         NAV.itemGap,
         active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
@@ -45,7 +46,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       )}
     >
       <div className={cn(
-        "transition-transform duration-300",
+        TRANSITION.transform,
         active && "drop-shadow-[0_0_8px_rgba(249,115,22,0.45)]"
       )}>
         {icon}
@@ -68,7 +69,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
 
   const getSyncColorClass = () => {
     switch (syncStatus) {
-      case 'syncing': return 'bg-amber-500 animate-pulse';
+      case 'syncing': return 'bg-amber-500 motion-safe:animate-pulse';
       case 'synced': return 'bg-emerald-500';
       case 'failed': return 'bg-red-500';
       default: return 'bg-zinc-600';

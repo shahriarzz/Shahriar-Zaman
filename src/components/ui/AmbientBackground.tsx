@@ -17,7 +17,7 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({
     >
       <div
         className={cn(
-          "absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-[100px] pointer-events-none animate-pulse",
+          "absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-[100px] pointer-events-none motion-safe:animate-pulse",
           intensity === 'subtle' ? "bg-orange-500/[0.04]" : "bg-orange-500/10"
         )}
       />

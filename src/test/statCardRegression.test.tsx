@@ -630,6 +630,114 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('45');
       expect(container!.textContent).toContain('min');
     });
+
+    it('initial render is not dimmed (does not apply opacity-50)', () => {
+      act(() => {
+        root!.render(<StatCard label="Streak" value={10} animationDuration={500} />);
+      });
+      const dimmedEl = container!.querySelector('.opacity-50');
+      expect(dimmedEl).toBeNull();
+    });
+
+    it('stable target change triggers subtle effect and clears after duration', () => {
+      act(() => {
+        root!.render(<StatCard label="Streak" value={10} animationDuration={800} />);
+      });
+      expect(container!.querySelector('.opacity-50')).toBeNull();
+
+      // Change target value
+      act(() => {
+        root!.render(<StatCard label="Streak" value={20} animationDuration={800} />);
+      });
+      expect(container!.querySelector('.opacity-50')).not.toBeNull();
+
+      // After 150ms (DURATION.fast), opacity-50 is cleared
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(container!.querySelector('.opacity-50')).toBeNull();
+    });
+
+    it('intermediate count-up frames do not retrigger the effect or keep it dim', () => {
+      act(() => {
+        root!.render(<StatCard label="Volume" value={100} animationDuration={1000} />);
+      });
+
+      // Update to new target
+      act(() => {
+        root!.render(<StatCard label="Volume" value={500} animationDuration={1000} />);
+      });
+      expect(container!.querySelector('.opacity-50')).not.toBeNull();
+
+      // Advance by 150ms: fade timeout expires
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(container!.querySelector('.opacity-50')).toBeNull();
+
+      // Advance timer further during count-up animation: frames tick, but value-fade does NOT re-trigger
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(container!.querySelector('.opacity-50')).toBeNull();
+
+      // Complete the count-up animation
+      act(() => {
+        vi.advanceTimersByTime(650);
+      });
+      expect(container!.querySelector('.opacity-50')).toBeNull();
+      expect(container!.textContent).toContain('500');
+    });
+
+    it('reduced-motion mode skips the value-fade effect entirely', () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      } as any));
+
+      try {
+        act(() => {
+          root!.render(<StatCard label="Tonnage" value={100} />);
+        });
+        expect(container!.querySelector('.opacity-50')).toBeNull();
+
+        // Update target in reduced motion mode
+        act(() => {
+          root!.render(<StatCard label="Tonnage" value={200} />);
+        });
+        // Must skip opacity-50 completely
+        expect(container!.querySelector('.opacity-50')).toBeNull();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('unavailable and nonnumeric values render correctly during target transitions', () => {
+      act(() => {
+        root!.render(<StatCard label="Top Set" value="Bench 100kg" />);
+      });
+      expect(container!.textContent).toContain('Bench 100kg');
+
+      // Update non-numeric value
+      act(() => {
+        root!.render(<StatCard label="Top Set" value="Squat 140kg" />);
+      });
+      expect(container!.textContent).toContain('Squat 140kg');
+
+      // Transition to unavailable
+      act(() => {
+        root!.render(<StatCard label="Top Set" value="—" isUnavailable={true} unavailableLabel="No PR logged" />);
+      });
+      expect(container!.textContent).toContain('—');
+      expect(container!.textContent).toContain('No PR logged');
+    });
   });
 
   describe('Compact Banner Typography & Hierarchy', () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP } from '../../styles/tokens';
+import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP, TRANSITION } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { haptics } from '../../utils/haptics';
 
@@ -107,14 +107,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
         ...style
       }}
       className={cn(
-        "inline-flex items-center justify-center transition-all select-none cursor-pointer",
+        "inline-flex items-center justify-center select-none cursor-pointer",
+        TRANSITION.colors,
         FOCUS.visible,
         RADIUS.button,
         variantClasses[variant] || variantClasses.secondary,
         sizeClasses[size],
         fullWidth && "w-full",
         (disabled || loading) && "opacity-40 cursor-not-allowed pointer-events-none",
-        !disabled && !loading && "active:scale-[0.98]",
+        !disabled && !loading && "active:scale-[0.98] transition-transform motion-reduce:transition-none",
         className
       )}
       {...props}

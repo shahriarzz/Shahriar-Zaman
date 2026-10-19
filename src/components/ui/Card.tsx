@@ -9,7 +9,8 @@ import {
   SHADOW,
   SemanticColor,
   getAccentColor,
-  INTERACTIVE
+  INTERACTIVE,
+  TRANSITION
 } from '../../styles/tokens';
 
 export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised' | 'panel' | 'elevated';
@@ -99,7 +100,8 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       RADIUS.card,
       BORDER.hover,
       INTERACTIVE.hover,
-      'border active:scale-[0.99] select-none cursor-pointer transition-all'
+      TRANSITION.interactive,
+      'border active:scale-[0.99] select-none cursor-pointer'
     ),
     selected: cn(
       'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
@@ -155,7 +157,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         surfaceClasses[effectiveSurface],
         variantClasses[normalizedVariant] || variantClasses.standard,
         paddingClass,
-        hoverable && cn(BORDER.hover, INTERACTIVE.hover, 'transition-all'),
+        hoverable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.colors),
         onClick && !hoverable && 'cursor-pointer',
         accentClasses,
         className

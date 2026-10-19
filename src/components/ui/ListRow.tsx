@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE } from '../../styles/tokens';
+import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE, TRANSITION } from '../../styles/tokens';
 
 export interface ListRowProps {
   leading?: React.ReactNode;
@@ -31,7 +31,8 @@ export const ListRow: React.FC<ListRowProps> = ({
     <div
       onClick={onClick}
       className={cn(
-        "border flex items-center justify-between gap-3 text-xs text-zinc-200 transition-all",
+        "border flex items-center justify-between gap-3 text-xs text-zinc-200",
+        TRANSITION.interactive,
         RADIUS.button,
         SPACING.compact,
         variant === 'subtle' && SURFACE.subtle,

@@ -67,7 +67,8 @@ import {
   SHADOW,
   SEMANTIC_COLORS,
   CHART_THEME,
-  MOTION_CONFIG
+  MOTION_CONFIG,
+  TRANSITION
 } from './ui';
 
 // Unified heatmap intensity scale used for both matrix cells and legend
@@ -355,7 +356,8 @@ export const AnalyticsView: React.FC = () => {
                       key={`day-${dateStr}-${dayIdx}`}
                       title={tooltipText}
                       className={cn(
-                        "aspect-square border flex flex-col items-center justify-center transition-all p-1 relative group cursor-default",
+                        "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
+                        TRANSITION.colors,
                         RADIUS.button,
                         isCurrentMonth
                           ? cn(

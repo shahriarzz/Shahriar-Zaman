@@ -303,13 +303,14 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             icon={
               <Zap 
                 size={18} 
-                className={loadingAdvice === ex.id ? 'animate-pulse' : ''} 
+                className={loadingAdvice === ex.id ? 'motion-safe:animate-pulse' : ''} 
                 style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
               />
             }
           />
           <motion.div
-            animate={{ rotate: isExpanded ? 180 : 0 }}
+            animate={shouldReduceMotion ? undefined : { rotate: isExpanded ? 180 : 0 }}
+            style={shouldReduceMotion ? { transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' } : undefined}
             transition={{ duration: 0.2 }}
             className="text-zinc-500 p-2"
           >
@@ -323,10 +324,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+            animate={MOTION_CONFIG.collapse.animate}
+            exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
+            transition={MOTION_CONFIG.collapse.transition}
             className="overflow-hidden"
           >
             {/* AI Advice Box */}
@@ -389,7 +390,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <div
                       key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
-                        "space-y-1.5 px-2 py-1.5 transition-colors duration-500",
+                        "space-y-1.5 px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
                         RADIUS.card,
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
                       )}
@@ -404,7 +405,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           inputMode="decimal"
                           onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
                           className={cn(
-                            "border py-3 px-1 text-sm text-center outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            "border py-3 px-1 text-sm text-center outline-none placeholder:text-zinc-850 min-w-0 font-mono",
+                            TRANSITION.colors,
                             RADIUS.button,
                             SURFACE.recessed,
                             isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
@@ -418,7 +420,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                           inputMode="numeric"
                           onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
                           className={cn(
-                            "border py-3 px-1 text-sm text-center outline-none transition-all placeholder:text-zinc-850 min-w-0 font-mono",
+                            "border py-3 px-1 text-sm text-center outline-none placeholder:text-zinc-850 min-w-0 font-mono",
+                            TRANSITION.colors,
                             RADIUS.button,
                             SURFACE.recessed,
                             isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
@@ -430,7 +433,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             size="sm"
                             onClick={() => handleSetDone(ex.id, si, s.done)}
                             className={cn(
-                              "w-12 h-12 p-0 flex items-center justify-center border transition-all",
+                              "w-12 h-12 p-0 flex items-center justify-center border",
+                              TRANSITION.interactive,
                               RADIUS.button,
                               s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400" : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
                             )}
@@ -460,7 +464,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       </div>
 
                       {isExtreme && (
-                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 flex items-center gap-2 text-amber-400 animate-pulse", RADIUS.button, TYPOGRAPHY.metadata)}>
+                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 flex items-center gap-2 text-amber-400 motion-safe:animate-pulse", RADIUS.button, TYPOGRAPHY.metadata)}>
                           <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
                           <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
                         </div>
@@ -1055,7 +1059,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               className="col-span-2 space-y-3 text-left bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-amber-500/20"
             >
               <div className="flex items-center gap-2">
-                <Trophy className="text-amber-500 animate-pulse" size={16} />
+                <Trophy className="text-amber-500 motion-safe:animate-pulse" size={16} />
                 <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold")}>New Records Set Today!</span>
               </div>
               <div className="space-y-2">
@@ -1150,7 +1154,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             onClick={finishSession}
             className={cn(
               "px-3 sm:px-4",
-              allExercisesDone && "shadow-[0_0_20px_rgba(255,255,255,0.25)] animate-pulse font-extrabold"
+              allExercisesDone && "shadow-[0_0_20px_rgba(255,255,255,0.25)] motion-safe:animate-pulse font-extrabold"
             )}
           >
             {isSubmitting ? (
@@ -1195,7 +1199,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <Card variant="standard" padding="section" className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
+                <span className="w-1.5 h-1.5 rounded-full motion-safe:animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
                 <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Active Finish Protocol</span>
               </div>
               <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>{activeWorkout.cardio.name}</h3>

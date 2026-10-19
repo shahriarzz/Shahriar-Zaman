@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, FOCUS } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, FOCUS, TRANSITION } from '../../styles/tokens';
 
 export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -46,7 +46,8 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
         id={textareaId}
         disabled={disabled}
         className={cn(
-          "w-full font-mono text-xs text-zinc-200 placeholder-zinc-500 outline-none transition-all p-3 resize-none",
+          "w-full font-mono text-xs text-zinc-200 placeholder-zinc-500 outline-none p-3 resize-none",
+          TRANSITION.colors,
           RADIUS.button,
           variant === 'standard' && cn(
             SURFACE.recessed,

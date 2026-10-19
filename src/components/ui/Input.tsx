@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS, TRANSITION } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
@@ -80,7 +80,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
           id={inputId}
           disabled={disabled}
           className={cn(
-            "w-full font-mono text-white placeholder-zinc-600 outline-none transition-all",
+            "w-full font-mono text-white placeholder-zinc-600 outline-none",
+            TRANSITION.colors,
             RADIUS.button,
             currentSize.input,
             effectiveLeftIcon ? "pl-9" : "",
