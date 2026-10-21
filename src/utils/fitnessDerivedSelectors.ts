@@ -1,5 +1,6 @@
 import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, isSameDay, eachDayOfInterval } from 'date-fns';
 import { SessionLog, SetLog, Workout, ExerciseDefinition } from '../types/fitness';
+import { INITIAL_WORKOUTS } from '../types/initialData';
 import {
   calculateSetVolume,
   calculateSetsVolume,
@@ -880,20 +881,91 @@ export function selectCycleDayForDate(
   return getCycleDay(cycleStart, targetDate);
 }
 
+export interface CoreWorkoutMapValidationResult {
+  coreWorkoutByCycleDayMap: Map<number, Workout>;
+  isValid: boolean;
+  errors: string[];
+}
+
+/**
+ * Validates and constructs the canonical 8-day core workout map.
+ * Enforces:
+ * - Exactly one core workout per cycle day 1–8.
+ * - Detects duplicate core cycleDay assignments without silent Map.set() overwrite.
+ * - Detects invalid or missing cycleDay assignments.
+ * - Keeps bonus workouts (isCore !== true) strictly outside the core map.
+ * - Deterministic fallback to initial core routines if invalid or missing, with explicit errors.
+ */
+export function buildValidatedCoreWorkoutMap(
+  workouts: Workout[] | undefined | null
+): CoreWorkoutMapValidationResult {
+  const map = new Map<number, Workout>();
+  const errors: string[] = [];
+  const candidateCoreWorkouts = (workouts || []).filter(w => Boolean(w && w.isCore));
+
+  for (const w of candidateCoreWorkouts) {
+    if (
+      typeof w.cycleDay !== 'number' ||
+      !Number.isInteger(w.cycleDay) ||
+      w.cycleDay < 1 ||
+      w.cycleDay > CYCLE_LENGTH
+    ) {
+      errors.push(
+        `Invalid core workout cycleDay "${w.cycleDay}" for workout "${w.id || w.name}". Must be an integer between 1 and ${CYCLE_LENGTH}.`
+      );
+      continue;
+    }
+
+    if (map.has(w.cycleDay)) {
+      errors.push(
+        `Duplicate core workout cycleDay ${w.cycleDay} detected between "${map.get(w.cycleDay)?.id}" and "${w.id}". Core workouts must have exactly one workout per cycle day.`
+      );
+      // Retain first valid workout to avoid silent overwrite
+      continue;
+    }
+
+    map.set(w.cycleDay, w);
+  }
+
+  // Check for missing days (1–CYCLE_LENGTH)
+  for (let day = 1; day <= CYCLE_LENGTH; day++) {
+    if (!map.has(day)) {
+      errors.push(`Missing core workout for cycle day ${day}.`);
+      // Deterministic, safe fallback: load from initial core routines for this specific cycle day
+      const fallbackWo = INITIAL_WORKOUTS.find(iw => iw.cycleDay === day && iw.isCore);
+      if (fallbackWo) {
+        map.set(day, fallbackWo);
+      }
+    }
+  }
+
+  return {
+    coreWorkoutByCycleDayMap: map,
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
 /**
  * Resolves the scheduled core workout for a given cycle day.
  */
 export function selectCoreWorkoutForCycleDay(
-  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  workoutMap: Map<string, Workout> | Map<number, Workout> | Workout[] | undefined | null,
   cycleDay: number
 ): Workout | undefined {
   if (!workoutMap) return undefined;
   if (Array.isArray(workoutMap)) {
     return workoutMap.find(w => w.cycleDay === cycleDay && w.isCore);
   }
-  for (const w of workoutMap.values()) {
-    if (w.cycleDay === cycleDay && w.isCore) {
-      return w;
+  if (workoutMap instanceof Map) {
+    const directByNumber = (workoutMap as Map<number, Workout>).get(cycleDay);
+    if (directByNumber && directByNumber.cycleDay === cycleDay && directByNumber.isCore) {
+      return directByNumber;
+    }
+    for (const w of workoutMap.values()) {
+      if (w.cycleDay === cycleDay && w.isCore) {
+        return w;
+      }
     }
   }
   return undefined;
@@ -903,7 +975,7 @@ export function selectCoreWorkoutForCycleDay(
  * Resolves today's scheduled core workout based on canonical cycleStart date anchor.
  */
 export function selectTodayCoreWorkout(
-  workoutMap: Map<string, Workout> | Workout[] | undefined | null,
+  workoutMap: Map<string, Workout> | Map<number, Workout> | Workout[] | undefined | null,
   cycleStart?: string | null,
   now: Date | string = new Date()
 ): Workout | undefined {

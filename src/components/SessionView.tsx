@@ -950,7 +950,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       // Await persistence (offline-first ensures local save occurs immediately)
       await addLog(logId, sanitizedLog);
 
-      if (activeWorkout.cycleDay && activeWorkout.isCore) {
+      if (
+        activeWorkout.isCore &&
+        typeof activeWorkout.cycleDay === 'number' &&
+        Number.isInteger(activeWorkout.cycleDay) &&
+        activeWorkout.cycleDay >= 1 &&
+        activeWorkout.cycleDay <= 8
+      ) {
         const currentScheduledDay = getCycleDay(appState?.cycleStart, new Date());
         if (!appState?.cycleStart || currentScheduledDay !== activeWorkout.cycleDay) {
           const newCycleStart = getAdjustedCycleStart(activeWorkout.cycleDay);

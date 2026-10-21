@@ -4,6 +4,7 @@ import { useFitness } from './FitnessContext';
 import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
   buildFitnessIndex,
+  buildValidatedCoreWorkoutMap,
   selectWeightSummary,
   selectMuscleDistribution,
   selectNextCycleDay,
@@ -152,15 +153,9 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return map;
   }, [workouts]);
 
-  // 4. Core Workout by Cycle Day Map
-  const coreWorkoutByCycleDayMap = useMemo(() => {
-    const map = new Map<number, Workout>();
-    (workouts || []).forEach(w => {
-      if (w.isCore && typeof w.cycleDay === 'number') {
-        map.set(w.cycleDay, w);
-      }
-    });
-    return map;
+  // 4. Core Workout by Cycle Day Map (Canonical 8-Day Validation Boundary)
+  const { coreWorkoutByCycleDayMap } = useMemo(() => {
+    return buildValidatedCoreWorkoutMap(workouts);
   }, [workouts]);
 
   // 5. Priority & Compound Exercises for Strength Progression

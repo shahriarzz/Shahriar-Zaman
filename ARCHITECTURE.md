@@ -1,8 +1,8 @@
 # GAINLOG System Architecture & Architectural Contract
 
 > **Document Status**: Active Architectural Contract  
-> **Last Verified Date**: 2026-10-12  
-> **Test Verification Evidence**: 24 Vitest suites, 346 tests passing (`npx vitest run`)  
+> **Last Verified Date**: 2026-10-21  
+> **Test Verification Evidence**: 28 Vitest suites, 440 tests passing (`npx vitest run`)  
 > **Maintenance Rule**: Any authorized architectural change MUST update this document in the same commit.
 
 ---
@@ -275,6 +275,7 @@ Cycle Day (1-8):
   - Skipped days do not pause or freeze the cycle.
   - Bonus workouts (`isCore === false`) do not advance or alter `cycleStart`.
   - Completing an out-of-order core workout recalculates `cycleStart` via `getAdjustedCycleStart(workout.cycleDay, new Date())`.
+  - **Core Workout Map Validation Boundary**: `buildValidatedCoreWorkoutMap(workouts)` validates exactly 8 cycle slots (Days 1–8), detects duplicate `cycleDay` values without silent overwrite, excludes bonus workouts (`isCore === false`), and provides deterministic fallback to initial routines for corrupted or missing slots.
 
 ---
 
@@ -342,8 +343,8 @@ Cycle Day (1-8):
 | 4 | **Exercise Identity Integrity**: `exerciseDefinitionId` is the single canonical key. Orphaned or missing definitions resolve to `Unknown Exercise`, never crash, and never output raw UUIDs as names. | `src/utils/exerciseResolver.ts` | `src/test/canonicalDataContract.test.ts`, `src/test/historyResolution.test.ts` | **VERIFIED & TESTED** |
 | 5 | **Sets Accounting Distinction**: `completedSetsByDate` strictly counts `done: true` sets from completed sessions. `plannedSetsByDate` counts programmed/logged set rows across all sessions. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
 | 6 | **PR Pipeline & Consolidation**: Historical index tracks independent weight and e1RM PRs. Session summary compares against pre-session index and consolidates a set establishing both weight and e1RM records into exactly 1 visible PR event. | `src/utils/fitnessDerivedSelectors.ts`, `src/components/SessionView.tsx` | `src/test/sessionPRRegression.test.ts`, `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
-| 7 | **Scheduled Core Adherence**: Adherence measures completion of the scheduled core workout for that cycle day. Bonus workouts do not satisfy core obligations; scheduled rest days do not enter the denominator. | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
-| 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts` | **VERIFIED & TESTED** |
+| 7 | **Scheduled Core Adherence**: Adherence measures completion of the scheduled core workout for that cycle day. Bonus workouts do not satisfy core obligations; scheduled rest days do not enter the denominator. | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/routineCycleHardening.test.ts` | **VERIFIED & TESTED** |
+| 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts`, `src/test/routineCycleHardening.test.ts` | **VERIFIED & TESTED** |
 | 9 | **Cross-Surface Consistency**: Equivalent metrics and time windows produce identical numbers across Dashboard, History, Analytics, and Calendar. | `src/context/FitnessDerivedContext.tsx` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/pipelineConsistencyRegression.test.ts` | **VERIFIED & TESTED** |
 | 10 | **Distinct Semantic Values for Data Availability**: Missing data, zero values, and unavailable metrics remain semantically distinct (`available: false` vs score `0`). | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
 | 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session`. Staged writes verify `gl_database_snapshot` before clearing `gl_snapshot_staging`. | `src/hooks/useFitnessData.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts` | **VERIFIED & TESTED** |

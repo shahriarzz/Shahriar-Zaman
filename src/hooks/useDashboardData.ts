@@ -62,6 +62,7 @@ export function useDashboardData(): DashboardData {
   } = useFitness();
 
   const {
+    currentDate,
     lifetimeStats,
     weightSummary: derivedWeightSummary,
     nextCycleDay: currentCycleDay,
@@ -71,15 +72,15 @@ export function useDashboardData(): DashboardData {
     strengthTrend
   } = useFitnessDerivedData();
 
-  // 1. Hero Date String
+  // 1. Hero Date String (reactive to calendar rollover and focus updates)
   const heroDateStr = React.useMemo(() => {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  }, []);
+    return currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  }, [currentDate]);
 
-  // 2. Cycle & Today's Workout
+  // 2. Cycle & Today's Workout from canonical validated core map
   const todayWorkout = React.useMemo(() => {
-    return coreWorkoutByCycleDayMap.get(currentCycleDay) || (workouts || []).find(w => w.cycleDay === currentCycleDay && w.isCore);
-  }, [coreWorkoutByCycleDayMap, workouts, currentCycleDay]);
+    return coreWorkoutByCycleDayMap.get(currentCycleDay);
+  }, [coreWorkoutByCycleDayMap, currentCycleDay]);
 
   // 3. Stats & Metrics from canonical derived pipeline
   const totalWeight = lifetimeStats.totalVolume;

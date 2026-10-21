@@ -90,6 +90,7 @@ export interface Workout {
   updatedAt?: number;               // Epoch milliseconds timestamp
 }
 ```
+*Validation Boundary*: Core workouts (`isCore: true`) are validated via `buildValidatedCoreWorkoutMap()`: requires integer `cycleDay` (1–8), rejects duplicates without silent overwrites, excludes bonus routines (`isCore: false`), and guarantees deterministic fallback to initial core routines if any day is missing or corrupted.
 
 ---
 
