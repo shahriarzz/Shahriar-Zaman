@@ -4,6 +4,7 @@ import { INITIAL_WORKOUTS } from '../types/initialData';
 import { getCycleDay, getAdjustedCycleStart } from '../utils/fitnessCalculations';
 import {
   buildFitnessIndex,
+  buildValidatedCoreWorkoutMap,
   selectNextCycleDay,
   selectCycleDayForDate,
   selectCoreWorkoutForCycleDay,
@@ -12,13 +13,10 @@ import {
 
 describe('Recovery Day Cycle Advancement Regression Suite', () => {
   const workouts: Workout[] = INITIAL_WORKOUTS;
+  const { coreWorkoutByCycleDayMap: coreMap } = buildValidatedCoreWorkoutMap(workouts);
   const workoutMap = new Map<string, Workout>();
-  const coreMap = new Map<number, Workout>();
   workouts.forEach(w => {
     workoutMap.set(w.id, w);
-    if (w.isCore && typeof w.cycleDay === 'number') {
-      coreMap.set(w.cycleDay, w);
-    }
   });
 
   // Cycle start anchor: 2026-10-01 (Thursday) is Day 1
@@ -257,5 +255,24 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     expect(getCycleDay(adjustedStart, '2026-10-04')).toBe(1);
     // Tomorrow (2026-10-05) evaluates to Day 2
     expect(getCycleDay(adjustedStart, '2026-10-05')).toBe(2);
+  });
+
+  it('Cross-surface identity: Dashboard, Calendar, and selectors resolve identical core workout for same anchor and date', () => {
+    const testDate = '2026-10-05'; // Day 5
+    const cycleDay = getCycleDay(cycleStart, testDate);
+    expect(cycleDay).toBe(5);
+
+    // 1. Core map direct lookup (Dashboard & Calendar detail)
+    const directCore = coreMap.get(cycleDay);
+    expect(directCore?.id).toBe('push-b');
+    expect(directCore?.badge).toBe('DAY 5 · PUSH B');
+
+    // 2. Selectors today core workout
+    const todayCore = selectTodayCoreWorkout(coreMap, cycleStart, testDate);
+    expect(todayCore?.id).toBe('push-b');
+
+    // 3. Date-based selector
+    const dateCore = selectCoreWorkoutForCycleDay(coreMap, selectCycleDayForDate(testDate, cycleStart));
+    expect(dateCore?.id).toBe('push-b');
   });
 });

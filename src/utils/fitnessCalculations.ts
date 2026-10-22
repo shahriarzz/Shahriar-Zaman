@@ -32,6 +32,23 @@ export function formatDateStr(dateStr: string): string {
   }
 }
 
+/**
+ * Strictly validates that a value is a valid YYYY-MM-DD calendar date string.
+ * Enforces:
+ * - Must be string.
+ * - Must match exact /^\d{4}-\d{2}-\d{2}$/ format.
+ * - Must parse to a valid Date object.
+ * - Re-formatting must match input exactly (rejects calendar rollovers like '2026-02-31').
+ */
+export function isValidCalendarDate(dateStr: unknown): dateStr is string {
+  if (typeof dateStr !== 'string') return false;
+  const trimmed = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+  const parsed = parseISO(trimmed);
+  if (!isValid(parsed)) return false;
+  return format(parsed, 'yyyy-MM-dd') === trimmed;
+}
+
 export interface DateRange {
   start: string;
   end: string;
@@ -403,7 +420,7 @@ export function getCycleDay(cycleStart: string | undefined | null, targetDate: D
   const target = isValid(targetParsed) ? targetParsed : new Date();
   
   let start: Date;
-  if (cycleStart && isValid(parseISO(cycleStart))) {
+  if (isValidCalendarDate(cycleStart)) {
     start = parseISO(cycleStart);
   } else {
     // Deterministic fallback: anchor to supplied targetDate

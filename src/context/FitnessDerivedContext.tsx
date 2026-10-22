@@ -155,7 +155,11 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   // 4. Core Workout by Cycle Day Map (Canonical 8-Day Validation Boundary)
   const { coreWorkoutByCycleDayMap } = useMemo(() => {
-    return buildValidatedCoreWorkoutMap(workouts);
+    const result = buildValidatedCoreWorkoutMap(workouts);
+    if (!result.isValid && process.env.NODE_ENV !== 'production') {
+      result.errors.forEach(err => console.warn(`[Core Workout Map Validation] ${err}`));
+    }
+    return result;
   }, [workouts]);
 
   // 5. Priority & Compound Exercises for Strength Progression

@@ -12,7 +12,7 @@ interface ConfirmContextType {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
 }
 
-const ConfirmContext = createContext<ConfirmContextType | undefined>(undefined);
+export const ConfirmContext = createContext<ConfirmContextType | undefined>(undefined);
 
 export const useConfirm = () => {
   const context = useContext(ConfirmContext);

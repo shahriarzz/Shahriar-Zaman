@@ -901,7 +901,14 @@ export function buildValidatedCoreWorkoutMap(
 ): CoreWorkoutMapValidationResult {
   const map = new Map<number, Workout>();
   const errors: string[] = [];
-  const candidateCoreWorkouts = (workouts || []).filter(w => Boolean(w && w.isCore));
+
+  // 1. Group valid core workouts strictly matching w?.isCore === true
+  const byCycleDay = new Map<number, Workout[]>();
+  for (let day = 1; day <= CYCLE_LENGTH; day++) {
+    byCycleDay.set(day, []);
+  }
+
+  const candidateCoreWorkouts = (workouts || []).filter(w => w?.isCore === true);
 
   for (const w of candidateCoreWorkouts) {
     if (
@@ -916,23 +923,29 @@ export function buildValidatedCoreWorkoutMap(
       continue;
     }
 
-    if (map.has(w.cycleDay)) {
-      errors.push(
-        `Duplicate core workout cycleDay ${w.cycleDay} detected between "${map.get(w.cycleDay)?.id}" and "${w.id}". Core workouts must have exactly one workout per cycle day.`
-      );
-      // Retain first valid workout to avoid silent overwrite
-      continue;
-    }
-
-    map.set(w.cycleDay, w);
+    byCycleDay.get(w.cycleDay)!.push(w);
   }
 
-  // Check for missing days (1–CYCLE_LENGTH)
+  // 2. Finalize mapping for each cycle day 1..CYCLE_LENGTH
   for (let day = 1; day <= CYCLE_LENGTH; day++) {
-    if (!map.has(day)) {
+    const list = byCycleDay.get(day) || [];
+    const fallbackWo = INITIAL_WORKOUTS.find(iw => iw.cycleDay === day && iw.isCore);
+
+    if (list.length === 1) {
+      // Exactly one valid core workout: retain user customization
+      map.set(day, list[0]);
+    } else if (list.length === 0) {
+      // Missing slot: report error and use canonical fallback
       errors.push(`Missing core workout for cycle day ${day}.`);
-      // Deterministic, safe fallback: load from initial core routines for this specific cycle day
-      const fallbackWo = INITIAL_WORKOUTS.find(iw => iw.cycleDay === day && iw.isCore);
+      if (fallbackWo) {
+        map.set(day, fallbackWo);
+      }
+    } else {
+      // Multiple workouts (duplicate cycleDay): report duplicate and deterministically fall back to initial workout
+      const ids = list.map(w => `"${w.id || w.name}"`).join(', ');
+      errors.push(
+        `Duplicate core workout cycleDay ${day} detected across ${ids}. Core workouts must have exactly one workout per cycle day.`
+      );
       if (fallbackWo) {
         map.set(day, fallbackWo);
       }

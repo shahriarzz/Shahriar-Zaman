@@ -5,7 +5,7 @@ import { useFitness } from '../context/FitnessContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
-import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay, parseStrictWeight, parseStrictReps } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay, parseStrictWeight, parseStrictReps, CYCLE_LENGTH } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
@@ -951,11 +951,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       await addLog(logId, sanitizedLog);
 
       if (
-        activeWorkout.isCore &&
+        activeWorkout.isCore === true &&
         typeof activeWorkout.cycleDay === 'number' &&
         Number.isInteger(activeWorkout.cycleDay) &&
         activeWorkout.cycleDay >= 1 &&
-        activeWorkout.cycleDay <= 8
+        activeWorkout.cycleDay <= CYCLE_LENGTH
       ) {
         const currentScheduledDay = getCycleDay(appState?.cycleStart, new Date());
         if (!appState?.cycleStart || currentScheduledDay !== activeWorkout.cycleDay) {

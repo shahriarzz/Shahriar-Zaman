@@ -68,7 +68,7 @@ export interface FitnessContextType {
   importBackup: (backupJson: string) => Promise<{ success: boolean; message: string }>;
 }
 
-const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
+export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 
 export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Core local state store

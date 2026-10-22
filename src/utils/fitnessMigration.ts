@@ -1,7 +1,7 @@
 import { Workout, SessionLog, AppState, WorkoutExercise, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { dk, generateId } from './fitnessHelpers';
-import { sanitizeSessionLog } from './fitnessCalculations';
+import { sanitizeSessionLog, isValidCalendarDate } from './fitnessCalculations';
 
 // Extract exercise definitions from workouts if migrating legacy data
 export function canonicalizeWorkoutExercise(
@@ -140,7 +140,8 @@ export function migrateV1ToV2(raw: {
   // 3. Resolve AppState
   let appState: AppState = { cycleStart: dk() };
   if (raw.rawState && typeof raw.rawState === 'object') {
-    const cycleStart = typeof raw.rawState.cycleStart === 'string' ? raw.rawState.cycleStart : dk();
+    const rawCycleStart = raw.rawState.cycleStart;
+    const cycleStart = isValidCalendarDate(rawCycleStart) ? rawCycleStart : dk();
     let weightLog: Record<string, number | { weight: number; updatedAt: number }> = {};
 
     if (raw.rawState.weightLog && typeof raw.rawState.weightLog === 'object') {
@@ -381,6 +382,27 @@ export function loadInitialFitnessData(): {
           rawLogs: validated.logs,
           rawState: validated.appState
         });
+
+        // If the stored anchor was invalid or missing, persist the repaired state once through persistence boundary
+        if (!isValidCalendarDate(validated.appState?.cycleStart)) {
+          try {
+            const versionedPayload = {
+              schemaVersion: CURRENT_SCHEMA_VERSION,
+              timestamp: Date.now(),
+              data: {
+                exerciseDefinitions: migrated.defs,
+                workouts: migrated.workouts,
+                logs: migrated.logs,
+                appState: migrated.appState
+              }
+            };
+            localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
+            localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
+          } catch {
+            // Best effort persistence
+          }
+        }
+
         return migrated;
       } else {
         // Snapshot failed structure or schema validation; preserve as recoverable backup
@@ -421,6 +443,26 @@ export function loadInitialFitnessData(): {
           rawLogs: validatedStaging.logs,
           rawState: validatedStaging.appState
         });
+
+        if (!isValidCalendarDate(validatedStaging.appState?.cycleStart)) {
+          try {
+            const versionedPayload = {
+              schemaVersion: CURRENT_SCHEMA_VERSION,
+              timestamp: Date.now(),
+              data: {
+                exerciseDefinitions: migrated.defs,
+                workouts: migrated.workouts,
+                logs: migrated.logs,
+                appState: migrated.appState
+              }
+            };
+            localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
+            localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
+          } catch {
+            // Best effort persistence
+          }
+        }
+
         return migrated;
       }
     } catch (e) {
