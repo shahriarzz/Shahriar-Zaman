@@ -294,7 +294,7 @@ export function sanitizeWorkout(raw: any, fallbackId: string = ''): Workout {
   const type: WorkoutType = VALID_WORKOUT_TYPES.has(rawType as WorkoutType) ? (rawType as WorkoutType) : 'custom';
 
   let cycleDay: number | null = null;
-  if (typeof raw?.cycleDay === 'number' && Number.isInteger(raw.cycleDay) && raw.cycleDay >= 1 && raw.cycleDay <= 8) {
+  if (typeof raw?.cycleDay === 'number' && Number.isInteger(raw.cycleDay) && raw.cycleDay >= 1 && raw.cycleDay <= CYCLE_LENGTH) {
     cycleDay = raw.cycleDay;
   }
 

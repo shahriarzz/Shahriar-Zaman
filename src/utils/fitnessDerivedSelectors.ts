@@ -15,6 +15,7 @@ import {
   getRollingDateRange,
   getPreviousDateRange,
   dk,
+  CYCLE_LENGTH,
   SparklineData
 } from './fitnessCalculations';
 
@@ -73,7 +74,7 @@ export {
   selectMuscleRecovery
 };
 
-export const CYCLE_LENGTH = 8;
+export { CYCLE_LENGTH };
 
 /**
  * Canonical Weight PR Representation.

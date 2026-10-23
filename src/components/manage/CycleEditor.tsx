@@ -1,17 +1,15 @@
 import React from 'react';
-import { ChevronRight, Plus, Moon, Dumbbell, Sparkles } from 'lucide-react';
+import { ChevronRight, Moon } from 'lucide-react';
 import { Workout } from '../../types/fitness';
 import { WORKOUT_COLORS } from '../../utils/fitnessHelpers';
+import { CYCLE_LENGTH } from '../../utils/fitnessCalculations';
 import {
   Card,
   Badge,
-  Button,
   Stack,
-  Grid,
   SectionHeader,
   WorkoutColorIndicator,
   TYPOGRAPHY,
-  GAP,
   BORDER,
   SURFACE,
   RADIUS,
@@ -29,16 +27,22 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
   workouts,
   onSelectWorkout
 }) => {
-  // Sort core cycle workouts by cycleDay 1..8
+  // Primary core cycle workouts (1..CYCLE_LENGTH)
   const cycleWorkouts = React.useMemo(() => {
     return [...workouts]
-      .filter(w => typeof w.cycleDay === 'number' && w.cycleDay > 0)
+      .filter(w =>
+        w.isCore === true &&
+        typeof w.cycleDay === 'number' &&
+        Number.isInteger(w.cycleDay) &&
+        w.cycleDay >= 1 &&
+        w.cycleDay <= CYCLE_LENGTH
+      )
       .sort((a, b) => (a.cycleDay || 0) - (b.cycleDay || 0));
   }, [workouts]);
 
-  // Bonus/Custom workouts not in the primary 8-day cycle
+  // Bonus/Auxiliary workouts (non-core protocols)
   const additionalWorkouts = React.useMemo(() => {
-    return [...workouts].filter(w => !w.cycleDay || w.cycleDay <= 0);
+    return [...workouts].filter(w => w.isCore !== true);
   }, [workouts]);
 
   const handleWorkoutClick = (id: string) => {

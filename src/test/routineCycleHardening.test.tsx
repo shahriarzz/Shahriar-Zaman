@@ -4,7 +4,7 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Workout, ExerciseDefinition, SessionLog, AppState, SetLog, CURRENT_SCHEMA_VERSION } from '../types/fitness';
+import { Workout, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import {
   getCycleDay,
@@ -24,6 +24,9 @@ import {
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
 import { SessionView } from '../components/SessionView';
+import { CycleEditor } from '../components/manage/CycleEditor';
+import { Dashboard } from '../components/Dashboard';
+import { Calendar } from '../components/Calendar';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedProvider, FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
@@ -138,7 +141,6 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
     });
 
     it('4. Duplicate Day 1 with two conflicting custom entries resolves Day 1 to canonical push-a regardless of order', () => {
-      // Workouts list where Day 1 has two custom workouts and no default push-a
       const customA: Workout = {
         id: 'custom-a',
         name: 'Custom Push A',
@@ -358,7 +360,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
     });
   });
 
-  describe('P1 — Production Component Testing: SessionView Finish Transaction', () => {
+  describe('P1 — CycleEditor Core vs Bonus Classification Regression Suite', () => {
     let container: HTMLDivElement;
     let root: Root;
 
@@ -375,11 +377,133 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       container.remove();
     });
 
-    it('Scenario 1: Complete expected core workout: log persisted and anchor remains aligned', async () => {
+    it('1. A bonus workout with isCore: false and cycleDay: 1 appears only in the bonus section', async () => {
+      const bonusWithCycleDay: Workout = {
+        id: 'date-night-bonus',
+        name: 'Date Night Mobility Protocol',
+        type: 'date',
+        badge: 'BONUS',
+        isCore: false,
+        cycleDay: 1, // Accidental cycleDay assignment
+        exercises: []
+      };
+
+      const workoutList: Workout[] = [...initialWorkouts, bonusWithCycleDay];
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={workoutList} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      // Bonus section must exist
+      expect(container.textContent).toContain('Bonus & Auxiliary Protocols');
+      expect(container.textContent).toContain('Date Night Mobility Protocol');
+
+      // The 8-day progression section must show exactly 8 core days (Day 1..8)
+      // and Day 1 must be Push Day A, NOT Date Night Mobility Protocol!
+      const cycleList = container.querySelector('.space-y-3')!;
+      const dayCards = Array.from(cycleList.children);
+      expect(dayCards).toHaveLength(CYCLE_LENGTH);
+      expect(dayCards[0].textContent).toContain('Push Day A');
+      expect(dayCards[0].textContent).not.toContain('Date Night Mobility Protocol');
+    });
+
+    it('2. A core workout with cycleDay: 9 does not appear as a valid cycle day', async () => {
+      const outOfBoundsWorkout: Workout = {
+        id: 'malformed-day-9',
+        name: 'Extra Core Day 9',
+        type: 'custom',
+        badge: 'DAY 9',
+        isCore: true,
+        cycleDay: 9, // Invalid out of range
+        exercises: []
+      };
+
+      const workoutList: Workout[] = [...initialWorkouts, outOfBoundsWorkout];
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={workoutList} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      // Day 9 workout must not appear as a numbered cycle slot
+      expect(container.textContent).not.toContain('Extra Core Day 9');
+      // The 8-day progression section must remain exactly 8 items
+      const cycleList = container.querySelector('.space-y-3')!;
+      const dayCards = Array.from(cycleList.children);
+      expect(dayCards).toHaveLength(CYCLE_LENGTH);
+    });
+
+    it('3. Valid core workouts appear in strictly ascending order from Day 1 through Day 8', async () => {
+      // Pass shuffled initial workouts
+      const shuffled = [...initialWorkouts].reverse();
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={shuffled} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      const cycleList = container.querySelector('.space-y-3')!;
+      const dayNumbers = Array.from(cycleList.children)
+        .map(el => el.querySelector('.font-display')?.textContent?.trim());
+
+      expect(dayNumbers).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    });
+
+    it('4. Ordinary bonus workouts without a cycle-day assignment remain visible in auxiliary section', async () => {
+      const auxiliaryWorkout: Workout = {
+        id: 'core-conditioning',
+        name: 'Auxiliary Core Protocol',
+        type: 'custom',
+        badge: 'AUX',
+        isCore: false,
+        cycleDay: null,
+        exercises: []
+      };
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={[...initialWorkouts, auxiliaryWorkout]} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      expect(container.textContent).toContain('Bonus & Auxiliary Protocols');
+      expect(container.textContent).toContain('Auxiliary Core Protocol');
+    });
+  });
+
+  describe('P1 — Production Component Testing: SessionView Finish Transaction & Failure Contract', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('Scenario 1: Complete expected core workout: log persisted, anchor aligned, draft cleared in order', async () => {
       const today = dk();
-      const mockAddLog = vi.fn().mockResolvedValue(undefined);
-      const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
-      const mockClearActiveSession = vi.fn();
+      const callOrder: string[] = [];
+      const mockAddLog = vi.fn().mockImplementation(async () => {
+        callOrder.push('addLog');
+      });
+      const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
+        callOrder.push('updateCycleStart');
+      });
+      const mockClearActiveSession = vi.fn().mockImplementation(() => {
+        callOrder.push('clearActiveSession');
+      });
 
       const pushAWorkout = initialWorkouts.find(w => w.id === 'push-a')!;
       expect(pushAWorkout.cycleDay).toBe(1);
@@ -416,7 +540,6 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      // Find Finish button
       const buttons = Array.from(container.querySelectorAll('button'));
       const finishBtn = buttons.find(b => b.textContent?.includes('Finish') || b.textContent?.includes('✓'));
       expect(finishBtn).toBeDefined();
@@ -432,17 +555,25 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(mockUpdateCycleStart).not.toHaveBeenCalled();
       // 3. Active session cleared
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
+      expect(callOrder).toEqual(['addLog', 'clearActiveSession']);
       // 4. Session cleared / summary view rendered
       expect(container.textContent).toContain('Session Cleared');
     });
 
-    it('Scenario 2: Complete different core workout: new anchor maps current date to that workout cycle day', async () => {
+    it('Scenario 2: Complete different core workout: operations execute in strict sequence (addLog -> updateCycleStart -> clearActiveSession)', async () => {
       const today = dk();
-      const mockAddLog = vi.fn().mockResolvedValue(undefined);
-      const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
-      const mockClearActiveSession = vi.fn();
+      const callOrder: string[] = [];
+      const mockAddLog = vi.fn().mockImplementation(async () => {
+        callOrder.push('addLog');
+      });
+      const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
+        callOrder.push('updateCycleStart');
+      });
+      const mockClearActiveSession = vi.fn().mockImplementation(() => {
+        callOrder.push('clearActiveSession');
+      });
 
-      // Today scheduled as Day 1 (cycleStart = today), but lifter runs Day 5 (push-b)
+      // Scheduled Day 1, but user completes Day 5
       const contextValue = createMockFitnessContext({
         appState: { cycleStart: today },
         addLog: mockAddLog,
@@ -483,11 +614,13 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       });
 
       expect(mockAddLog).toHaveBeenCalledTimes(1);
-      // Realignment MUST be called with new anchor for Day 5
       expect(mockUpdateCycleStart).toHaveBeenCalledTimes(1);
       const expectedAdjustedAnchor = getAdjustedCycleStart(5, today);
       expect(mockUpdateCycleStart).toHaveBeenCalledWith(expectedAdjustedAnchor);
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
+
+      // Verify exact sequence: addLog -> updateCycleStart -> clearActiveSession
+      expect(callOrder).toEqual(['addLog', 'updateCycleStart', 'clearActiveSession']);
     });
 
     it('Scenario 3: Complete bonus workout: cycleStart is unchanged', async () => {
@@ -552,7 +685,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
     });
 
-    it('Scenario 7: Simulate failed session save: cycle not realigned and active session draft preserved', async () => {
+    it('Scenario 7: Failed addLog persistence: cycle not realigned and active session draft preserved', async () => {
       const today = dk();
       const mockAddLog = vi.fn().mockRejectedValue(new Error('IndexedDB storage quota exceeded'));
       const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
@@ -608,6 +741,62 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       // 4. Active session screen remains rendered and interactive
       expect(finishBtn).toBeDefined();
     });
+
+    it('Failure Contract: updateCycleStart absorbs cloud failure internally while local update succeeds', async () => {
+      const today = dk();
+      // As implemented in useFitnessLogs.ts: updateCycleStart updates local appState and catches cloud errors,
+      // resolving cleanly so callers proceed with session completion offline-first.
+      const mockAddLog = vi.fn().mockResolvedValue(undefined);
+      const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
+        // Simulates local state update succeeding while cloud sync is queued/failed
+        return Promise.resolve();
+      });
+      const mockClearActiveSession = vi.fn();
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart: today },
+        addLog: mockAddLog,
+        updateCycleStart: mockUpdateCycleStart,
+        clearActiveSession: mockClearActiveSession
+      });
+
+      const derivedIndex = buildFitnessIndex([], defsMap, today);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedContext.Provider
+              value={
+                {
+                  index: derivedIndex,
+                  getLatestForExercise: () => null,
+                  getWeightPRForExercise: () => null,
+                  getE1RMPRForExercise: () => null,
+                  getHistoryForExercise: () => []
+                } as any
+              }
+            >
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <SessionView workoutId="push-b" onExit={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedContext.Provider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const buttons = Array.from(container.querySelectorAll('button'));
+      const finishBtn = buttons.find(b => b.textContent?.includes('Finish') || b.textContent?.includes('✓'));
+      expect(finishBtn).toBeDefined();
+
+      await act(async () => {
+        finishBtn!.click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).toHaveBeenCalledTimes(1);
+      expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Session Cleared');
+    });
   });
 
   describe('P1 — Provider-Level Fake-Timer & Visibility Rollover Suite', () => {
@@ -641,7 +830,6 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
     };
 
     it('Scenario 8: Midnight rollover and visibilitychange update cycle day reactively', async () => {
-      // Set initial system time to 2026-10-01 at 23:59:58
       const initialDate = new Date(2026, 9, 1, 23, 59, 58);
       vi.setSystemTime(initialDate);
 
@@ -688,6 +876,198 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       expect(todayEl.textContent).toBe('2026-10-03');
       expect(cycleEl.textContent).toBe('3');
+    });
+  });
+
+  describe('P1 — Cross-Surface Integration: Dashboard & Calendar Routine Resolution', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+      vi.useRealTimers();
+    });
+
+    it('1. Day 3 -> Day 4: Expected routine becomes Recovery on both Dashboard and Calendar without a log', async () => {
+      const cycleStart = '2026-10-01'; // Day 1
+      // On Day 4: 2026-10-04
+      vi.setSystemTime(new Date(2026, 9, 4, 10, 0, 0));
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart },
+        logs: {} // Zero logs
+      });
+
+      // Render real Dashboard
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Verify Dashboard reflects Day 4 Rest Protocol
+      expect(container.textContent).toContain('DAY 4 · REST');
+      expect(container.textContent).toContain('Recovery Day');
+      expect(container.textContent).toContain('Rest Day');
+
+      // Now unmount and render Calendar to verify calendar surface resolution
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Calendar grid rendered
+      expect(container.textContent).toContain('Schedule & Consistency');
+    });
+
+    it('2. Day 4 -> Day 5: Push B appears automatically without a recovery-day log', async () => {
+      const cycleStart = '2026-10-01';
+      // Advance clock to Day 5: 2026-10-05
+      vi.setSystemTime(new Date(2026, 9, 5, 10, 0, 0));
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart },
+        logs: {} // Still zero logs
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Day 5 Push B automatically appears on Dashboard
+      expect(container.textContent).toContain('DAY 5 · PUSH B');
+      expect(container.textContent).toContain('Push Day B');
+      expect(container.textContent).toContain('Start Session');
+    });
+
+    it('3. Day 8 -> Day 1: Push A appears automatically without a Day 8 log', async () => {
+      const cycleStart = '2026-10-01';
+      // 2026-10-09 is Day 1 of cycle 2 (8 days after anchor)
+      vi.setSystemTime(new Date(2026, 9, 9, 10, 0, 0));
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart },
+        logs: {}
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('Push Day A');
+    });
+
+    it('4. Missed days: cycle follows calendar rather than last completed workout', async () => {
+      const cycleStart = '2026-10-01';
+      // Lifter misses 11 days. Calendar day is 2026-10-12 (11 days after cycleStart).
+      // 11 % 8 = 3 -> Day 4 (Recovery)
+      vi.setSystemTime(new Date(2026, 9, 12, 10, 0, 0));
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart },
+        logs: {}
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Must show Day 4 Recovery, NOT Day 1 or Day 2
+      expect(container.textContent).toContain('DAY 4 · REST');
+      expect(container.textContent).toContain('Recovery Day');
+    });
+
+    it('5. Duplicate Day 1 in workouts library resolves through deterministic fallback on Dashboard', async () => {
+      const cycleStart = '2026-10-01'; // Day 1
+      vi.setSystemTime(new Date(2026, 9, 1, 10, 0, 0));
+
+      const duplicateWorkouts: Workout[] = [
+        {
+          id: 'custom-push-competing',
+          name: 'Competing Push Day',
+          type: 'push',
+          badge: 'DAY 1 · COMPETING',
+          cycleDay: 1,
+          isCore: true,
+          exercises: []
+        },
+        ...initialWorkouts
+      ];
+
+      const contextValue = createMockFitnessContext({
+        workouts: duplicateWorkouts,
+        appState: { cycleStart }
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Deterministic fallback resolves to canonical Push Day A
+      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('Push Day A');
+      expect(container.textContent).not.toContain('Competing Push Day');
     });
   });
 

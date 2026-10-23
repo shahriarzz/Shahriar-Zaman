@@ -257,7 +257,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     expect(getCycleDay(adjustedStart, '2026-10-05')).toBe(2);
   });
 
-  it('Cross-surface identity: Dashboard, Calendar, and selectors resolve identical core workout for same anchor and date', () => {
+  it('Selector cross-surface consistency: pure selectors resolve identical core workout for same anchor and date', () => {
     const testDate = '2026-10-05'; // Day 5
     const cycleDay = getCycleDay(cycleStart, testDate);
     expect(cycleDay).toBe(5);

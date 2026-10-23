@@ -154,10 +154,17 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [workouts]);
 
   // 4. Core Workout by Cycle Day Map (Canonical 8-Day Validation Boundary)
+  const lastLoggedValidationErrorsRef = React.useRef<string>('');
   const { coreWorkoutByCycleDayMap } = useMemo(() => {
     const result = buildValidatedCoreWorkoutMap(workouts);
     if (!result.isValid && process.env.NODE_ENV !== 'production') {
-      result.errors.forEach(err => console.warn(`[Core Workout Map Validation] ${err}`));
+      const errorFingerprint = result.errors.join('|');
+      if (lastLoggedValidationErrorsRef.current !== errorFingerprint) {
+        lastLoggedValidationErrorsRef.current = errorFingerprint;
+        result.errors.forEach(err => console.warn(`[Core Workout Map Validation] ${err}`));
+      }
+    } else if (result.isValid) {
+      lastLoggedValidationErrorsRef.current = '';
     }
     return result;
   }, [workouts]);
