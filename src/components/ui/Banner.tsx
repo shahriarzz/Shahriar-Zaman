@@ -24,39 +24,33 @@ export interface BannerProps {
 
 const BANNER_CONFIG: Record<BannerVariant, {
   accent: SemanticColor;
-  bgGradient: string;
+  containerClass: string;
   badgeColor: SemanticColor;
-  pingColor: string;
 }> = {
   warning: {
     accent: 'amber',
-    bgGradient: 'border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-zinc-900/40 to-transparent',
+    containerClass: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
     badgeColor: 'amber',
-    pingColor: 'bg-amber-500',
   },
   success: {
     accent: 'emerald',
-    bgGradient: 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 via-zinc-900/40 to-transparent',
+    containerClass: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
     badgeColor: 'emerald',
-    pingColor: 'bg-emerald-500',
   },
   destructive: {
     accent: 'red',
-    bgGradient: 'border-red-500/40 bg-gradient-to-r from-red-500/10 via-zinc-900/40 to-transparent',
+    containerClass: 'border-red-500/30 bg-red-500/10 text-red-200',
     badgeColor: 'red',
-    pingColor: 'bg-red-500',
   },
   info: {
     accent: 'zinc',
-    bgGradient: 'border-zinc-700/40 bg-gradient-to-r from-zinc-700/10 via-zinc-900/40 to-transparent',
+    containerClass: 'border-zinc-800 bg-zinc-900/60 text-zinc-300',
     badgeColor: 'zinc',
-    pingColor: 'bg-zinc-400',
   },
   achievement: {
     accent: 'orange',
-    bgGradient: 'border-orange-500/40 bg-gradient-to-r from-orange-500/15 via-zinc-900/40 to-transparent',
+    containerClass: 'border-orange-500/30 bg-orange-500/10 text-orange-200',
     badgeColor: 'orange',
-    pingColor: 'bg-orange-500',
   },
 };
 
@@ -77,9 +71,9 @@ export const Banner: React.FC<BannerProps> = ({
 
   return (
     <Card
-      variant="elevated"
+      variant="standard"
       padding={isCompact ? 'compact' : 'section'}
-      className={cn("relative overflow-hidden", config.bgGradient, className)}
+      className={cn("relative overflow-hidden", config.containerClass, className)}
     >
       <div className={cn(
         "relative z-10",
@@ -90,7 +84,6 @@ export const Banner: React.FC<BannerProps> = ({
         <div className={cn(isCompact ? "space-y-1" : "space-y-1.5", "flex-1 min-w-0")}>
           {(badge || icon) && (
             <div className="flex items-center gap-2">
-              <span className={cn(isCompact ? "w-1.5 h-1.5" : "w-2 h-2", "rounded-full", config.pingColor)} />
               {badge && (
                 <Badge
                   label={badge}

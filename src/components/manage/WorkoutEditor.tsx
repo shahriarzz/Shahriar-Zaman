@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ChevronLeft,
   ChevronDown,
@@ -59,6 +59,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 }) => {
   const { confirm } = useConfirm();
   const { exerciseDefinitions, addExerciseDefinition } = useFitness();
+  const shouldReduceMotion = useReducedMotion();
 
   // Track expanded state for each exercise card (using exercise ID)
   const [expandedExIds, setExpandedExIds] = useState<Set<string>>(new Set());
@@ -532,8 +533,9 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         icon={<ArrowUp size={14} />}
                         disabled={isFirst}
                         onClick={() => handleMoveExercise(index, 'up')}
+                        aria-label="Move exercise up"
                         className={cn(
-                          "w-8 h-8 text-zinc-500 hover:text-white",
+                          "text-zinc-500 hover:text-white",
                           isFirst && "opacity-20 cursor-not-allowed"
                         )}
                       />
@@ -543,8 +545,9 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         icon={<ArrowDown size={14} />}
                         disabled={isLast}
                         onClick={() => handleMoveExercise(index, 'down')}
+                        aria-label="Move exercise down"
                         className={cn(
-                          "w-8 h-8 text-zinc-500 hover:text-white",
+                          "text-zinc-500 hover:text-white",
                           isLast && "opacity-20 cursor-not-allowed"
                         )}
                       />
@@ -566,10 +569,10 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   <AnimatePresence initial={false}>
                     {isExpanded && (
                       <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeInOut' }}
+                        initial={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                        animate={shouldReduceMotion ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+                        exit={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeInOut' }}
                         className={cn("overflow-hidden border-t p-4 space-y-4", BORDER.standard, SURFACE.recessed)}
                       >
                         <Grid cols={1} colsMd={3} gap="sm">

@@ -75,8 +75,8 @@ export const AccountSection: React.FC = () => {
                   <span className={cn(
                     "w-2 h-2 rounded-full",
                     syncStatus === 'synced' && 'bg-emerald-500',
-                    syncStatus === 'syncing' && 'bg-amber-500 motion-safe:animate-pulse',
-                    syncStatus === 'failed' && 'bg-red-500 motion-safe:animate-pulse',
+                    syncStatus === 'syncing' && 'bg-amber-500',
+                    syncStatus === 'failed' && 'bg-red-500',
                     syncStatus === 'idle' && 'bg-zinc-500'
                   )} />
                 )}

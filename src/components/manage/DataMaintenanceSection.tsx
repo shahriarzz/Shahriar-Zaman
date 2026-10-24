@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Download,
   Upload,
@@ -52,6 +52,7 @@ export const DataMaintenanceSection: React.FC = () => {
     createManualBackup
   } = useFitness();
   const { confirm } = useConfirm();
+  const shouldReduceMotion = useReducedMotion();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -311,9 +312,10 @@ export const DataMaintenanceSection: React.FC = () => {
         <AnimatePresence>
           {bannerMessage && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              transition={shouldReduceMotion ? { duration: 0 } : undefined}
             >
               <Banner
                 variant={bannerMessage.type}
@@ -406,9 +408,10 @@ export const DataMaintenanceSection: React.FC = () => {
         <AnimatePresence>
           {showPasteBox && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+              transition={shouldReduceMotion ? { duration: 0 } : undefined}
             >
               <Card variant="recessed" padding="standard" className="space-y-3">
                 <Textarea

@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION, FOCUS, DURATION } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -12,13 +12,13 @@ const NavigationActiveIndicator: React.FC = () => {
   const shouldReduceMotion = useReducedMotion();
   if (shouldReduceMotion) {
     return (
-      <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+      <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full" />
     );
   }
   return (
     <motion.div
       layoutId="nav-pill"
-      className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"
+      className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full"
     />
   );
 };
@@ -45,7 +45,8 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center relative group select-none outline-none",
+        "flex flex-col items-center justify-center relative group select-none",
+        FOCUS.visible,
         TRANSITION.colors,
         NAV.item,
         NAV.itemGap,
@@ -53,10 +54,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         INTERACTIVE.active
       )}
     >
-      <div className={cn(
-        TRANSITION.transform,
-        active && "drop-shadow-[0_0_8px_rgba(249,115,22,0.45)]"
-      )}>
+      <div className={TRANSITION.transform}>
         {icon}
       </div>
       <span className={cn(TYPOGRAPHY.navLabel, "leading-none")}>{label}</span>
@@ -74,10 +72,11 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children }) => {
   const { user, syncStatus, syncError } = useFitness();
   const [showTooltip, setShowTooltip] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   const getSyncColorClass = () => {
     switch (syncStatus) {
-      case 'syncing': return 'bg-amber-500 motion-safe:animate-pulse';
+      case 'syncing': return 'bg-amber-500';
       case 'synced': return 'bg-emerald-500';
       case 'failed': return 'bg-red-500';
       default: return 'bg-zinc-600';
@@ -179,10 +178,10 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                     }}
                   />
                   <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.95 }}
+                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.95 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : DURATION.fast / 1000, ease: 'easeOut' }}
                     className={cn(
                       "absolute right-0 top-10 z-50 w-52 p-4 text-left pointer-events-auto border",
                       SURFACE.overlay,
@@ -211,10 +210,10 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
+            transition={{ duration: shouldReduceMotion ? 0 : DURATION.standard / 1000 }}
           >
             {children}
           </motion.div>

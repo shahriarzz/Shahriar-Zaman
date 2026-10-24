@@ -84,7 +84,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
     sm: cn(CONTROL_HEIGHT.sm, 'px-3', GAP.xs, TYPOGRAPHY.buttonSm),
     md: cn(CONTROL_HEIGHT.md, 'px-5 gap-2', TYPOGRAPHY.button),
     lg: cn(CONTROL_HEIGHT.lg, 'px-8', GAP.sm, TYPOGRAPHY.button),
-    icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-2 justify-center',
+    icon: cn(CONTROL_HEIGHT.touchTarget, 'p-2.5 justify-center'),
   };
 
   const iconSizes: Record<ButtonSize, number> = {
@@ -121,7 +121,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
       {...props}
     >
       {loading ? (
-        <Loader2 className="animate-spin shrink-0" size={iconSizes[size]} />
+        <Loader2 className="motion-safe:animate-spin shrink-0" size={iconSizes[size]} />
       ) : (
         effectiveLeftIcon && (
           <span className="shrink-0 flex items-center">

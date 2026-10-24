@@ -13,7 +13,8 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { ManageView } from './components/ManageView';
 import { isFirebaseConfigured, firebaseConfigState } from './lib/firebase';
 import { cn } from './lib/utils';
-import { AmbientBackground, ToastContainer, Card, TYPOGRAPHY } from './components/ui';
+import { ToastContainer, Card, TYPOGRAPHY } from './components/ui';
+import { CANVAS_HEX } from './styles/tokens';
 
 function AppContent() {
   const { loading, activeSession, clearActiveSession, syncStatus, user } = useFitness();
@@ -28,7 +29,7 @@ function AppContent() {
       StatusBar.setStyle({ style: Style.Light }).catch(err => {
         console.warn('Error setting StatusBar style:', err);
       });
-      StatusBar.setBackgroundColor({ color: '#09090e' }).catch(err => {
+      StatusBar.setBackgroundColor({ color: CANVAS_HEX }).catch(err => {
         console.warn('Error setting StatusBar background color:', err);
       });
     }
@@ -164,14 +165,14 @@ function AppContent() {
       switch (syncStatus) {
         case 'syncing':
           return {
-            dotColor: 'bg-amber-500 animate-pulse',
+            dotColor: 'bg-amber-500',
             statusText: 'Syncing Cloud Protocol',
             connectionText: 'SYNCING...',
             connectionColor: 'text-amber-400'
           };
         case 'failed':
           return {
-            dotColor: 'bg-red-500 animate-pulse',
+            dotColor: 'bg-red-500',
             statusText: 'Sync Interrupted',
             connectionText: 'FAILED',
             connectionColor: 'text-red-400'
@@ -198,12 +199,10 @@ function AppContent() {
 
     return (
       <div className="fixed inset-0 bg-[#09090e] flex flex-col items-center justify-center p-6 z-50">
-        <AmbientBackground />
-
         <div className="flex flex-col items-center max-w-sm w-full gap-8 relative text-center">
           {/* Restrained single loading spinner */}
           <div className="relative flex items-center justify-center">
-            <div className="w-12 h-12 border-2 border-zinc-800 border-t-orange-500 rounded-full animate-spin [animation-duration:1s]" />
+            <div className="w-12 h-12 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />
           </div>
 
           <div className="space-y-3">
@@ -253,7 +252,6 @@ function AppContent() {
 
   return (
     <>
-      <AmbientBackground intensity="subtle" />
       <ToastContainer />
       <Layout activeTab={activeTab} onTabChange={handleTabChange}>
         {activeTab === 'dashboard' && (

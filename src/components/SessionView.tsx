@@ -296,14 +296,15 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => getAiAdvice(ex)}
             disabled={loadingAdvice === ex.id}
-            className="w-8 h-8 p-0 rounded-full text-zinc-500"
+            aria-label="Get Coach tip"
+            className="text-zinc-500 hover:text-zinc-300"
             icon={
               <Zap 
                 size={18} 
-                className={loadingAdvice === ex.id ? 'motion-safe:animate-pulse' : ''} 
+                className={loadingAdvice === ex.id ? 'opacity-50' : ''} 
                 style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
               />
             }
@@ -324,10 +325,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-            animate={MOTION_CONFIG.collapse.animate}
-            exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
-            transition={MOTION_CONFIG.collapse.transition}
+            initial={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.initial}
+            animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+            exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+            transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
             className="overflow-hidden"
           >
             {/* AI Advice Box */}
@@ -464,7 +465,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       </div>
 
                       {isExtreme && (
-                        <div className={cn("mx-10 p-2 bg-amber-500/5 border border-amber-500/20 flex items-center gap-2 text-amber-400 motion-safe:animate-pulse", RADIUS.button, TYPOGRAPHY.metadata)}>
+                        <div className={cn("mx-10 p-2 bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-amber-400", RADIUS.button, TYPOGRAPHY.metadata)}>
                           <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
                           <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
                         </div>
@@ -1160,7 +1161,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             onClick={finishSession}
             className={cn(
               "px-3 sm:px-4",
-              allExercisesDone && "shadow-[0_0_20px_rgba(255,255,255,0.25)] motion-safe:animate-pulse font-extrabold"
+              allExercisesDone && "font-extrabold ring-1 ring-white/30"
             )}
           >
             {isSubmitting ? (

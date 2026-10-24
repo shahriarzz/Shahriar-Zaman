@@ -279,7 +279,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
             variant="ghost"
             size="icon"
             onClick={clearFilter}
-            className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+            className="text-zinc-400 hover:text-white"
             aria-label="Clear filter"
             icon={<X size={14} />}
           />

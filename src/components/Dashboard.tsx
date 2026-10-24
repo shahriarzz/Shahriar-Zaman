@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Dumbbell } from 'lucide-react';
 import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { formatDateStr } from '../utils/dashboardSelectors';
@@ -55,6 +55,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   } = useDashboardData();
 
   const { confirm } = useConfirm();
+  const shouldReduceMotion = useReducedMotion();
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const [weightInput, setWeightInput] = React.useState('');
 
@@ -139,8 +140,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Unfinished Session Alert */}
       {unfinishedSession && (
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={shouldReduceMotion ? { duration: 0 } : undefined}
         >
           <Banner
             variant="warning"

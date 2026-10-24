@@ -211,18 +211,18 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               )}
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
                 icon={<ChevronLeft size={16} />}
                 onClick={() => {
                   haptics.selection();
                   setCurrentMonth(subMonths(currentMonth, 1));
                 }}
+                aria-label="Previous Month"
                 title="Previous Month"
-                className="w-8 h-8 p-0"
               />
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
                 icon={<ChevronRight size={16} />}
                 onClick={() => {
                   if (isCurrentOrFutureMonth) return;
@@ -230,8 +230,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   setCurrentMonth(addMonths(currentMonth, 1));
                 }}
                 disabled={isCurrentOrFutureMonth}
+                aria-label={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
                 title={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
-                className="w-8 h-8 p-0"
               />
             </div>
           }
