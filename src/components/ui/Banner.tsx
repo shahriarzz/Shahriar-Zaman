@@ -90,7 +90,7 @@ export const Banner: React.FC<BannerProps> = ({
         <div className={cn(isCompact ? "space-y-1" : "space-y-1.5", "flex-1 min-w-0")}>
           {(badge || icon) && (
             <div className="flex items-center gap-2">
-              <span className={cn(isCompact ? "w-1.5 h-1.5" : "w-2 h-2", "rounded-full animate-ping", config.pingColor)} />
+              <span className={cn(isCompact ? "w-1.5 h-1.5" : "w-2 h-2", "rounded-full", config.pingColor)} />
               {badge && (
                 <Badge
                   label={badge}

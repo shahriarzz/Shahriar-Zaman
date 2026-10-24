@@ -92,7 +92,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   const paddingClass = SPACING[effectivePadding] || SPACING.standard;
 
   const variantClasses: Record<string, string> = {
-    standard: cn(BORDER.standard, RADIUS.card, SHADOW.elevation, 'border'),
+    standard: cn(BORDER.standard, RADIUS.card, 'border'),
     recessed: cn(BORDER.standard, RADIUS.card, 'border'),
     elevated: cn(BORDER.standard, RADIUS.panel, SHADOW.elevation, 'border'),
     interactive: cn(
@@ -104,11 +104,11 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       'border active:scale-[0.99] select-none cursor-pointer'
     ),
     selected: cn(
-      'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
+      'border border-orange-500 bg-orange-500/10 text-white',
       RADIUS.card
     ),
     active: cn(
-      'border border-orange-500 bg-gradient-to-br from-orange-500/15 to-transparent text-white shadow-[0_4px_20px_rgba(249,115,22,0.15)]',
+      'border border-orange-500 bg-orange-500/10 text-white',
       RADIUS.card
     ),
     warning: cn(
@@ -123,8 +123,8 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
       RADIUS.card
     ),
-    compact: cn(BORDER.standard, RADIUS.card, SHADOW.elevation, 'border'),
-    section: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
+    compact: cn(BORDER.standard, RADIUS.card, 'border'),
+    section: cn(BORDER.standard, RADIUS.panel, 'border'),
     panel: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
     overlay: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border backdrop-blur-xl')
   };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS, TRANSITION } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
@@ -45,9 +45,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   const isSuccess = Boolean(success) && !isError;
 
   const sizeClasses: Record<'sm' | 'md' | 'lg', { input: string; icon: number; text: string }> = {
-    sm: { input: 'h-8 min-h-[32px] px-2.5 text-xs', icon: 13, text: 'text-xs' },
-    md: { input: 'h-10 min-h-[40px] px-3 text-sm', icon: 14, text: 'text-sm' },
-    lg: { input: 'h-12 min-h-[48px] px-4 text-base', icon: 16, text: 'text-base' },
+    sm: { input: cn(CONTROL_HEIGHT.sm, 'px-2.5 text-xs'), icon: 13, text: 'text-xs' },
+    md: { input: cn(CONTROL_HEIGHT.md, 'px-3 text-sm'), icon: 14, text: 'text-sm' },
+    lg: { input: cn(CONTROL_HEIGHT.lg, 'px-4 text-base'), icon: 16, text: 'text-base' },
   };
 
   const currentSize = sizeClasses[size] || sizeClasses.md;

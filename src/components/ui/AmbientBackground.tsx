@@ -17,14 +17,14 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({
     >
       <div
         className={cn(
-          "absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-[100px] pointer-events-none motion-safe:animate-pulse",
+          "absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-[100px] pointer-events-none",
           intensity === 'subtle' ? "bg-orange-500/[0.04]" : "bg-orange-500/10"
         )}
       />
       <div
         className={cn(
           "absolute bottom-1/3 left-1/3 w-60 h-60 rounded-full blur-[120px] pointer-events-none",
-          intensity === 'subtle' ? "bg-blue-500/[0.02]" : "bg-blue-500/5"
+          intensity === 'subtle' ? "bg-zinc-800/[0.04]" : "bg-zinc-800/10"
         )}
       />
     </div>

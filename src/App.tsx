@@ -197,22 +197,17 @@ function AppContent() {
     const status = getStatusDetails();
 
     return (
-      <div className="fixed inset-0 bg-[#06060a] flex flex-col items-center justify-center p-6 z-50">
+      <div className="fixed inset-0 bg-[#09090e] flex flex-col items-center justify-center p-6 z-50">
         <AmbientBackground />
 
         <div className="flex flex-col items-center max-w-sm w-full gap-8 relative text-center">
-          {/* Main loader design */}
+          {/* Restrained single loading spinner */}
           <div className="relative flex items-center justify-center">
-            {/* Outer spinning ring */}
-            <div className="w-16 h-16 border-2 border-white/5 border-t-orange-500/80 rounded-full animate-spin [animation-duration:1.2s]" />
-            {/* Inner inverse spinning ring */}
-            <div className="w-10 h-10 border border-white/5 border-b-blue-400/80 rounded-full animate-spin absolute [animation-duration:0.8s] [animation-direction:reverse]" />
-            {/* Core dot */}
-            <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-ping absolute" />
+            <div className="w-12 h-12 border-2 border-zinc-800 border-t-orange-500 rounded-full animate-spin [animation-duration:1s]" />
           </div>
 
           <div className="space-y-3">
-            <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block animate-pulse")}>
+            <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>
               GainLog Synchronizer
             </span>
             <h3 className="text-xl font-bold uppercase tracking-wider text-white">

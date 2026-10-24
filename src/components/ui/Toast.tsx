@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { SURFACE, BORDER, RADIUS, SHADOW, TYPOGRAPHY } from '../../styles/tokens';
+import { SURFACE, BORDER, RADIUS, SHADOW, TYPOGRAPHY, DURATION } from '../../styles/tokens';
 import { Button } from './Button';
 
 export type ToastTone = 'error' | 'success' | 'warning' | 'info';
@@ -59,6 +59,7 @@ const TONE_CONFIG: Record<ToastTone, {
 
 export const ToastContainer: React.FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const shouldReduceMotion = useReducedMotion();
   const timersRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   useEffect(() => {
@@ -125,10 +126,10 @@ export const ToastContainer: React.FC = () => {
           return (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: 0.95 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: DURATION.standard / 1000 }}
               className={cn(
                 SURFACE.panel,
                 BORDER.standard,
@@ -139,7 +140,7 @@ export const ToastContainer: React.FC = () => {
               )}
             >
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <span className={cn("w-1.5 h-1.5 rounded-full animate-ping shrink-0", config.bgDot)} />
+                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", config.bgDot)} />
                 <Icon size={14} className={cn("shrink-0", config.textColor)} />
                 <span className={cn(TYPOGRAPHY.metadata, config.textColor, "break-words")}>
                   {toast.message}

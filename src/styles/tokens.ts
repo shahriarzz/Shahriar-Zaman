@@ -58,9 +58,10 @@ export const EDITOR_HEADER = {
 } as const;
 
 export const CONTROL_HEIGHT = {
-  sm: 'min-h-[30px] h-[30px]',
-  md: 'min-h-[38px] h-[38px]',
-  lg: 'min-h-[46px] h-[46px]',
+  sm: 'min-h-[32px] h-8',
+  md: 'min-h-[40px] h-10',
+  lg: 'min-h-[48px] h-12',
+  touchTarget: 'min-h-[44px] min-w-[44px]',
 } as const;
 
 export const ICON_SIZE = {
@@ -159,6 +160,7 @@ export const MOTION_CONFIG = {
   staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
 } as const;
 
+// Canonical Motion presets object and backward-compatible alias
 export const MOTION = MOTION_CONFIG;
 
 export const INTERACTIVE = {
@@ -311,7 +313,7 @@ export function getAccentColor(accent?: SemanticColor | null): string | undefine
 
 export const TYPOGRAPHY = {
   // Headings & Titles
-  eyebrow: 'font-mono text-[9px] uppercase tracking-[0.25em] font-bold',
+  eyebrow: 'font-mono text-[10px] uppercase tracking-[0.2em] font-bold',
   titlePage: 'font-display text-3xl uppercase tracking-tight text-white leading-none',
   titleSection: 'font-display text-2xl uppercase tracking-tight text-white leading-none',
   titleSubsection: 'font-display text-lg uppercase tracking-wide text-white leading-none', // Structural section headers
@@ -328,8 +330,8 @@ export const TYPOGRAPHY = {
   body: 'font-sans text-sm text-zinc-400 leading-relaxed',
   bodySecondary: 'font-sans text-xs text-zinc-400 leading-normal',
   metadata: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider',
-  caption: 'font-mono text-[9px] text-zinc-500 uppercase tracking-wide',
-  micro: 'font-mono text-[8px] uppercase tracking-widest font-bold',
+  caption: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wide',
+  micro: 'font-mono text-[9px] uppercase tracking-wider font-bold',
   
   // Controls & States
   buttonSm: 'font-mono text-[11px] uppercase tracking-wider font-bold',

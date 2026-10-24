@@ -1,7 +1,7 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP, FOCUS } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -16,6 +16,7 @@ export interface SegmentedControlProps<T extends string> {
   accent?: SemanticColor;
   colorOverride?: string;
   size?: 'sm' | 'md';
+  label?: string;
   className?: string;
 }
 
@@ -26,12 +27,16 @@ export function SegmentedControl<T extends string>({
   accent = 'emerald',
   colorOverride,
   size = 'sm',
+  label,
   className
 }: SegmentedControlProps<T>) {
   const accentHex = colorOverride || getAccentColor(accent) || SEMANTIC_COLORS.emerald;
+  const shouldReduceMotion = useReducedMotion();
 
   return (
     <div
+      role="group"
+      aria-label={label || 'Selection options'}
       className={cn(
         SURFACE.recessed,
         BORDER.standard,
@@ -47,23 +52,31 @@ export function SegmentedControl<T extends string>({
           <button
             key={opt.value}
             type="button"
+            aria-pressed={isSelected}
             onClick={() => onChange(opt.value)}
             className={cn(
               "relative transition-colors cursor-pointer select-none flex items-center justify-center",
               GAP.xs,
               size === 'sm' ? cn(SPACING.segmentedSm, TYPOGRAPHY.segmentedSm) : cn(SPACING.segmentedMd, TYPOGRAPHY.segmentedMd),
               RADIUS.button,
+              FOCUS.visible,
               isSelected
                 ? "text-white font-black"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40"
             )}
           >
             {isSelected && (
-              <motion.div
-                layoutId={`segmented-active-${options.map(o => o.value).join('-')}`}
-                className={cn("absolute inset-0 bg-zinc-800 border shadow-sm -z-0", BORDER.interactive, RADIUS.button)}
-                transition={{ type: "spring", stiffness: 500, damping: 35 }}
-              />
+              shouldReduceMotion ? (
+                <div
+                  className={cn("absolute inset-0 bg-zinc-800 border shadow-sm -z-0", BORDER.interactive, RADIUS.button)}
+                />
+              ) : (
+                <motion.div
+                  layoutId={`segmented-active-${options.map(o => o.value).join('-')}`}
+                  className={cn("absolute inset-0 bg-zinc-800 border shadow-sm -z-0", BORDER.interactive, RADIUS.button)}
+                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                />
+              )
             )}
             <span className={cn("relative z-10 flex items-center", GAP.xs)}>
               {opt.icon && (

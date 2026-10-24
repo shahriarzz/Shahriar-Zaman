@@ -59,7 +59,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       )}>
         {icon}
       </div>
-      <span className={cn(TYPOGRAPHY.micro, "leading-none")}>{label}</span>
+      <span className={cn(TYPOGRAPHY.navLabel, "leading-none")}>{label}</span>
       {active && <NavigationActiveIndicator />}
     </button>
   );

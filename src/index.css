@@ -56,7 +56,7 @@ body {
   overscroll-behavior-y: contain;
 }
 
-/* Hardware-accelerated fixed background pattern layer (prevents repaint during scroll) */
+/* Fixed background pattern layer (subtle neutral texture) */
 body::before {
   content: "";
   position: fixed;
@@ -65,11 +65,9 @@ body::before {
   background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1.2px, transparent 1.2px);
   background-size: 18px 18px;
   pointer-events: none;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
 }
 
-input, textarea, [contenteditable="true"] {
+input, textarea, [contenteditable="true"], .selectable-text {
   user-select: text;
   -webkit-user-select: text;
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -10,6 +11,8 @@ import {
   SPACING,
   BORDER,
   SURFACE,
+  SHADOW,
+  CONTROL_HEIGHT,
   TYPOGRAPHY,
   DURATION,
   TRANSITION,
@@ -18,6 +21,10 @@ import {
   SemanticColorKey,
 } from '../styles/tokens';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
+import React, { act } from 'react';
+import { createRoot, Root } from 'react-dom/client';
+import { Card } from '../components/ui/Card';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 
 /**
  * Design System Regression & Invariant Test Suite.
@@ -264,6 +271,159 @@ describe('Design System Consolidation & Token Contracts', () => {
       const agentsContent = fs.readFileSync(agentsPath, 'utf8');
       expect(agentsContent).toContain('DESIGN_SYSTEM.md');
       expect(agentsContent).toContain('Violating Design System Equivalents');
+    });
+  });
+
+  describe('7. Canonical Control Height & Touch Target Scale', () => {
+    it('defines canonical control height tokens with exact min-h boundaries', () => {
+      expect(CONTROL_HEIGHT.sm).toBe('min-h-[32px] h-8');
+      expect(CONTROL_HEIGHT.md).toBe('min-h-[40px] h-10');
+      expect(CONTROL_HEIGHT.lg).toBe('min-h-[48px] h-12');
+      expect(CONTROL_HEIGHT.touchTarget).toBe('min-h-[44px] min-w-[44px]');
+    });
+  });
+
+  describe('8. Readable Typography Floors by Role', () => {
+    it('enforces that no token in TYPOGRAPHY resolves to 8px or below', () => {
+      const sub9pxPattern = /text-\[(?:[0-8]px|0\.[0-9]+rem)\]/;
+      const violations: string[] = [];
+
+      Object.entries(TYPOGRAPHY).forEach(([key, value]) => {
+        if (sub9pxPattern.test(value)) {
+          violations.push(`${key}: "${value}"`);
+        }
+      });
+
+      expect(violations, `Found typography tokens below 9px readable floor: ${violations.join(', ')}`).toEqual([]);
+    });
+
+    it('enforces minimum 9px floor for micro-badges and 10px floor for metadata', () => {
+      expect(TYPOGRAPHY.micro).toContain('text-[9px]');
+      expect(TYPOGRAPHY.badgeSm).toContain('text-[9px]');
+      expect(TYPOGRAPHY.eyebrow).toContain('text-[10px]');
+      expect(TYPOGRAPHY.label).toContain('text-[10px]');
+      expect(TYPOGRAPHY.caption).toContain('text-[10px]');
+      expect(TYPOGRAPHY.metadata).toContain('text-[10px]');
+      expect(TYPOGRAPHY.navLabel).toContain('text-[10px]');
+    });
+  });
+
+  describe('9. Card Surface Discipline & Elevation Isolation', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('renders standard card without default shadow elevation', () => {
+      act(() => {
+        root.render(React.createElement(Card, { variant: 'standard' }, 'Test Card'));
+      });
+      const cardEl = container.firstElementChild as HTMLElement;
+      expect(cardEl).toBeTruthy();
+      expect(cardEl.className).not.toContain(SHADOW.elevation);
+      expect(cardEl.className).not.toContain('shadow-md');
+    });
+
+    it('renders elevated card with explicit shadow elevation', () => {
+      act(() => {
+        root.render(React.createElement(Card, { variant: 'elevated' }, 'Elevated Card'));
+      });
+      const cardEl = container.firstElementChild as HTMLElement;
+      expect(cardEl).toBeTruthy();
+      expect(cardEl.className).toContain(SHADOW.elevation);
+    });
+  });
+
+  describe('10. Accessible SegmentedControl & Motion Guards', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('renders with role="group" and aria-pressed attributes on options', () => {
+      const options = [
+        { value: 'tab1', label: 'Tab 1' },
+        { value: 'tab2', label: 'Tab 2' },
+      ];
+
+      act(() => {
+        root.render(
+          React.createElement(SegmentedControl, {
+            options,
+            value: 'tab1',
+            onChange: () => {},
+            label: 'Workout Filter',
+          })
+        );
+      });
+
+      const groupEl = container.querySelector('[role="group"]');
+      expect(groupEl).toBeTruthy();
+      expect(groupEl?.getAttribute('aria-label')).toBe('Workout Filter');
+
+      const buttons = container.querySelectorAll('button');
+      expect(buttons.length).toBe(2);
+      expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
+      expect(buttons[1].getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  describe('11. Elimination of Decorative Looping Effects', () => {
+    function getAllComponentFiles(dir: string): string[] {
+      let results: string[] = [];
+      const list = fs.readdirSync(dir);
+      list.forEach((file) => {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat && stat.isDirectory()) {
+          results = results.concat(getAllComponentFiles(fullPath));
+        } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
+          results.push(fullPath);
+        }
+      });
+      return results;
+    }
+
+    const componentFiles = getAllComponentFiles(path.join(rootDir, 'src/components'));
+
+    it('verifies no component uses animate-ping', () => {
+      const pingViolations: string[] = [];
+      componentFiles.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
+        if (content.includes('animate-ping')) {
+          pingViolations.push(path.relative(rootDir, file));
+        }
+      });
+      expect(pingViolations, `Found decorative animate-ping in: ${pingViolations.join(', ')}`).toEqual([]);
+    });
+
+    it('verifies AmbientBackground does not use continuous animate-pulse or unapproved blue glow', () => {
+      const ambientPath = path.join(rootDir, 'src/components/ui/AmbientBackground.tsx');
+      const content = fs.readFileSync(ambientPath, 'utf8');
+      expect(content).not.toContain('animate-pulse');
+      expect(content).not.toContain('bg-blue-500');
     });
   });
 });

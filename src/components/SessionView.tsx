@@ -1065,7 +1065,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               className="col-span-2 space-y-3 text-left bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-amber-500/20"
             >
               <div className="flex items-center gap-2">
-                <Trophy className="text-amber-500 motion-safe:animate-pulse" size={16} />
+                <Trophy className="text-amber-500" size={16} />
                 <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold")}>New Records Set Today!</span>
               </div>
               <div className="space-y-2">
@@ -1205,7 +1205,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           <Card variant="standard" padding="section" className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full motion-safe:animate-pulse" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
                 <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Active Finish Protocol</span>
               </div>
               <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>{activeWorkout.cardio.name}</h3>

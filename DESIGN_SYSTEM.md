@@ -1,6 +1,6 @@
 # DESIGN_SYSTEM.md — GAINLOG Visual Language & UI Contract
 
-> **Status:** Proposed operating contract — reconcile with implementation before treating every rule as enforced  
+> **Status:** Active operating contract enforced by regression suites  
 > **Audience:** AI coding agents and contributors  
 > **Scope:** `src/styles/tokens.ts`, `src/components/ui/`, and visual/layout code in screen components  
 > **Product intent:** A compact, fast, data-driven strength-training tool. The interface should make planning, logging, analysis, and progress easier—not compete for attention.
@@ -116,6 +116,14 @@ Current token groups include:
 
 The token names and definitions in source are authoritative. Do not invent names such as `buttonLabel`, `formLabel`, or `bodyTertiary` unless a real semantic gap is demonstrated and approved.
 
+### Readable typography floors by role
+
+To preserve comfort and legibility across high-density mobile screens:
+- **Absolute floor (9px):** `TYPOGRAPHY.micro` (`text-[9px]`) and `TYPOGRAPHY.badgeSm` (`text-[9px]`) are the lowest permitted font sizes in the app, strictly reserved for micro-badges, tertiary status tags, and compact category tags.
+- **Secondary metadata floor (10px):** `eyebrow`, `label`, `caption`, `metadata`, `helperText`, `dialogFooter`, and `navLabel` use `text-[10px]`.
+- **Interactive control floor (11px / 12px):** `buttonSm` (`text-[11px]`), `button` (`text-xs` / 12px), `segmentedSm` (`text-[10px]`), and `segmentedMd` (`text-xs`).
+- **Prohibited:** No typography token or inline text may use `text-[8px]` or below.
+
 ### Typography rules
 
 - Use display typography for hierarchy, not for every label.
@@ -138,7 +146,12 @@ Use the existing exports in `src/styles/tokens.ts`:
 - `GAP`: horizontal/grid gap scale (`none`, `micro`, `xs`, `sm`, `md`, `lg`, `xl`, `2xl`).
 - `STACK_SPACING`: vertical rhythm scale with corresponding size names.
 - `RADIUS`: `badge`, `button`, `card`, `panel`, `pill`.
-- `CONTROL_HEIGHT`, `ICON_SIZE`, `NAV`, and `EDITOR_HEADER`: use where their existing scope fits.
+- `CONTROL_HEIGHT`: canonical height contract for interactive controls:
+  - `sm`: `min-h-[32px] h-8` (compact inputs, secondary buttons)
+  - `md`: `min-h-[40px] h-10` (standard inputs, default buttons)
+  - `lg`: `min-h-[48px] h-12` (prominent actions, hero controls)
+  - `touchTarget`: `min-h-[44px] min-w-[44px]` (accessible mobile tap boundary)
+- `ICON_SIZE`, `NAV`, and `EDITOR_HEADER`: use where their existing scope fits.
 - `SURFACE`, `BORDER`, and `SHADOW`: standard surface, border, and elevation choices.
 
 Do not add another spacing or radius scale without proving the current system cannot express the requirement. A token's actual exported name and value in source takes precedence over a paraphrase in this document.
@@ -156,13 +169,14 @@ Do not add another spacing or radius scale without proving the current system ca
 ### 5.3 Radius and elevation
 
 - Reuse `RADIUS` role tokens rather than inventing arbitrary rounded values.
-- Keep elevation levels limited. Most content should be separated by layout, background, or a subtle border rather than a shadow.
+- **Card surface discipline:** Standard and compact cards (`variant="standard"` / `variant="compact"`) do not receive default box shadows (`SHADOW.elevation`). Surfaces are separated by border (`BORDER.standard`) and background (`SURFACE.default` / `SURFACE.subtle`).
+- Keep elevation levels limited. Elevation (`SHADOW.elevation`, `SHADOW.panel`) is reserved for genuinely elevated, floating, or modal surfaces (`variant="elevated"`, `variant="panel"`, `Dialog`).
 - Use `SHADOW.accentGlow` only for explicitly selected, active, or achievement states, consistent with its source comment.
 - Do not introduce new decorative halos, gradients, blur, or glass effects as routine card styling.
 
 ### 5.4 Touch targets
 
-The current `CONTROL_HEIGHT` includes 30px, 38px, and 46px options; these are not all sufficient for every touch interaction. On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation, and icon-only controls. Compact visual controls may use a larger hit area than their visible shape. Do not reduce touch targets merely to increase density.
+The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (md), and `min-h-[48px]` (lg), alongside `CONTROL_HEIGHT.touchTarget` (`min-h-[44px] min-w-[44px]`). On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation items, and icon-only controls. Compact visual controls may retain a 32px or 40px visual boundary while expanding their hit region using hit-padding or touchTarget containers. Do not reduce touch targets merely to increase density.
 
 ---
 
@@ -170,9 +184,9 @@ The current `CONTROL_HEIGHT` includes 30px, 38px, and 46px options; these are no
 
 ### 6.1 Use the real motion API
 
-The current token module exports `DURATION`, `TRANSITION`, and `MOTION_CONFIG`. Do not copy or introduce a parallel `MOTION` object or assume keys such as `TRANSITION.fast`, `TRANSITION.base`, or `TRANSITION.slow` exist. Check the current source before use.
+The token module exports `DURATION`, `TRANSITION`, `MOTION_CONFIG`, and its canonical export alias `MOTION` (`export const MOTION = MOTION_CONFIG`). Both `MOTION` and `MOTION_CONFIG` reference identical motion presets (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `tapRestrained`, `hoverRestrained`, `pulseSubtle`, `staggerDelay`). Do not introduce a third motion preset object.
 
-`TRANSITION` currently uses property-specific transitions and `motion-reduce:transition-none`; prefer these over `transition-all`, which may animate unintended properties.
+`TRANSITION` provides property-specific CSS transitions coupled with `motion-reduce:transition-none`; prefer these over untargeted `transition-all`. For Framer Motion components, always inspect reduced-motion preference via `useReducedMotion()` from `motion/react` to provide a zero-motion or static alternative for users who prefer reduced motion.
 
 ### 6.2 Motion rules
 
