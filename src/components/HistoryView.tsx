@@ -6,7 +6,7 @@ import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
 import { WORKOUT_COLORS, generateId, formatCompactWeight } from '../utils/fitnessHelpers';
-import { SessionLog, SetLog, ExerciseDefinition, Workout } from '../types/fitness';
+import { SessionLog, SetLog, ExerciseDefinition, Workout, WorkoutType } from '../types/fitness';
 import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -24,7 +24,8 @@ import {
   EmptyState,
   SegmentedControl,
   SEMANTIC_COLORS,
-  SEMANTIC_UI,
+  SEMANTIC_PALETTE,
+  getAccentColor,
   RADIUS,
   SURFACE,
   BORDER,
@@ -559,7 +560,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                     className="h-full" 
                                     style={{
                                       width: `${percentage}%`,
-                                      backgroundColor: WORKOUT_COLORS[type] || SEMANTIC_COLORS.orange
+                                      backgroundColor: (type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc
                                     }} 
                                   />
                                 </div>
@@ -614,7 +615,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
               const workout = workouts.find(w => w.id === session.workoutId);
               const totalSets = getCompletedSets(session).length;
               const vol = calculateSetsVolume(getCompletedSets(session));
-              const color = WORKOUT_COLORS[workout?.type || 'push'];
+              const color = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
               const isExpanded = expandedDate === session.id;
               const sessionPRs = (index.weightPRs || []).filter(pr => pr.date === session.date);
 
@@ -971,7 +972,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);
                           const isSessionPR = (index.weightPRs || []).some(pr => pr.exerciseDefinitionId === exId && pr.date === session.date);
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
-                          const exColor = WORKOUT_COLORS[workout?.type as keyof typeof WORKOUT_COLORS] || SEMANTIC_COLORS.amber;
+                          const exColor = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
 
                           return (
                             <div key={exId} className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}>
@@ -1107,10 +1108,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                             <div 
                                               key={hIdx}
                                               className={cn(
-                                                "flex items-center justify-between p-2.5 border text-xs transition-colors", RADIUS.card,
+                                                "flex items-center justify-between p-2.5 border text-xs",
+                                                TRANSITION.colors,
+                                                RADIUS.card,
                                                 isPR 
-                                                  ? cn(SEMANTIC_UI.primary, "font-bold")
-                                                  : SEMANTIC_UI.neutral
+                                                  ? cn(SEMANTIC_PALETTE.orange.compound, "font-bold")
+                                                  : SEMANTIC_PALETTE.zinc.compound
                                               )}
                                             >
                                               <div className="flex items-center gap-2">

@@ -166,7 +166,7 @@ import {
   SectionHeader,
   SEMANTIC_COLORS
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -311,7 +311,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           <motion.div
             animate={shouldReduceMotion ? undefined : { rotate: isExpanded ? 180 : 0 }}
             style={shouldReduceMotion ? { transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' } : undefined}
-            transition={{ duration: 0.2 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: DURATION.standard / 1000 }}
             className="text-zinc-500 p-2"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">

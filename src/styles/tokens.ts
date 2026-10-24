@@ -159,6 +159,8 @@ export const MOTION_CONFIG = {
   staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
 } as const;
 
+export const MOTION = MOTION_CONFIG;
+
 export const INTERACTIVE = {
   hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors motion-reduce:transition-none',
   active: 'active:scale-[0.99] transition-transform motion-reduce:transition-none',
@@ -294,21 +296,6 @@ export const CHART_THEME = {
   red: SEMANTIC_COLORS.red,
   indigo: SEMANTIC_COLORS.indigo,
   zinc: SEMANTIC_COLORS.zinc,
-} as const;
-
-export const SEMANTIC_UI = {
-  primary: SEMANTIC_PALETTE.orange.compound,
-  success: SEMANTIC_PALETTE.emerald.compound,
-  warning: SEMANTIC_PALETTE.amber.compound,
-  destructive: SEMANTIC_PALETTE.red.compound,
-  intelligence: SEMANTIC_PALETTE.indigo.compound,
-  neutral: SEMANTIC_PALETTE.zinc.compound,
-  mutedText: 'text-zinc-500',
-  disabledText: 'text-zinc-600',
-  focus: 'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 outline-none',
-  selected: 'border-orange-500 bg-orange-500/10 text-white shadow-[0_0_15px_rgba(249,115,22,0.15)]',
-  activeSurface: 'bg-zinc-800/80',
-  hoverSurface: 'hover:bg-zinc-900/80 hover:border-zinc-700 transition-colors duration-200 motion-reduce:transition-none',
 } as const;
 
 export function getAccentColor(accent?: SemanticColor | null): string | undefined {

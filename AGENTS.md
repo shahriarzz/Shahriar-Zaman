@@ -56,13 +56,19 @@ Before proposing, modifying, or executing any code or architecture change, the A
                                     │
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│ 6. Inspect Implementation Files & Existing Regression Tests            │
+│ 6. Read DESIGN_SYSTEM.md (If Touching Tokens, UI, or Screen Layouts)   │
+│    Required before touching tokens.ts, components/ui/, or visual code  │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 7. Inspect Implementation Files & Existing Regression Tests            │
 │    Verify actual default-branch code behavior before proposing changes │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│ 7. Check Invariant Statuses Prior to Proposal                          │
+│ 8. Check Invariant Statuses Prior to Proposal                          │
 │    Ensure proposed changes do not violate any of the 15 invariants     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -136,6 +142,7 @@ AI agents working on GAINLOG are **strictly prohibited** from:
 6. **Violating Layer Directionality**: Never import UI components, React hooks, or contexts into pure utility modules (`src/utils/`).
 7. **Weakening Firestore Rules**: Never modify `firestore.rules` to permit public unauthenticated access or cross-user document inspection.
 8. **Disabling Existing Regression Tests**: Never delete, comment out, or skip existing tests in `src/test/` to make a failing suite pass. Fix the root cause in the implementation or report the conflict.
+9. **Violating Design System Equivalents**: Never introduce a new color, typography style, radius value, spacing value, or UI primitive without first checking `DESIGN_SYSTEM.md` for an existing equivalent. If none exists, propose the addition explicitly in the same change rather than creating a parallel option silently.
 
 ---
 

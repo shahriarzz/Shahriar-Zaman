@@ -6,12 +6,15 @@ import {
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
   CHART_THEME,
-  SEMANTIC_UI,
   RADIUS,
   SPACING,
   BORDER,
   SURFACE,
   TYPOGRAPHY,
+  DURATION,
+  TRANSITION,
+  MOTION_CONFIG,
+  MOTION,
   SemanticColorKey,
 } from '../styles/tokens';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
@@ -58,15 +61,6 @@ describe('Design System Consolidation & Token Contracts', () => {
       });
     });
 
-    it('ensures SEMANTIC_UI variants map directly to canonical SEMANTIC_PALETTE compounds', () => {
-      expect(SEMANTIC_UI.primary).toBe(SEMANTIC_PALETTE.orange.compound);
-      expect(SEMANTIC_UI.success).toBe(SEMANTIC_PALETTE.emerald.compound);
-      expect(SEMANTIC_UI.warning).toBe(SEMANTIC_PALETTE.amber.compound);
-      expect(SEMANTIC_UI.destructive).toBe(SEMANTIC_PALETTE.red.compound);
-      expect(SEMANTIC_UI.intelligence).toBe(SEMANTIC_PALETTE.indigo.compound);
-      expect(SEMANTIC_UI.neutral).toBe(SEMANTIC_PALETTE.zinc.compound);
-    });
-
     it('derives chart colors from canonical SEMANTIC_COLORS and SURFACE tokens', () => {
       expect(CHART_THEME.orange).toBe(SEMANTIC_COLORS.orange);
       expect(CHART_THEME.emerald).toBe(SEMANTIC_COLORS.emerald);
@@ -91,6 +85,7 @@ describe('Design System Consolidation & Token Contracts', () => {
 
   describe('2. Deprecated Token Removal & Zero Stale References', () => {
     const deprecatedTokens = [
+      'SEMANTIC_UI',
       'formSuccess',
       'zincText',
       'buttonMd',
@@ -238,6 +233,37 @@ describe('Design System Consolidation & Token Contracts', () => {
       const content = fs.readFileSync(tokensPath, 'utf8');
       expect(content).not.toMatch(/from\s+['"]react['"]/);
       expect(content).not.toMatch(/from\s+['"]\.\.?\/components/);
+    });
+  });
+
+  describe('6. Motion Tokens & DESIGN_SYSTEM.md Integration Invariants', () => {
+    it('exports canonical DURATION scale (fast, standard, relaxed)', () => {
+      expect(DURATION.fast).toBe(150);
+      expect(DURATION.standard).toBe(200);
+      expect(DURATION.relaxed).toBe(250);
+    });
+
+    it('exports MOTION matching MOTION_CONFIG and containing standard motion presets', () => {
+      expect(MOTION).toBe(MOTION_CONFIG);
+      expect(MOTION.entrance).toBeDefined();
+      expect(MOTION.calendarPanel).toBeDefined();
+      expect(MOTION.collapse).toBeDefined();
+    });
+
+    it('exports TRANSITION with property-specific utilities and reduced-motion guard', () => {
+      expect(TRANSITION.colors).toContain('motion-reduce:transition-none');
+      expect(TRANSITION.interactive).toContain('motion-reduce:transition-none');
+      expect(TRANSITION.button).toContain('motion-reduce:transition-none');
+    });
+
+    it('verifies DESIGN_SYSTEM.md exists in root and is wired into AGENTS.md reading order and prohibited actions', () => {
+      const designSystemPath = path.join(rootDir, 'DESIGN_SYSTEM.md');
+      expect(fs.existsSync(designSystemPath)).toBe(true);
+
+      const agentsPath = path.join(rootDir, 'AGENTS.md');
+      const agentsContent = fs.readFileSync(agentsPath, 'utf8');
+      expect(agentsContent).toContain('DESIGN_SYSTEM.md');
+      expect(agentsContent).toContain('Violating Design System Equivalents');
     });
   });
 });

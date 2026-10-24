@@ -40,6 +40,8 @@ import {
   INTERACTIVE,
   GAP,
   SEMANTIC_COLORS,
+  getAccentColor,
+  DURATION,
   MOTION_CONFIG,
   TRANSITION
 } from './ui';
@@ -127,10 +129,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     if (isFuture) {
       if (expectedWo) {
         if (expectedWo.type === 'rest') {
-          return { color: SEMANTIC_COLORS.emerald, label: 'rest', isFuture: true, expectedWo };
+          return { color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald, label: 'rest', isFuture: true, expectedWo };
         }
         return {
-          color: WORKOUT_COLORS[expectedWo.type] || SEMANTIC_COLORS.amber,
+          color: WORKOUT_COLORS[expectedWo.type] || getAccentColor('amber') || SEMANTIC_COLORS.amber,
           label: expectedWo.name,
           isFuture: true,
           expectedWo
@@ -141,10 +143,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
     if (expectedWo) {
       if (expectedWo.type === 'rest') {
-        return { color: SEMANTIC_COLORS.emerald, label: 'rest', isRest: true, expectedWo };
+        return { color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald, label: 'rest', isRest: true, expectedWo };
       }
       if (!isSameDay(date, today)) {
-        return { color: SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
+        return { color: getAccentColor('red') || SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
       }
     }
 
@@ -253,11 +255,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               const isCurrentMonthDay = isSameMonth(day, monthStart);
 
               return (
-                <motion.button
+                <button
                   key={dateStr}
-                  whileHover={shouldReduceMotion ? undefined : MOTION_CONFIG.hoverRestrained}
-                  whileTap={shouldReduceMotion ? undefined : MOTION_CONFIG.tapRestrained}
-                  transition={MOTION_CONFIG.pressTransition}
+                  type="button"
+                  data-testid={`calendar-day-${dateStr}`}
                   onClick={() => {
                     haptics.selection();
                     setSelectedDate(day);
@@ -304,7 +305,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       style={{ backgroundColor: status.color }}
                     />
                   )}
-                </motion.button>
+                </button>
               );
             })}
           </div>
@@ -315,9 +316,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               { label: 'Push', color: WORKOUT_COLORS.push },
               { label: 'Pull', color: WORKOUT_COLORS.pull },
               { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-              { label: 'Rest', color: SEMANTIC_COLORS.emerald },
-              { label: 'Missed', color: SEMANTIC_COLORS.red },
-              { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
+              { label: 'Rest', color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald },
+              { label: 'Missed', color: getAccentColor('red') || SEMANTIC_COLORS.red },
+              { label: 'Incomplete', color: getAccentColor('amber') || SEMANTIC_COLORS.amber },
             ].map(l => (
               <div key={l.label} className="flex items-center gap-2">
                 <div
@@ -334,7 +335,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
       </div>
 
       {/* Selected Day Detail Panel */}
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {selectedDate ? (
           <motion.div
             key={selectedDateStr || 'detail'}
@@ -384,12 +385,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                         <Badge label="TODAY" color="emerald" variant="solid" />
                       )}
                     </>
-                  ) : isSelectedDateFuture && expectedWoForSelected ? (
+                  ) : (isSelectedDateFuture || isSelectedDateToday) && expectedWoForSelected ? (
                     <Badge
                       label={
                         expectedWoForSelected.type === 'rest'
                           ? 'SCHEDULED REST'
-                          : `UPCOMING: ${expectedWoForSelected.name}`
+                          : isSelectedDateToday
+                            ? `TODAY: ${expectedWoForSelected.name}`
+                            : `UPCOMING: ${expectedWoForSelected.name}`
                       }
                       color={expectedWoForSelected.type === 'rest' ? 'emerald' : 'orange'}
                       variant="subtle"
@@ -487,13 +490,13 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   </div>
                 )}
 
-                {/* 2. PRIMARY SECTION: Future Scheduled Workout Preview */}
-                {!selectedLog && isSelectedDateFuture && expectedWoForSelected && (
+                {/* 2. PRIMARY SECTION: Scheduled Workout Preview (Today or Future) */}
+                {!selectedLog && (isSelectedDateFuture || isSelectedDateToday) && expectedWoForSelected && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className={cn(TYPOGRAPHY.label, "text-orange-400 flex items-center gap-1.5")}>
                         <CalendarIcon size={12} />
-                        Scheduled Protocol
+                        {isSelectedDateToday ? "Today's Scheduled Protocol" : "Scheduled Protocol"}
                       </span>
                       <span className={TYPOGRAPHY.metadata}>
                         {expectedWoForSelected.type === 'rest'
@@ -708,7 +711,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             initial={shouldReduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={shouldReduceMotion ? undefined : { opacity: 0 }}
-            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: DURATION.standard / 1000 }}
             className="hidden lg:flex flex-col w-96"
           >
             <Card variant="standard" padding="section" className="h-full flex items-center justify-center min-h-[380px]">

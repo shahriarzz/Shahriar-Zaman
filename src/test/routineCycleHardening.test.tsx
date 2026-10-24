@@ -400,45 +400,168 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('Bonus & Auxiliary Protocols');
       expect(container.textContent).toContain('Date Night Mobility Protocol');
 
+      // Malformed section must NOT exist for clean bonus workouts
+      expect(container.querySelector('[data-testid="malformed-core-section"]')).toBeNull();
+
       // The 8-day progression section must show exactly 8 core days (Day 1..8)
       // and Day 1 must be Push Day A, NOT Date Night Mobility Protocol!
-      const cycleList = container.querySelector('.space-y-3')!;
-      const dayCards = Array.from(cycleList.children);
-      expect(dayCards).toHaveLength(CYCLE_LENGTH);
-      expect(dayCards[0].textContent).toContain('Push Day A');
-      expect(dayCards[0].textContent).not.toContain('Date Night Mobility Protocol');
+      const cycleSlots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(cycleSlots).toHaveLength(CYCLE_LENGTH);
+      expect(cycleSlots[0].textContent).toContain('Push Day A');
+      expect(cycleSlots[0].textContent).not.toContain('Date Night Mobility Protocol');
     });
 
-    it('2. A core workout with cycleDay: 9 does not appear as a valid cycle day', async () => {
-      const outOfBoundsWorkout: Workout = {
-        id: 'malformed-day-9',
-        name: 'Extra Core Day 9',
-        type: 'custom',
-        badge: 'DAY 9',
+    it('2. Duplicate Day 1: editor renders exactly 8 sequential slots (1..8) with canonical fallback for Day 1, and shows both competing workouts in Needs Review section for repair', async () => {
+      const dupe1: Workout = {
+        id: 'custom-push-dupe-1',
+        name: 'Custom Push Alpha',
+        type: 'push',
+        badge: 'DAY 1 · ALPHA',
+        cycleDay: 1,
         isCore: true,
-        cycleDay: 9, // Invalid out of range
+        exercises: []
+      };
+      const dupe2: Workout = {
+        id: 'custom-push-dupe-2',
+        name: 'Custom Push Beta',
+        type: 'push',
+        badge: 'DAY 1 · BETA',
+        cycleDay: 1,
+        isCore: true,
         exercises: []
       };
 
-      const workoutList: Workout[] = [...initialWorkouts, outOfBoundsWorkout];
+      // Workouts with duplicate Day 1 replacing default Day 1
+      const withoutDay1 = initialWorkouts.filter(w => w.cycleDay !== 1);
+      const workoutsWithDuplicates = [...withoutDay1, dupe1, dupe2];
 
       await act(async () => {
         root.render(
-          <CycleEditor workouts={workoutList} onSelectWorkout={vi.fn()} />
+          <CycleEditor workouts={workoutsWithDuplicates} onSelectWorkout={vi.fn()} />
         );
       });
 
-      // Day 9 workout must not appear as a numbered cycle slot
-      expect(container.textContent).not.toContain('Extra Core Day 9');
-      // The 8-day progression section must remain exactly 8 items
-      const cycleList = container.querySelector('.space-y-3')!;
-      const dayCards = Array.from(cycleList.children);
-      expect(dayCards).toHaveLength(CYCLE_LENGTH);
+      // Exactly 8 cycle slots rendered in ascending order
+      const cycleSlots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(cycleSlots).toHaveLength(CYCLE_LENGTH);
+
+      // Slot 1 resolves via deterministic fallback to initial Push Day A
+      const slot1 = container.querySelector('[data-testid="cycle-slot-1"]')!;
+      expect(slot1.textContent).toContain('Push Day A');
+      expect(slot1.textContent).toContain('Fallback');
+
+      // Both duplicate core workouts are surfaced in the Needs Review repair section
+      const repairSection = container.querySelector('[data-testid="malformed-core-section"]')!;
+      expect(repairSection).not.toBeNull();
+      expect(repairSection.textContent).toContain('Needs Review / Inactive Core Routines');
+      expect(repairSection.querySelector('[data-testid="malformed-workout-custom-push-dupe-1"]')).not.toBeNull();
+      expect(repairSection.querySelector('[data-testid="malformed-workout-custom-push-dupe-2"]')).not.toBeNull();
+      expect(repairSection.textContent).toContain('DUPLICATE DAY 1');
     });
 
-    it('3. Valid core workouts appear in strictly ascending order from Day 1 through Day 8', async () => {
-      // Pass shuffled initial workouts
-      const shuffled = [...initialWorkouts].reverse();
+    it('3. Missing core days: editor still displays all 8 sequential slots (1..8) with missing day resolving via canonical fallback', async () => {
+      // Remove Day 3 (Hybrid Day A)
+      const missingDay3Workouts = initialWorkouts.filter(w => w.cycleDay !== 3);
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={missingDay3Workouts} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      // Exactly 8 cycle slots rendered
+      const cycleSlots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(cycleSlots).toHaveLength(CYCLE_LENGTH);
+
+      // Slot 3 resolves via canonical fallback
+      const slot3 = container.querySelector('[data-testid="cycle-slot-3"]')!;
+      expect(slot3.textContent).toContain('Hybrid Day A');
+      expect(slot3.textContent).toContain('Fallback');
+    });
+
+    it('4. Invalid core day values (null, 0, 9, 2.5 fractional): excluded from cycle slots and displayed in Needs Review section with tap to edit', async () => {
+      const invalidWorkouts: Workout[] = [
+        {
+          id: 'invalid-null-day',
+          name: 'Core Workout Null Day',
+          type: 'custom',
+          badge: 'CORE',
+          isCore: true,
+          cycleDay: null,
+          exercises: []
+        },
+        {
+          id: 'invalid-zero-day',
+          name: 'Core Workout Day Zero',
+          type: 'custom',
+          badge: 'CORE',
+          isCore: true,
+          cycleDay: 0,
+          exercises: []
+        },
+        {
+          id: 'invalid-day-9',
+          name: 'Core Workout Day Nine',
+          type: 'custom',
+          badge: 'CORE',
+          isCore: true,
+          cycleDay: 9,
+          exercises: []
+        },
+        {
+          id: 'invalid-fractional-day',
+          name: 'Core Workout Day Two Point Five',
+          type: 'custom',
+          badge: 'CORE',
+          isCore: true,
+          cycleDay: 2.5,
+          exercises: []
+        }
+      ];
+
+      const fullList = [...initialWorkouts, ...invalidWorkouts];
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={fullList} onSelectWorkout={vi.fn()} />
+        );
+      });
+
+      // The 8-day progression section must remain exactly 8 items (1..8)
+      const cycleSlots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(cycleSlots).toHaveLength(CYCLE_LENGTH);
+
+      // None of the invalid workouts appear as numbered cycle slots
+      invalidWorkouts.forEach(iw => {
+        const matchingInCycle = Array.from(cycleSlots).find(slot => slot.textContent?.includes(iw.name));
+        expect(matchingInCycle).toBeUndefined();
+      });
+
+      // All 4 invalid core workouts appear in Needs Review section
+      const repairSection = container.querySelector('[data-testid="malformed-core-section"]')!;
+      expect(repairSection).not.toBeNull();
+      invalidWorkouts.forEach(iw => {
+        const item = repairSection.querySelector(`[data-testid="malformed-workout-${iw.id}"]`);
+        expect(item).not.toBeNull();
+        expect(item?.textContent).toContain(iw.name);
+      });
+    });
+
+    it('5. Valid core workouts appear in strictly ascending order from Day 1 through Day 8 with customizations preserved', async () => {
+      // Create a valid customized Day 2 workout
+      const customPull: Workout = {
+        id: 'custom-pull-day-2',
+        name: 'Custom Hypertrophy Pull',
+        type: 'pull',
+        badge: 'DAY 2 · PULL',
+        cycleDay: 2,
+        isCore: true,
+        exercises: []
+      };
+
+      // Shuffled array order with custom Day 2
+      const modified = initialWorkouts.filter(w => w.cycleDay !== 2);
+      const shuffled = [customPull, ...modified].reverse();
 
       await act(async () => {
         root.render(
@@ -446,14 +569,23 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      const cycleList = container.querySelector('.space-y-3')!;
-      const dayNumbers = Array.from(cycleList.children)
-        .map(el => el.querySelector('.font-display')?.textContent?.trim());
+      const cycleSlots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(cycleSlots).toHaveLength(CYCLE_LENGTH);
 
+      // Verify ascending day order
+      const dayNumbers = Array.from(cycleSlots).map(el =>
+        el.querySelector('.font-display')?.textContent?.trim()
+      );
       expect(dayNumbers).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+
+      // Slot 2 must preserve the user's valid custom routine
+      const slot2 = container.querySelector('[data-testid="cycle-slot-2"]')!;
+      expect(slot2.textContent).toContain('Custom Hypertrophy Pull');
+      // No fallback indicator on valid user customization
+      expect(slot2.textContent).not.toContain('Fallback');
     });
 
-    it('4. Ordinary bonus workouts without a cycle-day assignment remain visible in auxiliary section', async () => {
+    it('6. Ordinary bonus workouts without a cycle-day assignment remain visible in auxiliary section', async () => {
       const auxiliaryWorkout: Workout = {
         id: 'core-conditioning',
         name: 'Auxiliary Core Protocol',
@@ -472,6 +604,35 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       expect(container.textContent).toContain('Bonus & Auxiliary Protocols');
       expect(container.textContent).toContain('Auxiliary Core Protocol');
+    });
+
+    it('7. Clicking a malformed core workout in Needs Review invokes onSelectWorkout with its ID for user repair', async () => {
+      const onSelectWorkout = vi.fn();
+      const malformedWorkout: Workout = {
+        id: 'repairable-workout-9',
+        name: 'Repairable Core Routine',
+        type: 'custom',
+        badge: 'DAY 9',
+        isCore: true,
+        cycleDay: 9,
+        exercises: []
+      };
+
+      await act(async () => {
+        root.render(
+          <CycleEditor workouts={[...initialWorkouts, malformedWorkout]} onSelectWorkout={onSelectWorkout} />
+        );
+      });
+
+      const repairCard = container.querySelector('[data-testid="malformed-workout-repairable-workout-9"]') as HTMLElement;
+      expect(repairCard).not.toBeNull();
+
+      await act(async () => {
+        repairCard.click();
+      });
+
+      expect(onSelectWorkout).toHaveBeenCalledTimes(1);
+      expect(onSelectWorkout).toHaveBeenCalledWith('repairable-workout-9');
     });
   });
 
@@ -908,7 +1069,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         logs: {} // Zero logs
       });
 
-      // Render real Dashboard
+      // 1. Render real Dashboard
       await act(async () => {
         root.render(
           <FitnessContext.Provider value={contextValue}>
@@ -926,7 +1087,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('Recovery Day');
       expect(container.textContent).toContain('Rest Day');
 
-      // Now unmount and render Calendar to verify calendar surface resolution
+      // 2. Render Calendar surface and click Day 4 cell to verify identical workout resolution
       act(() => {
         root.unmount();
       });
@@ -944,11 +1105,22 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      // Calendar grid rendered
       expect(container.textContent).toContain('Schedule & Consistency');
+
+      // Click the Day 4 cell in Calendar grid to inspect the resolved protocol card
+      const day4Btn = container.querySelector('[data-testid="calendar-day-2026-10-04"]') as HTMLElement;
+      expect(day4Btn).not.toBeNull();
+
+      await act(async () => {
+        day4Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      // Calendar preview card confirms identical Recovery Day identity
+      expect(container.textContent).toContain('Rest & Adaptation Protocol');
     });
 
-    it('2. Day 4 -> Day 5: Push B appears automatically without a recovery-day log', async () => {
+    it('2. Day 4 -> Day 5: Push B appears automatically without a recovery-day log on both Dashboard and Calendar', async () => {
       const cycleStart = '2026-10-01';
       // Advance clock to Day 5: 2026-10-05
       vi.setSystemTime(new Date(2026, 9, 5, 10, 0, 0));
@@ -974,9 +1146,39 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('DAY 5 · PUSH B');
       expect(container.textContent).toContain('Push Day B');
       expect(container.textContent).toContain('Start Session');
+
+      // Render Calendar on Day 5 and click Day 5 cell
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const day5Btn = container.querySelector('[data-testid="calendar-day-2026-10-05"]') as HTMLElement;
+      expect(day5Btn).not.toBeNull();
+
+      await act(async () => {
+        day5Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      // Calendar resolves identical Push Day B routine
+      expect(container.textContent).toContain('Push Day B');
+      expect(container.textContent).toContain('DAY 5 · PUSH B');
     });
 
-    it('3. Day 8 -> Day 1: Push A appears automatically without a Day 8 log', async () => {
+    it('3. Day 8 -> Day 1: Push A appears automatically without a Day 8 log on both surfaces', async () => {
       const cycleStart = '2026-10-01';
       // 2026-10-09 is Day 1 of cycle 2 (8 days after anchor)
       vi.setSystemTime(new Date(2026, 9, 9, 10, 0, 0));
@@ -1000,6 +1202,35 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       expect(container.textContent).toContain('DAY 1 · PUSH A');
       expect(container.textContent).toContain('Push Day A');
+
+      // Render Calendar on Day 9 (Day 1 of next cycle)
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const day9Btn = container.querySelector('[data-testid="calendar-day-2026-10-09"]') as HTMLElement;
+      expect(day9Btn).not.toBeNull();
+
+      await act(async () => {
+        day9Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      expect(container.textContent).toContain('Push Day A');
+      expect(container.textContent).toContain('DAY 1 · PUSH A');
     });
 
     it('4. Missed days: cycle follows calendar rather than last completed workout', async () => {
@@ -1030,7 +1261,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('Recovery Day');
     });
 
-    it('5. Duplicate Day 1 in workouts library resolves through deterministic fallback on Dashboard', async () => {
+    it('5. Duplicate Day 1 in workouts library resolves through deterministic fallback on both surfaces', async () => {
       const cycleStart = '2026-10-01'; // Day 1
       vi.setSystemTime(new Date(2026, 9, 1, 10, 0, 0));
 
@@ -1064,10 +1295,97 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      // Deterministic fallback resolves to canonical Push Day A
+      // Deterministic fallback resolves to canonical Push Day A on Dashboard
       expect(container.textContent).toContain('DAY 1 · PUSH A');
       expect(container.textContent).toContain('Push Day A');
       expect(container.textContent).not.toContain('Competing Push Day');
+
+      // Verify Calendar also resolves to canonical Push Day A fallback
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const day1Btn = container.querySelector('[data-testid="calendar-day-2026-10-01"]') as HTMLElement;
+      expect(day1Btn).not.toBeNull();
+
+      await act(async () => {
+        day1Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      expect(container.textContent).toContain('Push Day A');
+      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).not.toContain('Competing Push Day');
+    });
+
+    it('6. Missing core day (Day 3 missing) resolves to canonical Hybrid Day A on both surfaces', async () => {
+      const cycleStart = '2026-10-01';
+      // 2026-10-03 is Day 3 (Hybrid Day A)
+      vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
+
+      const withoutDay3 = initialWorkouts.filter(w => w.cycleDay !== 3);
+      const contextValue = createMockFitnessContext({
+        workouts: withoutDay3,
+        appState: { cycleStart }
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      // Dashboard shows canonical Hybrid Day A fallback
+      expect(container.textContent).toContain('DAY 3 · HYBRID A');
+      expect(container.textContent).toContain('Hybrid Day A');
+
+      // Calendar shows identical fallback
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const day3Btn = container.querySelector('[data-testid="calendar-day-2026-10-03"]') as HTMLElement;
+      expect(day3Btn).not.toBeNull();
+
+      await act(async () => {
+        day3Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      expect(container.textContent).toContain('Hybrid Day A');
+      expect(container.textContent).toContain('DAY 3 · HYBRID A');
     });
   });
 

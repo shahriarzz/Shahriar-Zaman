@@ -275,7 +275,7 @@ Cycle Day (1-8):
   - Skipped days do not pause or freeze the cycle.
   - Bonus workouts (`isCore === false`) do not advance or alter `cycleStart`.
   - Completing an out-of-order core workout recalculates `cycleStart` via `getAdjustedCycleStart(workout.cycleDay, new Date())`.
-  - **Core Workout Map Validation Boundary**: `buildValidatedCoreWorkoutMap(workouts)` validates exactly 8 cycle slots (Days 1–8), detects duplicate `cycleDay` values without silent overwrite, excludes bonus workouts (`isCore === false`), and provides deterministic fallback to initial routines for corrupted or missing slots.
+  - **Core Workout Map Validation & UI Boundary**: `buildValidatedCoreWorkoutMap(workouts)` validates exactly 8 cycle slots (Days 1–8), detects duplicate `cycleDay` values without silent overwrite, excludes bonus workouts (`isCore === false`), and provides deterministic fallback to initial routines for corrupted or missing slots. `CycleEditor` is strictly driven by this canonical resolution, ensuring exactly 8 sequential slots (1–8) are displayed, while surfacing duplicate or malformed core workouts in a dedicated "Needs Review / Inactive Core Routines" repair list so they remain discoverable and editable without corrupting the primary cycle.
 
 ---
 

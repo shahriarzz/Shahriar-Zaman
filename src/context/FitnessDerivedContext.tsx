@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useCallback, useEffect } from 'react';
 import { format, subDays } from 'date-fns';
 import { useFitness } from './FitnessContext';
 import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';
@@ -154,20 +154,26 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [workouts]);
 
   // 4. Core Workout by Cycle Day Map (Canonical 8-Day Validation Boundary)
+  const validationResult = useMemo(() => {
+    return buildValidatedCoreWorkoutMap(workouts);
+  }, [workouts]);
+
+  const { coreWorkoutByCycleDayMap } = validationResult;
+
   const lastLoggedValidationErrorsRef = React.useRef<string>('');
-  const { coreWorkoutByCycleDayMap } = useMemo(() => {
-    const result = buildValidatedCoreWorkoutMap(workouts);
-    if (!result.isValid && process.env.NODE_ENV !== 'production') {
-      const errorFingerprint = result.errors.join('|');
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+
+    if (!validationResult.isValid) {
+      const errorFingerprint = validationResult.errors.join('|');
       if (lastLoggedValidationErrorsRef.current !== errorFingerprint) {
         lastLoggedValidationErrorsRef.current = errorFingerprint;
-        result.errors.forEach(err => console.warn(`[Core Workout Map Validation] ${err}`));
+        validationResult.errors.forEach(err => console.warn(`[Core Workout Map Validation] ${err}`));
       }
-    } else if (result.isValid) {
+    } else {
       lastLoggedValidationErrorsRef.current = '';
     }
-    return result;
-  }, [workouts]);
+  }, [validationResult.isValid, validationResult.errors]);
 
   // 5. Priority & Compound Exercises for Strength Progression
   const priorityExercises = useMemo(() => {
