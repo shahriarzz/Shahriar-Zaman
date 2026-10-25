@@ -17,7 +17,7 @@ import {
   DURATION,
   TRANSITION,
   MOTION_CONFIG,
-  MOTION,
+  CANVAS_HEX,
   SemanticColorKey,
 } from '../styles/tokens';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
@@ -25,6 +25,9 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Card } from '../components/ui/Card';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { Dialog, DialogHeader } from '../components/ui/Dialog';
+import { Banner } from '../components/ui/Banner';
+import { Button } from '../components/ui/Button';
 
 /**
  * Design System Regression & Invariant Test Suite.
@@ -143,34 +146,41 @@ describe('Design System Consolidation & Token Contracts', () => {
     });
   });
 
-  describe('3. Approved Raw Hex Allowlist in UI Components', () => {
-    // Only dynamic luminance calculation in Badge.tsx is permitted to use raw hex literals in src/components/
+  describe('3. Approved Raw Hex Allowlist in UI Code & Styles', () => {
+    // Only dynamic luminance calculation in Badge.tsx and canonical tokens/theme in index.css are permitted
     const approvedHexMap: Record<string, string[]> = {
       'src/components/ui/Badge.tsx': ['#ffffff', '#000000'],
+      'src/index.css': ['#45454e', '#232328', '#151518', '#27272a', '#3f3f46', '#09090e'],
+      'src/App.tsx': [],
     };
 
-    function getComponentFiles(dir: string): string[] {
+    function getScanFiles(): string[] {
       let results: string[] = [];
-      const list = fs.readdirSync(dir);
-      list.forEach((file) => {
-        const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
-        if (stat && stat.isDirectory()) {
-          results = results.concat(getComponentFiles(fullPath));
-        } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
-          results.push(fullPath);
-        }
-      });
+      function walkDir(dir: string) {
+        const list = fs.readdirSync(dir);
+        list.forEach((file) => {
+          const fullPath = path.join(dir, file);
+          const stat = fs.statSync(fullPath);
+          if (stat && stat.isDirectory()) {
+            walkDir(fullPath);
+          } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
+            results.push(fullPath);
+          }
+        });
+      }
+      walkDir(path.join(rootDir, 'src/components'));
+      results.push(path.join(rootDir, 'src/App.tsx'));
+      results.push(path.join(rootDir, 'src/index.css'));
       return results;
     }
 
-    const componentFiles = getComponentFiles(path.join(rootDir, 'src/components'));
+    const scanFiles = getScanFiles();
 
-    it('verifies all raw hex occurrences in components match the explicit allowlist', () => {
+    it('verifies all raw hex occurrences in UI code and styles match the explicit allowlist', () => {
       const hexRegex = /#[0-9a-fA-F]{3,8}\b/g;
       const unapprovedOccurrences: { file: string; hex: string; line: number }[] = [];
 
-      componentFiles.forEach((file) => {
+      scanFiles.forEach((file) => {
         const relPath = path.relative(rootDir, file).replace(/\\/g, '/');
         const content = fs.readFileSync(file, 'utf8');
         const lines = content.split('\n');
@@ -250,11 +260,17 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(DURATION.relaxed).toBe(250);
     });
 
-    it('exports MOTION matching MOTION_CONFIG and containing standard motion presets', () => {
-      expect(MOTION).toBe(MOTION_CONFIG);
-      expect(MOTION.entrance).toBeDefined();
-      expect(MOTION.calendarPanel).toBeDefined();
-      expect(MOTION.collapse).toBeDefined();
+    it('exports MOTION_CONFIG as the canonical preset object containing standard motion presets', () => {
+      expect(MOTION_CONFIG).toBeDefined();
+      expect(MOTION_CONFIG.entrance).toBeDefined();
+      expect(MOTION_CONFIG.viewEntrance).toBeDefined();
+      expect(MOTION_CONFIG.dialogSurface).toBeDefined();
+      expect(MOTION_CONFIG.calendarPanel).toBeDefined();
+      expect(MOTION_CONFIG.collapse).toBeDefined();
+      expect(MOTION_CONFIG.tapRestrained).toBeDefined();
+      expect(MOTION_CONFIG.hoverRestrained).toBeDefined();
+      expect(MOTION_CONFIG.pulseSubtle).toBeDefined();
+      expect(typeof MOTION_CONFIG.staggerDelay).toBe('function');
     });
 
     it('exports TRANSITION with property-specific utilities and reduced-motion guard', () => {
@@ -284,17 +300,64 @@ describe('Design System Consolidation & Token Contracts', () => {
   });
 
   describe('8. Readable Typography Floors by Role', () => {
-    it('enforces that no token in TYPOGRAPHY resolves to 8px or below', () => {
-      const sub9pxPattern = /text-\[(?:[0-8]px|0\.[0-9]+rem)\]/;
-      const violations: string[] = [];
+    function extractSub9pxArbitraryFonts(text: string): { match: string; px: number }[] {
+      const regex = /text-\[([0-9.]+)(px|rem)\]/g;
+      const findings: { match: string; px: number }[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(text)) !== null) {
+        const val = parseFloat(m[1]);
+        const unit = m[2];
+        const px = unit === 'rem' ? val * 16 : val;
+        if (px < 9) {
+          findings.push({ match: m[0], px });
+        }
+      }
+      return findings;
+    }
 
+    it('enforces that no token in TYPOGRAPHY resolves to below 9px via unit parser', () => {
+      const violations: string[] = [];
       Object.entries(TYPOGRAPHY).forEach(([key, value]) => {
-        if (sub9pxPattern.test(value)) {
-          violations.push(`${key}: "${value}"`);
+        const findings = extractSub9pxArbitraryFonts(value);
+        if (findings.length > 0) {
+          violations.push(`${key}: ${findings.map(f => `${f.match} (${f.px}px)`).join(', ')}`);
         }
       });
-
       expect(violations, `Found typography tokens below 9px readable floor: ${violations.join(', ')}`).toEqual([]);
+    });
+
+    it('scans all UI source files to ensure no arbitrary font-size utility falls below 9px', () => {
+      function getAllUiFiles(dir: string): string[] {
+        let results: string[] = [];
+        const list = fs.readdirSync(dir);
+        list.forEach((file) => {
+          const fullPath = path.join(dir, file);
+          const stat = fs.statSync(fullPath);
+          if (stat && stat.isDirectory()) {
+            results = results.concat(getAllUiFiles(fullPath));
+          } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
+            results.push(fullPath);
+          }
+        });
+        return results;
+      }
+
+      const uiFiles = [...getAllUiFiles(path.join(rootDir, 'src/components')), path.join(rootDir, 'src/App.tsx')];
+      const violations: { file: string; match: string; px: number }[] = [];
+
+      uiFiles.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
+        const findings = extractSub9pxArbitraryFonts(content);
+        findings.forEach(f => {
+          violations.push({
+            file: path.relative(rootDir, file).replace(/\\/g, '/'),
+            match: f.match,
+            px: f.px,
+          });
+        });
+      });
+
+      expect(violations, `Found inline arbitrary font-size below 9px in UI files: ${JSON.stringify(violations, null, 2)}`).toEqual([]);
     });
 
     it('enforces minimum 9px floor for micro-badges and 10px floor for metadata', () => {
@@ -391,26 +454,30 @@ describe('Design System Consolidation & Token Contracts', () => {
   });
 
   describe('11. Elimination of Decorative Looping Effects', () => {
-    function getAllComponentFiles(dir: string): string[] {
+    function getAllUiSourceFiles(): string[] {
       let results: string[] = [];
-      const list = fs.readdirSync(dir);
-      list.forEach((file) => {
-        const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
-        if (stat && stat.isDirectory()) {
-          results = results.concat(getAllComponentFiles(fullPath));
-        } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
-          results.push(fullPath);
-        }
-      });
+      function walkDir(dir: string) {
+        const list = fs.readdirSync(dir);
+        list.forEach((file) => {
+          const fullPath = path.join(dir, file);
+          const stat = fs.statSync(fullPath);
+          if (stat && stat.isDirectory()) {
+            walkDir(fullPath);
+          } else if (file.endsWith('.tsx') || file.endsWith('.ts')) {
+            results.push(fullPath);
+          }
+        });
+      }
+      walkDir(path.join(rootDir, 'src/components'));
+      results.push(path.join(rootDir, 'src/App.tsx'));
       return results;
     }
 
-    const componentFiles = getAllComponentFiles(path.join(rootDir, 'src/components'));
+    const uiSourceFiles = getAllUiSourceFiles();
 
-    it('verifies no component uses animate-ping', () => {
+    it('verifies no component or UI file uses decorative animate-ping', () => {
       const pingViolations: string[] = [];
-      componentFiles.forEach((file) => {
+      uiSourceFiles.forEach((file) => {
         const content = fs.readFileSync(file, 'utf8');
         if (content.includes('animate-ping')) {
           pingViolations.push(path.relative(rootDir, file));
@@ -424,6 +491,166 @@ describe('Design System Consolidation & Token Contracts', () => {
       const content = fs.readFileSync(ambientPath, 'utf8');
       expect(content).not.toContain('animate-pulse');
       expect(content).not.toContain('bg-blue-500');
+    });
+
+    it('verifies status dots across Layout, App, and AccountSection do not use continuous animate-pulse', () => {
+      const layoutContent = fs.readFileSync(path.join(rootDir, 'src/components/Layout.tsx'), 'utf8');
+      const appContent = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
+      const accountContent = fs.readFileSync(path.join(rootDir, 'src/components/manage/AccountSection.tsx'), 'utf8');
+
+      expect(layoutContent).not.toMatch(/syncing.*animate-pulse/);
+      expect(appContent).not.toMatch(/dotColor:.*animate-pulse/);
+      expect(accountContent).not.toMatch(/syncStatus === 'syncing'.*animate-pulse/);
+    });
+
+    it('verifies spinners in App and Button use motion-safe:animate-spin', () => {
+      const appContent = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
+      const buttonContent = fs.readFileSync(path.join(rootDir, 'src/components/ui/Button.tsx'), 'utf8');
+
+      expect(appContent).toContain('motion-safe:animate-spin');
+      expect(buttonContent).toContain('motion-safe:animate-spin');
+    });
+  });
+
+  describe('12. Dialog Accessible Naming Contract', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('forwards ariaLabel directly to the element with role="dialog"', () => {
+      act(() => {
+        root.render(
+          React.createElement(Dialog, { isOpen: true, ariaLabel: 'System Protocol Confirmation' }, 'Dialog Content')
+        );
+      });
+
+      const dialogEl = container.querySelector('[role="dialog"]');
+      expect(dialogEl).toBeTruthy();
+      expect(dialogEl?.getAttribute('aria-label')).toBe('System Protocol Confirmation');
+      expect(dialogEl?.getAttribute('aria-modal')).toBe('true');
+    });
+
+    it('connects DialogHeader title to dialog via aria-labelledby when ariaLabel is not passed', () => {
+      act(() => {
+        root.render(
+          React.createElement(
+            Dialog,
+            { isOpen: true },
+            React.createElement(DialogHeader, { title: 'Purge Archive Logs' })
+          )
+        );
+      });
+
+      const dialogEl = container.querySelector('[role="dialog"]');
+      expect(dialogEl).toBeTruthy();
+      const labelledBy = dialogEl?.getAttribute('aria-labelledby');
+      expect(labelledBy).toBeTruthy();
+
+      const titleEl = container.querySelector(`#${labelledBy}`);
+      expect(titleEl).toBeTruthy();
+      expect(titleEl?.textContent).toBe('Purge Archive Logs');
+    });
+  });
+
+  describe('13. Banner Styling & Non-Elevation Contract', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('renders Banner without default shadow elevation or background gradient', () => {
+      act(() => {
+        root.render(React.createElement(Banner, { variant: 'warning', title: 'Test Alert' }));
+      });
+
+      const cardEl = container.firstElementChild as HTMLElement;
+      expect(cardEl).toBeTruthy();
+      expect(cardEl.className).not.toContain(SHADOW.elevation);
+      expect(cardEl.className).not.toContain('shadow-md');
+      expect(cardEl.className).not.toContain('bg-gradient-to-r');
+      expect(cardEl.className).not.toContain('from-amber-500');
+    });
+
+    it('distinguishes all 5 banner variants with distinct semantic container classes', () => {
+      const bannerSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Banner.tsx'), 'utf8');
+      expect(bannerSrc).not.toContain('bgGradient');
+      expect(bannerSrc).not.toContain('pingColor');
+
+      const variants = ['warning', 'success', 'destructive', 'info', 'achievement'] as const;
+      const classMap = new Set<string>();
+
+      variants.forEach((v) => {
+        act(() => {
+          root.render(React.createElement(Banner, { variant: v, title: `Alert ${v}` }));
+        });
+        const cardEl = container.firstElementChild as HTMLElement;
+        expect(cardEl).toBeTruthy();
+        classMap.add(cardEl.className);
+      });
+
+      // All 5 variants must produce distinct class styling
+      expect(classMap.size).toBe(5);
+    });
+  });
+
+  describe('14. Canvas Synchronization & Native Status Bar Invariant', () => {
+    it('synchronizes web canvas token, CSS custom property, and native status bar color', () => {
+      expect(CANVAS_HEX).toBe('#09090e');
+      expect(SURFACE.canvas).toBe('bg-[#09090e]');
+
+      const cssContent = fs.readFileSync(path.join(rootDir, 'src/index.css'), 'utf8');
+      expect(cssContent).toContain('--canvas-color: #09090e;');
+      expect(cssContent).toContain('background-color: var(--canvas-color);');
+      expect(cssContent).not.toContain('body::before');
+
+      const appContent = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
+      expect(appContent).toContain('StatusBar.setBackgroundColor({ color: CANVAS_HEX })');
+    });
+  });
+
+  describe('15. Touch-Target & Focus Accessibility Contracts', () => {
+    it('enforces Button size="icon" matches touchTarget (minimum 44x44px)', () => {
+      expect(CONTROL_HEIGHT.touchTarget).toBe('min-h-[44px] min-w-[44px]');
+
+      const buttonSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Button.tsx'), 'utf8');
+      expect(buttonSrc).toContain("icon: cn(CONTROL_HEIGHT.touchTarget, 'p-2.5 justify-center')");
+    });
+
+    it('enforces FOCUS.visible on navigation items in Layout.tsx', () => {
+      const layoutSrc = fs.readFileSync(path.join(rootDir, 'src/components/Layout.tsx'), 'utf8');
+      expect(layoutSrc).toContain('FOCUS.visible');
+      expect(layoutSrc).not.toContain('drop-shadow-[0_0_8px_rgba(249,115,22,0.45)]');
+    });
+
+    it('verifies Toast dismiss button and HistoryView clear button do not have sub-44px overrides', () => {
+      const toastSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Toast.tsx'), 'utf8');
+      expect(toastSrc).not.toContain('h-5 w-5 p-0');
+
+      const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
+      expect(historySrc).not.toContain('h-6 w-6 p-0 text-zinc-400');
     });
   });
 });

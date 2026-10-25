@@ -679,7 +679,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <div className={cn("flex items-center gap-3 self-stretch sm:self-auto justify-between border-t sm:border-t-0 pt-4 sm:pt-0", BORDER.subtle)}>
                       <Button
                         variant={editingLogId === session.id ? "primary" : "secondary"}
-                        size="sm"
+                        size="icon"
                         icon={<Edit2 size={14} />}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -689,12 +689,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           setExpandedDate(session.id);
                         }}
                         title="Edit session logs"
-                        className="w-8 h-8 p-0"
+                        aria-label="Edit session logs"
                       />
 
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         icon={<Trash2 size={14} />}
                         onClick={async (e) => {
                           e.stopPropagation();
@@ -709,7 +709,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           }
                         }}
                         title="Purge session"
-                        className="w-8 h-8 p-0 hover:text-red-400"
+                        aria-label="Purge session"
+                        className="hover:text-red-400"
                       />
                       
                       <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400", SURFACE.recessed, BORDER.standard)}>
@@ -725,10 +726,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
-                      initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-                      animate={MOTION_CONFIG.collapse.animate}
-                      exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
-                      transition={MOTION_CONFIG.collapse.transition}
+                      initial={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.initial}
+                      animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                      exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                      transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
                       className={cn("border-t p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
                     >
                       {editingLogId === session.id && editSessionState ? (
@@ -741,14 +742,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                             </div>
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="icon"
                               icon={<X size={16} />}
                               onClick={() => {
                                 setEditingLogId(null);
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
-                              className="w-8 h-8 p-0 rounded-full"
+                              aria-label="Close session editor"
+                              title="Close session editor"
                             />
                           </div>
 

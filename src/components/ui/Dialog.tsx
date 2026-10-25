@@ -3,6 +3,12 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { RADIUS, BORDER, SURFACE, SHADOW, SPACING, TYPOGRAPHY, MOTION_CONFIG } from '../../styles/tokens';
 
+export interface DialogContextValue {
+  titleId: string;
+}
+
+export const DialogContext = React.createContext<DialogContextValue>({ titleId: '' });
+
 export interface DialogProps {
   isOpen: boolean;
   onClose?: () => void;
@@ -11,6 +17,8 @@ export interface DialogProps {
   className?: string;
   closeOnEscape?: boolean;
   closeOnBackdropClick?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
 }
 
 export const Dialog: React.FC<DialogProps> = ({
@@ -21,7 +29,12 @@ export const Dialog: React.FC<DialogProps> = ({
   className,
   closeOnEscape = true,
   closeOnBackdropClick = true,
+  ariaLabel,
+  ariaLabelledBy,
 }) => {
+  const generatedId = React.useId();
+  const defaultTitleId = `dialog-title-${generatedId.replace(/:/g, '')}`;
+  const effectiveTitleId = ariaLabelledBy || defaultTitleId;
   const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -142,6 +155,8 @@ export const Dialog: React.FC<DialogProps> = ({
             transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.dialogSurface.transition}
             role="dialog"
             aria-modal="true"
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabel ? undefined : effectiveTitleId}
             className={cn(
               "relative w-full min-w-0 max-w-full text-zinc-200 focus:outline-none",
               SURFACE.panel,
@@ -154,7 +169,9 @@ export const Dialog: React.FC<DialogProps> = ({
               className
             )}
           >
-            {children}
+            <DialogContext.Provider value={{ titleId: effectiveTitleId }}>
+              {children}
+            </DialogContext.Provider>
           </motion.div>
         </div>
       )}
@@ -180,8 +197,12 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({
   isDanger,
   children,
   className,
+  id,
   ...props
 }) => {
+  const { titleId } = React.useContext(DialogContext);
+  const headerId = id || titleId;
+
   return (
     <div className={cn("flex items-start justify-between gap-4", className)} {...props}>
       <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -206,6 +227,7 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({
           )}
           {title && (
             <h2
+              id={headerId}
               className={cn(
                 "text-base font-sans font-semibold tracking-tight",
                 isDanger ? "text-red-400" : "text-zinc-100"

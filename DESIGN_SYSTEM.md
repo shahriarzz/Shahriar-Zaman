@@ -1,6 +1,6 @@
 # DESIGN_SYSTEM.md — GAINLOG Visual Language & UI Contract
 
-> **Status:** Active operating contract enforced by regression suites  
+> **Status:** Active operating contract with automated invariant checks (rules are enforced incrementally across test suites and code reviews)  
 > **Audience:** AI coding agents and contributors  
 > **Scope:** `src/styles/tokens.ts`, `src/components/ui/`, and visual/layout code in screen components  
 > **Product intent:** A compact, fast, data-driven strength-training tool. The interface should make planning, logging, analysis, and progress easier—not compete for attention.
@@ -176,7 +176,7 @@ Do not add another spacing or radius scale without proving the current system ca
 
 ### 5.4 Touch targets
 
-The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (md), and `min-h-[48px]` (lg), alongside `CONTROL_HEIGHT.touchTarget` (`min-h-[44px] min-w-[44px]`). On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation items, and icon-only controls. Compact visual controls may retain a 32px or 40px visual boundary while expanding their hit region using hit-padding or touchTarget containers. Do not reduce touch targets merely to increase density.
+The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (md), and `min-h-[48px]` (lg), alongside `CONTROL_HEIGHT.touchTarget` (`min-h-[44px] min-w-[44px]`). On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation items, and icon-only controls. Compact visual controls may retain a 32px or 40px visual boundary while expanding their hit region using hit-padding or touchTarget containers. Any deliberate exception to the 44px hit-target policy or raw-color rules requires an explicit architectural reason and automated test coverage. Do not reduce touch targets merely to increase density.
 
 ---
 
@@ -184,7 +184,7 @@ The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (
 
 ### 6.1 Use the real motion API
 
-The token module exports `DURATION`, `TRANSITION`, `MOTION_CONFIG`, and its canonical export alias `MOTION` (`export const MOTION = MOTION_CONFIG`). Both `MOTION` and `MOTION_CONFIG` reference identical motion presets (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `tapRestrained`, `hoverRestrained`, `pulseSubtle`, `staggerDelay`). Do not introduce a third motion preset object.
+The token module exports `DURATION`, `TRANSITION`, and `MOTION_CONFIG`. `MOTION_CONFIG` is the sole canonical preset object in `src/styles/tokens.ts` (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `tapRestrained`, `hoverRestrained`, `pulseSubtle`, `staggerDelay`). Do not introduce secondary alias objects.
 
 `TRANSITION` provides property-specific CSS transitions coupled with `motion-reduce:transition-none`; prefer these over untargeted `transition-all`. For Framer Motion components, always inspect reduced-motion preference via `useReducedMotion()` from `motion/react` to provide a zero-motion or static alternative for users who prefer reduced motion.
 
@@ -209,16 +209,16 @@ Use and extend existing primitives before creating alternatives. The current `sr
 
 | Primitive/helper | Contract |
 |---|---|
-| `Card` | Shared surface, border, radius, padding, and state/accent styling |
+| `Card` | Shared surface, border, radius, padding, and state/accent styling (canonical `selected` variant; no default elevation on standard/compact) |
 | `Section` | Card-based section composition with optional `SectionHeader` |
 | `SectionHeader` | Reusable section heading, supporting description, and action |
 | `StatCard` | Compact metric presentation |
 | `AchievementCard` | Achievement/record-specific presentation; keep its role narrow |
 | `Badge` | Compact status or category label |
-| `Button` | Standardized button variants, sizes, focus/disabled states |
+| `Button` | Standardized button variants, sizes (`sm`, `md`, `lg`, `icon` at 44px min), focus/disabled states |
 | `Input`, `Textarea` | Shared text-entry controls |
-| `Banner` | Inline notice/alert variants |
-| `Dialog` | Existing dialog/confirmation surface; inspect before creating another modal pattern |
+| `Banner` | Inline notice/alert variants (non-elevated by default; distinct semantic borders & subtle fills; no gradients or ping dots) |
+| `Dialog` | Modal dialog surface with explicit accessible naming (`ariaLabel` / `aria-labelledby`) and focus trap |
 | `EmptyState` | Shared no-content or no-results treatment |
 | `SegmentedControl` | Compact choice among a small set of options; not a universal replacement for every tab/navigation pattern |
 | `Grid`, `Stack` | Shared layout composition |

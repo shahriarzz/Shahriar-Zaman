@@ -95,6 +95,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isOpen={isOpen && Boolean(options)}
         onClose={() => handleClose(false)}
         size="md"
+        ariaLabel={options?.title || 'System Protocol Confirmation'}
       >
         {options && (
           <>

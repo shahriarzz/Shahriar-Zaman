@@ -160,9 +160,6 @@ export const MOTION_CONFIG = {
   staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
 } as const;
 
-// Canonical Motion presets object and backward-compatible alias
-export const MOTION = MOTION_CONFIG;
-
 export const INTERACTIVE = {
   hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors motion-reduce:transition-none',
   active: 'active:scale-[0.99] transition-transform motion-reduce:transition-none',

@@ -14,7 +14,7 @@ import { ManageView } from './components/ManageView';
 import { isFirebaseConfigured, firebaseConfigState } from './lib/firebase';
 import { cn } from './lib/utils';
 import { ToastContainer, Card, TYPOGRAPHY } from './components/ui';
-import { CANVAS_HEX } from './styles/tokens';
+import { CANVAS_HEX, SURFACE } from './styles/tokens';
 
 function AppContent() {
   const { loading, activeSession, clearActiveSession, syncStatus, user } = useFitness();
@@ -198,7 +198,7 @@ function AppContent() {
     const status = getStatusDetails();
 
     return (
-      <div className="fixed inset-0 bg-[#09090e] flex flex-col items-center justify-center p-6 z-50">
+      <div className={cn("fixed inset-0 flex flex-col items-center justify-center p-6 z-50", SURFACE.canvas)}>
         <div className="flex flex-col items-center max-w-sm w-full gap-8 relative text-center">
           {/* Restrained single loading spinner */}
           <div className="relative flex items-center justify-center">

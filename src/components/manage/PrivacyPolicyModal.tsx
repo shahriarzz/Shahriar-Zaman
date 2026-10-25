@@ -10,20 +10,23 @@ interface PrivacyPolicyModalProps {
 
 export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, onClose }) => {
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} size="2xl" className="max-h-[85vh] flex flex-col p-0 overflow-hidden">
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      size="2xl"
+      ariaLabel="Privacy Policy & Data Safety"
+      className="max-h-[85vh] flex flex-col p-0 overflow-hidden"
+    >
       {/* Header */}
       <DialogHeader
         className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/40 items-center shrink-0"
         icon={<Shield size={18} className="text-emerald-400" />}
+        title="Privacy Policy & Data Safety"
+        eyebrow="Effective: October 2026 · GAINLOG Protocol"
         action={
-          <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={16} />} aria-label="Close dialog" />
+          <Button variant="ghost" size="icon" onClick={onClose} icon={<X size={16} />} aria-label="Close dialog" />
         }
-      >
-        <div>
-          <h3 className={cn(TYPOGRAPHY.titleSection, "text-white")}>Privacy Policy & Data Safety</h3>
-          <p className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>Effective: October 2026 · GAINLOG Protocol</p>
-        </div>
-      </DialogHeader>
+      />
 
       {/* Scrollable Content */}
       <DialogBody className="overflow-y-auto p-6 my-0 space-y-6 text-zinc-300 text-sm leading-relaxed">

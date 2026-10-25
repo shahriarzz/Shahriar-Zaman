@@ -45,8 +45,13 @@
   }
 }
 
+:root {
+  --canvas-color: #09090e;
+}
+
 body {
-  @apply bg-[#09090e] text-zinc-200 antialiased;
+  background-color: var(--canvas-color);
+  @apply text-zinc-200 antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   
   /* Native App Safe touch/selection styling */
@@ -54,17 +59,6 @@ body {
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
-}
-
-/* Fixed background pattern layer (subtle neutral texture) */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1.2px, transparent 1.2px);
-  background-size: 18px 18px;
-  pointer-events: none;
 }
 
 input, textarea, [contenteditable="true"], .selectable-text {

@@ -118,7 +118,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 }}
                 icon={<Info className="w-3.5 h-3.5" />}
                 aria-label="Toggle coverage breakdown details"
-                className="h-6 px-1.5 text-[11px] text-zinc-400 hover:text-white"
+                className="px-2 text-[11px] text-zinc-400 hover:text-white"
               >
                 {showCoverageDetail ? 'Hide' : 'Details'}
               </Button>

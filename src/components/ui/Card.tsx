@@ -24,7 +24,6 @@ export type CardVariant =
   | 'default'
   | 'recessed'
   | 'selected'
-  | 'active'
   | 'warning'
   | 'destructive'
   | 'success'
@@ -104,10 +103,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       'border active:scale-[0.99] select-none cursor-pointer'
     ),
     selected: cn(
-      'border border-orange-500 bg-orange-500/10 text-white',
-      RADIUS.card
-    ),
-    active: cn(
       'border border-orange-500 bg-orange-500/10 text-white',
       RADIUS.card
     ),
