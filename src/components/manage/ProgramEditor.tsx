@@ -131,7 +131,7 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
 
   // 3. Main Program Editor View (Cycle | Exercises toggle)
   return (
-    <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
+    <Stack spacing="lg">
       {/* Top Navigation Bar */}
       <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
         <div className="flex items-center gap-3">

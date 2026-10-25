@@ -76,16 +76,16 @@ Current mapping:
 
 | Workout type | Current value |
 |---|---|
-| `push` | `#f59e0b` |
+| `push` | `#facc15` |
 | `pull` | `#38bdf8` |
 | `hybrid` | `#c026d3` |
 | `rest` | `#22c55e` |
 | `date` | `#f43f8e` |
 | `upper` | `#fb923c` |
-| `lower` | `#4ade80` |
+| `lower` | `#84cc16` |
 | `custom` | `#a78bfa` |
 
-Use `WorkoutColorIndicator` where appropriate instead of inventing another workout-type marker. Unknown-type fallbacks must be deliberate and consistent.
+Use `WorkoutColorIndicator` where appropriate instead of inventing another workout-type marker. Unknown-type fallbacks resolve consistently to neutral zinc (`#71717a` / `UNKNOWN_WORKOUT_COLOR`), never to amber or push.
 
 ### 3.3 Color rules
 

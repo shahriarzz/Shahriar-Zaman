@@ -226,20 +226,22 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
+                  aria-label="Decrease sets"
                   onClick={() => setSets(Math.max(1, sets - 1))}
-                  className="w-10 h-10 p-0 font-bold text-base"
+                  className="font-bold text-base"
                 >
                   -
                 </Button>
-                <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-10 border flex items-center justify-center font-mono font-bold text-white text-base")}>
+                <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-white text-base")}>
                   {sets}
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
+                  aria-label="Increase sets"
                   onClick={() => setSets(sets + 1)}
-                  className="w-10 h-10 p-0 font-bold text-base"
+                  className="font-bold text-base"
                 >
                   +
                 </Button>

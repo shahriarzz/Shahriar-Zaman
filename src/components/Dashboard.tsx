@@ -371,8 +371,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       <span className="text-white font-bold">{weight} <span className={cn(TYPOGRAPHY.unit, "ml-0.5")}>kg</span></span>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        icon={<Trash2 size={13} />}
+                        size="icon"
+                        icon={<Trash2 size={14} />}
                         onClick={async () => {
                           haptics.warning();
                           const proceed = await confirm({
@@ -384,7 +384,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                             weightSummary.deleteWeight(date);
                           }
                         }}
-                        className="w-6 h-6 p-0 text-zinc-600 hover:text-red-400"
+                        className="text-zinc-600 hover:text-red-400"
+                        aria-label="Delete Entry"
                         title="Delete Entry"
                       />
                     </div>

@@ -178,6 +178,11 @@ export const SHADOW = {
   modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
   // accentGlow reserved exclusively for active/selected/achievement states — never decorative
   accentGlow: (hex: string) => `shadow-[0_0_20px_${hex}40]`,
+  emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
+  emeraldSubtle: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
+  emeraldInset: 'shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]',
+  emeraldDate: 'shadow-[0_0_8px_rgba(16,185,129,0.4)]',
+  amberWarning: 'shadow-[0_0_8px_rgba(245,158,11,0.15)]',
 } as const;
 
 // Central color-semantic map — resolves a semantic name to its actual color value.

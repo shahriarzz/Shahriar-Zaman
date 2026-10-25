@@ -497,7 +497,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                       <StatCard
                         label="PRs"
                         value={currentMonthPRs.length}
-                        accent="amber"
+                        accent="orange"
                         icon={Trophy}
                         trend={prTrendText}
                         trendDirection={prTrendDir}
@@ -863,7 +863,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               <Button
                                                 type="button"
                                                 variant="ghost"
-                                                size="sm"
+                                                size="icon"
                                                 icon={<X size={14} />}
                                                 onClick={() => {
                                                   setEditSessionState(prev => {
@@ -873,7 +873,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                     return { ...prev, sets: newSets };
                                                   });
                                                 }}
-                                                className="w-7 h-7 p-0 hover:text-red-400"
+                                                className="hover:text-red-400"
+                                                aria-label="Remove set"
                                                 title="Remove set"
                                               />
                                             </div>
@@ -1029,20 +1030,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                 {isSelected && (
                                   <motion.div
                                     initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-                                    animate={MOTION_CONFIG.collapse.animate}
-                                    exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
-                                    transition={MOTION_CONFIG.collapse.transition}
+                                    animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                                    exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                                    transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
                                     className={cn("border-t p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <Trophy size={12} className="shrink-0" style={{ color: exColor }} />
+                                        <Trophy size={12} className="shrink-0 text-orange-400" />
                                         <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Progressive Benchmark</span>
                                       </div>
                                       {prWeight > 0 && (
                                         <Badge
                                           label={`Lifetime PR: ${prWeight}kg${canonicalPR?.reps ? ` × ${canonicalPR.reps}` : ''}`}
-                                          colorOverride={exColor}
+                                          color="orange"
                                           variant="subtle"
                                           size="sm"
                                           dot={false}

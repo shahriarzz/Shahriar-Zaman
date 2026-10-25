@@ -43,7 +43,8 @@ import {
   getAccentColor,
   DURATION,
   MOTION_CONFIG,
-  TRANSITION
+  TRANSITION,
+  SHADOW
 } from './ui';
 
 interface CalendarProps {
@@ -118,8 +119,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           log
         };
       }
+      const woTypeColor = wo?.type ? WORKOUT_COLORS[wo.type] : undefined;
       return {
-        color: WORKOUT_COLORS[wo?.type || 'push'] || SEMANTIC_COLORS.emerald,
+        color: woTypeColor || SEMANTIC_COLORS.zinc,
         label: wo?.type || 'session',
         isComplete: true,
         log
@@ -129,10 +131,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     if (isFuture) {
       if (expectedWo) {
         if (expectedWo.type === 'rest') {
-          return { color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald, label: 'rest', isFuture: true, expectedWo };
+          return { color: WORKOUT_COLORS.rest, label: 'rest', isFuture: true, expectedWo };
         }
         return {
-          color: WORKOUT_COLORS[expectedWo.type] || getAccentColor('amber') || SEMANTIC_COLORS.amber,
+          color: WORKOUT_COLORS[expectedWo.type] || SEMANTIC_COLORS.zinc,
           label: expectedWo.name,
           isFuture: true,
           expectedWo
@@ -143,10 +145,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
     if (expectedWo) {
       if (expectedWo.type === 'rest') {
-        return { color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald, label: 'rest', isRest: true, expectedWo };
+        return { color: WORKOUT_COLORS.rest, label: 'rest', isRest: true, expectedWo };
       }
       if (!isSameDay(date, today)) {
-        return { color: getAccentColor('red') || SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
+        return { color: SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
       }
     }
 
@@ -269,9 +271,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     RADIUS.card,
                     !isCurrentMonthDay && "opacity-20 pointer-events-none",
                     isSelected
-                      ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                      ? cn("border-emerald-400/70 bg-emerald-500/15", SHADOW.emeraldSubtle)
                       : isToday
-                        ? "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
+                        ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
                         : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
                   )}
                 >
@@ -281,7 +283,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
                       TRANSITION.colors,
                       isToday
-                        ? "bg-emerald-500 text-black font-black shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                        ? cn("bg-emerald-500 text-black font-black", SHADOW.emeraldDate)
                         : isSelected
                           ? "bg-white text-black font-black"
                           : status
@@ -315,10 +317,13 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             {[
               { label: 'Push', color: WORKOUT_COLORS.push },
               { label: 'Pull', color: WORKOUT_COLORS.pull },
+              { label: 'Upper', color: WORKOUT_COLORS.upper },
+              { label: 'Lower', color: WORKOUT_COLORS.lower },
               { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-              { label: 'Rest', color: getAccentColor('emerald') || SEMANTIC_COLORS.emerald },
-              { label: 'Missed', color: getAccentColor('red') || SEMANTIC_COLORS.red },
-              { label: 'Incomplete', color: getAccentColor('amber') || SEMANTIC_COLORS.amber },
+              { label: 'Custom', color: WORKOUT_COLORS.custom },
+              { label: 'Rest', color: WORKOUT_COLORS.rest },
+              { label: 'Missed', color: SEMANTIC_COLORS.red },
+              { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
             ].map(l => (
               <div key={l.label} className="flex items-center gap-2">
                 <div
@@ -340,8 +345,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
           <motion.div
             key={selectedDateStr || 'detail'}
             initial={shouldReduceMotion ? false : MOTION_CONFIG.calendarPanel.initial}
-            animate={MOTION_CONFIG.calendarPanel.animate}
-            exit={shouldReduceMotion ? undefined : MOTION_CONFIG.calendarPanel.exit}
+            animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.calendarPanel.animate}
+            exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.calendarPanel.exit}
             transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.calendarPanel.transition}
             className="w-full lg:w-96 flex flex-col"
           >
@@ -357,14 +362,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                   />
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="icon"
                     icon={<X size={14} />}
                     onClick={() => {
                       haptics.selection();
                       setSelectedDate(null);
                     }}
+                    aria-label="Close Details"
                     title="Close Details"
-                    className="w-7 h-7 p-0 rounded-full"
                   />
                 </div>
 
@@ -394,7 +399,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                             ? `TODAY: ${expectedWoForSelected.name}`
                             : `UPCOMING: ${expectedWoForSelected.name}`
                       }
-                      color={expectedWoForSelected.type === 'rest' ? 'emerald' : 'orange'}
+                      colorOverride={WORKOUT_COLORS[expectedWoForSelected.type] || SEMANTIC_COLORS.zinc}
                       variant="subtle"
                     />
                   ) : isSelectedDatePast && expectedWoForSelected ? (
@@ -404,11 +409,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           ? 'SCHEDULED REST'
                           : `MISSED: ${expectedWoForSelected.name}`
                       }
-                      color={expectedWoForSelected.type === 'rest' ? 'emerald' : 'red'}
+                      colorOverride={expectedWoForSelected.type === 'rest' ? WORKOUT_COLORS.rest : undefined}
+                      color={expectedWoForSelected.type === 'rest' ? undefined : 'red'}
                       variant="subtle"
                     />
                   ) : (
-                    <Badge label="REST DAY" color="emerald" variant="subtle" />
+                    <Badge label="REST DAY" colorOverride={WORKOUT_COLORS.rest} variant="subtle" />
                   )}
                 </div>
               </div>
@@ -533,7 +539,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                           </div>
                           <Badge
                             label={expectedWoForSelected.badge}
-                            color={expectedWoForSelected.type === 'push' || expectedWoForSelected.type === 'pull' || expectedWoForSelected.type === 'hybrid' ? 'orange' : 'zinc'}
+                            colorOverride={WORKOUT_COLORS[expectedWoForSelected.type] || SEMANTIC_COLORS.zinc}
                             variant="solid"
                           />
                         </Card>

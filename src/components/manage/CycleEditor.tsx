@@ -99,7 +99,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
         {cycleSlots.map(({ day, workout: wo, isFallback }) => {
           const isRest = wo.type === 'rest';
           const exerciseCount = wo.exercises ? wo.exercises.length : 0;
-          const accentColor = WORKOUT_COLORS[wo.type] || SEMANTIC_COLORS.orange;
+          const accentColor = WORKOUT_COLORS[wo.type] || SEMANTIC_COLORS.zinc;
 
           return (
             <Card

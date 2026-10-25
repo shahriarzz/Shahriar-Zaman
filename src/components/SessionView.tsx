@@ -166,7 +166,7 @@ import {
   SectionHeader,
   SEMANTIC_COLORS
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, SHADOW } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -360,8 +360,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <div className="p-4 space-y-1">
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>All-Time PR</span>
                 {allTimePR ? (
-                  <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1")} style={{ color: `${WORKOUT_COLORS[workoutType]}CC` }}>
-                    <Trophy size={10} style={{ color: WORKOUT_COLORS[workoutType] }} /> {allTimePR.weight}kg × {allTimePR.reps}
+                  <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1 text-orange-400")}>
+                    <Trophy size={10} className="text-orange-400" /> {allTimePR.weight}kg × {allTimePR.reps}
                   </div>
                 ) : (
                   <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No PR recorded</div>
@@ -410,7 +410,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             TRANSITION.colors,
                             RADIUS.button,
                             SURFACE.recessed,
-                            isExtremeWeight ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
+                            isExtremeWeight ? cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning) : cn(BORDER.standard, "focus:border-zinc-500")
                           )}
                         />
                         {/* specialized table/matrix input for active workout set reps */}
@@ -425,7 +425,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             TRANSITION.colors,
                             RADIUS.button,
                             SURFACE.recessed,
-                            isExtremeReps ? "border-amber-500/80 text-amber-400 focus:border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)]" : cn(BORDER.standard, "focus:border-zinc-500")
+                            isExtremeReps ? cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning) : cn(BORDER.standard, "focus:border-zinc-500")
                           )}
                         />
                         <div className="flex justify-center">
@@ -437,7 +437,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                               "w-12 h-12 p-0 flex items-center justify-center border",
                               TRANSITION.interactive,
                               RADIUS.button,
-                              s.done ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400" : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
+                              s.done ? cn("bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400", SHADOW.emeraldGlow) : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
                             )}
                             icon={<CheckCircle2 size={24} />}
                             aria-label={s.done ? "Mark set incomplete" : "Mark set complete"}
@@ -1050,8 +1050,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           {/* Minimal PR acknowledgement in Session Summary */}
           {sessionPRs.length > 0 && (
             <div className="col-span-2 flex items-center justify-center gap-1.5 py-1">
-              <Trophy size={14} className="text-amber-500 shrink-0" />
-              <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold tracking-wider")}>
+              <Trophy size={14} className="text-orange-500 shrink-0" />
+              <span className={cn(TYPOGRAPHY.caption, "text-orange-400 font-bold tracking-wider")}>
                 {sessionPRs.length} {sessionPRs.length === 1 ? 'PR' : 'PRs'}
               </span>
             </div>
@@ -1060,14 +1060,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
           {/* Today's Personal Records Summary */}
           {sessionPRs.length > 0 && (
             <Card
-              variant="elevated"
-              accent="amber"
+              variant="standard"
+              accent="orange"
               padding="md"
-              className="col-span-2 space-y-3 text-left bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-amber-500/20"
+              className="col-span-2 space-y-3 text-left border-orange-500/30 bg-orange-500/5"
             >
               <div className="flex items-center gap-2">
-                <Trophy className="text-amber-500" size={16} />
-                <span className={cn(TYPOGRAPHY.caption, "text-amber-400 font-bold")}>New Records Set Today!</span>
+                <Trophy className="text-orange-500" size={16} />
+                <span className={cn(TYPOGRAPHY.caption, "text-orange-400 font-bold")}>New Records Set Today!</span>
               </div>
               <div className="space-y-2">
                 {sessionPRs.map((pr, idx) => (

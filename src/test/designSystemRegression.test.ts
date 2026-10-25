@@ -83,12 +83,12 @@ describe('Design System Consolidation & Token Contracts', () => {
 
     it('preserves domain-specific workout category colors separate from semantic states', () => {
       // Workout categories have distinct visual meaning and must not be blindly recolored
-      expect(WORKOUT_COLORS.push).toBe('#f59e0b');
+      expect(WORKOUT_COLORS.push).toBe('#facc15');
       expect(WORKOUT_COLORS.pull).toBe('#38bdf8');
       expect(WORKOUT_COLORS.hybrid).toBe('#c026d3');
       expect(WORKOUT_COLORS.rest).toBe('#22c55e');
       expect(WORKOUT_COLORS.upper).toBe('#fb923c');
-      expect(WORKOUT_COLORS.lower).toBe('#4ade80');
+      expect(WORKOUT_COLORS.lower).toBe('#84cc16');
       expect(WORKOUT_COLORS.custom).toBe('#a78bfa');
     });
   });
@@ -529,7 +529,7 @@ describe('Design System Consolidation & Token Contracts', () => {
       container.remove();
     });
 
-    it('forwards ariaLabel directly to the element with role="dialog"', () => {
+    it('forwards ariaLabel directly to the element with role="dialog" without aria-labelledby', () => {
       act(() => {
         root.render(
           React.createElement(Dialog, { isOpen: true, ariaLabel: 'System Protocol Confirmation' }, 'Dialog Content')
@@ -539,7 +539,27 @@ describe('Design System Consolidation & Token Contracts', () => {
       const dialogEl = container.querySelector('[role="dialog"]');
       expect(dialogEl).toBeTruthy();
       expect(dialogEl?.getAttribute('aria-label')).toBe('System Protocol Confirmation');
+      expect(dialogEl?.getAttribute('aria-labelledby')).toBeNull();
       expect(dialogEl?.getAttribute('aria-modal')).toBe('true');
+    });
+
+    it('sets aria-labelledby pointing to existing element when ariaLabelledBy is passed', () => {
+      const heading = document.createElement('h2');
+      heading.id = 'external-heading-id';
+      heading.textContent = 'External Heading';
+      document.body.appendChild(heading);
+
+      act(() => {
+        root.render(
+          React.createElement(Dialog, { isOpen: true, ariaLabelledBy: 'external-heading-id' }, 'Dialog Content')
+        );
+      });
+
+      const dialogEl = container.querySelector('[role="dialog"]');
+      expect(dialogEl).toBeTruthy();
+      expect(dialogEl?.getAttribute('aria-labelledby')).toBe('external-heading-id');
+      expect(document.getElementById('external-heading-id')).toBeTruthy();
+      heading.remove();
     });
 
     it('connects DialogHeader title to dialog via aria-labelledby when ariaLabel is not passed', () => {
@@ -561,6 +581,27 @@ describe('Design System Consolidation & Token Contracts', () => {
       const titleEl = container.querySelector(`#${labelledBy}`);
       expect(titleEl).toBeTruthy();
       expect(titleEl?.textContent).toBe('Purge Archive Logs');
+    });
+
+    it('provides accessible name fallback and does not silently render invalid aria-labelledby in no-title/no-label case', () => {
+      act(() => {
+        root.render(
+          React.createElement(
+            Dialog,
+            { isOpen: true },
+            React.createElement('div', null, 'Dialog with no title or label')
+          )
+        );
+      });
+
+      const dialogEl = container.querySelector('[role="dialog"]');
+      expect(dialogEl).toBeTruthy();
+      // Must NOT render a dangling aria-labelledby pointing to non-existent element
+      const labelledBy = dialogEl?.getAttribute('aria-labelledby');
+      expect(labelledBy).toBeNull();
+      // Must still have a valid accessible name fallback
+      const ariaLabel = dialogEl?.getAttribute('aria-label');
+      expect(ariaLabel).toBe('Dialog');
     });
   });
 

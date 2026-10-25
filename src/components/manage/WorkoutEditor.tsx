@@ -278,7 +278,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   const isRest = workout.type === 'rest';
 
   return (
-    <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
+    <Stack spacing="lg">
       {/* Top Breadcrumb Navigation */}
       <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
         <div className="flex items-center gap-3">
@@ -582,20 +582,20 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             <div className="flex items-center gap-1.5">
                               <Button
                                 variant="outline"
-                                size="sm"
+                                size="icon"
+                                aria-label="Decrease sets"
                                 onClick={() => handleUpdateExerciseField(ex.id, 'sets', Math.max(1, ex.sets - 1))}
-                                className="w-8 h-8 p-0"
                               >
                                 -
                               </Button>
-                              <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-8 border flex items-center justify-center font-mono font-bold text-xs text-white")}>
+                              <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-xs text-white")}>
                                 {ex.sets}
                               </div>
                               <Button
                                 variant="outline"
-                                size="sm"
+                                size="icon"
+                                aria-label="Increase sets"
                                 onClick={() => handleUpdateExerciseField(ex.id, 'sets', ex.sets + 1)}
-                                className="w-8 h-8 p-0"
                               >
                                 +
                               </Button>

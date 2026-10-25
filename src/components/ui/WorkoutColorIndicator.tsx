@@ -29,7 +29,7 @@ export const WorkoutColorIndicator: React.FC<WorkoutColorIndicatorProps> = ({
     color ||
     (type ? WORKOUT_COLORS[type] : undefined) ||
     (accent ? getAccentColor(accent) : undefined) ||
-    SEMANTIC_COLORS.orange;
+    SEMANTIC_COLORS.zinc;
 
   return (
     <span

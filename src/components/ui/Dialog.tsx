@@ -5,9 +5,15 @@ import { RADIUS, BORDER, SURFACE, SHADOW, SPACING, TYPOGRAPHY, MOTION_CONFIG } f
 
 export interface DialogContextValue {
   titleId: string;
+  registerTitle: (id: string) => void;
+  unregisterTitle: (id: string) => void;
 }
 
-export const DialogContext = React.createContext<DialogContextValue>({ titleId: '' });
+export const DialogContext = React.createContext<DialogContextValue>({
+  titleId: '',
+  registerTitle: () => {},
+  unregisterTitle: () => {},
+});
 
 export interface DialogProps {
   isOpen: boolean;
@@ -34,7 +40,31 @@ export const Dialog: React.FC<DialogProps> = ({
 }) => {
   const generatedId = React.useId();
   const defaultTitleId = `dialog-title-${generatedId.replace(/:/g, '')}`;
+  const [renderedTitleId, setRenderedTitleId] = React.useState<string | null>(null);
+
+  const registerTitle = React.useCallback((id: string) => {
+    setRenderedTitleId(id);
+  }, []);
+
+  const unregisterTitle = React.useCallback((id: string) => {
+    setRenderedTitleId((prev) => (prev === id ? null : prev));
+  }, []);
+
   const effectiveTitleId = ariaLabelledBy || defaultTitleId;
+
+  let dialogAriaLabel: string | undefined = undefined;
+  let dialogAriaLabelledBy: string | undefined = undefined;
+
+  if (ariaLabel) {
+    dialogAriaLabel = ariaLabel;
+  } else if (ariaLabelledBy) {
+    dialogAriaLabelledBy = ariaLabelledBy;
+  } else if (renderedTitleId) {
+    dialogAriaLabelledBy = renderedTitleId;
+  } else {
+    dialogAriaLabel = 'Dialog';
+  }
+
   const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -155,8 +185,8 @@ export const Dialog: React.FC<DialogProps> = ({
             transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.dialogSurface.transition}
             role="dialog"
             aria-modal="true"
-            aria-label={ariaLabel}
-            aria-labelledby={ariaLabel ? undefined : effectiveTitleId}
+            aria-label={dialogAriaLabel}
+            aria-labelledby={dialogAriaLabelledBy}
             className={cn(
               "relative w-full min-w-0 max-w-full text-zinc-200 focus:outline-none",
               SURFACE.panel,
@@ -169,7 +199,7 @@ export const Dialog: React.FC<DialogProps> = ({
               className
             )}
           >
-            <DialogContext.Provider value={{ titleId: effectiveTitleId }}>
+            <DialogContext.Provider value={{ titleId: effectiveTitleId, registerTitle, unregisterTitle }}>
               {children}
             </DialogContext.Provider>
           </motion.div>
@@ -200,8 +230,15 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({
   id,
   ...props
 }) => {
-  const { titleId } = React.useContext(DialogContext);
+  const { titleId, registerTitle, unregisterTitle } = React.useContext(DialogContext);
   const headerId = id || titleId;
+
+  React.useLayoutEffect(() => {
+    if (title) {
+      registerTitle(headerId);
+      return () => unregisterTitle(headerId);
+    }
+  }, [title, headerId, registerTitle, unregisterTitle]);
 
   return (
     <div className={cn("flex items-start justify-between gap-4", className)} {...props}>
