@@ -553,15 +553,20 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                       />
 
                       {/* Expand/Collapse Chevron */}
-                      <div
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        icon={
+                          <ChevronDown
+                            size={16}
+                            className={cn("transition-transform duration-200 motion-reduce:transition-none", isExpanded && "rotate-180")}
+                          />
+                        }
                         onClick={() => toggleExpandExercise(ex.id)}
-                        className="p-1.5 text-zinc-500 hover:text-zinc-200 transition-transform cursor-pointer"
-                      >
-                        <ChevronDown
-                          size={16}
-                          className={cn("transition-transform duration-200", isExpanded && "rotate-180")}
-                        />
-                      </div>
+                        aria-label={isExpanded ? "Collapse exercise details" : "Expand exercise details"}
+                        aria-expanded={isExpanded}
+                        className="text-zinc-500 hover:text-zinc-200"
+                      />
                     </div>
                   </div>
 

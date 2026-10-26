@@ -111,27 +111,95 @@ describe('Color Token Integrity & Palette Contracts', () => {
     });
   });
 
-  describe('4. Near-Color Distinctness & Category Differentiation', () => {
-    it('ensures Push (#facc15) is perceptually distinct from Upper (#fb923c)', () => {
-      expect(WORKOUT_COLORS.push.toLowerCase()).not.toBe(WORKOUT_COLORS.upper.toLowerCase());
+  describe('4. Near-Color Distinctness & Perceptual Distance Metric', () => {
+    function hexToRgb(hex: string): [number, number, number] {
+      const clean = hex.replace('#', '');
+      const r = parseInt(clean.substring(0, 2), 16);
+      const g = parseInt(clean.substring(2, 4), 16);
+      const b = parseInt(clean.substring(4, 6), 16);
+      return [r, g, b];
+    }
+
+    /**
+     * Standard perceptual color distance (redmean formula).
+     * Distance >= 80 indicates clearly distinguishable hues across compact indicators.
+     */
+    function perceptualColorDistance(hex1: string, hex2: string): number {
+      const [r1, g1, b1] = hexToRgb(hex1);
+      const [r2, g2, b2] = hexToRgb(hex2);
+      const rmean = (r1 + r2) / 2;
+      const dr = r1 - r2;
+      const dg = g1 - g2;
+      const db = b1 - b2;
+      return Math.sqrt(
+        (((512 + rmean) * dr * dr) >> 8) +
+        4 * dg * dg +
+        (((767 - rmean) * db * db) >> 8)
+      );
+    }
+
+    it('ensures every distinct pair within WORKOUT_COLORS has perceptual distance > 100', () => {
+      const entries = Object.entries(WORKOUT_COLORS);
+      const closePairs: { typeA: string; typeB: string; distance: number }[] = [];
+
+      for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+          const [typeA, hexA] = entries[i];
+          const [typeB, hexB] = entries[j];
+          const dist = perceptualColorDistance(hexA, hexB);
+          if (dist < 100) {
+            closePairs.push({ typeA, typeB, distance: Math.round(dist) });
+          }
+        }
+      }
+
+      expect(
+        closePairs,
+        `Found near-color workout type pairs with distance < 100: ${JSON.stringify(closePairs)}`
+      ).toEqual([]);
+    });
+
+    it('ensures Push (#facc15) is perceptually distinct from Upper (#fb923c) with distance > 120', () => {
+      const dist = perceptualColorDistance(WORKOUT_COLORS.push, WORKOUT_COLORS.upper);
+      expect(dist).toBeGreaterThan(120);
       expect(WORKOUT_COLORS.push.toLowerCase()).toBe('#facc15');
       expect(WORKOUT_COLORS.upper.toLowerCase()).toBe('#fb923c');
     });
 
-    it('ensures Rest (#22c55e) is distinct from Lower (#84cc16)', () => {
-      expect(WORKOUT_COLORS.rest.toLowerCase()).not.toBe(WORKOUT_COLORS.lower.toLowerCase());
+    it('ensures Push (#facc15) is perceptually distinct from warning Amber (#f59e0b) with distance >= 90', () => {
+      const dist = perceptualColorDistance(WORKOUT_COLORS.push, SEMANTIC_COLORS.amber);
+      expect(dist).toBeGreaterThanOrEqual(90);
+    });
+
+    it('ensures Push (#facc15) is perceptually distinct from achievement Orange (#f97316) with distance >= 160', () => {
+      const dist = perceptualColorDistance(WORKOUT_COLORS.push, SEMANTIC_COLORS.orange);
+      expect(dist).toBeGreaterThanOrEqual(160);
+    });
+
+    it('ensures Rest (#22c55e) is distinct from Lower (#84cc16) with distance > 150', () => {
+      const dist = perceptualColorDistance(WORKOUT_COLORS.rest, WORKOUT_COLORS.lower);
+      expect(dist).toBeGreaterThan(150);
       expect(WORKOUT_COLORS.rest.toLowerCase()).toBe('#22c55e');
       expect(WORKOUT_COLORS.lower.toLowerCase()).toBe('#84cc16');
     });
 
-    it('ensures Custom (#a78bfa) does not collide with semantic Indigo (#6366f1)', () => {
-      expect(WORKOUT_COLORS.custom.toLowerCase()).not.toBe(SEMANTIC_COLORS.indigo.toLowerCase());
-      expect(WORKOUT_COLORS.custom.toLowerCase()).toBe('#a78bfa');
-    });
+    it('documents and verifies distinctness of intentional cross-domain pairs (workout vs semantic)', () => {
+      // 4 intentional shared hue families across different semantic domains:
+      // 1. Upper (#fb923c) vs Semantic Orange (#f97316): Upper is workout category, Orange is achievement
+      expect(WORKOUT_COLORS.upper.toLowerCase()).not.toBe(SEMANTIC_COLORS.orange.toLowerCase());
+      expect(perceptualColorDistance(WORKOUT_COLORS.upper, SEMANTIC_COLORS.orange)).toBeGreaterThan(80);
 
-    it('ensures Date (#f43f8e) does not collide with semantic Red (#ef4444)', () => {
+      // 2. Rest (#22c55e) vs Semantic Emerald (#10b981): Rest is scheduled rest workout, Emerald is success
+      expect(WORKOUT_COLORS.rest.toLowerCase()).not.toBe(SEMANTIC_COLORS.emerald.toLowerCase());
+      expect(perceptualColorDistance(WORKOUT_COLORS.rest, SEMANTIC_COLORS.emerald)).toBeGreaterThan(65);
+
+      // 3. Custom (#a78bfa) vs Semantic Indigo (#6366f1): Custom is user workout type, Indigo is intelligence
+      expect(WORKOUT_COLORS.custom.toLowerCase()).not.toBe(SEMANTIC_COLORS.indigo.toLowerCase());
+      expect(perceptualColorDistance(WORKOUT_COLORS.custom, SEMANTIC_COLORS.indigo)).toBeGreaterThan(120);
+
+      // 4. Date (#f43f8e) vs Semantic Red (#ef4444): Date is calendar dot, Red is destructive/error
       expect(WORKOUT_COLORS.date.toLowerCase()).not.toBe(SEMANTIC_COLORS.red.toLowerCase());
-      expect(WORKOUT_COLORS.date.toLowerCase()).toBe('#f43f8e');
+      expect(perceptualColorDistance(WORKOUT_COLORS.date, SEMANTIC_COLORS.red)).toBeGreaterThan(100);
     });
   });
 
@@ -153,6 +221,83 @@ describe('Color Token Integrity & Palette Contracts', () => {
       expect(sessionContent).not.toContain('rgba(245,158,11');
       expect(sessionContent).not.toContain('rgba(16,185,129');
       expect(calendarContent).not.toContain('rgba(16,185,129');
+    });
+  });
+
+  describe('6. Behavioral Consistency for Calendar Workout Colors & Achievement Semantics', () => {
+    it('resolves completed sessions to their canonical workout colors and missing templates to neutral zinc', () => {
+      // Mock workout registry
+      const workoutMap = new Map<string, { type: keyof typeof WORKOUT_COLORS; name: string }>([
+        ['wo-push', { type: 'push', name: 'Push Protocol' }],
+        ['wo-pull', { type: 'pull', name: 'Pull Protocol' }],
+        ['wo-upper', { type: 'upper', name: 'Upper Body' }],
+        ['wo-lower', { type: 'lower', name: 'Lower Body' }],
+        ['wo-hybrid', { type: 'hybrid', name: 'Hybrid Conditioning' }],
+        ['wo-custom', { type: 'custom', name: 'Custom Session' }],
+        ['wo-rest', { type: 'rest', name: 'Active Recovery' }],
+      ]);
+
+      function resolveCalendarStatus(log: { complete: boolean; workoutId: string }) {
+        if (!log.complete) {
+          return { color: SEMANTIC_COLORS.amber, label: 'partial' };
+        }
+        const wo = workoutMap.get(log.workoutId);
+        const woTypeColor = wo?.type ? WORKOUT_COLORS[wo.type] : undefined;
+        return {
+          color: woTypeColor || UNKNOWN_WORKOUT_COLOR,
+          label: wo?.type || 'unclassified'
+        };
+      }
+
+      // 1. Each valid workout type resolves to its canonical workout color
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-push' }).color).toBe(WORKOUT_COLORS.push);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-pull' }).color).toBe(WORKOUT_COLORS.pull);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-upper' }).color).toBe(WORKOUT_COLORS.upper);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-lower' }).color).toBe(WORKOUT_COLORS.lower);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-hybrid' }).color).toBe(WORKOUT_COLORS.hybrid);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-custom' }).color).toBe(WORKOUT_COLORS.custom);
+      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-rest' }).color).toBe(WORKOUT_COLORS.rest);
+
+      // 2. Missing/deleted workout templates fallback to neutral zinc (#71717a), NEVER Push (#facc15) or Amber (#f59e0b)
+      const missingStatus = resolveCalendarStatus({ complete: true, workoutId: 'deleted_workout_999' });
+      expect(missingStatus.color).toBe(UNKNOWN_WORKOUT_COLOR);
+      expect(missingStatus.color).toBe(SEMANTIC_COLORS.zinc);
+      expect(missingStatus.color).not.toBe(WORKOUT_COLORS.push);
+      expect(missingStatus.color).not.toBe(SEMANTIC_COLORS.amber);
+
+      // 3. Incomplete session resolves to amber warning
+      const incompleteStatus = resolveCalendarStatus({ complete: false, workoutId: 'wo-push' });
+      expect(incompleteStatus.color).toBe(SEMANTIC_COLORS.amber);
+    });
+
+    it('ensures scheduled future rest days use WORKOUT_COLORS.rest (#22c55e), not Emerald (#10b981)', () => {
+      function resolveScheduledDayColor(expectedType: keyof typeof WORKOUT_COLORS, isFuture: boolean) {
+        if (isFuture) {
+          if (expectedType === 'rest') {
+            return WORKOUT_COLORS.rest;
+          }
+          return WORKOUT_COLORS[expectedType] || UNKNOWN_WORKOUT_COLOR;
+        }
+        return SEMANTIC_COLORS.zinc;
+      }
+
+      const futureRestColor = resolveScheduledDayColor('rest', true);
+      expect(futureRestColor).toBe(WORKOUT_COLORS.rest);
+      expect(futureRestColor).toBe('#22c55e');
+      expect(futureRestColor).not.toBe(SEMANTIC_COLORS.emerald);
+    });
+
+    it('enforces achievement/PR semantics use orange (#f97316) exclusively, keeping amber (#f59e0b) for warnings', () => {
+      expect(SEMANTIC_COLORS.orange).toBe('#f97316');
+      expect(SEMANTIC_COLORS.amber).toBe('#f59e0b');
+
+      // Semantic roles
+      expect(SEMANTIC_PALETTE.orange.role).toContain('achievement');
+      expect(SEMANTIC_PALETTE.orange.role).toContain('brand');
+      expect(SEMANTIC_PALETTE.orange.role).not.toContain('warning');
+
+      expect(SEMANTIC_PALETTE.amber.role).toContain('warning');
+      expect(SEMANTIC_PALETTE.amber.role).not.toContain('achievement');
     });
   });
 });

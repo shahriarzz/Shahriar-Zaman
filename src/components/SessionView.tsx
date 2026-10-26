@@ -460,6 +460,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                               SURFACE.recessed
                             )}
                             title="Delete this set"
+                            aria-label="Delete this set"
                           />
                         </div>
                       </div>
@@ -1128,6 +1129,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             size="icon"
             onClick={handleExitAttempt}
             icon={<ChevronLeft size={20} />}
+            aria-label="Exit session"
+            title="Exit session"
           />
           <div className="space-y-1">
             <Badge

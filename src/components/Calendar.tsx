@@ -266,7 +266,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     setSelectedDate(day);
                   }}
                   className={cn(
-                    "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                    "group relative aspect-square min-h-[44px] min-w-[44px] sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
                     TRANSITION.interactive,
                     RADIUS.card,
                     !isCurrentMonthDay && "opacity-20 pointer-events-none",

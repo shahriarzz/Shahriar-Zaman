@@ -470,9 +470,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 return (
                   <motion.div
                     initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-                    animate={MOTION_CONFIG.collapse.animate}
-                    exit={shouldReduceMotion ? undefined : MOTION_CONFIG.collapse.exit}
-                    transition={MOTION_CONFIG.collapse.transition}
+                    animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                    exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                    transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
                     className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
                   >
                     {/* Summary Grid: Sessions, Volume, PRs, Strength Trend */}

@@ -86,7 +86,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
   };
 
   return (
-    <Stack spacing="lg" className="animate-in fade-in-50 duration-200">
+    <Stack spacing="lg">
       {/* Top Header & Navigation */}
       <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
         <div className="flex items-center gap-3">

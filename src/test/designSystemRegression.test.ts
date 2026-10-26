@@ -673,11 +673,82 @@ describe('Design System Consolidation & Token Contracts', () => {
   });
 
   describe('15. Touch-Target & Focus Accessibility Contracts', () => {
-    it('enforces Button size="icon" matches touchTarget (minimum 44x44px)', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('enforces Button size="icon" matches touchTarget (minimum 44x44px) in source contract', () => {
       expect(CONTROL_HEIGHT.touchTarget).toBe('min-h-[44px] min-w-[44px]');
 
       const buttonSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Button.tsx'), 'utf8');
       expect(buttonSrc).toContain("icon: cn(CONTROL_HEIGHT.touchTarget, 'p-2.5 justify-center')");
+    });
+
+    it('renders Button size="icon" with DOM classes guaranteeing 44x44px touch target and accessibility', () => {
+      act(() => {
+        root.render(
+          React.createElement(
+            Button,
+            { size: 'icon', 'aria-label': 'Settings action' },
+            React.createElement('span', null, 'Icon')
+          )
+        );
+      });
+
+      const buttonEl = container.querySelector('button') as HTMLButtonElement;
+      expect(buttonEl).toBeTruthy();
+
+      // Verified computed class token contract: min 44x44px hit boundary
+      expect(buttonEl.classList.contains('min-h-[44px]')).toBe(true);
+      expect(buttonEl.classList.contains('min-w-[44px]')).toBe(true);
+      expect(buttonEl.classList.contains('justify-center')).toBe(true);
+
+      // Accessible name contract
+      expect(buttonEl.getAttribute('aria-label')).toBe('Settings action');
+
+      // Zero sub-44px overriding classes
+      const sub44Overrides = ['h-5', 'h-6', 'h-7', 'h-8', 'w-5', 'w-6', 'w-7', 'w-8'];
+      sub44Overrides.forEach((cls) => {
+        expect(buttonEl.classList.contains(cls)).toBe(false);
+      });
+    });
+
+    it('renders standard Button size variants (sm, md, lg) with exact CONTROL_HEIGHT tokens', () => {
+      // sm: min-h-[32px] h-8
+      act(() => {
+        root.render(React.createElement(Button, { size: 'sm' }, 'Small'));
+      });
+      let btn = container.querySelector('button') as HTMLButtonElement;
+      expect(btn.classList.contains('min-h-[32px]')).toBe(true);
+      expect(btn.classList.contains('h-8')).toBe(true);
+
+      // md: min-h-[40px] h-10
+      act(() => {
+        root.render(React.createElement(Button, { size: 'md' }, 'Medium'));
+      });
+      btn = container.querySelector('button') as HTMLButtonElement;
+      expect(btn.classList.contains('min-h-[40px]')).toBe(true);
+      expect(btn.classList.contains('h-10')).toBe(true);
+
+      // lg: min-h-[48px] h-12
+      act(() => {
+        root.render(React.createElement(Button, { size: 'lg' }, 'Large'));
+      });
+      btn = container.querySelector('button') as HTMLButtonElement;
+      expect(btn.classList.contains('min-h-[48px]')).toBe(true);
+      expect(btn.classList.contains('h-12')).toBe(true);
     });
 
     it('enforces FOCUS.visible on navigation items in Layout.tsx', () => {
