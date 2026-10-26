@@ -686,12 +686,25 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(layoutSrc).not.toContain('drop-shadow-[0_0_8px_rgba(249,115,22,0.45)]');
     });
 
-    it('verifies Toast dismiss button and HistoryView clear button do not have sub-44px overrides', () => {
+    it('verifies caller controls do not have sub-44px touch target overrides', () => {
       const toastSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Toast.tsx'), 'utf8');
       expect(toastSrc).not.toContain('h-5 w-5 p-0');
 
       const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
       expect(historySrc).not.toContain('h-6 w-6 p-0 text-zinc-400');
+      expect(historySrc).not.toContain('w-7 h-7 p-0 hover:text-red-400');
+
+      const dashboardSrc = fs.readFileSync(path.join(rootDir, 'src/components/Dashboard.tsx'), 'utf8');
+      expect(dashboardSrc).not.toContain('w-6 h-6 p-0 text-zinc-600');
+
+      const calendarSrc = fs.readFileSync(path.join(rootDir, 'src/components/Calendar.tsx'), 'utf8');
+      expect(calendarSrc).not.toContain('w-7 h-7 p-0 rounded-full');
+
+      const workoutEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/WorkoutEditor.tsx'), 'utf8');
+      expect(workoutEditorSrc).not.toContain('w-8 h-8 p-0');
+
+      const exerciseEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/ExerciseEditor.tsx'), 'utf8');
+      expect(exerciseEditorSrc).not.toContain('w-10 h-10 p-0');
     });
   });
 });
