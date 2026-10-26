@@ -1,12 +1,63 @@
-import { describe, it, expect } from 'vitest';
+// @vitest-environment jsdom
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import React, { act } from 'react';
+import { createRoot, Root } from 'react-dom/client';
 import { SEMANTIC_COLORS, SEMANTIC_PALETTE } from '../styles/tokens';
 import {
   WORKOUT_COLORS,
   UNKNOWN_WORKOUT_COLOR,
   getWorkoutBadgeStyle
 } from '../utils/fitnessHelpers';
+import { resolveCalendarDayStatus } from '../utils/calendarHelpers';
+import { Workout, WorkoutType } from '../types/fitness';
+import { Calendar } from '../components/Calendar';
+
+const mockCalendarWorkouts: Workout[] = [
+  { id: 'wo-push', name: 'Push Protocol', badge: 'PUSH', type: 'push', isCore: true, cycleDay: 1, exercises: [] },
+  { id: 'wo-pull', name: 'Pull Protocol', badge: 'PULL', type: 'pull', isCore: true, cycleDay: 2, exercises: [] },
+  { id: 'wo-upper', name: 'Upper Protocol', badge: 'UPPER', type: 'upper', isCore: true, cycleDay: 3, exercises: [] },
+  { id: 'wo-lower', name: 'Lower Protocol', badge: 'LOWER', type: 'lower', isCore: true, cycleDay: 4, exercises: [] },
+  { id: 'wo-hybrid', name: 'Hybrid Protocol', badge: 'HYBRID', type: 'hybrid', isCore: true, cycleDay: 5, exercises: [] },
+  { id: 'wo-custom', name: 'Custom Protocol', badge: 'CUSTOM', type: 'custom', isCore: true, cycleDay: 6, exercises: [] },
+  { id: 'wo-rest', name: 'Rest Day', badge: 'REST', type: 'rest', isCore: true, cycleDay: 7, exercises: [] },
+];
+
+const mockWorkoutMap = new Map(mockCalendarWorkouts.map(w => [w.id, w]));
+const mockCoreMap = new Map(mockCalendarWorkouts.map(w => [w.cycleDay, w]));
+
+const mockLogsByDate = new Map<string, any[]>([
+  ['2026-10-01', [{ id: 'l1', workoutId: 'wo-push', date: '2026-10-01', complete: true, sets: {}, durationMinutes: 45 }]],
+  ['2026-10-02', [{ id: 'l2', workoutId: 'wo-pull', date: '2026-10-02', complete: false, sets: {}, durationMinutes: 30 }]],
+  ['2026-10-03', [{ id: 'l3', workoutId: 'deleted_template', date: '2026-10-03', complete: true, sets: {}, durationMinutes: 45 }]],
+]);
+
+vi.mock('../context/FitnessContext', () => ({
+  useFitness: () => ({
+    workouts: mockCalendarWorkouts,
+  }),
+}));
+
+vi.mock('../hooks/useFitnessDerivedData', () => ({
+  useFitnessDerivedData: () => ({
+    index: {
+      logsByDate: mockLogsByDate,
+      volumeByDate: {},
+      completedSetsByDate: { '2026-10-01': 3, '2026-10-02': 1, '2026-10-03': 3 },
+      plannedSetsByDate: { '2026-10-01': 3, '2026-10-02': 3, '2026-10-03': 3 },
+    },
+    workoutMap: mockWorkoutMap,
+    coreWorkoutByCycleDayMap: mockCoreMap,
+    getCycleDayForDate: (d: Date) => {
+      // Map day 28 (future) to cycleDay 7 (Rest), past day 5 to cycleDay 1 (Push)
+      if (d.getDate() === 28) return 7;
+      return 1;
+    },
+    resolveExerciseMeta: () => null,
+  }),
+}));
 
 /**
  * Color Token Integrity & Palette Collision Regression Suite.
@@ -121,8 +172,10 @@ describe('Color Token Integrity & Palette Contracts', () => {
     }
 
     /**
-     * Standard perceptual color distance (redmean formula).
-     * Distance >= 80 indicates clearly distinguishable hues across compact indicators.
+     * Approximate redmean color-distance formula used strictly as a rough comparative heuristic.
+     * Note: This numerical calculation is not a formal proof of human perceptual clarity,
+     * universal distinctness, or WCAG accessibility compliance. It serves merely as an automated
+     * check against unintentional near-identical palette values.
      */
     function perceptualColorDistance(hex1: string, hex2: string): number {
       const [r1, g1, b1] = hexToRgb(hex1);
@@ -159,19 +212,19 @@ describe('Color Token Integrity & Palette Contracts', () => {
       ).toEqual([]);
     });
 
-    it('ensures Push (#facc15) is perceptually distinct from Upper (#fb923c) with distance > 120', () => {
+    it('ensures Push (#facc15) is distinct from Upper (#fb923c) with distance > 120', () => {
       const dist = perceptualColorDistance(WORKOUT_COLORS.push, WORKOUT_COLORS.upper);
       expect(dist).toBeGreaterThan(120);
       expect(WORKOUT_COLORS.push.toLowerCase()).toBe('#facc15');
       expect(WORKOUT_COLORS.upper.toLowerCase()).toBe('#fb923c');
     });
 
-    it('ensures Push (#facc15) is perceptually distinct from warning Amber (#f59e0b) with distance >= 90', () => {
+    it('ensures Push (#facc15) is distinct from warning Amber (#f59e0b) with distance >= 90', () => {
       const dist = perceptualColorDistance(WORKOUT_COLORS.push, SEMANTIC_COLORS.amber);
       expect(dist).toBeGreaterThanOrEqual(90);
     });
 
-    it('ensures Push (#facc15) is perceptually distinct from achievement Orange (#f97316) with distance >= 160', () => {
+    it('ensures Push (#facc15) is distinct from achievement Orange (#f97316) with distance >= 160', () => {
       const dist = perceptualColorDistance(WORKOUT_COLORS.push, SEMANTIC_COLORS.orange);
       expect(dist).toBeGreaterThanOrEqual(160);
     });
@@ -183,21 +236,36 @@ describe('Color Token Integrity & Palette Contracts', () => {
       expect(WORKOUT_COLORS.lower.toLowerCase()).toBe('#84cc16');
     });
 
-    it('documents and verifies distinctness of intentional cross-domain pairs (workout vs semantic)', () => {
-      // 4 intentional shared hue families across different semantic domains:
-      // 1. Upper (#fb923c) vs Semantic Orange (#f97316): Upper is workout category, Orange is achievement
+    it('documents context isolation and verifies distinctness for cross-domain pairs', () => {
+      // 1. Upper (#fb923c) vs Semantic Orange (#f97316) (~82)
+      // UI Context Analysis: Upper Body is a workout routine category identifier (badge/legend).
+      // Semantic Orange is the brand interactive color (primary CTA buttons) and PR achievement pill.
+      // They belong to distinct semantic systems and are never displayed simultaneously as competing options
+      // in the same picker, legend, or selector.
       expect(WORKOUT_COLORS.upper.toLowerCase()).not.toBe(SEMANTIC_COLORS.orange.toLowerCase());
       expect(perceptualColorDistance(WORKOUT_COLORS.upper, SEMANTIC_COLORS.orange)).toBeGreaterThan(80);
 
-      // 2. Rest (#22c55e) vs Semantic Emerald (#10b981): Rest is scheduled rest workout, Emerald is success
+      // 2. Rest (#22c55e) vs Semantic Emerald (#10b981) (~69)
+      // UI Context Analysis: Rest is a recovery protocol identifier (accompanied by Moon icon and "REST" label).
+      // Semantic Emerald is a feedback state for successful session completion ("COMPLETED SESSION").
+      // Because a scheduled rest day by definition contains no completed session, these two visual treatments
+      // never compete or coexist on the same date cell or action.
       expect(WORKOUT_COLORS.rest.toLowerCase()).not.toBe(SEMANTIC_COLORS.emerald.toLowerCase());
       expect(perceptualColorDistance(WORKOUT_COLORS.rest, SEMANTIC_COLORS.emerald)).toBeGreaterThan(65);
 
-      // 3. Custom (#a78bfa) vs Semantic Indigo (#6366f1): Custom is user workout type, Indigo is intelligence
+      // 3. Upper (#fb923c) vs Semantic Amber (#f59e0b) (~74)
+      // UI Context Analysis: Upper represents routine identity, whereas Amber indicates warning/partial status
+      // (e.g. "PARTIAL" session badge). They never serve as competing choices in any selector or legend.
+      expect(WORKOUT_COLORS.upper.toLowerCase()).not.toBe(SEMANTIC_COLORS.amber.toLowerCase());
+      expect(perceptualColorDistance(WORKOUT_COLORS.upper, SEMANTIC_COLORS.amber)).toBeGreaterThan(70);
+
+      // 4. Custom (#a78bfa) vs Semantic Indigo (#6366f1) (~132)
+      // Custom is user workout type, Indigo is strength trend intelligence. Different contexts.
       expect(WORKOUT_COLORS.custom.toLowerCase()).not.toBe(SEMANTIC_COLORS.indigo.toLowerCase());
       expect(perceptualColorDistance(WORKOUT_COLORS.custom, SEMANTIC_COLORS.indigo)).toBeGreaterThan(120);
 
-      // 4. Date (#f43f8e) vs Semantic Red (#ef4444): Date is calendar dot, Red is destructive/error
+      // 5. Date (#f43f8e) vs Semantic Red (#ef4444) (~106)
+      // Date is calendar indicator dot, Red is destructive/error action.
       expect(WORKOUT_COLORS.date.toLowerCase()).not.toBe(SEMANTIC_COLORS.red.toLowerCase());
       expect(perceptualColorDistance(WORKOUT_COLORS.date, SEMANTIC_COLORS.red)).toBeGreaterThan(100);
     });
@@ -224,67 +292,145 @@ describe('Color Token Integrity & Palette Contracts', () => {
     });
   });
 
-  describe('6. Behavioral Consistency for Calendar Workout Colors & Achievement Semantics', () => {
-    it('resolves completed sessions to their canonical workout colors and missing templates to neutral zinc', () => {
-      // Mock workout registry
-      const workoutMap = new Map<string, { type: keyof typeof WORKOUT_COLORS; name: string }>([
-        ['wo-push', { type: 'push', name: 'Push Protocol' }],
-        ['wo-pull', { type: 'pull', name: 'Pull Protocol' }],
-        ['wo-upper', { type: 'upper', name: 'Upper Body' }],
-        ['wo-lower', { type: 'lower', name: 'Lower Body' }],
-        ['wo-hybrid', { type: 'hybrid', name: 'Hybrid Conditioning' }],
-        ['wo-custom', { type: 'custom', name: 'Custom Session' }],
-        ['wo-rest', { type: 'rest', name: 'Active Recovery' }],
-      ]);
+  describe('6. Production Behavioral Consistency for Calendar Workout Colors & Achievement Semantics', () => {
+    let container: HTMLDivElement;
+    let root: Root;
 
-      function resolveCalendarStatus(log: { complete: boolean; workoutId: string }) {
-        if (!log.complete) {
-          return { color: SEMANTIC_COLORS.amber, label: 'partial' };
-        }
-        const wo = workoutMap.get(log.workoutId);
-        const woTypeColor = wo?.type ? WORKOUT_COLORS[wo.type] : undefined;
-        return {
-          color: woTypeColor || UNKNOWN_WORKOUT_COLOR,
-          label: wo?.type || 'unclassified'
-        };
-      }
-
-      // 1. Each valid workout type resolves to its canonical workout color
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-push' }).color).toBe(WORKOUT_COLORS.push);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-pull' }).color).toBe(WORKOUT_COLORS.pull);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-upper' }).color).toBe(WORKOUT_COLORS.upper);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-lower' }).color).toBe(WORKOUT_COLORS.lower);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-hybrid' }).color).toBe(WORKOUT_COLORS.hybrid);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-custom' }).color).toBe(WORKOUT_COLORS.custom);
-      expect(resolveCalendarStatus({ complete: true, workoutId: 'wo-rest' }).color).toBe(WORKOUT_COLORS.rest);
-
-      // 2. Missing/deleted workout templates fallback to neutral zinc (#71717a), NEVER Push (#facc15) or Amber (#f59e0b)
-      const missingStatus = resolveCalendarStatus({ complete: true, workoutId: 'deleted_workout_999' });
-      expect(missingStatus.color).toBe(UNKNOWN_WORKOUT_COLOR);
-      expect(missingStatus.color).toBe(SEMANTIC_COLORS.zinc);
-      expect(missingStatus.color).not.toBe(WORKOUT_COLORS.push);
-      expect(missingStatus.color).not.toBe(SEMANTIC_COLORS.amber);
-
-      // 3. Incomplete session resolves to amber warning
-      const incompleteStatus = resolveCalendarStatus({ complete: false, workoutId: 'wo-push' });
-      expect(incompleteStatus.color).toBe(SEMANTIC_COLORS.amber);
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
     });
 
-    it('ensures scheduled future rest days use WORKOUT_COLORS.rest (#22c55e), not Emerald (#10b981)', () => {
-      function resolveScheduledDayColor(expectedType: keyof typeof WORKOUT_COLORS, isFuture: boolean) {
-        if (isFuture) {
-          if (expectedType === 'rest') {
-            return WORKOUT_COLORS.rest;
-          }
-          return WORKOUT_COLORS[expectedType] || UNKNOWN_WORKOUT_COLOR;
-        }
-        return SEMANTIC_COLORS.zinc;
-      }
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
 
-      const futureRestColor = resolveScheduledDayColor('rest', true);
-      expect(futureRestColor).toBe(WORKOUT_COLORS.rest);
-      expect(futureRestColor).toBe('#22c55e');
-      expect(futureRestColor).not.toBe(SEMANTIC_COLORS.emerald);
+    function normalizeColor(color?: string | null): string {
+      if (!color) return '';
+      if (color.startsWith('rgb')) {
+        const matches = color.match(/\d+/g);
+        if (matches && matches.length >= 3) {
+          const [r, g, b] = matches.map(Number);
+          return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+      }
+      return color.toLowerCase();
+    }
+
+    it('exercises production resolveCalendarDayStatus for all supported workout types, partials, fallbacks, and missed', () => {
+      const mockWorkout = (type: WorkoutType): Workout => ({
+        id: `wo-${type}`,
+        name: `${type} protocol`,
+        badge: type.toUpperCase(),
+        type,
+        isCore: true,
+        cycleDay: 1,
+        exercises: [],
+      });
+
+      // 1. All supported workout types resolve to their canonical WORKOUT_COLORS
+      const supportedTypes: WorkoutType[] = ['push', 'pull', 'upper', 'lower', 'hybrid', 'custom', 'rest'];
+      supportedTypes.forEach((type) => {
+        const result = resolveCalendarDayStatus({
+          date: new Date('2026-10-15'),
+          dateStr: '2026-10-15',
+          today: new Date('2026-10-15'),
+          log: { complete: true, workoutId: `wo-${type}`, id: 'log-1', date: '2026-10-15', sets: {}, durationMinutes: 45 },
+          workout: mockWorkout(type),
+        });
+        expect(result?.color).toBe(WORKOUT_COLORS[type]);
+        expect(result?.isComplete).toBe(true);
+      });
+
+      // 2. Incomplete sessions must use semantic Amber (#f59e0b)
+      const incomplete = resolveCalendarDayStatus({
+        date: new Date('2026-10-15'),
+        dateStr: '2026-10-15',
+        today: new Date('2026-10-15'),
+        log: { complete: false, workoutId: 'wo-push', id: 'log-2', date: '2026-10-15', sets: {}, durationMinutes: 30 },
+        workout: mockWorkout('push'),
+      });
+      expect(incomplete?.color).toBe(SEMANTIC_COLORS.amber);
+      expect(incomplete?.isPartial).toBe(true);
+
+      // 3. Unknown or deleted workout templates must use neutral Zinc fallback (#71717a)
+      const unknownWo = resolveCalendarDayStatus({
+        date: new Date('2026-10-15'),
+        dateStr: '2026-10-15',
+        today: new Date('2026-10-15'),
+        log: { complete: true, workoutId: 'deleted-999', id: 'log-3', date: '2026-10-15', sets: {}, durationMinutes: 45 },
+        workout: null,
+      });
+      expect(unknownWo?.color).toBe(UNKNOWN_WORKOUT_COLOR);
+      expect(unknownWo?.color).toBe(SEMANTIC_COLORS.zinc);
+      expect(unknownWo?.color).not.toBe(WORKOUT_COLORS.push);
+      expect(unknownWo?.color).not.toBe(SEMANTIC_COLORS.amber);
+
+      // 4. Scheduled future rest days must use WORKOUT_COLORS.rest (#22c55e), not Emerald
+      const futureRest = resolveCalendarDayStatus({
+        date: new Date('2026-10-28'),
+        dateStr: '2026-10-28',
+        today: new Date('2026-10-15'),
+        expectedWorkout: mockWorkout('rest'),
+      });
+      expect(futureRest?.color).toBe(WORKOUT_COLORS.rest);
+      expect(futureRest?.color).toBe('#22c55e');
+      expect(futureRest?.color).not.toBe(SEMANTIC_COLORS.emerald);
+
+      // 5. Missed scheduled sessions must use semantic Red (#ef4444)
+      const missed = resolveCalendarDayStatus({
+        date: new Date('2026-10-10'),
+        dateStr: '2026-10-10',
+        today: new Date('2026-10-15'),
+        expectedWorkout: mockWorkout('push'),
+      });
+      expect(missed?.color).toBe(SEMANTIC_COLORS.red);
+      expect(missed?.isMissed).toBe(true);
+    });
+
+    it('exercises the actual Calendar component and asserts rendered date indicator colors in DOM', () => {
+      act(() => {
+        root.render(React.createElement(Calendar));
+      });
+
+      // 1. Completed Push workout on 2026-10-01 -> dot must be WORKOUT_COLORS.push (#facc15)
+      const pushDay = container.querySelector('[data-testid="calendar-day-2026-10-01"]');
+      expect(pushDay, 'Day 2026-10-01 should be rendered').toBeTruthy();
+      const pushDot = pushDay?.querySelector('.rounded-full:not(span)') as HTMLElement;
+      expect(pushDot).toBeTruthy();
+      expect(normalizeColor(pushDot.style.backgroundColor)).toBe(WORKOUT_COLORS.push.toLowerCase());
+
+      // 2. Incomplete workout on 2026-10-02 -> dot must be SEMANTIC_COLORS.amber (#f59e0b)
+      const incompleteDay = container.querySelector('[data-testid="calendar-day-2026-10-02"]');
+      expect(incompleteDay, 'Day 2026-10-02 should be rendered').toBeTruthy();
+      const incompleteDot = incompleteDay?.querySelector('.rounded-full:not(span)') as HTMLElement;
+      expect(incompleteDot).toBeTruthy();
+      expect(normalizeColor(incompleteDot.style.backgroundColor)).toBe(SEMANTIC_COLORS.amber.toLowerCase());
+
+      // 3. Completed session with deleted/missing template on 2026-10-03 -> neutral zinc (#71717a)
+      const missingDay = container.querySelector('[data-testid="calendar-day-2026-10-03"]');
+      expect(missingDay, 'Day 2026-10-03 should be rendered').toBeTruthy();
+      const missingDot = missingDay?.querySelector('.rounded-full:not(span)') as HTMLElement;
+      expect(missingDot).toBeTruthy();
+      expect(normalizeColor(missingDot.style.backgroundColor)).toBe(UNKNOWN_WORKOUT_COLOR.toLowerCase());
+
+      // 4. Scheduled future rest day on 2026-10-28 -> WORKOUT_COLORS.rest (#22c55e)
+      const futureRestDay = container.querySelector('[data-testid="calendar-day-2026-10-28"]');
+      expect(futureRestDay, 'Day 2026-10-28 should be rendered').toBeTruthy();
+      const futureRestDot = futureRestDay?.querySelector('.rounded-full:not(span)') as HTMLElement;
+      expect(futureRestDot).toBeTruthy();
+      expect(normalizeColor(futureRestDot.style.backgroundColor)).toBe(WORKOUT_COLORS.rest.toLowerCase());
+
+      // 5. Missed scheduled past session on 2026-10-05 (past core push, no log) -> SEMANTIC_COLORS.red (#ef4444)
+      const missedDay = container.querySelector('[data-testid="calendar-day-2026-10-05"]');
+      expect(missedDay, 'Day 2026-10-05 should be rendered').toBeTruthy();
+      const missedDot = missedDay?.querySelector('.rounded-full:not(span)') as HTMLElement;
+      expect(missedDot).toBeTruthy();
+      expect(normalizeColor(missedDot.style.backgroundColor)).toBe(SEMANTIC_COLORS.red.toLowerCase());
     });
 
     it('enforces achievement/PR semantics use orange (#f97316) exclusively, keeping amber (#f59e0b) for warnings', () => {

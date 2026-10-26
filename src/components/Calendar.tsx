@@ -19,6 +19,7 @@ import {
   WORKOUT_COLORS,
   formatCompactWeight
 } from '../utils/fitnessHelpers';
+import { resolveCalendarDayStatus } from '../utils/calendarHelpers';
 import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
 import { haptics } from '../utils/haptics';
 import { useCalendarGrid } from '../hooks/useCalendarGrid';
@@ -99,60 +100,19 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const getDayStatus = (date: Date, dateStr: string) => {
     const log = logsByDateMap.get(dateStr);
     const dayDetail = dayDetailMap[dateStr];
-    const today = new Date();
-    const isFuture = isAfter(startOfDay(date), startOfDay(today));
-
-    // Cycle day is derived from the canonical cycleStart date anchor
     const cycleDay = getCycleDayForDate(date);
     const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+    const wo = log ? workoutMap.get(log.workoutId) : undefined;
 
-    if (log) {
-      const wo = workoutMap.get(log.workoutId);
-      const doneSets = dayDetail?.doneSets ?? 0;
-      const totalSets = dayDetail?.totalSets ?? 0;
-
-      if (!log.complete) {
-        return {
-          color: SEMANTIC_COLORS.amber,
-          label: totalSets > 0 ? `${doneSets}/${totalSets} sets` : 'partial',
-          isPartial: true,
-          log
-        };
-      }
-      const woTypeColor = wo?.type ? WORKOUT_COLORS[wo.type] : undefined;
-      return {
-        color: woTypeColor || SEMANTIC_COLORS.zinc,
-        label: wo?.type || 'session',
-        isComplete: true,
-        log
-      };
-    }
-
-    if (isFuture) {
-      if (expectedWo) {
-        if (expectedWo.type === 'rest') {
-          return { color: WORKOUT_COLORS.rest, label: 'rest', isFuture: true, expectedWo };
-        }
-        return {
-          color: WORKOUT_COLORS[expectedWo.type] || SEMANTIC_COLORS.zinc,
-          label: expectedWo.name,
-          isFuture: true,
-          expectedWo
-        };
-      }
-      return null;
-    }
-
-    if (expectedWo) {
-      if (expectedWo.type === 'rest') {
-        return { color: WORKOUT_COLORS.rest, label: 'rest', isRest: true, expectedWo };
-      }
-      if (!isSameDay(date, today)) {
-        return { color: SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo };
-      }
-    }
-
-    return null;
+    return resolveCalendarDayStatus({
+      date,
+      dateStr,
+      today: new Date(),
+      log,
+      dayDetail,
+      workout: wo,
+      expectedWorkout: expectedWo,
+    });
   };
 
   // 4. Selected date analysis
@@ -238,78 +198,80 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
             </div>
           }
         >
-          {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1.5 pt-2 min-w-0 [&>*]:min-w-0">
-            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-              <div
-                key={d}
-                className={cn("text-center pb-2", TYPOGRAPHY.label, "text-zinc-500")}
-              >
-                {d}
-              </div>
-            ))}
-
-            {days.map(day => {
-              const dateStr = format(day, 'yyyy-MM-dd');
-              const status = getDayStatus(day, dateStr);
-              const isToday = isSameDay(day, new Date());
-              const isSelected = selectedDate && isSameDay(day, selectedDate);
-              const isCurrentMonthDay = isSameMonth(day, monthStart);
-
-              return (
-                <button
-                  key={dateStr}
-                  type="button"
-                  data-testid={`calendar-day-${dateStr}`}
-                  onClick={() => {
-                    haptics.selection();
-                    setSelectedDate(day);
-                  }}
-                  className={cn(
-                    "group relative aspect-square min-h-[44px] min-w-[44px] sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
-                    TRANSITION.interactive,
-                    RADIUS.card,
-                    !isCurrentMonthDay && "opacity-20 pointer-events-none",
-                    isSelected
-                      ? cn("border-emerald-400/70 bg-emerald-500/15", SHADOW.emeraldSubtle)
-                      : isToday
-                        ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
-                        : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
-                  )}
+          {/* Days Grid Responsive Scroll Container */}
+          <div className="overflow-x-auto -mx-1 px-1 custom-scrollbar">
+            <div className="grid grid-cols-7 gap-1.5 pt-2 min-w-[344px] [&>*]:min-w-0">
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                <div
+                  key={d}
+                  className={cn("text-center pb-2", TYPOGRAPHY.label, "text-zinc-500")}
                 >
-                  {/* Date Number Badge */}
-                  <span
-                    className={cn(
-                      "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
-                      TRANSITION.colors,
-                      isToday
-                        ? cn("bg-emerald-500 text-black font-black", SHADOW.emeraldDate)
-                        : isSelected
-                          ? "bg-white text-black font-black"
-                          : status
-                            ? "text-zinc-200"
-                            : "text-zinc-500",
-                      status && !isSelected && !isToday && (status.isFuture ? 'border-2 border-dashed' : 'border-2')
-                    )}
-                    style={status && !isSelected && !isToday ? { borderColor: status.color } : undefined}
-                  >
-                    {format(day, 'd')}
-                  </span>
+                  {d}
+                </div>
+              ))}
 
-                  {/* Color-Coded Status Dot */}
-                  {status && (
-                    <div
+              {days.map(day => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const status = getDayStatus(day, dateStr);
+                const isToday = isSameDay(day, new Date());
+                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                const isCurrentMonthDay = isSameMonth(day, monthStart);
+
+                return (
+                  <button
+                    key={dateStr}
+                    type="button"
+                    data-testid={`calendar-day-${dateStr}`}
+                    onClick={() => {
+                      haptics.selection();
+                      setSelectedDate(day);
+                    }}
+                    className={cn(
+                      "group relative aspect-square min-h-[44px] min-w-[44px] sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                      TRANSITION.interactive,
+                      RADIUS.card,
+                      !isCurrentMonthDay && "opacity-20 pointer-events-none",
+                      isSelected
+                        ? cn("border-emerald-400/70 bg-emerald-500/15", SHADOW.emeraldSubtle)
+                        : isToday
+                          ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
+                          : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
+                    )}
+                  >
+                    {/* Date Number Badge */}
+                    <span
                       className={cn(
-                        "w-1.5 h-1.5 rounded-full mt-1",
-                        TRANSITION.opacity,
-                        status.isFuture ? "opacity-70" : "opacity-100"
+                        "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
+                        TRANSITION.colors,
+                        isToday
+                          ? cn("bg-emerald-500 text-black font-black", SHADOW.emeraldDate)
+                          : isSelected
+                            ? "bg-white text-black font-black"
+                            : status
+                              ? "text-zinc-200"
+                              : "text-zinc-500",
+                        status && !isSelected && !isToday && (status.isFuture ? 'border-2 border-dashed' : 'border-2')
                       )}
-                      style={{ backgroundColor: status.color }}
-                    />
-                  )}
-                </button>
-              );
-            })}
+                      style={status && !isSelected && !isToday ? { borderColor: status.color } : undefined}
+                    >
+                      {format(day, 'd')}
+                    </span>
+
+                    {/* Color-Coded Status Dot */}
+                    {status && (
+                      <div
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full mt-1",
+                          TRANSITION.opacity,
+                          status.isFuture ? "opacity-70" : "opacity-100"
+                        )}
+                        style={{ backgroundColor: status.color }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Legend */}
