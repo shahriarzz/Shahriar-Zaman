@@ -537,5 +537,22 @@ describe('GAINLOG Supporting-Code Audit Test Suite', () => {
       expect(errorRefId).not.toContain('internal-server');
     });
   });
+
+  describe('10. Server Startup and Port Collision Error Invariant', () => {
+    it('verifies server.ts captures app.listen() and attaches error listener terminating with non-zero exit', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const serverSource = fs.readFileSync(path.join(process.cwd(), 'server.ts'), 'utf8');
+
+      // Verifies server instance capture
+      expect(serverSource).toMatch(/const\s+server\s*=\s*app\.listen\(/);
+
+      // Verifies asynchronous error event listener on server instance
+      expect(serverSource).toMatch(/server\.on\(\s*['"]error['"]\s*,\s*\(err/);
+
+      // Verifies non-zero process exit on server error
+      expect(serverSource).toMatch(/process\.exit\(1\)/);
+    });
+  });
 });
 

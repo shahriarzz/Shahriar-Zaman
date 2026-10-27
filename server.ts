@@ -363,11 +363,12 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // In production, resolve the directory containing index.html
+    const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
     const possibleDistPaths = [
       path.join(process.cwd(), 'dist'),
       process.cwd(),
-      __dirname,
-      path.join(__dirname, '..', 'dist'),
+      currentDir,
+      path.join(currentDir, '..', 'dist'),
     ];
     const distPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html'))) || path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -394,8 +395,13 @@ async function startServer() {
   });
 
   const PORT = Number(process.env.PORT) || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
+
+  server.on('error', (err: Error) => {
+    console.error('HTTP server startup error:', err);
+    process.exit(1);
   });
 }
 startServer().catch((err) => {

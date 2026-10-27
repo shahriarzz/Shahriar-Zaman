@@ -822,5 +822,36 @@ describe('Design System Consolidation & Token Contracts', () => {
       const exerciseEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/ExerciseEditor.tsx'), 'utf8');
       expect(exerciseEditorSrc).not.toContain('w-10 h-10 p-0');
     });
+
+    it('verifies user status avatar and navigation items in Layout.tsx enforce 44x44px touch targets', () => {
+      const layoutSrc = fs.readFileSync(path.join(rootDir, 'src/components/Layout.tsx'), 'utf8');
+
+      // User status avatar button touch target & accessibility
+      expect(layoutSrc).toContain('min-h-[44px] min-w-[44px]');
+      expect(layoutSrc).toContain('aria-haspopup="true"');
+      expect(layoutSrc).toContain('aria-expanded={showTooltip}');
+
+      // Navigation items touch target
+      expect(layoutSrc).toContain('NAV.item');
+      expect(layoutSrc).toContain('min-w-[44px]');
+    });
+
+    it('verifies WorkoutEditor.tsx and ManageView.tsx respect reduced motion and accessibility contracts', () => {
+      const workoutEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/WorkoutEditor.tsx'), 'utf8');
+      expect(workoutEditorSrc).toContain('aria-label="Edit routine title"');
+      expect(workoutEditorSrc).toContain('aria-label="Delete rest note"');
+      expect(workoutEditorSrc).toContain('MOTION_CONFIG.collapse.initial');
+      expect(workoutEditorSrc).toContain('TRANSITION.interactive');
+
+      const manageSrc = fs.readFileSync(path.join(rootDir, 'src/components/ManageView.tsx'), 'utf8');
+      expect(manageSrc).toContain("shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.viewEntrance.transition");
+    });
+
+    it('verifies Android hardware back button registration and session protection contract in App.tsx', () => {
+      const appSrc = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
+      expect(appSrc).toContain("CapApp.addListener('backButton'");
+      expect(appSrc).toContain("leaveSessionRef.current('dashboard')");
+      expect(appSrc).toContain("CapApp.minimizeApp()");
+    });
   });
 });

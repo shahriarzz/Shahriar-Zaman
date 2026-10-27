@@ -45,7 +45,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center relative group select-none",
+        "flex flex-col items-center justify-center relative group select-none min-w-[44px]",
         FOCUS.visible,
         TRANSITION.colors,
         NAV.item,
@@ -148,39 +148,47 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
 
         <div className="flex items-center gap-2">
           {/* Subtle user status avatar with integrated sync indicator */}
-          <div 
-            className="relative group/sync cursor-pointer select-none" 
-            title={user ? getSyncTooltip() : 'Offline database mode'}
-            role="status"
-            aria-label={user ? getSyncTooltip() : 'Offline database mode'}
-            onClick={() => setShowTooltip(!showTooltip)}
-          >
-            {user?.photoURL ? (
-              <img 
-                src={user.photoURL} 
-                alt={user.displayName || "User"} 
-                referrerPolicy="no-referrer" 
-                className={cn("w-8 h-8 object-cover border", RADIUS.pill, BORDER.standard)} 
-              />
-            ) : user ? (
-              <div className={cn("w-8 h-8 flex items-center justify-center text-xs font-mono font-bold text-zinc-300 border", RADIUS.pill, SURFACE.subtle, BORDER.strong)}>
-                {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
-              </div>
-            ) : (
-              <div className={cn("w-8 h-8 flex items-center justify-center border", RADIUS.pill, SURFACE.recessed, BORDER.standard)}>
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
-              </div>
-            )}
+          <div className="relative">
+            <button 
+              type="button"
+              className={cn(
+                "group/sync cursor-pointer select-none min-h-[44px] min-w-[44px] flex items-center justify-center relative",
+                FOCUS.visible,
+                RADIUS.button
+              )} 
+              title={user ? getSyncTooltip() : 'Offline database mode'}
+              aria-label={user ? getSyncTooltip() : 'Offline database mode'}
+              aria-haspopup="true"
+              aria-expanded={showTooltip}
+              onClick={() => setShowTooltip(!showTooltip)}
+            >
+              {user?.photoURL ? (
+                <img 
+                  src={user.photoURL} 
+                  alt={user.displayName || "User"} 
+                  referrerPolicy="no-referrer" 
+                  className={cn("w-8 h-8 object-cover border", RADIUS.pill, BORDER.standard)} 
+                />
+              ) : user ? (
+                <div className={cn("w-8 h-8 flex items-center justify-center text-xs font-mono font-bold text-zinc-300 border", RADIUS.pill, SURFACE.subtle, BORDER.strong)}>
+                  {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '?')}
+                </div>
+              ) : (
+                <div className={cn("w-8 h-8 flex items-center justify-center border", RADIUS.pill, SURFACE.recessed, BORDER.standard)}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+                </div>
+              )}
 
-            {user && (
-              <span 
-                className={cn(
-                  "absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border",
-                  BORDER.canvasHalo,
-                  getSyncColorClass()
-                )} 
-              />
-            )}
+              {user && (
+                <span 
+                  className={cn(
+                    "absolute bottom-1 right-1 w-[9px] h-[9px] rounded-full border",
+                    BORDER.canvasHalo,
+                    getSyncColorClass()
+                  )} 
+                />
+              )}
+            </button>
 
             {/* Dynamic visual touch/mobile tooltip popover */}
             <AnimatePresence>
@@ -200,7 +208,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                     exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.95 }}
                     transition={{ duration: shouldReduceMotion ? 0 : DURATION.fast / 1000, ease: 'easeOut' }}
                     className={cn(
-                      "absolute right-0 top-10 z-50 w-52 p-4 text-left pointer-events-auto border",
+                      "absolute right-0 top-12 z-50 w-52 p-4 text-left pointer-events-auto border",
                       SURFACE.overlay,
                       BORDER.standard,
                       RADIUS.card,

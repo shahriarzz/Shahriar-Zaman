@@ -726,7 +726,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
-                      initial={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.initial}
+                      initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                       animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
                       exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
                       transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}

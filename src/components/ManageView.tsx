@@ -24,7 +24,7 @@ export const ManageView: React.FC = () => {
           initial={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.initial}
           animate={MOTION_CONFIG.viewEntrance.animate}
           exit={shouldReduceMotion ? undefined : MOTION_CONFIG.viewEntrance.exit}
-          transition={MOTION_CONFIG.viewEntrance.transition}
+          transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.viewEntrance.transition}
           className="pt-4 pb-12"
         >
           <ProgramEditor onBackToManage={() => setIsEditingProgram(false)} />
@@ -35,7 +35,7 @@ export const ManageView: React.FC = () => {
           initial={shouldReduceMotion ? false : MOTION_CONFIG.viewEntrance.initial}
           animate={MOTION_CONFIG.viewEntrance.animate}
           exit={shouldReduceMotion ? undefined : MOTION_CONFIG.viewEntrance.exit}
-          transition={MOTION_CONFIG.viewEntrance.transition}
+          transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.viewEntrance.transition}
         >
           <Stack spacing="xl" className="pt-4 pb-12">
             {/* Top Page Header */}

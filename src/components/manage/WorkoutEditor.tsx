@@ -38,6 +38,8 @@ import {
   RADIUS,
   SPACING,
   INTERACTIVE,
+  TRANSITION,
+  MOTION_CONFIG,
   EDITOR_HEADER
 } from '../ui';
 import { cn } from '../../lib/utils';
@@ -344,6 +346,8 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     size="icon"
                     icon={<Edit3 size={13} />}
                     className="text-zinc-500 hover:text-white"
+                    aria-label="Edit routine title"
+                    title="Edit routine title"
                     onClick={() => {
                       setWorkoutName(workout.name);
                       setWorkoutBadge(workout.badge);
@@ -411,6 +415,8 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                       size="icon"
                       icon={<Trash2 size={13} />}
                       className="text-zinc-500 hover:text-red-400"
+                      aria-label="Delete rest note"
+                      title="Delete rest note"
                       onClick={() => handleDeleteRestNote(idx)}
                     />
                   }
@@ -477,14 +483,18 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     SURFACE.default,
                     BORDER.standard,
                     RADIUS.card,
-                    "border overflow-hidden transition-all duration-200",
+                    "border overflow-hidden",
+                    TRANSITION.interactive,
                     isExpanded ? cn(BORDER.interactive, SURFACE.subtle, "shadow-lg") : BORDER.hover
                   )}
                 >
                   {/* COLLAPSED HEADER (SessionView Pattern) */}
                   <div
                     onClick={() => toggleExpandExercise(exId)}
-                    className="p-4 cursor-pointer hover:bg-zinc-800/20 transition-colors flex items-center justify-between gap-3 select-none"
+                    className={cn(
+                      "p-4 cursor-pointer hover:bg-zinc-800/20 flex items-center justify-between gap-3 select-none",
+                      TRANSITION.colors
+                    )}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {/* Exercise Index Badge */}
@@ -574,10 +584,10 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   <AnimatePresence initial={false}>
                     {isExpanded && (
                       <motion.div
-                        initial={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                        animate={shouldReduceMotion ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-                        exit={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeInOut' }}
+                        initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                        animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                        exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                        transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
                         className={cn("overflow-hidden border-t p-4 space-y-4", BORDER.standard, SURFACE.recessed)}
                       >
                         <Grid cols={1} colsMd={3} gap="sm">
