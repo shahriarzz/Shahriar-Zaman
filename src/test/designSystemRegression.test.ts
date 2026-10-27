@@ -28,6 +28,8 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Dialog, DialogHeader } from '../components/ui/Dialog';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
+import { Layout } from '../components/Layout';
+import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 
 /**
  * Design System Regression & Invariant Test Suite.
@@ -823,17 +825,69 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(exerciseEditorSrc).not.toContain('w-10 h-10 p-0');
     });
 
-    it('verifies user status avatar and navigation items in Layout.tsx enforce 44x44px touch targets', () => {
+    it('verifies user status avatar and navigation items in Layout.tsx enforce CONTROL_HEIGHT.touchTarget and correct ARIA semantics', () => {
       const layoutSrc = fs.readFileSync(path.join(rootDir, 'src/components/Layout.tsx'), 'utf8');
 
-      // User status avatar button touch target & accessibility
-      expect(layoutSrc).toContain('min-h-[44px] min-w-[44px]');
-      expect(layoutSrc).toContain('aria-haspopup="true"');
-      expect(layoutSrc).toContain('aria-expanded={showTooltip}');
+      // 1. Shared design token usage (no hardcoded dimensions)
+      expect(layoutSrc).toContain('CONTROL_HEIGHT.touchTarget');
+      expect(layoutSrc).not.toContain('min-h-[44px] min-w-[44px]');
+      expect(layoutSrc).not.toContain('min-w-[44px]');
 
-      // Navigation items touch target
-      expect(layoutSrc).toContain('NAV.item');
-      expect(layoutSrc).toContain('min-w-[44px]');
+      // 2. Removal of misleading menu/dialog ARIA semantics
+      expect(layoutSrc).not.toContain('aria-haspopup');
+      expect(layoutSrc).toContain('aria-controls="cloud-status-popover"');
+      expect(layoutSrc).toContain('aria-expanded={showTooltip}');
+      expect(layoutSrc).toContain('role="status"');
+
+      // 3. Rendered DOM contract & behavior verification
+      const mockFitnessContextValue: Partial<FitnessContextType> = {
+        user: null,
+        syncStatus: 'idle',
+        syncError: null,
+      };
+
+      act(() => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            { value: mockFitnessContextValue as any },
+            React.createElement(Layout, { activeTab: 'dashboard', onTabChange: () => {} }, 'Test Content')
+          )
+        );
+      });
+
+      // Status button contract: enforces touch target classes, controls popover, no menu popup declared
+      const statusBtn = container.querySelector('button[aria-controls="cloud-status-popover"]') as HTMLButtonElement;
+      expect(statusBtn).toBeTruthy();
+      expect(statusBtn.classList.contains('min-h-[44px]')).toBe(true);
+      expect(statusBtn.classList.contains('min-w-[44px]')).toBe(true);
+      expect(statusBtn.getAttribute('aria-haspopup')).toBeNull();
+      expect(statusBtn.getAttribute('aria-expanded')).toBe('false');
+
+      // Navigation item contract: enforces touch target classes and accessible label
+      const navBtn = container.querySelector('#nav-item-dashboard') as HTMLButtonElement;
+      expect(navBtn).toBeTruthy();
+      expect(navBtn.classList.contains('min-h-[44px]')).toBe(true);
+      expect(navBtn.classList.contains('min-w-[44px]')).toBe(true);
+
+      // Status popover expansion behavior
+      act(() => {
+        statusBtn.click();
+      });
+      expect(statusBtn.getAttribute('aria-expanded')).toBe('true');
+      const popover = container.querySelector('#cloud-status-popover');
+      expect(popover).toBeTruthy();
+      expect(popover?.getAttribute('role')).toBe('status');
+
+      // Keyboard dismissal (Escape key closes popover)
+      act(() => {
+        statusBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(statusBtn.getAttribute('aria-expanded')).toBe('false');
+
+      // Verification boundary note: These assertions verify the computed CSS class contracts
+      // and ARIA DOM state in JSDOM, without claiming to measure real-browser pixel layout box
+      // geometry or native Android touch hardware boundaries.
     });
 
     it('verifies WorkoutEditor.tsx and ManageView.tsx respect reduced motion and accessibility contracts', () => {

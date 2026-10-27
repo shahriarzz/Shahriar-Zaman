@@ -4,7 +4,7 @@ import { LayoutDashboard, History, BarChart3, Settings, Dumbbell } from 'lucide-
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
-import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION, FOCUS, DURATION } from '../styles/tokens';
+import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION, FOCUS, DURATION, CONTROL_HEIGHT } from '../styles/tokens';
 
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
@@ -45,7 +45,8 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center relative group select-none min-w-[44px]",
+        "flex flex-col items-center justify-center relative group select-none",
+        CONTROL_HEIGHT.touchTarget,
         FOCUS.visible,
         TRANSITION.colors,
         NAV.item,
@@ -152,15 +153,22 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
             <button 
               type="button"
               className={cn(
-                "group/sync cursor-pointer select-none min-h-[44px] min-w-[44px] flex items-center justify-center relative",
+                "group/sync cursor-pointer select-none flex items-center justify-center relative",
+                CONTROL_HEIGHT.touchTarget,
                 FOCUS.visible,
                 RADIUS.button
               )} 
               title={user ? getSyncTooltip() : 'Offline database mode'}
               aria-label={user ? getSyncTooltip() : 'Offline database mode'}
-              aria-haspopup="true"
               aria-expanded={showTooltip}
+              aria-controls="cloud-status-popover"
               onClick={() => setShowTooltip(!showTooltip)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && showTooltip) {
+                  e.stopPropagation();
+                  setShowTooltip(false);
+                }
+              }}
             >
               {user?.photoURL ? (
                 <img 
@@ -203,6 +211,8 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                     }}
                   />
                   <motion.div
+                    id="cloud-status-popover"
+                    role="status"
                     initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.95 }}
                     animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
                     exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.95 }}
