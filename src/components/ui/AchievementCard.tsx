@@ -2,7 +2,7 @@ import React from 'react';
 import { Trophy } from 'lucide-react';
 import { Card } from './Card';
 import { cn } from '../../lib/utils';
-import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TYPOGRAPHY, RADIUS } from '../../styles/tokens';
+import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TYPOGRAPHY, RADIUS, SpacingIntent } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface AchievementCardProps {
@@ -12,6 +12,8 @@ export interface AchievementCardProps {
   icon?: IconProp;
   accent?: SemanticColor;
   colorOverride?: string;
+  size?: 'standard' | 'hero';
+  padding?: SpacingIntent;
   className?: string;
 }
 
@@ -24,9 +26,13 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
   icon,
   accent = 'orange',
   colorOverride,
+  size = 'standard',
+  padding,
   className
 }) => {
   const accentHex = colorOverride || getAccentColor(accent as SemanticColor) || SEMANTIC_COLORS.orange;
+  const effectivePadding = padding || (size === 'hero' ? 'section' : 'standard');
+  const valueTypography = size === 'hero' ? TYPOGRAPHY.statValueHero : TYPOGRAPHY.statValue;
 
   return (
     <Card
@@ -34,7 +40,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
       accent={accent}
       colorOverride={colorOverride}
       accentVariant="glow"
-      padding="section"
+      padding={effectivePadding}
       className={cn("flex flex-col justify-between relative overflow-hidden min-w-0 max-w-full", className)}
     >
       {/* Subtle brand glow backdrop */}
@@ -67,7 +73,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
         </div>
 
         <div className="flex items-baseline gap-2 mt-2 min-w-0 max-w-full">
-          <span className={cn(TYPOGRAPHY.statValueHero, "text-white leading-none min-w-0 max-w-full break-words whitespace-normal")}>
+          <span className={cn(valueTypography, "text-white leading-none min-w-0 max-w-full break-words whitespace-normal")}>
             {value}
           </span>
         </div>

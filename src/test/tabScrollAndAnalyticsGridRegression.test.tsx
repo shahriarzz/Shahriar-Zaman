@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-import React, { act, useState } from 'react';
+import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Layout, ActiveTab } from '../components/Layout';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
-import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
-import { SessionLog } from '../types/fitness';
 import * as useAnalyticsDataModule from '../hooks/useAnalyticsData';
 import * as useFitnessDerivedDataModule from '../hooks/useFitnessDerivedData';
 
@@ -54,6 +52,81 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     importBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
     ...overrides
   };
+}
+
+function createMockAggregatedData(overrides: Partial<any> = {}) {
+  return {
+    totalLogsCount: 20,
+    rangeLogsCount: 14,
+    rangeVolume: 35000,
+    priorVolume: 30000,
+    volumePeriodChangePct: 16,
+    activeDaysCount: 11,
+    avgDuration: 48,
+    biggestWeek: { weekStr: 'Week 40', volume: 15000 },
+    recordsList: [],
+    rangeMuscleVolume: {} as any,
+    rangeMuscleSets: {} as any,
+    rangeMuscleFrequency: {} as any,
+    mostFrequentExercises: [],
+    workoutTypeDistribution: {},
+    firstLogDate: '2026-07-15',
+    lastLogDate: '2026-10-25',
+    daysSinceLast: 1,
+    avgGapDays: 2.1,
+    lifetimeVolume: 95000,
+    lifetimeSets: 350,
+    lifetimeHours: 28,
+    scheduledCoreWorkouts: 8,
+    completedScheduledCore: 7,
+    scheduledRestDays: 4,
+    missedPastCoreDays: 1,
+    bonusCompletedSessions: 2,
+    isTodayCorePending: false,
+    adherencePct: 88,
+    active1RMTrend: [],
+    ...overrides
+  };
+}
+
+function createMockAnalyticsReturn(aggregatedOverrides: Partial<any> = {}, extraOverrides: Partial<any> = {}) {
+  return {
+    index: buildFitnessIndex({}),
+    workoutMap: new Map(),
+    coreWorkoutByCycleDayMap: new Map(),
+    priorityExercises: [{ id: 'ex-bench', name: 'Barbell Bench Press', target: 'Chest' }] as any,
+    active1RMExerciseId: 'ex-bench',
+    aggregated: createMockAggregatedData(aggregatedOverrides),
+    heatmapData: {
+      days: [],
+      logVolMap: {},
+      dayDetailMap: {},
+      maxDayVol: 4000,
+      monthStart: new Date('2026-10-01')
+    } as any,
+    muscleChartData: [],
+    workoutPieData: [],
+    insightsList: ['Great training cadence.'],
+    getCycleDayForDate: () => 1,
+    ...extraOverrides
+  } as any;
+}
+
+function createMockFitnessDerivedReturn(overrides: Partial<any> = {}) {
+  return {
+    trainingStreak: { currentStreak: 3, longestStreak: 7, lastCompletedDate: '2026-10-25' },
+    adherenceInsight: { percent: 85, completedScheduled: 6, evaluatedScheduledWorkouts: 7, pendingScheduledWorkouts: 0, status: 'On Track' },
+    performanceScore: { score: 92, status: 'Excellent' },
+    strengthTrend: { currentE1RM: 140, previousE1RM: 135, changePct: 3.7, movementName: 'Bench Press' },
+    currentDate: new Date('2026-10-26T12:00:00Z'),
+    todayStr: '2026-10-26',
+    index: buildFitnessIndex({}),
+    workoutMap: new Map(),
+    coreWorkoutByCycleDayMap: new Map(),
+    priorityExercises: [{ id: 'ex-bench', name: 'Barbell Bench Press', target: 'Chest' }] as any,
+    getCycleDayForDate: () => 1,
+    ...overrides
+  } as any;
 }
 
 describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
@@ -138,8 +211,8 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       expect(document.body.scrollTop).toBe(0);
     });
 
-    it('resets scroll position across multiple navigation transitions (Analytics -> History, Dashboard -> History)', () => {
-      let currentTab: ActiveTab = 'analytics';
+    it('resets scroll position across all 4 primary tabs and session view transitions', () => {
+      let currentTab: ActiveTab = 'dashboard';
       const mockFitness = createMockFitnessContext();
 
       const TestHarness: React.FC<{ tab: ActiveTab }> = ({ tab }) => (
@@ -155,30 +228,50 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       });
       scrollToSpy.mockClear();
 
-      // Transition 1: Analytics -> History
+      // Transition 1: Dashboard -> Session (user begins a workout)
+      document.documentElement.scrollTop = 400;
+      act(() => {
+        currentTab = 'session';
+        root.render(<TestHarness tab={currentTab} />);
+      });
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+      expect(document.documentElement.scrollTop).toBe(0);
+      scrollToSpy.mockClear();
+
+      // Transition 2: Session -> History (user finishes workout and checks history)
+      document.documentElement.scrollTop = 550;
+      act(() => {
+        currentTab = 'history';
+        root.render(<TestHarness tab={currentTab} />);
+      });
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+      expect(document.documentElement.scrollTop).toBe(0);
+      scrollToSpy.mockClear();
+
+      // Transition 3: History -> Analytics
       document.documentElement.scrollTop = 350;
       act(() => {
-        currentTab = 'history';
+        currentTab = 'analytics';
         root.render(<TestHarness tab={currentTab} />);
       });
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
       expect(document.documentElement.scrollTop).toBe(0);
       scrollToSpy.mockClear();
 
-      // Transition 2: History -> Dashboard
+      // Transition 4: Analytics -> Manage
       document.documentElement.scrollTop = 600;
       act(() => {
-        currentTab = 'dashboard';
+        currentTab = 'manage';
         root.render(<TestHarness tab={currentTab} />);
       });
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
       expect(document.documentElement.scrollTop).toBe(0);
       scrollToSpy.mockClear();
 
-      // Transition 3: Dashboard -> History directly (simulating onNavigateToHistory link)
+      // Transition 5: Manage -> Dashboard
       document.documentElement.scrollTop = 420;
       act(() => {
-        currentTab = 'history';
+        currentTab = 'dashboard';
         root.render(<TestHarness tab={currentTab} />);
       });
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
@@ -254,71 +347,16 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
     it('configures Average Session Length and Biggest Week Ever in a 2-column grid at mobile breakpoint', () => {
       const mockFitness = createMockFitnessContext();
 
-      // Mock useFitnessDerivedData
-      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
-        trainingStreak: { currentStreak: 3, longestStreak: 7, lastCompletedDate: '2026-10-25' },
-        adherenceInsight: { adherencePct: 85, completedScheduledCore: 6, scheduledCoreDays: 7, status: 'On Track' },
-        performanceScore: { score: 92, status: 'Excellent' },
-        strengthTrend: { currentE1RM: 140, previousE1RM: 135, changePct: 3.7, movementName: 'Bench Press' },
-        currentDate: new Date('2026-10-26T12:00:00Z'),
-        todayStr: '2026-10-26',
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [{ id: 'ex-bench', name: 'Barbell Bench Press', target: 'Chest' }] as any,
-        getCycleDayForDate: () => 1
-      } as any);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue(
+        createMockFitnessDerivedReturn()
+      );
 
-      // Mock useAnalyticsData with populated session and biggest week data
-      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue({
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [{ id: 'ex-bench', name: 'Barbell Bench Press', target: 'Chest' }] as any,
-        active1RMExerciseId: 'ex-bench',
-        aggregated: {
-          totalLogsCount: 24,
-          rangeLogsCount: 12,
-          rangeVolume: 45000,
-          priorVolume: 40000,
-          volumePeriodChangePct: 12,
-          activeDaysCount: 10,
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
           avgDuration: 52,
-          biggestWeek: { weekStr: 'Week 41 (Oct 2026)', volume: 18500 },
-          recordsList: [],
-          rangeMuscleVolume: {} as any,
-          rangeMuscleSets: {} as any,
-          rangeMuscleFrequency: {} as any,
-          mostFrequentExercises: [],
-          workoutTypeDistribution: {},
-          firstLogDate: '2026-08-01',
-          lastLogDate: '2026-10-25',
-          daysSinceLast: 1,
-          avgGapDays: 1.8,
-          lifetimeVolume: 120000,
-          lifetimeSets: 420,
-          lifetimeHours: 36.5,
-          scheduledCoreWorkouts: 8,
-          completedScheduledCore: 7,
-          scheduledRestDays: 4,
-          missedPastCoreDays: 1,
-          bonusCompletedSessions: 2,
-          isTodayCorePending: false,
-          adherencePct: 88,
-          active1RMTrend: []
-        } as any,
-        heatmapData: {
-          days: [],
-          logVolMap: {},
-          dayDetailMap: {},
-          maxDayVol: 5000,
-          monthStart: new Date('2026-10-01')
-        } as any,
-        muscleChartData: [],
-        workoutPieData: [],
-        insightsList: ['Great training cadence.'],
-        getCycleDayForDate: () => 1
-      } as any);
+          biggestWeek: { weekStr: 'Week 41 (Oct 2026)', volume: 18500 }
+        })
+      );
 
       act(() => {
         root.render(
@@ -346,9 +384,10 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       expect(avgCard).toBeTruthy();
       expect(biggestWeekCard).toBeTruthy();
 
-      const gridContainer = avgCard!.parentElement;
+      // Assert via structural grid container rather than brittle single-level parentElement
+      const gridContainer = avgCard!.closest('.grid');
       expect(gridContainer).toBeTruthy();
-      expect(gridContainer).toBe(biggestWeekCard!.parentElement);
+      expect(gridContainer).toBe(biggestWeekCard!.closest('.grid'));
 
       // Verify the grid container uses grid-cols-2 at mobile and desktop (cols={2} without colsMd restriction)
       expect(gridContainer!.classList.contains('grid-cols-2')).toBe(true);
@@ -367,69 +406,16 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
     it('arranges Training Cadence in a 2x2 grid containing all four metrics with accurate data', () => {
       const mockFitness = createMockFitnessContext();
 
-      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
-        trainingStreak: { currentStreak: 3, longestStreak: 7, lastCompletedDate: '2026-10-25' },
-        adherenceInsight: { adherencePct: 85, completedScheduledCore: 6, scheduledCoreDays: 7, status: 'On Track' },
-        performanceScore: { score: 92, status: 'Excellent' },
-        strengthTrend: { currentE1RM: 140, previousE1RM: 135, changePct: 3.7, movementName: 'Bench' },
-        currentDate: new Date('2026-10-26T12:00:00Z'),
-        todayStr: '2026-10-26',
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        getCycleDayForDate: () => 1
-      } as any);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue(
+        createMockFitnessDerivedReturn()
+      );
 
-      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue({
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        active1RMExerciseId: '',
-        aggregated: {
-          totalLogsCount: 20,
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
           rangeLogsCount: 14,
-          rangeVolume: 35000,
-          priorVolume: 30000,
-          volumePeriodChangePct: 16,
-          activeDaysCount: 11,
-          avgDuration: 48,
-          biggestWeek: { weekStr: 'Week 40', volume: 15000 },
-          recordsList: [],
-          rangeMuscleVolume: {} as any,
-          rangeMuscleSets: {} as any,
-          rangeMuscleFrequency: {} as any,
-          mostFrequentExercises: [],
-          workoutTypeDistribution: {},
-          firstLogDate: '2026-07-15',
-          lastLogDate: '2026-10-25',
-          daysSinceLast: 1,
-          avgGapDays: 2.1,
-          lifetimeVolume: 95000,
-          lifetimeSets: 350,
-          lifetimeHours: 28,
-          scheduledCoreWorkouts: 8,
-          completedScheduledCore: 7,
-          scheduledRestDays: 4,
-          missedPastCoreDays: 1,
-          bonusCompletedSessions: 2,
-          isTodayCorePending: false,
-          adherencePct: 88,
-          active1RMTrend: []
-        } as any,
-        heatmapData: {
-          days: [],
-          logVolMap: {},
-          dayDetailMap: {},
-          maxDayVol: 4000,
-          monthStart: new Date('2026-10-01')
-        } as any,
-        muscleChartData: [],
-        workoutPieData: [],
-        insightsList: [],
-        getCycleDayForDate: () => 1
-      } as any);
+          firstLogDate: '2026-07-15'
+        })
+      );
 
       act(() => {
         root.render(
@@ -467,7 +453,7 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       const card = sessionsInWindowLabel.closest('[class*="rounded"]');
       expect(card).toBeTruthy();
 
-      const cadenceGrid = card!.parentElement;
+      const cadenceGrid = card!.closest('.grid');
       expect(cadenceGrid).toBeTruthy();
       expect(cadenceGrid!.classList.contains('grid-cols-2')).toBe(true);
       expect(cadenceGrid!.classList.contains('grid-cols-1')).toBe(false);
@@ -484,63 +470,23 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       const mockFitness = createMockFitnessContext();
 
       // Case A: User has 0 sessions in window but has lifetime logs
-      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
-        trainingStreak: { currentStreak: 0, longestStreak: 2, lastCompletedDate: '2026-08-01' },
-        adherenceInsight: { adherencePct: 0, completedScheduledCore: 0, scheduledCoreDays: 4, status: 'Needs Attention' },
-        performanceScore: { score: 40, status: 'Needs Focus' },
-        strengthTrend: { currentE1RM: null, previousE1RM: null, changePct: null, movementName: null },
-        currentDate: new Date('2026-10-26T12:00:00Z'),
-        todayStr: '2026-10-26',
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        getCycleDayForDate: () => 1
-      } as any);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue(
+        createMockFitnessDerivedReturn({
+          trainingStreak: { currentStreak: 0, longestStreak: 2, lastCompletedDate: '2026-08-01' },
+          adherenceInsight: { percent: 0, completedScheduled: 0, evaluatedScheduledWorkouts: 4, pendingScheduledWorkouts: 0, status: 'Needs Attention' },
+          performanceScore: { score: 40, status: 'Needs Focus' }
+        })
+      );
 
-      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue({
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        active1RMExerciseId: '',
-        aggregated: {
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
           totalLogsCount: 5,
           rangeLogsCount: 0, // 0 in this window
-          rangeVolume: 0,
-          priorVolume: 0,
-          volumePeriodChangePct: null,
-          activeDaysCount: 0,
-          avgDuration: 0,
-          biggestWeek: { weekStr: 'Week 32', volume: 8000 },
-          recordsList: [],
-          rangeMuscleVolume: {} as any,
-          rangeMuscleSets: {} as any,
-          rangeMuscleFrequency: {} as any,
-          mostFrequentExercises: [],
-          workoutTypeDistribution: {},
           firstLogDate: '2026-08-01',
           lastLogDate: '2026-08-10',
-          daysSinceLast: 77,
-          avgGapDays: 2.5,
-          lifetimeVolume: 25000,
-          lifetimeSets: 80,
-          lifetimeHours: 6,
-          scheduledCoreWorkouts: 4,
-          completedScheduledCore: 0,
-          scheduledRestDays: 2,
-          missedPastCoreDays: 4,
-          bonusCompletedSessions: 0,
-          isTodayCorePending: false,
-          adherencePct: 0,
-          active1RMTrend: []
-        } as any,
-        heatmapData: { days: [], logVolMap: {}, dayDetailMap: {}, maxDayVol: 0, monthStart: new Date('2026-10-01') } as any,
-        muscleChartData: [],
-        workoutPieData: [],
-        insightsList: [],
-        getCycleDayForDate: () => 1
-      } as any);
+          daysSinceLast: 77
+        })
+      );
 
       act(() => {
         root.render(
@@ -559,49 +505,16 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       expect(cardA.textContent).toContain('No sessions in 30D window');
 
       // Case B: Brand new user with zero lifetime logs (firstLogDate is null)
-      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue({
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        active1RMExerciseId: '',
-        aggregated: {
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
           totalLogsCount: 0,
           rangeLogsCount: 0,
-          rangeVolume: 0,
-          priorVolume: 0,
-          volumePeriodChangePct: null,
-          activeDaysCount: 0,
-          avgDuration: 0,
-          biggestWeek: { weekStr: '', volume: 0 },
-          recordsList: [],
-          rangeMuscleVolume: {} as any,
-          rangeMuscleSets: {} as any,
-          rangeMuscleFrequency: {} as any,
-          mostFrequentExercises: [],
-          workoutTypeDistribution: {},
           firstLogDate: null, // No lifetime logs
           lastLogDate: null,
           daysSinceLast: 0,
-          avgGapDays: 0,
-          lifetimeVolume: 0,
-          lifetimeSets: 0,
-          lifetimeHours: 0,
-          scheduledCoreWorkouts: 0,
-          completedScheduledCore: 0,
-          scheduledRestDays: 0,
-          missedPastCoreDays: 0,
-          bonusCompletedSessions: 0,
-          isTodayCorePending: false,
-          adherencePct: 0,
-          active1RMTrend: []
-        } as any,
-        heatmapData: { days: [], logVolMap: {}, dayDetailMap: {}, maxDayVol: 0, monthStart: new Date('2026-10-01') } as any,
-        muscleChartData: [],
-        workoutPieData: [],
-        insightsList: [],
-        getCycleDayForDate: () => 1
-      } as any);
+          avgGapDays: 0
+        })
+      );
 
       act(() => {
         root.render(
@@ -622,63 +535,19 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
     it('ensures singular unit "session" is displayed when rangeLogsCount is exactly 1', () => {
       const mockFitness = createMockFitnessContext();
 
-      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
-        trainingStreak: { currentStreak: 1, longestStreak: 1, lastCompletedDate: '2026-10-26' },
-        adherenceInsight: { adherencePct: 100, completedScheduledCore: 1, scheduledCoreDays: 1, status: 'On Track' },
-        performanceScore: { score: 90, status: 'Strong' },
-        strengthTrend: { currentE1RM: 100, previousE1RM: 95, changePct: 5.2, movementName: 'Squat' },
-        currentDate: new Date('2026-10-26T12:00:00Z'),
-        todayStr: '2026-10-26',
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        getCycleDayForDate: () => 1
-      } as any);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue(
+        createMockFitnessDerivedReturn()
+      );
 
-      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue({
-        index: buildFitnessIndex({}),
-        workoutMap: new Map(),
-        coreWorkoutByCycleDayMap: new Map(),
-        priorityExercises: [] as any,
-        active1RMExerciseId: '',
-        aggregated: {
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
           totalLogsCount: 1,
           rangeLogsCount: 1, // exactly 1 session
           rangeVolume: 2500,
-          priorVolume: 0,
-          volumePeriodChangePct: null,
-          activeDaysCount: 1,
-          avgDuration: 40,
-          biggestWeek: { weekStr: 'Week 43', volume: 2500 },
-          recordsList: [],
-          rangeMuscleVolume: {} as any,
-          rangeMuscleSets: {} as any,
-          rangeMuscleFrequency: {} as any,
-          mostFrequentExercises: [],
-          workoutTypeDistribution: {},
           firstLogDate: '2026-10-26',
-          lastLogDate: '2026-10-26',
-          daysSinceLast: 0,
-          avgGapDays: 0,
-          lifetimeVolume: 2500,
-          lifetimeSets: 12,
-          lifetimeHours: 0.7,
-          scheduledCoreWorkouts: 1,
-          completedScheduledCore: 1,
-          scheduledRestDays: 0,
-          missedPastCoreDays: 0,
-          bonusCompletedSessions: 0,
-          isTodayCorePending: false,
-          adherencePct: 100,
-          active1RMTrend: []
-        } as any,
-        heatmapData: { days: [], logVolMap: {}, dayDetailMap: {}, maxDayVol: 2500, monthStart: new Date('2026-10-01') } as any,
-        muscleChartData: [],
-        workoutPieData: [],
-        insightsList: [],
-        getCycleDayForDate: () => 1
-      } as any);
+          lastLogDate: '2026-10-26'
+        })
+      );
 
       act(() => {
         root.render(
