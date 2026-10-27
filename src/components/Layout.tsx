@@ -161,7 +161,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
               title={user ? getSyncTooltip() : 'Offline database mode'}
               aria-label={user ? getSyncTooltip() : 'Offline database mode'}
               aria-expanded={showTooltip}
-              aria-controls="cloud-status-popover"
+              aria-controls={showTooltip ? "cloud-status-popover" : undefined}
               onClick={() => setShowTooltip(!showTooltip)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape' && showTooltip) {

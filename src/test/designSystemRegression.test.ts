@@ -833,9 +833,9 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(layoutSrc).not.toContain('min-h-[44px] min-w-[44px]');
       expect(layoutSrc).not.toContain('min-w-[44px]');
 
-      // 2. Removal of misleading menu/dialog ARIA semantics
+      // 2. Removal of misleading menu/dialog ARIA semantics & conditional aria-controls
       expect(layoutSrc).not.toContain('aria-haspopup');
-      expect(layoutSrc).toContain('aria-controls="cloud-status-popover"');
+      expect(layoutSrc).toContain('aria-controls={showTooltip ? "cloud-status-popover" : undefined}');
       expect(layoutSrc).toContain('aria-expanded={showTooltip}');
       expect(layoutSrc).toContain('role="status"');
 
@@ -856,13 +856,17 @@ describe('Design System Consolidation & Token Contracts', () => {
         );
       });
 
-      // Status button contract: enforces touch target classes, controls popover, no menu popup declared
-      const statusBtn = container.querySelector('button[aria-controls="cloud-status-popover"]') as HTMLButtonElement;
+      // Status button contract: enforces touch target classes, controls popover conditionally, no menu popup declared
+      const statusBtn = container.querySelector('button.group\\/sync') as HTMLButtonElement;
       expect(statusBtn).toBeTruthy();
       expect(statusBtn.classList.contains('min-h-[44px]')).toBe(true);
       expect(statusBtn.classList.contains('min-w-[44px]')).toBe(true);
       expect(statusBtn.getAttribute('aria-haspopup')).toBeNull();
+
+      // Closed state: assert aria-expanded="false" and that aria-controls is absent
       expect(statusBtn.getAttribute('aria-expanded')).toBe('false');
+      expect(statusBtn.hasAttribute('aria-controls')).toBe(false);
+      expect(statusBtn.getAttribute('aria-controls')).toBeNull();
 
       // Navigation item contract: enforces touch target classes and accessible label
       const navBtn = container.querySelector('#nav-item-dashboard') as HTMLButtonElement;
@@ -870,20 +874,23 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(navBtn.classList.contains('min-h-[44px]')).toBe(true);
       expect(navBtn.classList.contains('min-w-[44px]')).toBe(true);
 
-      // Status popover expansion behavior
+      // Status popover expansion behavior: assert aria-expanded="true", aria-controls matches popover ID, and role="status"
       act(() => {
         statusBtn.click();
       });
       expect(statusBtn.getAttribute('aria-expanded')).toBe('true');
+      expect(statusBtn.getAttribute('aria-controls')).toBe('cloud-status-popover');
       const popover = container.querySelector('#cloud-status-popover');
       expect(popover).toBeTruthy();
       expect(popover?.getAttribute('role')).toBe('status');
 
-      // Keyboard dismissal (Escape key closes popover)
+      // Keyboard dismissal (Escape key closes popover): assert collapsed state and absence of dangling reference
       act(() => {
         statusBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       });
       expect(statusBtn.getAttribute('aria-expanded')).toBe('false');
+      expect(statusBtn.hasAttribute('aria-controls')).toBe(false);
+      expect(statusBtn.getAttribute('aria-controls')).toBeNull();
 
       // Verification boundary note: These assertions verify the computed CSS class contracts
       // and ARIA DOM state in JSDOM, without claiming to measure real-browser pixel layout box
