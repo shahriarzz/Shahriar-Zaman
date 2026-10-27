@@ -502,7 +502,7 @@ export const AnalyticsView: React.FC = () => {
             )}
 
             {/* Summary metrics beneath chart */}
-            <Grid cols={1} colsMd={2} gap="md">
+            <Grid cols={2} gap="md">
               <StatCard
                 label="Average Session Length"
                 value={aggregated.avgDuration}
@@ -804,7 +804,7 @@ export const AnalyticsView: React.FC = () => {
         title="Training Cadence"
         padding="section"
       >
-        <Grid cols={1} colsMd={3} gap="md">
+        <Grid cols={2} gap="md">
           <StatCard
             label="Last Session"
             value={
@@ -836,6 +836,21 @@ export const AnalyticsView: React.FC = () => {
             unit="days"
             accent="emerald"
             sublabel={`Logged in ${timeRange.toUpperCase()} window`}
+          />
+          <StatCard
+            label="Sessions in Window"
+            value={!aggregated.firstLogDate ? '—' : aggregated.rangeLogsCount}
+            unit={!aggregated.firstLogDate ? undefined : (aggregated.rangeLogsCount === 1 ? 'session' : 'sessions')}
+            accent="emerald"
+            isUnavailable={!aggregated.firstLogDate}
+            unavailableLabel="No sessions recorded"
+            sublabel={
+              !aggregated.firstLogDate
+                ? 'No sessions recorded'
+                : aggregated.rangeLogsCount === 0
+                ? `No sessions in ${timeRange.toUpperCase()} window`
+                : `Logged in ${timeRange.toUpperCase()} window`
+            }
           />
         </Grid>
       </Section>

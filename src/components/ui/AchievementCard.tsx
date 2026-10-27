@@ -35,7 +35,7 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
       colorOverride={colorOverride}
       accentVariant="glow"
       padding="section"
-      className={cn("flex flex-col justify-between relative overflow-hidden", className)}
+      className={cn("flex flex-col justify-between relative overflow-hidden min-w-0 max-w-full", className)}
     >
       {/* Subtle brand glow backdrop */}
       <div
@@ -44,8 +44,8 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
         style={{ backgroundColor: `${accentHex}1a` }}
       />
 
-      <div>
-        <div className="flex items-center gap-2 mb-3">
+      <div className="min-w-0 max-w-full">
+        <div className="flex items-center gap-2 mb-3 min-w-0 max-w-full">
           <div
             className={cn("p-2 shrink-0 flex items-center justify-center border", RADIUS.button)}
             style={{
@@ -59,22 +59,22 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({
             )}
           </div>
           <span
-            className={cn(TYPOGRAPHY.label, "font-bold")}
+            className={cn(TYPOGRAPHY.label, "font-bold min-w-0 max-w-full break-words whitespace-normal leading-tight")}
             style={{ color: accentHex }}
           >
             {title}
           </span>
         </div>
 
-        <div className="flex items-baseline gap-2 mt-2">
-          <span className={cn(TYPOGRAPHY.statValueHero, "text-white leading-none")}>
+        <div className="flex items-baseline gap-2 mt-2 min-w-0 max-w-full">
+          <span className={cn(TYPOGRAPHY.statValueHero, "text-white leading-none min-w-0 max-w-full break-words whitespace-normal")}>
             {value}
           </span>
         </div>
       </div>
 
       {subtitle && (
-        <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400 mt-4 leading-relaxed")}>
+        <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400 mt-4 leading-relaxed min-w-0 max-w-full break-words whitespace-normal")}>
           {subtitle}
         </p>
       )}

@@ -74,6 +74,23 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
   const [showTooltip, setShowTooltip] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
+  // Scroll position reset: immediately reset window and document scroll upon actual activeTab change
+  const prevTabRef = React.useRef<ActiveTab>(activeTab);
+  React.useLayoutEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      if (typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+        if (document.documentElement) {
+          document.documentElement.scrollTop = 0;
+        }
+        if (document.body) {
+          document.body.scrollTop = 0;
+        }
+      }
+    }
+  }, [activeTab]);
+
   const getSyncColorClass = () => {
     switch (syncStatus) {
       case 'syncing': return 'bg-amber-500';
