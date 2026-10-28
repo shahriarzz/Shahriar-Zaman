@@ -201,18 +201,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
         ) : todayWorkout ? (
           <Card
-            variant={todayWorkout.type === 'rest' ? 'standard' : 'interactive'}
+            variant="standard"
             padding="section"
-            onClick={() => {
-              if (todayWorkout.type !== 'rest') {
-                haptics.medium();
-                onStartWorkout(todayWorkout.id);
-              }
-            }}
-            className={cn(
-              "group relative overflow-hidden",
-              todayWorkout.type === 'rest' && "cursor-default"
-            )}
+            className="group relative overflow-hidden"
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <Stack spacing="xs">
@@ -231,8 +222,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 variant={todayWorkout.type === 'rest' ? 'secondary' : 'success'}
                 size="lg"
                 disabled={todayWorkout.type === 'rest'}
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() => {
                   if (todayWorkout.type !== 'rest') {
                     haptics.medium();
                     onStartWorkout(todayWorkout.id);

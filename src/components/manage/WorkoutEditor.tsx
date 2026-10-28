@@ -740,17 +740,15 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   filteredLibraryExercises.map((libEx) => (
                     <div
                       key={libEx.name}
-                      onClick={() => handleAddExerciseFromLibrary(libEx)}
                       className={cn(
                         SURFACE.subtle,
                         BORDER.standard,
-                        BORDER.hover,
-                        INTERACTIVE.hover,
                         RADIUS.button,
-                        "p-2.5 border flex items-center justify-between cursor-pointer transition-all"
+                        "p-2.5 border flex items-center justify-between",
+                        TRANSITION.interactive
                       )}
                     >
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 min-w-0 pr-2">
                         <div className="text-xs font-bold text-white">{libEx.name}</div>
                         <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>
                           {libEx.target} · {libEx.sets} sets × {libEx.reps}
@@ -760,10 +758,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         variant="secondary"
                         size="sm"
                         icon={<Plus size={12} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddExerciseFromLibrary(libEx);
-                        }}
+                        onClick={() => handleAddExerciseFromLibrary(libEx)}
                       >
                         Add
                       </Button>

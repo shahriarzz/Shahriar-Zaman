@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP, FOCUS } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP, FOCUS, TRANSITION } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -55,7 +55,8 @@ export function SegmentedControl<T extends string>({
             aria-pressed={isSelected}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "relative transition-colors cursor-pointer select-none flex items-center justify-center",
+              "relative cursor-pointer select-none flex items-center justify-center",
+              TRANSITION.colors,
               GAP.xs,
               size === 'sm' ? cn(SPACING.segmentedSm, TYPOGRAPHY.segmentedSm) : cn(SPACING.segmentedMd, TYPOGRAPHY.segmentedMd),
               RADIUS.button,

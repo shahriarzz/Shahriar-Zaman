@@ -10,25 +10,20 @@ import {
   SemanticColor,
   getAccentColor,
   INTERACTIVE,
-  TRANSITION
+  TRANSITION,
+  FOCUS
 } from '../../styles/tokens';
 
-export type CardSurface = 'base' | 'subtle' | 'recessed' | 'raised' | 'panel' | 'elevated';
+export type CardSurface = 'base' | 'subtle' | 'recessed' | 'elevated';
 export type CardAccentVariant = 'left' | 'top' | 'glow';
 export type CardVariant = 
   | 'standard' 
   | 'elevated' 
   | 'interactive' 
-  | 'panel' 
-  | 'overlay' 
-  | 'default'
   | 'recessed'
   | 'selected'
   | 'warning'
-  | 'destructive'
-  | 'success'
-  | 'compact'
-  | 'section';
+  | 'destructive';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: CardVariant;
@@ -57,15 +52,13 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   style,
   ...props
 }, ref) => {
-  const normalizedVariant = variant === 'default' ? 'standard' : variant;
+  const isActionable = Boolean(onClick);
 
-  // Resolved surface appearance (base / subtle / recessed / raised / elevated / panel)
+  // Resolved surface appearance (base / subtle / recessed / elevated)
   const effectiveSurface: CardSurface = surface || (
-    normalizedVariant === 'panel'
-      ? 'subtle'
-      : normalizedVariant === 'elevated'
+    variant === 'elevated'
       ? 'elevated'
-      : normalizedVariant === 'recessed'
+      : variant === 'recessed'
       ? 'recessed'
       : 'base'
   );
@@ -74,33 +67,26 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     base: SURFACE.default,
     subtle: SURFACE.subtle,
     recessed: SURFACE.recessed,
-    raised: SURFACE.raised,
     elevated: SURFACE.elevated,
-    panel: SURFACE.panel,
   };
 
-  // Determine default padding based on variant if not explicitly provided
-  const effectivePadding: SpacingIntent = padding || (
-    normalizedVariant === 'compact'
-      ? 'compact'
-      : normalizedVariant === 'section'
-      ? 'section'
-      : 'standard'
-  );
+  const paddingClass = SPACING[padding || 'standard'] || SPACING.standard;
 
-  const paddingClass = SPACING[effectivePadding] || SPACING.standard;
-
-  const variantClasses: Record<string, string> = {
+  const variantClasses: Record<CardVariant, string> = {
     standard: cn(BORDER.standard, RADIUS.card, 'border'),
     recessed: cn(BORDER.standard, RADIUS.card, 'border'),
     elevated: cn(BORDER.standard, RADIUS.panel, SHADOW.elevation, 'border'),
     interactive: cn(
       BORDER.standard,
       RADIUS.card,
-      BORDER.hover,
-      INTERACTIVE.hover,
-      TRANSITION.interactive,
-      'border active:scale-[0.99] select-none cursor-pointer'
+      'border',
+      isActionable && cn(
+        BORDER.hover,
+        INTERACTIVE.hover,
+        TRANSITION.interactive,
+        'active:scale-[0.99] select-none cursor-pointer',
+        FOCUS.visible
+      )
     ),
     selected: cn(
       'border border-orange-500 bg-orange-500/10 text-white',
@@ -114,21 +100,13 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       'border border-red-500/30 bg-red-500/10 text-red-200',
       RADIUS.card
     ),
-    success: cn(
-      'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-      RADIUS.card
-    ),
-    compact: cn(BORDER.standard, RADIUS.card, 'border'),
-    section: cn(BORDER.standard, RADIUS.panel, 'border'),
-    panel: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border'),
-    overlay: cn(BORDER.standard, RADIUS.panel, SHADOW.panel, 'border backdrop-blur-xl')
   };
 
   const resolvedAccentHex = colorOverride || getAccentColor(accent);
   const effectiveAccentVariant = accentVariant;
 
   let accentClasses = '';
-  let accentStyles: React.CSSProperties = {};
+  const accentStyles: React.CSSProperties = {};
 
   if (resolvedAccentHex && effectiveAccentVariant) {
     if (effectiveAccentVariant === 'left') {
@@ -138,22 +116,36 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       accentClasses = 'border-t-4';
       accentStyles.borderTopColor = resolvedAccentHex;
     } else if (effectiveAccentVariant === 'glow') {
-      accentClasses = SHADOW.accentGlow(resolvedAccentHex);
+      accentStyles.boxShadow = `0 0 20px ${resolvedAccentHex}40`;
     }
   }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isActionable) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
+      }
+    }
+    props.onKeyDown?.(e);
+  };
 
   return (
     <div
       ref={ref}
+      role={props.role || (isActionable ? 'button' : undefined)}
+      tabIndex={props.tabIndex !== undefined ? props.tabIndex : (isActionable ? 0 : undefined)}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       style={{ ...accentStyles, ...style }}
       className={cn(
         "min-w-0",
         surfaceClasses[effectiveSurface],
-        variantClasses[normalizedVariant] || variantClasses.standard,
+        variantClasses[variant] || variantClasses.standard,
         paddingClass,
-        hoverable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.colors),
-        onClick && !hoverable && 'cursor-pointer',
+        isActionable && FOCUS.visible,
+        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.colors),
+        isActionable && !hoverable && 'cursor-pointer',
         accentClasses,
         className
       )}

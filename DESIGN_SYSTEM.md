@@ -169,9 +169,9 @@ Do not add another spacing or radius scale without proving the current system ca
 ### 5.3 Radius and elevation
 
 - Reuse `RADIUS` role tokens rather than inventing arbitrary rounded values.
-- **Card surface discipline:** Standard and compact cards (`variant="standard"` / `variant="compact"`) do not receive default box shadows (`SHADOW.elevation`). Surfaces are separated by border (`BORDER.standard`) and background (`SURFACE.default` / `SURFACE.subtle`).
-- Keep elevation levels limited. Elevation (`SHADOW.elevation`, `SHADOW.panel`) is reserved for genuinely elevated, floating, or modal surfaces (`variant="elevated"`, `variant="panel"`, `Dialog`).
-- Use `SHADOW.accentGlow` only for explicitly selected, active, or achievement states, consistent with its source comment.
+- **Card surface discipline:** Standard cards (`variant="standard"`) do not receive default box shadows (`SHADOW.elevation`). Surfaces are separated by border (`BORDER.standard`) and background (`SURFACE.default` / `SURFACE.subtle`).
+- Keep elevation levels limited. Elevation (`SHADOW.elevation`) is reserved for genuinely elevated surfaces (`variant="elevated"`, `Dialog`).
+- Use `SHADOW.accentGlowStyle` / `accentVariant="glow"` only for explicitly selected, active, or achievement states, consistent with its source comment.
 - Do not introduce new decorative halos, gradients, blur, or glass effects as routine card styling.
 
 ### 5.4 Touch targets
@@ -184,7 +184,7 @@ The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (
 
 ### 6.1 Use the real motion API
 
-The token module exports `DURATION`, `TRANSITION`, and `MOTION_CONFIG`. `MOTION_CONFIG` is the sole canonical preset object in `src/styles/tokens.ts` (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `tapRestrained`, `hoverRestrained`, `pulseSubtle`, `staggerDelay`). Do not introduce secondary alias objects.
+The token module exports `DURATION`, `TRANSITION`, and `MOTION_CONFIG`. `MOTION_CONFIG` is the sole canonical preset object in `src/styles/tokens.ts` (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `pulseSubtle`, `staggerDelay`). Do not introduce secondary alias objects.
 
 `TRANSITION` provides property-specific CSS transitions coupled with `motion-reduce:transition-none`; prefer these over untargeted `transition-all`. For Framer Motion components, always inspect reduced-motion preference via `useReducedMotion()` from `motion/react` to provide a zero-motion or static alternative for users who prefer reduced motion.
 
@@ -209,7 +209,7 @@ Use and extend existing primitives before creating alternatives. The current `sr
 
 | Primitive/helper | Contract |
 |---|---|
-| `Card` | Shared surface, border, radius, padding, and state/accent styling (canonical `selected` variant; no default elevation on standard/compact) |
+| `Card` | Shared surface, border, radius, padding, and state/accent styling (`standard`, `elevated`, `interactive`, `recessed`, `selected`, `warning`, `destructive` variants; no default elevation on standard) |
 | `Section` | Card-based section composition with optional `SectionHeader` |
 | `SectionHeader` | Reusable section heading, supporting description, and action |
 | `StatCard` | Compact metric presentation |
@@ -225,7 +225,6 @@ Use and extend existing primitives before creating alternatives. The current `sr
 | `ListRow` | Repeated list-row pattern |
 | `ChartTooltip` | Shared Recharts tooltip styling |
 | `WorkoutColorIndicator` | Workout-type color marker |
-| `AmbientBackground` | Existing background treatment; use only where it supports the intended visual hierarchy |
 | `Toast` | Transient feedback |
 | `ErrorFallback` | Error-boundary fallback |
 | `renderIcon` | Shared icon resolution helper |

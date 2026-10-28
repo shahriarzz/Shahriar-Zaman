@@ -16,7 +16,8 @@ import {
   SURFACE,
   BORDER,
   RADIUS,
-  TRANSITION
+  TRANSITION,
+  TYPOGRAPHY
 } from './ui';
 
 interface MuscleBalanceRecoveryProps {
@@ -89,7 +90,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
               <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
                 {totalAttributedWSE.toFixed(1)}
               </span>
-              <span className="text-[10px] text-zinc-500 uppercase ml-1">WSE</span>
+              <span className={cn(TYPOGRAPHY.metadata, "ml-1")}>WSE</span>
             </div>
           </div>
 
@@ -118,14 +119,14 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 }}
                 icon={<Info className="w-3.5 h-3.5" />}
                 aria-label="Toggle coverage breakdown details"
-                className="px-2 text-[11px] text-zinc-400 hover:text-white"
+                className="px-2 text-zinc-400 hover:text-white"
               >
                 {showCoverageDetail ? 'Hide' : 'Details'}
               </Button>
             </div>
 
             {showCoverageDetail && (
-              <div className={cn("mt-2 pt-2 border-t text-[11px] text-zinc-400 space-y-1.5", BORDER.standard)}>
+              <div className={cn("mt-2 pt-2 border-t space-y-1.5", TYPOGRAPHY.bodySecondary, BORDER.standard)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span>Curated: <strong className="text-zinc-200 font-mono">{coverage.curatedSets}</strong></span>
                   <span aria-hidden="true" className="text-zinc-600">·</span>
@@ -133,7 +134,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                   <span aria-hidden="true" className="text-zinc-600">·</span>
                   <span>Unclassified: <strong className="text-zinc-400 font-mono">{coverage.unclassifiedSets}</strong></span>
                 </div>
-                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                <p className={cn(TYPOGRAPHY.helperText, "leading-relaxed")}>
                   Attribution coverage measures how many eligible sets could be mapped to muscles; it does not measure the accuracy of the underlying biomechanical mapping.
                 </p>
               </div>
@@ -160,7 +161,8 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     <div className="flex items-center justify-between text-xs mb-1">
                       <div className="flex items-center gap-2">
                         <span className={cn(
-                          "w-4 font-mono text-[10px] tabular-nums text-right",
+                          "w-4 tabular-nums text-right",
+                          TYPOGRAPHY.metadata,
                           isZero ? "text-zinc-600" : "text-zinc-400"
                         )}>
                           {idx + 1}.
@@ -172,7 +174,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                           {group.label}
                         </span>
                         {isZero && (
-                          <span className="text-[10px] text-zinc-600 tracking-wider font-mono">
+                          <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 font-mono")}>
                             (0 exposure)
                           </span>
                         )}
@@ -183,10 +185,10 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                           "font-mono font-medium tabular-nums",
                           isZero ? "text-zinc-600" : "text-zinc-200"
                         )}>
-                          {group.wse.toFixed(1)} <span className="text-[10px] text-zinc-500">WSE</span>
+                          {group.wse.toFixed(1)} <span className={TYPOGRAPHY.metadata}>WSE</span>
                         </span>
                         <span className={cn(
-                          "w-12 text-right font-mono text-[11px] tabular-nums",
+                          "w-12 text-right font-mono text-xs tabular-nums",
                           isZero ? "text-zinc-600" : "text-emerald-400 font-semibold"
                         )}>
                           {group.sharePercent.toFixed(1)}%
@@ -255,7 +257,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
             </div>
 
             <div className="text-right">
-              <span className="text-[10px] text-zinc-500 uppercase">Window</span>
+              <span className={TYPOGRAPHY.label}>Window</span>
               <div className="text-xs font-mono text-zinc-400 tabular-nums">
                 14 Days
               </div>
@@ -263,7 +265,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
           </div>
 
           {/* Model Disclaimer Notice */}
-          <p className="text-[11px] text-zinc-500 mb-4 leading-relaxed">
+          <p className={cn(TYPOGRAPHY.caption, "mb-4 leading-relaxed")}>
             Recency-weighted residual workload estimate · Derived from completed sets · Not measured physiological recovery.
           </p>
 
@@ -282,7 +284,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                   <div key={item.muscle} className="group">
                     <div className="flex items-center justify-between text-xs mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="w-4 font-mono text-[10px] text-zinc-500 tabular-nums text-right">
+                        <span className={cn("w-4 tabular-nums text-right", TYPOGRAPHY.metadata)}>
                           #{idx + 1}
                         </span>
                         <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
@@ -293,7 +295,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                       <div className="flex items-center gap-3 text-right">
                         {/* Recency Context */}
                         <span className={cn(
-                          "text-[11px] font-mono tabular-nums",
+                          "font-mono text-xs tabular-nums",
                           hasRecent ? "text-zinc-300" : "text-zinc-500"
                         )}>
                           {item.relativeLabel}
@@ -301,7 +303,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
 
                         {/* Residual Score with 2-decimal precision */}
                         <span className="w-18 font-mono font-bold text-xs text-emerald-400 tabular-nums">
-                          {item.residualStimulus.toFixed(2)} <span className="text-[10px] text-zinc-500 font-normal">res</span>
+                          {item.residualStimulus.toFixed(2)} <span className={TYPOGRAPHY.unit}>res</span>
                         </span>
                       </div>
                     </div>
@@ -323,7 +325,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
         </div>
 
         {/* Footer Context / Lifetime History Info */}
-        <div className={cn("mt-4 pt-3 border-t flex items-center justify-between text-[11px] text-zinc-500", BORDER.subtle)}>
+        <div className={cn("mt-4 pt-3 border-t flex items-center justify-between", TYPOGRAPHY.caption, BORDER.subtle)}>
           <span>Decay model: 2-day half-life exponential residual</span>
           <span className="font-mono text-zinc-400">
             {hasAnyResidual ? `Peak: ${recoveryResult.items[0]?.label}` : 'No recent stimulus'}

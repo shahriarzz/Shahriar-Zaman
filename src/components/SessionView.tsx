@@ -399,42 +399,42 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
                         <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 text-center")}>{si + 1}</span>
                         {/* specialized table/matrix input for active workout set weight */}
-                        <input
+                        <Input
                           type="number"
+                          variant="standard"
+                          size="lg"
                           placeholder="kg"
                           value={s.weight}
                           inputMode="decimal"
                           onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
+                          aria-label={`Set ${si + 1} weight`}
                           className={cn(
-                            "border py-3 px-1 text-sm text-center outline-none placeholder:text-zinc-850 min-w-0 font-mono",
-                            TRANSITION.colors,
-                            RADIUS.button,
-                            SURFACE.recessed,
-                            isExtremeWeight ? cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning) : cn(BORDER.standard, "focus:border-zinc-500")
+                            "text-center font-mono",
+                            isExtremeWeight && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
                           )}
                         />
                         {/* specialized table/matrix input for active workout set reps */}
-                        <input
+                        <Input
                           type="number"
+                          variant="standard"
+                          size="lg"
                           placeholder="reps"
                           value={s.reps}
                           inputMode="numeric"
                           onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
+                          aria-label={`Set ${si + 1} reps`}
                           className={cn(
-                            "border py-3 px-1 text-sm text-center outline-none placeholder:text-zinc-850 min-w-0 font-mono",
-                            TRANSITION.colors,
-                            RADIUS.button,
-                            SURFACE.recessed,
-                            isExtremeReps ? cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning) : cn(BORDER.standard, "focus:border-zinc-500")
+                            "text-center font-mono",
+                            isExtremeReps && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
                           )}
                         />
                         <div className="flex justify-center">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={() => handleSetDone(ex.id, si, s.done)}
                             className={cn(
-                              "w-12 h-12 p-0 flex items-center justify-center border",
+                              "border",
                               TRANSITION.interactive,
                               RADIUS.button,
                               s.done ? cn("bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400", SHADOW.emeraldGlow) : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
@@ -446,7 +446,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                         <div className="flex justify-center">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             icon={<Trash2 size={16} />}
                             onClick={() => {
                               haptics.warning();
@@ -454,7 +454,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                             }}
                             disabled={setsForEx.length <= 1}
                             className={cn(
-                              "w-12 h-12 p-0 border text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10",
+                              "border text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10",
                               RADIUS.button,
                               BORDER.subtle,
                               SURFACE.recessed

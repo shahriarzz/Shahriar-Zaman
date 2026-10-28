@@ -22,7 +22,6 @@ import {
   Stack,
   Grid,
   EmptyState,
-  SegmentedControl,
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
   getAccentColor,
@@ -241,8 +240,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
     setEditVerified(false);
   };
 
-  const [historySubTab, setHistorySubTab] = useState<'log'>('log');
-
   return (
     <Stack spacing="xl" className="pt-4">
       {/* Upper header */}
@@ -251,20 +248,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
         eyebrowColor="orange"
         title="History"
         size="page"
-        action={
-          <SegmentedControl
-            value={historySubTab}
-            onChange={(val) => {
-              haptics.selection();
-              setHistorySubTab(val as 'log');
-            }}
-            options={[
-              { value: 'log', label: 'Log', icon: <Calendar size={14} /> }
-            ]}
-            accent="orange"
-            size="sm"
-          />
-        }
       />
 
       {/* Search Bar */}
@@ -812,8 +795,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                           <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center">
                                             <span className="font-mono text-xs text-zinc-400 text-center font-bold">{idx + 1}</span>
                                             {/* specialized table/matrix input for historical set weight */}
-                                            <input
+                                            <Input
                                               type="number"
+                                              variant="standard"
+                                              size="md"
                                               placeholder="0"
                                               value={s.weight}
                                               onChange={(e) => {
@@ -828,16 +813,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                   return { ...prev, sets: newSets };
                                                 });
                                               }}
+                                              aria-label={`Set ${idx + 1} weight`}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white",
-                                                TRANSITION.colors,
-                                                RADIUS.button,
-                                                isExtremeW ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
+                                                "text-center text-xs",
+                                                isExtremeW && "border-amber-500 text-amber-400 font-bold"
                                               )}
                                             />
                                             {/* specialized table/matrix input for historical set reps */}
-                                            <input
+                                            <Input
                                               type="number"
+                                              variant="standard"
+                                              size="md"
                                               placeholder="0"
                                               value={s.reps}
                                               onChange={(e) => {
@@ -852,11 +838,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                                   return { ...prev, sets: newSets };
                                                 });
                                               }}
+                                              aria-label={`Set ${idx + 1} reps`}
                                               className={cn(
-                                                "w-full min-w-0 bg-zinc-950 border py-2 px-2 text-xs text-center focus:outline-none font-mono text-white",
-                                                TRANSITION.colors,
-                                                RADIUS.button,
-                                                isExtremeR ? "border-amber-500 text-amber-400 font-bold" : cn(BORDER.standard, "focus:border-zinc-500")
+                                                "text-center text-xs",
+                                                isExtremeR && "border-amber-500 text-amber-400 font-bold"
                                               )}
                                             />
                                             <div className="flex items-center justify-center">

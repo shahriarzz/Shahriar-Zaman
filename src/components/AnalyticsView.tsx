@@ -355,6 +355,7 @@ export const AnalyticsView: React.FC = () => {
                     <div
                       key={`day-${dateStr}-${dayIdx}`}
                       title={tooltipText}
+                      style={isCurrentMonth && intensity.glow ? { boxShadow: `0 0 20px ${SEMANTIC_COLORS.emerald}40` } : undefined}
                       className={cn(
                         "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
                         TRANSITION.colors,
@@ -363,8 +364,7 @@ export const AnalyticsView: React.FC = () => {
                           ? cn(
                               intensity.bg,
                               intensity.border,
-                              intensity.text,
-                              intensity.glow && SHADOW.accentGlow(SEMANTIC_COLORS.emerald)
+                              intensity.text
                             )
                           : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
                       )}
@@ -696,7 +696,7 @@ export const AnalyticsView: React.FC = () => {
               {visibleRecords.map((rec, idx) => (
                 <Card
                   key={rec.exerciseName ? `rec-${rec.exerciseName}-${idx}` : `rec-${idx}`}
-                  variant="interactive"
+                  variant="standard"
                   accent="orange"
                   padding="standard"
                   className="flex items-center justify-between group"

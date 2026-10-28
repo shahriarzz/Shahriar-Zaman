@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
+import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP, TRANSITION, CONTROL_HEIGHT, ICON_SIZE, INTERACTIVE } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { haptics } from '../../utils/haptics';
 
@@ -88,10 +88,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   };
 
   const iconSizes: Record<ButtonSize, number> = {
-    sm: 13,
-    md: 15,
-    lg: 16,
-    icon: 16,
+    sm: ICON_SIZE.sm,
+    md: ICON_SIZE.md,
+    lg: ICON_SIZE.lg,
+    icon: ICON_SIZE.md,
   };
 
   const effectiveLeftIcon = leftIcon || (iconPosition === 'left' ? icon : undefined);
@@ -114,8 +114,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
         variantClasses[variant] || variantClasses.secondary,
         sizeClasses[size],
         fullWidth && "w-full",
-        (disabled || loading) && "opacity-40 cursor-not-allowed pointer-events-none",
-        !disabled && !loading && "active:scale-[0.98]",
+        (disabled || loading) && INTERACTIVE.disabled,
+        !disabled && !loading && INTERACTIVE.active,
         className
       )}
       {...props}

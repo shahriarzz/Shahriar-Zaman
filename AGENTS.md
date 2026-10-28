@@ -158,7 +158,7 @@ Before editing any file:
 ### Post-Implementation Verification Checklist
 Before declaring any task complete:
 - [ ] **Typecheck**: `npm run lint` (`tsc --noEmit`) passes with 0 errors.
-- [ ] **Unit & Regression Tests**: `npx vitest run` passes with 100% of test files passing (verified baseline: 24 test files, 346 tests; all suites must pass cleanly).
+- [ ] **Unit & Regression Tests**: `npx vitest run` passes with 100% of test files passing (all regression suites must pass cleanly).
 - [ ] **Production Build**: `npm run build` succeeds cleanly (`build:web` and `build:server`).
 - [ ] **Regression Coverage**: Added dedicated test cases in `src/test/` for any new logic, edge case, or bug fix.
 - [ ] **Documentation Sync**: If an approved architectural change occurred, updated `ARCHITECTURE.md` and `DATA_MODEL.md` in the same commit.

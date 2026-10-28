@@ -1,8 +1,8 @@
 # GAINLOG System Architecture & Architectural Contract
 
 > **Document Status**: Active Architectural Contract  
-> **Last Verified Date**: 2026-10-21  
-> **Test Verification Evidence**: 28 Vitest suites, 440 tests passing (`npx vitest run`)  
+> **Last Verified Date**: 2026-10-28  
+> **Test Verification Evidence**: 100% Vitest suites passing cleanly (`npx vitest run`)  
 > **Maintenance Rule**: Any authorized architectural change MUST update this document in the same commit.
 
 ---
@@ -80,7 +80,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 7. **Design Tokens & Shared Primitives** (`src/styles/tokens.ts`, `src/components/ui/`, `src/components/MuscleBalanceRecovery.tsx`):
    Centralizes application visual design: `SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, `SHADOW`, `GAP`, `CHART_THEME`, and modular primitives (`Card`, `StatCard`, `Section`, `Button`, `Dialog`, etc.). Governed by a unified semantic color configuration (`orange` for brand/achievement, `emerald` for data visualization/success, `amber` for warning/partial, `red` for destructive/missed, `indigo` as the canonical intelligence/strength-trend color, and `zinc` for neutral) and canonical semantic radius scale (`badge`, `button`, `card`, `panel`, `pill`). Renders responsive side-by-side analytics for muscle balance and recovery context with zero-pill discipline and tabular numerals. Empty states cleanly distinguish zero eligible sets from unclassified sets and zero recent residual stimulus.
 8. **Tests & Build Configuration** (`src/test/`, `vite.config.ts`, `package.json`, `.github/workflows/ci.yml`, `android/app/build.gradle`):
-   Automated regression suite (25 test suites, 362 tests), Vite bundler, and GitHub Actions CI workflow (`ci.yml`):
+   Automated regression suite (all Vitest suites passing cleanly), Vite bundler, and GitHub Actions CI workflow (`ci.yml`):
    - **`validate`**: Runs `npm ci`, `npm run lint` (`tsc --noEmit`), `npm test` (Vitest), and `npm run build`.
    - **`android-build`**: Builds the Android debug APK (`./gradlew assembleDebug`) and uploads artifacts. Runs unconditionally after `validate` succeeds.
    - **`android-release-validation`**: Guarded explicitly to run only on trusted `push` events when repository variable `vars.ANDROID_RELEASE_ENABLED == 'true'`. Pull requests (including same-repository PRs) never trigger this job. Requires secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Decodes release keystore and verifies `./gradlew bundleRelease`. If enabled on push with missing secrets, halts with a specific error message. When disabled or on pull requests, skips cleanly without impacting ordinary build/test validation.

@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE, TRANSITION } from '../../styles/tokens';
+import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE, TRANSITION, FOCUS } from '../../styles/tokens';
 
 export interface ListRowProps {
   leading?: React.ReactNode;
@@ -8,7 +8,6 @@ export interface ListRowProps {
   trailing?: React.ReactNode;
   children?: React.ReactNode;
   selected?: boolean;
-  interactive?: boolean;
   onClick?: () => void;
   className?: string;
   variant?: 'standard' | 'subtle' | 'recessed';
@@ -20,16 +19,27 @@ export const ListRow: React.FC<ListRowProps> = ({
   trailing,
   children,
   selected = false,
-  interactive = false,
   onClick,
   className,
   variant = 'subtle',
 }) => {
-  const isClickable = Boolean(onClick || interactive);
+  const isClickable = Boolean(onClick);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isClickable) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.();
+      }
+    }
+  };
 
   return (
     <div
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       className={cn(
         "border flex items-center justify-between gap-3 text-xs text-zinc-200",
         TRANSITION.interactive,
@@ -39,9 +49,8 @@ export const ListRow: React.FC<ListRowProps> = ({
         variant === 'recessed' && SURFACE.recessed,
         variant === 'standard' && SURFACE.default,
         BORDER.standard,
-        isClickable && INTERACTIVE.hover,
-        isClickable && "cursor-pointer",
-        selected && "border-orange-500 bg-orange-500/10 text-white shadow-[0_0_15px_rgba(249,115,22,0.15)]",
+        isClickable && cn(INTERACTIVE.hover, INTERACTIVE.active, "cursor-pointer select-none", FOCUS.visible),
+        selected && "border-orange-500 bg-orange-500/10 text-white",
         className
       )}
     >

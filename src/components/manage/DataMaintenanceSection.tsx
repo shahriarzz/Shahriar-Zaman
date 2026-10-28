@@ -485,7 +485,7 @@ export const DataMaintenanceSection: React.FC = () => {
                 return (
                   <Card
                     key={b.timestamp}
-                    variant="interactive"
+                    variant="standard"
                     surface="subtle"
                     padding="compact"
                     className="flex items-center justify-between gap-3 text-left"

@@ -149,8 +149,9 @@ export const ToastContainer: React.FC = () => {
               <Button
                 variant="ghost"
                 size="icon"
+                haptic="none"
                 onClick={() => removeToast(toast.id)}
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-zinc-500 hover:text-zinc-300 shrink-0"
                 aria-label="Dismiss notification"
                 icon={<X size={14} />}
               />

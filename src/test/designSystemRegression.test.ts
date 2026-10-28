@@ -28,6 +28,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Dialog, DialogHeader } from '../components/ui/Dialog';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
+import { ListRow } from '../components/ui/ListRow';
 import { Layout } from '../components/Layout';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 
@@ -269,8 +270,6 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(MOTION_CONFIG.dialogSurface).toBeDefined();
       expect(MOTION_CONFIG.calendarPanel).toBeDefined();
       expect(MOTION_CONFIG.collapse).toBeDefined();
-      expect(MOTION_CONFIG.tapRestrained).toBeDefined();
-      expect(MOTION_CONFIG.hoverRestrained).toBeDefined();
       expect(MOTION_CONFIG.pulseSubtle).toBeDefined();
       expect(typeof MOTION_CONFIG.staggerDelay).toBe('function');
     });
@@ -488,11 +487,9 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(pingViolations, `Found decorative animate-ping in: ${pingViolations.join(', ')}`).toEqual([]);
     });
 
-    it('verifies AmbientBackground does not use continuous animate-pulse or unapproved blue glow', () => {
+    it('verifies dead AmbientBackground component has been removed', () => {
       const ambientPath = path.join(rootDir, 'src/components/ui/AmbientBackground.tsx');
-      const content = fs.readFileSync(ambientPath, 'utf8');
-      expect(content).not.toContain('animate-pulse');
-      expect(content).not.toContain('bg-blue-500');
+      expect(fs.existsSync(ambientPath)).toBe(false);
     });
 
     it('verifies status dots across Layout, App, and AccountSection do not use continuous animate-pulse', () => {
@@ -771,7 +768,7 @@ describe('Design System Consolidation & Token Contracts', () => {
 
     it('verifies Calendar date buttons and WorkoutEditor expand/collapse buttons enforce 44x44px touch-target tokens', () => {
       const calendarSrc = fs.readFileSync(path.join(rootDir, 'src/components/Calendar.tsx'), 'utf8');
-      expect(calendarSrc).toContain('min-h-[44px] min-w-[44px]');
+      expect(calendarSrc).toContain('CONTROL_HEIGHT.touchTarget');
 
       const workoutEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/WorkoutEditor.tsx'), 'utf8');
       expect(workoutEditorSrc).toContain('size="icon"');
@@ -913,6 +910,201 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(appSrc).toContain("CapApp.addListener('backButton'");
       expect(appSrc).toContain("leaveSessionRef.current('dashboard')");
       expect(appSrc).toContain("CapApp.minimizeApp()");
+    });
+  });
+
+  describe('14. Token Discipline, Interactive Contracts & Accessibility Enforcement', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('verifies zero transition-all in production UI code in src/', () => {
+      function getUiFiles(dir: string): string[] {
+        let results: string[] = [];
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            results = results.concat(getUiFiles(fullPath));
+          } else if (
+            (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) &&
+            !entry.name.includes('.test.')
+          ) {
+            results.push(fullPath);
+          }
+        }
+        return results;
+      }
+
+      const files = getUiFiles(path.join(rootDir, 'src/components'));
+      const violations: string[] = [];
+
+      files.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
+        if (content.includes('transition-all')) {
+          violations.push(path.relative(rootDir, file));
+        }
+      });
+
+      expect(violations, `Found forbidden transition-all in: ${violations.join(', ')}`).toEqual([]);
+    });
+
+    it('verifies zero zinc-850 references in production UI code and stylesheets', () => {
+      const componentFiles = fs.readdirSync(path.join(rootDir, 'src/components')).filter(f => f.endsWith('.tsx') || f.endsWith('.ts'));
+      const violations: string[] = [];
+
+      componentFiles.forEach((file) => {
+        const content = fs.readFileSync(path.join(rootDir, 'src/components', file), 'utf8');
+        if (content.includes('zinc-850')) {
+          violations.push(file);
+        }
+      });
+
+      const cssContent = fs.readFileSync(path.join(rootDir, 'src/index.css'), 'utf8');
+      if (cssContent.includes('zinc-850')) {
+        violations.push('src/index.css');
+      }
+
+      expect(violations, `Found deprecated zinc-850 in: ${violations.join(', ')}`).toEqual([]);
+    });
+
+    it('verifies zero raw pixel typography utilities (text-[10px], text-[11px]) outside tokens.ts in components', () => {
+      function getComponentFiles(dir: string): string[] {
+        let results: string[] = [];
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            results = results.concat(getComponentFiles(fullPath));
+          } else if (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) {
+            results.push(fullPath);
+          }
+        }
+        return results;
+      }
+
+      const files = getComponentFiles(path.join(rootDir, 'src/components'));
+      const violations: string[] = [];
+
+      files.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
+        if (/text-\[1[01]px\]/.test(content)) {
+          violations.push(path.relative(rootDir, file));
+        }
+      });
+
+      expect(violations, `Found raw typography utilities in components: ${violations.join(', ')}`).toEqual([]);
+    });
+
+    it('verifies Card keyboard operability, role assignment, and dynamic accent-glow inline styling', () => {
+      let clicked = false;
+      const handleClick = () => { clicked = true; };
+
+      // Actionable Card: gets role="button", tabIndex=0, responds to Enter and Space
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, accent: 'emerald', accentVariant: 'glow' },
+            React.createElement('span', null, 'Interactive Card')
+          )
+        );
+      });
+
+      const cardEl = container.firstElementChild as HTMLDivElement;
+      expect(cardEl).toBeTruthy();
+      expect(cardEl.getAttribute('role')).toBe('button');
+      expect(cardEl.getAttribute('tabindex')).toBe('0');
+      expect(cardEl.style.boxShadow).toContain('20px');
+
+      // Key activation
+      act(() => {
+        cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      expect(clicked).toBe(true);
+
+      clicked = false;
+      act(() => {
+        cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      });
+      expect(clicked).toBe(true);
+
+      // Non-actionable Card: no role="button", no tabIndex
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { variant: 'standard' },
+            React.createElement('span', null, 'Standard Card')
+          )
+        );
+      });
+
+      const standardCard = container.firstElementChild as HTMLDivElement;
+      expect(standardCard.getAttribute('role')).toBeNull();
+      expect(standardCard.getAttribute('tabindex')).toBeNull();
+    });
+
+    it('verifies ListRow keyboard operability and accessible semantics', () => {
+      let clicked = false;
+      const handleClick = () => { clicked = true; };
+
+      // Actionable ListRow: gets role="button", tabIndex=0, responds to Enter and Space
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Interactive Row')
+          )
+        );
+      });
+
+      const rowEl = container.firstElementChild as HTMLDivElement;
+      expect(rowEl).toBeTruthy();
+      expect(rowEl.getAttribute('role')).toBe('button');
+      expect(rowEl.getAttribute('tabindex')).toBe('0');
+
+      act(() => {
+        rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      expect(clicked).toBe(true);
+
+      // Non-actionable ListRow: no role, no tabIndex
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            null,
+            React.createElement('span', null, 'Static Row')
+          )
+        );
+      });
+
+      const staticRow = container.firstElementChild as HTMLDivElement;
+      expect(staticRow.getAttribute('role')).toBeNull();
+      expect(staticRow.getAttribute('tabindex')).toBeNull();
+    });
+
+    it('verifies Calendar date cell accessibility contracts in source', () => {
+      const calendarSrc = fs.readFileSync(path.join(rootDir, 'src/components/Calendar.tsx'), 'utf8');
+      expect(calendarSrc).toContain('CONTROL_HEIGHT.touchTarget');
+      expect(calendarSrc).toContain('FOCUS.visible');
+      expect(calendarSrc).toContain("aria-current={isToday ? 'date' : undefined}");
+      expect(calendarSrc).toContain("aria-pressed={Boolean(isSelected)}");
+      expect(calendarSrc).toContain("disabled={!isCurrentMonthDay}");
     });
   });
 });

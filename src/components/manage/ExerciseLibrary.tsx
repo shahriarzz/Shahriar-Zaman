@@ -145,13 +145,17 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
             return (
               <Card
                 key={item.name}
-                variant="interactive"
+                variant="standard"
                 surface="base"
                 padding="standard"
-                onClick={() => onOpenExerciseEditor(item as Exercise)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all cursor-pointer group select-none"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 group select-none"
               >
-                <div className="space-y-1.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenExerciseEditor(item as Exercise)}
+                  className="text-left space-y-1.5 min-w-0 flex-1 p-1 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 transition-colors"
+                  aria-label={`Edit ${item.name} definition`}
+                >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-white text-sm group-hover:text-orange-400 transition-colors">
                       {item.name}
@@ -180,17 +184,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                       Used in: {item.usedInWorkouts.map(w => w.name).join(', ') || 'None'}
                     </span>
                   </div>
-                </div>
+                </button>
 
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                   <Button
                     variant="outline"
                     size="sm"
                     icon={<Edit3 size={12} />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenExerciseEditor(item as Exercise);
-                    }}
+                    onClick={() => onOpenExerciseEditor(item as Exercise)}
                   >
                     Edit Definition
                   </Button>

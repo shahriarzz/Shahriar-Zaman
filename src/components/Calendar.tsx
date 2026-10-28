@@ -45,7 +45,9 @@ import {
   DURATION,
   MOTION_CONFIG,
   TRANSITION,
-  SHADOW
+  SHADOW,
+  CONTROL_HEIGHT,
+  FOCUS
 } from './ui';
 
 interface CalendarProps {
@@ -222,15 +224,21 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     key={dateStr}
                     type="button"
                     data-testid={`calendar-day-${dateStr}`}
+                    disabled={!isCurrentMonthDay}
+                    aria-label={`${format(day, 'MMMM d, yyyy')}${status?.label ? `, ${status.label}` : ''}`}
+                    aria-current={isToday ? 'date' : undefined}
+                    aria-pressed={Boolean(isSelected)}
                     onClick={() => {
                       haptics.selection();
                       setSelectedDate(day);
                     }}
                     className={cn(
-                      "group relative aspect-square min-h-[44px] min-w-[44px] sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                      "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                      CONTROL_HEIGHT.touchTarget,
+                      FOCUS.visible,
                       TRANSITION.interactive,
                       RADIUS.card,
-                      !isCurrentMonthDay && "opacity-20 pointer-events-none",
+                      !isCurrentMonthDay && "opacity-20 pointer-events-none disabled:cursor-not-allowed",
                       isSelected
                         ? cn("border-emerald-400/70 bg-emerald-500/15", SHADOW.emeraldSubtle)
                         : isToday

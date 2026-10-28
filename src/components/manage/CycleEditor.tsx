@@ -14,7 +14,8 @@ import {
   BORDER,
   SURFACE,
   RADIUS,
-  SEMANTIC_COLORS
+  SEMANTIC_COLORS,
+  TRANSITION
 } from '../ui';
 import { cn } from '../../lib/utils';
 import { haptics } from '../../utils/haptics';
@@ -110,7 +111,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               data-testid={`cycle-slot-${day}`}
               data-cycle-day={day}
               onClick={() => handleWorkoutClick(wo.id)}
-              className={cn("flex items-center justify-between group transition-all cursor-pointer select-none", BORDER.interactive)}
+              className={cn("flex items-center justify-between group cursor-pointer select-none", TRANSITION.interactive, BORDER.interactive)}
             >
               <div className="flex items-center gap-4 min-w-0">
                 {/* Day Indicator Badge / Pill */}
@@ -208,7 +209,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                   padding="compact"
                   onClick={() => handleWorkoutClick(wo.id)}
                   data-testid={`malformed-workout-${wo.id}`}
-                  className={cn("flex items-center justify-between group transition-all cursor-pointer select-none", BORDER.interactive)}
+                  className={cn("flex items-center justify-between group cursor-pointer select-none", TRANSITION.interactive, BORDER.interactive)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={cn("flex flex-col items-center justify-center w-10 h-10 shrink-0 border text-amber-400", RADIUS.button, SURFACE.recessed, BORDER.standard)}>
@@ -261,7 +262,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                   surface="base"
                   padding="compact"
                   onClick={() => handleWorkoutClick(wo.id)}
-                  className={cn("flex items-center justify-between group transition-all cursor-pointer select-none", BORDER.interactive)}
+                  className={cn("flex items-center justify-between group cursor-pointer select-none", TRANSITION.interactive, BORDER.interactive)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <WorkoutColorIndicator type={wo.type} size="sm" />

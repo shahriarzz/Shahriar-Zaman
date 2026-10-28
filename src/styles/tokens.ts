@@ -96,7 +96,6 @@ export const TRANSITION = {
   transform: 'transition-transform duration-300 motion-reduce:transition-none',
   opacity: 'transition-opacity duration-150 motion-reduce:transition-none',
   interactive: 'transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none',
-  width: 'transition-[width] duration-300 motion-reduce:transition-none',
   button: 'transition-[background-color,border-color,color,transform] duration-200 motion-reduce:transition-none',
   progressBar: 'transition-[width,background-color] duration-300 motion-reduce:transition-none',
 } as const;
@@ -147,10 +146,6 @@ export const MOTION_CONFIG = {
     exit: { height: 0, opacity: 0 },
     transition: { duration: DURATION.standard / 1000, ease: 'easeInOut' },
   },
-  // Restrained interactive feedback for controls (Calendar days, micro-buttons)
-  tapRestrained: { scale: 0.985 },
-  hoverRestrained: { scale: 1.015 },
-  pressTransition: { type: 'spring' as const, stiffness: 400, damping: 25 },
   // Subtle completion celebration / pulse
   pulseSubtle: {
     scale: [1, 1.015, 1],
@@ -163,7 +158,6 @@ export const MOTION_CONFIG = {
 export const INTERACTIVE = {
   hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors motion-reduce:transition-none',
   active: 'active:scale-[0.99] transition-transform motion-reduce:transition-none',
-  focus: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950',
   disabled: 'opacity-40 cursor-not-allowed pointer-events-none select-none',
 } as const;
 
@@ -176,8 +170,8 @@ export const SHADOW = {
   elevation: 'shadow-md',
   panel: 'shadow-2xl',
   modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
-  // accentGlow reserved exclusively for active/selected/achievement states — never decorative
-  accentGlow: (hex: string) => `shadow-[0_0_20px_${hex}40]`,
+  // accentGlowStyle returns a dynamic CSSProperties boxShadow rather than an interpolated Tailwind class
+  accentGlowStyle: (hex: string) => ({ boxShadow: `0 0 20px ${hex}40` }),
   emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
   emeraldSubtle: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
   emeraldInset: 'shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]',
