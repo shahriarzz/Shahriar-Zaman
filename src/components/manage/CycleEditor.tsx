@@ -125,7 +125,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                 {/* Workout Details */}
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-bold text-white text-base break-words group-hover:text-orange-400 transition-colors">
+                    <span className={cn("font-bold text-white text-base break-words group-hover:text-orange-400", TRANSITION.colors)}>
                       {wo.name}
                     </span>
                     <Badge
@@ -170,7 +170,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               </div>
 
               {/* Right Tap Affordance */}
-              <div className="flex items-center gap-1.5 text-zinc-500 group-hover:text-white transition-colors shrink-0 ml-3">
+              <div className={cn("flex items-center gap-1.5 text-zinc-500 group-hover:text-white shrink-0 ml-3", TRANSITION.colors)}>
                 <span className={cn(TYPOGRAPHY.eyebrow, "hidden sm:inline-block")}>
                   Edit
                 </span>
@@ -217,7 +217,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                     </div>
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-white text-sm break-words group-hover:text-orange-400 transition-colors">
+                        <span className={cn("font-bold text-white text-sm break-words group-hover:text-orange-400", TRANSITION.colors)}>
                           {wo.name}
                         </span>
                         <Badge
@@ -233,7 +233,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 text-zinc-500 group-hover:text-white transition-colors shrink-0">
+                  <div className={cn("flex items-center gap-1 text-zinc-500 group-hover:text-white shrink-0", TRANSITION.colors)}>
                     <ChevronRight size={16} />
                   </div>
                 </Card>
@@ -267,7 +267,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                   <div className="flex items-center gap-3 min-w-0">
                     <WorkoutColorIndicator type={wo.type} size="sm" />
                     <div className="space-y-0.5 min-w-0">
-                      <div className="font-bold text-white text-sm break-words group-hover:text-orange-400 transition-colors">
+                      <div className={cn("font-bold text-white text-sm break-words group-hover:text-orange-400", TRANSITION.colors)}>
                         {wo.name}
                       </div>
                       <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
@@ -276,7 +276,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 text-zinc-500 group-hover:text-white transition-colors shrink-0">
+                  <div className={cn("flex items-center gap-1 text-zinc-500 group-hover:text-white shrink-0", TRANSITION.colors)}>
                     <ChevronRight size={16} />
                   </div>
                 </Card>

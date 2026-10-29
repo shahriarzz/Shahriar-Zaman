@@ -325,7 +325,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                     <div
                       className={cn(
                         TYPOGRAPHY.eyebrow,
-                        "text-zinc-500 group-hover:text-amber-400 transition-colors"
+                        "text-zinc-500 group-hover:text-amber-400",
+                        TRANSITION.colors
                       )}
                     >
                       {summary.monthKey}
@@ -972,7 +973,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                   setSelectedExKey(isSelected ? null : exKey);
                                 }}
                                 className={cn(
-                                  "w-full text-left p-4 pr-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-800/40 transition-colors cursor-pointer relative",
+                                  "w-full text-left p-4 pr-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-800/40 cursor-pointer relative",
+                                  TRANSITION.colors,
                                   isSelected && "bg-zinc-800/30"
                                 )}
                               >

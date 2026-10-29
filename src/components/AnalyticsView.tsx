@@ -702,7 +702,7 @@ export const AnalyticsView: React.FC = () => {
                   className="flex items-center justify-between group"
                 >
                   <div className={cn("min-w-0 pr-2", STACK_SPACING.xs)}>
-                    <p className="text-xs font-bold text-white group-hover:text-orange-400 transition-colors break-words">
+                    <p className={cn("text-xs font-bold text-white group-hover:text-orange-400 break-words", TRANSITION.colors)}>
                       {rec.exerciseName}
                     </p>
                     <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>

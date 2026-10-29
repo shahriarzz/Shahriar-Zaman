@@ -172,30 +172,68 @@ export const SHADOW = {
   modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
   /**
    * Generates inline CSSProperties boxShadow for dynamic accent glow.
-   * Single source of truth for glow geometry (0 0 20px) and ~25% alpha.
-   * Handles 6-digit hex (#rrggbb), 3-digit hex (#rgb), 8-digit hex (#rrggbbaa),
-   * and rgb/rgba color strings safely without runtime Tailwind interpolation.
+   * Single source of truth for glow geometry (0 0 20px) and canonical ~25% alpha.
+   *
+   * Supported color formats and alpha rules:
+   * 1. Six-digit hex (#rrggbb): applies canonical 25% glow alpha (hex 40): `0 0 20px #rrggbb40`.
+   * 2. Three-digit hex (#rgb): expands each nibble to two characters and applies canonical 25% glow alpha: `0 0 20px #rrggbbaa40`.
+   * 3. Eight-digit hex (#rrggbbaa): explicitly preserves caller-supplied alpha: `0 0 20px #rrggbbaa`.
+   * 4. rgb(r, g, b): validates channels (0-255) and applies canonical 25% alpha: `0 0 20px rgba(r, g, b, 0.25)`.
+   * 5. rgba(r, g, b, a): validates channels (0-255) and alpha (0-1), explicitly preserving caller-supplied alpha: `0 0 20px rgba(r, g, b, a)`.
+   *
+   * Any unsupported format, malformed hex, out-of-range channel/alpha, or empty input returns `{ boxShadow: 'none' }`.
    */
   accentGlowStyle: (color: string): { boxShadow: string } => {
-    if (!color) return { boxShadow: 'none' };
+    if (!color || typeof color !== 'string') return { boxShadow: 'none' };
     const trimmed = color.trim();
+    if (!trimmed) return { boxShadow: 'none' };
+
+    // 1. 6-digit hex: #rrggbb
     if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
       return { boxShadow: `0 0 20px ${trimmed}40` };
     }
+
+    // 2. 3-digit hex: #rgb
     if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
       const r = trimmed[1];
       const g = trimmed[2];
       const b = trimmed[3];
       return { boxShadow: `0 0 20px #${r}${r}${g}${g}${b}${b}40` };
     }
+
+    // 3. 8-digit hex: #rrggbbaa (preserves caller alpha)
     if (/^#[0-9a-fA-F]{8}$/.test(trimmed)) {
       return { boxShadow: `0 0 20px ${trimmed}` };
     }
-    if (/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.test(trimmed)) {
-      const rgba = trimmed.replace(/rgb\(/i, 'rgba(').replace(/\)$/, ', 0.25)');
-      return { boxShadow: `0 0 20px ${rgba}` };
+
+    const isValidChannel = (val: number) => Number.isInteger(val) && val >= 0 && val <= 255;
+
+    // 4. rgb(r, g, b)
+    const rgbMatch = trimmed.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+    if (rgbMatch) {
+      const r = Number(rgbMatch[1]);
+      const g = Number(rgbMatch[2]);
+      const b = Number(rgbMatch[3]);
+      if (isValidChannel(r) && isValidChannel(g) && isValidChannel(b)) {
+        return { boxShadow: `0 0 20px rgba(${r}, ${g}, ${b}, 0.25)` };
+      }
+      return { boxShadow: 'none' };
     }
-    return { boxShadow: `0 0 20px ${trimmed}` };
+
+    // 5. rgba(r, g, b, a) (preserves caller alpha)
+    const rgbaMatch = trimmed.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i);
+    if (rgbaMatch) {
+      const r = Number(rgbaMatch[1]);
+      const g = Number(rgbaMatch[2]);
+      const b = Number(rgbaMatch[3]);
+      const a = Number(rgbaMatch[4]);
+      if (isValidChannel(r) && isValidChannel(g) && isValidChannel(b) && !Number.isNaN(a) && a >= 0 && a <= 1) {
+        return { boxShadow: `0 0 20px rgba(${r}, ${g}, ${b}, ${rgbaMatch[4]})` };
+      }
+      return { boxShadow: 'none' };
+    }
+
+    return { boxShadow: 'none' };
   },
   emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
   emeraldSubtle: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',

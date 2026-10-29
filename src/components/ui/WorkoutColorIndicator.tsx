@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { WorkoutType } from '../../types/fitness';
 import { WORKOUT_COLORS } from '../../utils/fitnessHelpers';
-import { getAccentColor, SemanticColor, SEMANTIC_COLORS } from '../../styles/tokens';
+import { getAccentColor, SemanticColor, SEMANTIC_COLORS, TRANSITION } from '../../styles/tokens';
 
 export interface WorkoutColorIndicatorProps {
   color?: string;
@@ -34,7 +34,7 @@ export const WorkoutColorIndicator: React.FC<WorkoutColorIndicatorProps> = ({
   return (
     <span
       aria-hidden="true"
-      className={cn("shrink-0 block transition-colors", SIZE_CLASSES[size], className)}
+      className={cn("shrink-0 block", TRANSITION.colors, SIZE_CLASSES[size], className)}
       style={{ backgroundColor: resolvedColor }}
     />
   );

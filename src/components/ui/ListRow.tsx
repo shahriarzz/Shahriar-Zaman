@@ -21,6 +21,8 @@ export const ListRow: React.FC<ListRowProps> = ({
   selected = false,
   onClick,
   onKeyDown,
+  onKeyUp,
+  onBlur,
   role,
   tabIndex,
   className,
@@ -28,36 +30,82 @@ export const ListRow: React.FC<ListRowProps> = ({
   ...props
 }) => {
   const isClickable = Boolean(onClick);
+  const isSpacePressedRef = React.useRef(false);
+
+  const resolvedRole = role !== undefined ? role : (isClickable ? 'button' : undefined);
+  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(e);
 
-    if (isClickable && !e.defaultPrevented) {
-      if (e.key === 'Enter' || e.key === ' ') {
+    // Only apply built-in button keyboard behavior when resolvedRole is 'button' and clickable
+    if (resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
+      if (e.key === 'Enter') {
         e.preventDefault();
         onClick?.();
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        // Prevent default page scroll on Space keydown; activation occurs on keyup
+        e.preventDefault();
+        if (!e.repeat) {
+          isSpacePressedRef.current = true;
+        }
       }
     }
   };
 
-  const resolvedRole = role !== undefined ? role : (isClickable ? 'button' : undefined);
-  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined);
-  const resolvedAriaSelected = props['aria-selected'] !== undefined
-    ? props['aria-selected']
-    : (selected ? true : undefined);
-  const resolvedAriaPressed = props['aria-pressed'] !== undefined
-    ? props['aria-pressed']
-    : (isClickable && selected ? true : undefined);
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    onKeyUp?.(e);
+
+    if (resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        if (isSpacePressedRef.current) {
+          isSpacePressedRef.current = false;
+          onClick?.();
+        }
+      }
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    onBlur?.(e);
+    isSpacePressedRef.current = false;
+  };
+
+  // Roles supporting aria-selected per WAI-ARIA specification
+  const isSelectableRole = resolvedRole && (
+    resolvedRole === 'option' ||
+    resolvedRole === 'tab' ||
+    resolvedRole === 'row' ||
+    resolvedRole === 'gridcell' ||
+    resolvedRole === 'treeitem'
+  );
+
+  const {
+    'aria-selected': ariaSelectedProp,
+    'aria-pressed': ariaPressedProp,
+    ...restProps
+  } = props;
+
+  // aria-selected is only emitted for selectable roles
+  const resolvedAriaSelected = isSelectableRole
+    ? (ariaSelectedProp !== undefined ? ariaSelectedProp : (selected !== undefined ? selected : undefined))
+    : undefined;
+
+  // aria-pressed is emitted for role="button" toggle buttons when aria-pressed is explicitly provided
+  const resolvedAriaPressed = resolvedRole === 'button' ? ariaPressedProp : undefined;
 
   return (
     <div
-      {...props}
+      {...restProps}
       role={resolvedRole}
       tabIndex={resolvedTabIndex}
       aria-selected={resolvedAriaSelected}
       aria-pressed={resolvedAriaPressed}
       onClick={onClick}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={handleBlur}
       className={cn(
         "border flex items-center justify-between gap-3 text-xs text-zinc-200",
         TRANSITION.interactive,

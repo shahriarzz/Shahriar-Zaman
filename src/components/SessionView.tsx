@@ -271,7 +271,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       {/* Header */}
       <div 
         onClick={onToggleExpand}
-        className="p-6 cursor-pointer hover:bg-zinc-800/10 transition-colors flex items-start justify-between gap-4"
+        className={cn("p-6 cursor-pointer hover:bg-zinc-800/10 flex items-start justify-between gap-4", TRANSITION.colors)}
       >
         <div className="space-y-1">
           <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white flex items-center gap-2")}>
@@ -391,6 +391,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <div
                       key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
+                        // Deliberate 500ms set-completion celebration flash (differs from canonical 200ms TRANSITION.colors to provide clear visual acknowledgement)
                         "space-y-1.5 px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
                         RADIUS.card,
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"

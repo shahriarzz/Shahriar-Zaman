@@ -15,7 +15,9 @@ import {
   GAP,
   BORDER,
   SURFACE,
-  RADIUS
+  RADIUS,
+  FOCUS,
+  TRANSITION
 } from '../ui';
 import { cn } from '../../lib/utils';
 import { haptics } from '../../utils/haptics';
@@ -153,11 +155,15 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenExerciseEditor(item as Exercise)}
-                  className="text-left space-y-1.5 min-w-0 flex-1 p-1 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 transition-colors"
+                  className={cn(
+                    "text-left space-y-1.5 min-w-0 flex-1 p-1 -m-1 rounded-lg",
+                    FOCUS.visible,
+                    TRANSITION.colors
+                  )}
                   aria-label={`Edit ${item.name} definition`}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-white text-sm group-hover:text-orange-400 transition-colors">
+                    <span className={cn("font-bold text-white text-sm group-hover:text-orange-400", TRANSITION.colors)}>
                       {item.name}
                     </span>
                     {hasPriority && (

@@ -169,7 +169,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         </span>
                         <span className={cn(
                           "font-medium",
-                          isZero ? "text-zinc-500" : "text-zinc-200 group-hover:text-white transition-colors"
+                          isZero ? "text-zinc-500" : cn("text-zinc-200 group-hover:text-white", TRANSITION.colors)
                         )}>
                           {group.label}
                         </span>
@@ -287,7 +287,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         <span className={cn("w-4 tabular-nums text-right", TYPOGRAPHY.metadata)}>
                           #{idx + 1}
                         </span>
-                        <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
+                        <span className={cn("font-medium text-zinc-200 group-hover:text-white", TRANSITION.colors)}>
                           {item.label}
                         </span>
                       </div>

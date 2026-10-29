@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { format } from 'date-fns';
 import {
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
@@ -32,11 +33,14 @@ import { ListRow } from '../components/ui/ListRow';
 import { Input } from '../components/ui/Input';
 import { Layout } from '../components/Layout';
 import { Calendar } from '../components/Calendar';
+import { SessionView } from '../components/SessionView';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
+import { ConfirmContext } from '../context/ConfirmContext';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
 import { INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
+import { SessionLog, Workout } from '../types/fitness';
 
 /**
  * Design System Regression & Invariant Test Suite.
@@ -938,15 +942,27 @@ describe('Design System Consolidation & Token Contracts', () => {
 
     /**
      * Recursively retrieves all production source files under the given directory,
-     * explicitly excluding test files, mocks, and node_modules.
+     * explicitly excluding test directories, mocks, fixtures, and node_modules.
      */
+    const EXCLUDED_SCANNER_DIRS = new Set([
+      'node_modules',
+      'dist',
+      'dist-server',
+      'test',
+      '__tests__',
+      '__mocks__',
+      'fixtures',
+      'coverage',
+      '.git',
+    ]);
+
     function getAllProductionSourceFiles(dir: string): string[] {
       let results: string[] = [];
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name !== 'node_modules' && entry.name !== 'dist' && entry.name !== 'dist-server') {
+          if (!EXCLUDED_SCANNER_DIRS.has(entry.name)) {
             results = results.concat(getAllProductionSourceFiles(fullPath));
           }
         } else if (
@@ -1016,10 +1032,11 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(violations, `Found hard-coded touch-target utilities in: ${violations.join(', ')}. Use CONTROL_HEIGHT.touchTarget or Button size="icon" instead.`).toEqual([]);
     });
 
-    it('verifies Card keyboard-event contract: Enter and Space activation without fabricated MouseEvent', () => {
+    it('verifies Card keyboard-event contract: Enter on keydown, Space on keyup, preventDefault, and role scoping', () => {
       let callCount = 0;
       let receivedArg: any = 'INITIAL_STATE';
       let consumerKeyDownFired = false;
+      let consumerKeyUpFired = false;
 
       const handleClick = (e?: React.MouseEvent<HTMLDivElement>) => {
         callCount++;
@@ -1029,8 +1046,11 @@ describe('Design System Consolidation & Token Contracts', () => {
       const handleCustomKeyDown = () => {
         consumerKeyDownFired = true;
       };
+      const handleCustomKeyUp = () => {
+        consumerKeyUpFired = true;
+      };
 
-      // 1. Actionable Card with consumer onKeyDown and custom data props
+      // 1. Actionable Card with consumer handlers and custom data props
       act(() => {
         root.render(
           React.createElement(
@@ -1038,6 +1058,7 @@ describe('Design System Consolidation & Token Contracts', () => {
             {
               onClick: handleClick,
               onKeyDown: handleCustomKeyDown,
+              onKeyUp: handleCustomKeyUp,
               'data-testid': 'custom-card',
               className: 'custom-class'
             },
@@ -1053,22 +1074,39 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(cardEl.getAttribute('data-testid')).toBe('custom-card');
       expect(cardEl.classList.contains('custom-class')).toBe(true);
 
-      // Enter key activation: runs consumer onKeyDown AND activates onClick without fabricated event
+      // Enter key activation: activates on keydown, no fake React.MouseEvent passed
       act(() => {
         cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       });
       expect(callCount).toBe(1);
       expect(consumerKeyDownFired).toBe(true);
-      expect(receivedArg).toBeUndefined(); // Crucial: no fake React.MouseEvent passed
+      expect(receivedArg).toBeUndefined();
 
-      // Space key activation: runs consumer onKeyDown AND activates onClick without fabricated event
+      // Space keydown: prevents scroll, forwards consumer onKeyDown, does NOT activate immediately
       consumerKeyDownFired = false;
       receivedArg = 'INITIAL_STATE';
+      let defaultPrevented = false;
       act(() => {
-        cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        cardEl.dispatchEvent(ev);
+        defaultPrevented = ev.defaultPrevented;
+      });
+      expect(defaultPrevented).toBe(true); // Space keydown prevented default page scroll
+      expect(consumerKeyDownFired).toBe(true);
+      expect(callCount).toBe(1); // No activation on Space keydown
+
+      // Space key repeat: holding Space does NOT activate
+      act(() => {
+        cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
+      // Space keyup: activates on keyup, forwards consumer onKeyUp, calls onClick without fabricated event
+      act(() => {
+        cardEl.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
       });
       expect(callCount).toBe(2);
-      expect(consumerKeyDownFired).toBe(true);
+      expect(consumerKeyUpFired).toBe(true);
       expect(receivedArg).toBeUndefined();
 
       // Native mouse click: passes the real MouseEvent
@@ -1078,7 +1116,7 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(callCount).toBe(3);
       expect(receivedArg).toBeDefined();
 
-      // Consumer event cancellation: calling preventDefault in onKeyDown cancels activation
+      // Consumer event cancellation on Enter keydown: calling preventDefault cancels activation
       const cancellingKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         e.preventDefault();
       };
@@ -1097,6 +1135,64 @@ describe('Design System Consolidation & Token Contracts', () => {
       });
       expect(callCount).toBe(0);
 
+      // Consumer event cancellation on Space keyup: calling preventDefault cancels activation
+      const cancellingKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.preventDefault();
+      };
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, onKeyUp: cancellingKeyUp },
+            'Cancelled Space Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Focus loss (blur/focusout) cancels pending Space activation
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Blur Cancel Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Non-button custom role does NOT inherit button keyboard activation
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, role: 'region' },
+            'Region Card'
+          )
+        );
+      });
+      callCount = 0;
+      const regionCard = container.firstElementChild as HTMLDivElement;
+      expect(regionCard.getAttribute('role')).toBe('region');
+      act(() => {
+        regionCard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        regionCard.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        regionCard.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
       // Non-actionable Card: no role="button", no tabIndex by default
       act(() => {
         root.render(
@@ -1111,28 +1207,60 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(staticCard.getAttribute('role')).toBeNull();
       expect(staticCard.getAttribute('tabindex')).toBeNull();
 
-      // Preserves valid role and tabIndex overrides when provided explicitly
+      // Card selection semantics: variant="selected" does NOT automatically emit aria-selected
       act(() => {
         root.render(
           React.createElement(
             Card,
-            { onClick: handleClick, role: 'tab', tabIndex: -1 },
+            { variant: 'selected' },
+            'Visually Selected Static Card'
+          )
+        );
+      });
+      const selectedStaticCard = container.firstElementChild as HTMLDivElement;
+      expect(selectedStaticCard.getAttribute('aria-selected')).toBeNull();
+      expect(selectedStaticCard.getAttribute('role')).toBeNull();
+
+      // Card with valid selectable role and explicit aria-selected
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { role: 'tab', 'aria-selected': true, tabIndex: 0 },
             'Tab Card'
           )
         );
       });
       const tabCard = container.firstElementChild as HTMLDivElement;
       expect(tabCard.getAttribute('role')).toBe('tab');
-      expect(tabCard.getAttribute('tabindex')).toBe('-1');
+      expect(tabCard.getAttribute('aria-selected')).toBe('true');
     });
 
     it('verifies SHADOW.accentGlowStyle contract across color formats and consumer components', () => {
-      // 1. Contract tests for supported color inputs
+      // 1. Contract tests for supported color inputs and alpha rules
+      // 6-digit hex: applies canonical 25% glow alpha (hex 40)
       expect(SHADOW.accentGlowStyle('#10b981')).toEqual({ boxShadow: '0 0 20px #10b98140' });
+      // 3-digit hex: expands to 6 digits and applies canonical 25% glow alpha
       expect(SHADOW.accentGlowStyle('#0f0')).toEqual({ boxShadow: '0 0 20px #00ff0040' });
+      // 8-digit hex: preserves caller alpha
       expect(SHADOW.accentGlowStyle('#10b98180')).toEqual({ boxShadow: '0 0 20px #10b98180' });
+      // rgb(r, g, b): validates channels and applies canonical 25% alpha
       expect(SHADOW.accentGlowStyle('rgb(16, 185, 129)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 0.25)' });
+      // rgba(r, g, b, a): validates channels and preserves caller alpha
+      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 0.5)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 0.5)' });
+      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 1)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 1)' });
+
+      // Whitespace trimming
+      expect(SHADOW.accentGlowStyle('  #10b981  ')).toEqual({ boxShadow: '0 0 20px #10b98140' });
+
+      // Unsupported formats, malformed hex, out-of-range values -> safe { boxShadow: 'none' } fallback
       expect(SHADOW.accentGlowStyle('')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('   ')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('#12')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('#gggggg')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('rgb(300, 185, 129)')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 1.5)')).toEqual({ boxShadow: 'none' });
+      expect(SHADOW.accentGlowStyle('not-a-color')).toEqual({ boxShadow: 'none' });
 
       // 2. Verified usage in Card.tsx
       const cardSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Card.tsx'), 'utf8');
@@ -1160,16 +1288,18 @@ describe('Design System Consolidation & Token Contracts', () => {
     it('verifies ListRow keyboard operability and accessible semantics', () => {
       let clicked = false;
       let consumerKeyDownFired = false;
+      let consumerKeyUpFired = false;
       const handleClick = () => { clicked = true; };
       const handleKeyDown = () => { consumerKeyDownFired = true; };
+      const handleKeyUp = () => { consumerKeyUpFired = true; };
 
-      // Actionable ListRow: gets role="button", tabIndex=0, responds to Enter and Space
+      // 1. Normal clickable ListRow: role="button", tabIndex=0, does NOT emit aria-selected or aria-pressed
       act(() => {
         root.render(
           React.createElement(
             ListRow,
-            { onClick: handleClick, onKeyDown: handleKeyDown, selected: true },
-            React.createElement('span', null, 'Interactive Row')
+            { onClick: handleClick, onKeyDown: handleKeyDown, onKeyUp: handleKeyUp },
+            React.createElement('span', null, 'Normal Clickable Row')
           )
         );
       });
@@ -1178,25 +1308,64 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(rowEl).toBeTruthy();
       expect(rowEl.getAttribute('role')).toBe('button');
       expect(rowEl.getAttribute('tabindex')).toBe('0');
-      expect(rowEl.getAttribute('aria-selected')).toBe('true');
-      expect(rowEl.getAttribute('aria-pressed')).toBe('true');
+      expect(rowEl.getAttribute('aria-selected')).toBeNull();
+      expect(rowEl.getAttribute('aria-pressed')).toBeNull();
 
-      // Key activation
+      // Enter key activation: activates on keydown
       act(() => {
         rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       });
       expect(clicked).toBe(true);
       expect(consumerKeyDownFired).toBe(true);
 
+      // Space key activation: prevents scroll on keydown, activates on keyup
       clicked = false;
       consumerKeyDownFired = false;
       act(() => {
-        rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        rowEl.dispatchEvent(ev);
+        expect(ev.defaultPrevented).toBe(true);
       });
-      expect(clicked).toBe(true);
+      expect(clicked).toBe(false); // Does NOT activate on keydown
       expect(consumerKeyDownFired).toBe(true);
 
-      // Non-actionable ListRow: no role, no tabIndex
+      act(() => {
+        rowEl.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(clicked).toBe(true); // Activates on keyup
+      expect(consumerKeyUpFired).toBe(true);
+
+      // 2. Toggle-style ListRow: exposes aria-pressed without aria-selected
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, 'aria-pressed': true },
+            React.createElement('span', null, 'Toggled Row')
+          )
+        );
+      });
+      const toggledRow = container.firstElementChild as HTMLDivElement;
+      expect(toggledRow.getAttribute('role')).toBe('button');
+      expect(toggledRow.getAttribute('aria-pressed')).toBe('true');
+      expect(toggledRow.getAttribute('aria-selected')).toBeNull();
+
+      // 3. Selectable ListRow: role="option" with selected={true} exposes aria-selected="true" without aria-pressed
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { role: 'option', selected: true, onClick: handleClick },
+            React.createElement('span', null, 'Option Row')
+          )
+        );
+      });
+      const optionRow = container.firstElementChild as HTMLDivElement;
+      expect(optionRow.getAttribute('role')).toBe('option');
+      expect(optionRow.getAttribute('aria-selected')).toBe('true');
+      expect(optionRow.getAttribute('aria-pressed')).toBeNull();
+
+      // 4. Non-actionable ListRow: no role, no tabIndex, no aria-selected, no aria-pressed
       act(() => {
         root.render(
           React.createElement(
@@ -1206,16 +1375,27 @@ describe('Design System Consolidation & Token Contracts', () => {
           )
         );
       });
-
       const staticRow = container.firstElementChild as HTMLDivElement;
       expect(staticRow.getAttribute('role')).toBeNull();
       expect(staticRow.getAttribute('tabindex')).toBeNull();
       expect(staticRow.getAttribute('aria-selected')).toBeNull();
+      expect(staticRow.getAttribute('aria-pressed')).toBeNull();
     });
 
     it('verifies Calendar rendered behavior: accessible labels, today state, disabled adjacent dates, and visible focus', () => {
       const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
-      const mockIndex = buildFitnessIndex([], defsMap);
+      // Create a mock log with completed sets to test status label in aria-label
+      const mockLog: SessionLog = {
+        id: 'test-log-today',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        workoutId: 'push-a',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          'bench-press': [{ id: 's1', reps: '8', weight: '80', done: true }]
+        }
+      };
+      const mockIndex = buildFitnessIndex([mockLog], defsMap);
 
       act(() => {
         root.render(
@@ -1243,122 +1423,162 @@ describe('Design System Consolidation & Token Contracts', () => {
       const dayButtons = Array.from(container.querySelectorAll('button[data-testid^="calendar-day-"]')) as HTMLButtonElement[];
       expect(dayButtons.length).toBeGreaterThanOrEqual(28);
 
-      // 1. Accessible label and touch target contract on date cells
+      // 1. Assert rendered calendar contains at least one adjacent-month cell and ALL such cells are disabled with opacity-20
+      const disabledDateCells = Array.from(container.querySelectorAll('button[data-testid^="calendar-day-"]:disabled')) as HTMLButtonElement[];
+      expect(disabledDateCells.length).toBeGreaterThan(0);
+      disabledDateCells.forEach((cell) => {
+        expect(cell.disabled).toBe(true);
+        expect(cell.classList.contains('opacity-20')).toBe(true);
+        expect(cell.classList.contains('pointer-events-none')).toBe(true);
+      });
+
+      // 2. Accessible label contract: each date label contains full date format ("MMMM d, yyyy")
+      // and includes status label when one exists
       dayButtons.forEach((btn) => {
-        expect(btn.hasAttribute('aria-label')).toBe(true);
-        expect(btn.getAttribute('aria-label')).toBeTruthy();
+        const ariaLabel = btn.getAttribute('aria-label');
+        expect(ariaLabel).toBeTruthy();
+        expect(ariaLabel).toMatch(/^[A-Z][a-z]+ \d{1,2}, \d{4}/);
+      });
+
+      // Verify that today's date cell includes full date and the status label (from mockLog)
+      const todayBtn = container.querySelector('button[aria-current="date"]') as HTMLButtonElement;
+      expect(todayBtn).toBeTruthy();
+      expect(todayBtn.getAttribute('aria-label')).toBe(`${format(new Date(), 'MMMM d, yyyy')}, session`);
+
+      // 3. Assert today and selected states independently:
+      // When initially rendered: today is NOT selected
+      expect(todayBtn.getAttribute('aria-current')).toBe('date');
+      expect(todayBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // When another date is selected:
+      const nonTodayActiveBtn = dayButtons.find((btn) => !btn.disabled && btn !== todayBtn);
+      expect(nonTodayActiveBtn).toBeTruthy();
+      if (nonTodayActiveBtn) {
+        act(() => {
+          nonTodayActiveBtn.click();
+        });
+        expect(nonTodayActiveBtn.getAttribute('aria-pressed')).toBe('true');
+        expect(nonTodayActiveBtn.getAttribute('aria-current')).toBeNull();
+        expect(todayBtn.getAttribute('aria-current')).toBe('date');
+        expect(todayBtn.getAttribute('aria-pressed')).toBe('false');
+      }
+
+      // When today is also selected:
+      act(() => {
+        todayBtn.click();
+      });
+      expect(todayBtn.getAttribute('aria-current')).toBe('date');
+      expect(todayBtn.getAttribute('aria-pressed')).toBe('true');
+
+      // 4. Contract guards for touch targets and focus tokens (documenting JSDOM test bounds)
+      // Note: JSDOM verifies applied class tokens but cannot measure physical display pixels, focus-ring geometry, or native Android touch targets.
+      dayButtons.forEach((btn) => {
         expect(btn.classList.contains('min-h-[44px]')).toBe(true);
         expect(btn.classList.contains('min-w-[44px]')).toBe(true);
         expect(btn.classList.contains('focus-visible:ring-2')).toBe(true);
       });
 
-      // 2. Today date cell contract: aria-current="date"
-      const todayBtn = container.querySelector('button[aria-current="date"]') as HTMLButtonElement;
-      expect(todayBtn).toBeTruthy();
-      expect(todayBtn.getAttribute('aria-current')).toBe('date');
-
-      // 3. Disabled adjacent-month dates
-      const disabledDateCells = Array.from(container.querySelectorAll('button[data-testid^="calendar-day-"]:disabled')) as HTMLButtonElement[];
-      if (disabledDateCells.length > 0) {
-        disabledDateCells.forEach((cell) => {
-          expect(cell.disabled).toBe(true);
-          expect(cell.classList.contains('opacity-20')).toBe(true);
-        });
-      }
-
-      // Also verify future month navigation button is disabled
+      // Future month navigation button is disabled
       const nextMonthBtn = container.querySelector('button[aria-label="Cannot browse future months"]') as HTMLButtonElement;
       expect(nextMonthBtn).toBeTruthy();
       expect(nextMonthBtn.disabled).toBe(true);
-
-      // 4. Interactive selection updates aria-pressed on active day button
-      const currentMonthActiveBtn = dayButtons.find((btn) => !btn.disabled);
-      expect(currentMonthActiveBtn).toBeTruthy();
-      if (currentMonthActiveBtn) {
-        expect(currentMonthActiveBtn.getAttribute('aria-pressed')).toBe('false');
-        act(() => {
-          currentMonthActiveBtn.click();
-        });
-        expect(currentMonthActiveBtn.getAttribute('aria-pressed')).toBe('true');
-      }
     });
 
-    it('verifies shared Input migration preserves numeric entry, callbacks, warning styling, accessible labels, and narrow grid', () => {
-      // 1. SessionView active set numeric inputs contract
-      let sessionWeight = '80';
-      let sessionReps = '5';
-      const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        sessionWeight = e.target.value;
-      };
-      const handleRepsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        sessionReps = e.target.value;
+    it('verifies real SessionView and HistoryView input regions preserve numeric entry, callbacks, and narrow set grid', async () => {
+      const mockWorkout: Workout = {
+        id: 'push-a',
+        name: 'Push Protocol Alpha',
+        badge: 'PUSH A',
+        cycleDay: 1,
+        type: 'push',
+        exercises: [
+          {
+            sets: 3,
+            reps: '5-8',
+            exerciseDefinitionId: 'bench-press',
+          },
+        ],
       };
 
-      act(() => {
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const mockIndex = buildFitnessIndex([], defsMap);
+
+      const mockFitnessContextValue = {
+        workouts: [mockWorkout],
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        appState: { cycleStart: '2026-10-25' },
+        addLog: vi.fn(),
+        updateCycleStart: vi.fn(),
+        activeSession: null,
+        startActiveSession: vi.fn(),
+        updateActiveSessionSets: vi.fn(),
+        clearActiveSession: vi.fn(),
+        user: null,
+      };
+
+      await act(async () => {
         root.render(
           React.createElement(
-            'div',
-            { className: 'grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center' },
-            React.createElement('span', null, '1'),
-            React.createElement(Input, {
-              type: 'number',
-              variant: 'standard',
-              size: 'lg',
-              placeholder: 'kg',
-              value: sessionWeight,
-              inputMode: 'decimal',
-              onChange: handleWeightChange,
-              'aria-label': 'Set 1 weight',
-              className: 'text-center font-mono border-amber-500/80 text-amber-400',
-            }),
-            React.createElement(Input, {
-              type: 'number',
-              variant: 'standard',
-              size: 'lg',
-              placeholder: 'reps',
-              value: sessionReps,
-              inputMode: 'numeric',
-              onChange: handleRepsChange,
-              'aria-label': 'Set 1 reps',
-              className: 'text-center font-mono',
-            })
+            FitnessContext.Provider,
+            { value: mockFitnessContextValue as any },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              {
+                value: {
+                  index: mockIndex,
+                  getLatestForExercise: () => null,
+                  getWeightPRForExercise: () => null,
+                  getE1RMPRForExercise: () => null,
+                  getHistoryForExercise: () => [],
+                } as any,
+              },
+              React.createElement(
+                ConfirmContext.Provider,
+                { value: { confirm: vi.fn().mockResolvedValue(true) } as any },
+                React.createElement(SessionView, { workoutId: 'push-a', onExit: vi.fn() })
+              )
+            )
           )
         );
       });
 
-      const inputs = Array.from(container.querySelectorAll('input')) as HTMLInputElement[];
-      expect(inputs.length).toBe(2);
+      // 1. Real SessionView inputs verification
+      const inputs = Array.from(container.querySelectorAll('input[type="number"]')) as HTMLInputElement[];
+      expect(inputs.length).toBeGreaterThanOrEqual(2);
 
-      // Weight input verification
       const weightInput = inputs[0];
-      expect(weightInput.type).toBe('number');
-      expect(weightInput.getAttribute('inputmode')).toBe('decimal');
+      const repsInput = inputs[1];
+
+      // Verify accessible labels and placeholder
       expect(weightInput.getAttribute('aria-label')).toBe('Set 1 weight');
       expect(weightInput.placeholder).toBe('kg');
-      expect(weightInput.value).toBe('80');
-      expect(weightInput.classList.contains('border-amber-500/80')).toBe(true);
-      expect(weightInput.classList.contains('text-amber-400')).toBe(true);
+      expect(weightInput.getAttribute('inputmode')).toBe('decimal');
 
-      // Reps input verification
-      const repsInput = inputs[1];
-      expect(repsInput.type).toBe('number');
-      expect(repsInput.getAttribute('inputmode')).toBe('numeric');
       expect(repsInput.getAttribute('aria-label')).toBe('Set 1 reps');
       expect(repsInput.placeholder).toBe('reps');
-      expect(repsInput.value).toBe('5');
+      expect(repsInput.getAttribute('inputmode')).toBe('numeric');
 
-      // Callback firing with React controlled input setter
+      // Verify narrow set-entry grid structure
+      const gridContainer = weightInput.closest('.grid');
+      expect(gridContainer).toBeTruthy();
+      expect(gridContainer?.className).toContain('grid-cols-[40px_1fr_1fr_60px_45px]');
+
+      // Exercise numeric value change callback in the real SessionView
       act(() => {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          'value'
-        )?.set;
-        nativeInputValueSetter?.call(weightInput, '82.5');
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '85');
         weightInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
-      expect(sessionWeight).toBe('82.5');
+      expect(weightInput.value).toBe('85');
 
-      // 2. Source contract: SessionView and HistoryView source code must not use raw unstyled inputs or dead placeholders
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(repsInput, '6');
+        repsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(repsInput.value).toBe('6');
+
+      // 2. Supplementary source-level contract checks for SessionView and HistoryView
       const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
       expect(sessionSrc).toContain('<Input');
       expect(sessionSrc).not.toContain('placeholder:text-zinc-850');

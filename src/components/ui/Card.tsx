@@ -47,6 +47,8 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   hoverable = false,
   onClick,
   onKeyDown,
+  onKeyUp,
+  onBlur,
   role,
   tabIndex,
   padding,
@@ -56,6 +58,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   ...props
 }, ref) => {
   const isActionable = Boolean(onClick);
+  const isSpacePressedRef = React.useRef(false);
 
   // Resolved surface appearance (base / subtle / recessed / elevated)
   const effectiveSurface: CardSurface = surface || (
@@ -86,7 +89,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       isActionable && cn(
         BORDER.hover,
         INTERACTIVE.hover,
-        TRANSITION.interactive,
         'active:scale-[0.99] select-none cursor-pointer',
         FOCUS.visible
       )
@@ -123,34 +125,76 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     }
   }
 
+  const resolvedRole = role !== undefined ? role : (isActionable ? 'button' : undefined);
+  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isActionable ? 0 : undefined);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // 1. Compose consumer's onKeyDown so custom handlers execute
     onKeyDown?.(e);
 
-    // 2. If actionable and default was not prevented, trigger onClick on Enter or Space without fabricating a fake MouseEvent
-    if (isActionable && !e.defaultPrevented) {
-      if (e.key === 'Enter' || e.key === ' ') {
+    // Only apply built-in button keyboard behavior when resolvedRole is 'button' and actionable
+    if (resolvedRole === 'button' && isActionable && !e.defaultPrevented) {
+      if (e.key === 'Enter') {
         e.preventDefault();
         onClick?.();
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        // Prevent default page scroll on Space keydown; activation occurs on keyup
+        e.preventDefault();
+        if (!e.repeat) {
+          isSpacePressedRef.current = true;
+        }
       }
     }
   };
 
-  const resolvedRole = role !== undefined ? role : (isActionable ? 'button' : undefined);
-  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isActionable ? 0 : undefined);
-  const resolvedAriaSelected = props['aria-selected'] !== undefined
-    ? props['aria-selected']
-    : (variant === 'selected' ? true : undefined);
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    onKeyUp?.(e);
+
+    if (resolvedRole === 'button' && isActionable && !e.defaultPrevented) {
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        if (isSpacePressedRef.current) {
+          isSpacePressedRef.current = false;
+          onClick?.();
+        }
+      }
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    onBlur?.(e);
+    isSpacePressedRef.current = false;
+  };
+
+  // Roles supporting aria-selected per WAI-ARIA specification
+  const isSelectableRole = resolvedRole && (
+    resolvedRole === 'option' ||
+    resolvedRole === 'tab' ||
+    resolvedRole === 'row' ||
+    resolvedRole === 'gridcell' ||
+    resolvedRole === 'treeitem'
+  );
+
+  const {
+    'aria-selected': ariaSelectedProp,
+    'aria-pressed': ariaPressedProp,
+    ...restProps
+  } = props;
+
+  const resolvedAriaSelected = isSelectableRole ? ariaSelectedProp : undefined;
+  const resolvedAriaPressed = resolvedRole === 'button' ? ariaPressedProp : undefined;
 
   return (
     <div
       ref={ref}
-      {...props}
+      {...restProps}
       role={resolvedRole}
       tabIndex={resolvedTabIndex}
       aria-selected={resolvedAriaSelected}
+      aria-pressed={resolvedAriaPressed}
       onClick={onClick}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={handleBlur}
       style={{ ...accentStyles, ...style }}
       className={cn(
         "min-w-0",
@@ -158,7 +202,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         variantClasses[variant] || variantClasses.standard,
         paddingClass,
         isActionable && FOCUS.visible,
-        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.colors),
+        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover),
         isActionable && !hoverable && 'cursor-pointer',
         accentClasses,
         className
