@@ -46,6 +46,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   accentVariant,
   hoverable = false,
   onClick,
+  onKeyDown,
+  role,
+  tabIndex,
   padding,
   children,
   className,
@@ -116,25 +119,36 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       accentClasses = 'border-t-4';
       accentStyles.borderTopColor = resolvedAccentHex;
     } else if (effectiveAccentVariant === 'glow') {
-      accentStyles.boxShadow = `0 0 20px ${resolvedAccentHex}40`;
+      Object.assign(accentStyles, SHADOW.accentGlowStyle(resolvedAccentHex));
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isActionable) {
+    // 1. Compose consumer's onKeyDown so custom handlers execute
+    onKeyDown?.(e);
+
+    // 2. If actionable and default was not prevented, trigger onClick on Enter or Space without fabricating a fake MouseEvent
+    if (isActionable && !e.defaultPrevented) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
+        onClick?.();
       }
     }
-    props.onKeyDown?.(e);
   };
+
+  const resolvedRole = role !== undefined ? role : (isActionable ? 'button' : undefined);
+  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isActionable ? 0 : undefined);
+  const resolvedAriaSelected = props['aria-selected'] !== undefined
+    ? props['aria-selected']
+    : (variant === 'selected' ? true : undefined);
 
   return (
     <div
       ref={ref}
-      role={props.role || (isActionable ? 'button' : undefined)}
-      tabIndex={props.tabIndex !== undefined ? props.tabIndex : (isActionable ? 0 : undefined)}
+      {...props}
+      role={resolvedRole}
+      tabIndex={resolvedTabIndex}
+      aria-selected={resolvedAriaSelected}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       style={{ ...accentStyles, ...style }}
@@ -149,7 +163,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         accentClasses,
         className
       )}
-      {...props}
     >
       {children}
     </div>

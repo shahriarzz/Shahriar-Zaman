@@ -355,7 +355,7 @@ export const AnalyticsView: React.FC = () => {
                     <div
                       key={`day-${dateStr}-${dayIdx}`}
                       title={tooltipText}
-                      style={isCurrentMonth && intensity.glow ? { boxShadow: `0 0 20px ${SEMANTIC_COLORS.emerald}40` } : undefined}
+                      style={isCurrentMonth && intensity.glow ? SHADOW.accentGlowStyle(SEMANTIC_COLORS.emerald) : undefined}
                       className={cn(
                         "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
                         TRANSITION.colors,

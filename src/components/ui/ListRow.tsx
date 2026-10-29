@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE, TRANSITION, FOCUS } from '../../styles/tokens';
 
-export interface ListRowProps {
+export interface ListRowProps extends React.HTMLAttributes<HTMLDivElement> {
   leading?: React.ReactNode;
   content?: React.ReactNode;
   trailing?: React.ReactNode;
@@ -20,13 +20,19 @@ export const ListRow: React.FC<ListRowProps> = ({
   children,
   selected = false,
   onClick,
+  onKeyDown,
+  role,
+  tabIndex,
   className,
   variant = 'subtle',
+  ...props
 }) => {
   const isClickable = Boolean(onClick);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isClickable) {
+    onKeyDown?.(e);
+
+    if (isClickable && !e.defaultPrevented) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onClick?.();
@@ -34,10 +40,22 @@ export const ListRow: React.FC<ListRowProps> = ({
     }
   };
 
+  const resolvedRole = role !== undefined ? role : (isClickable ? 'button' : undefined);
+  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined);
+  const resolvedAriaSelected = props['aria-selected'] !== undefined
+    ? props['aria-selected']
+    : (selected ? true : undefined);
+  const resolvedAriaPressed = props['aria-pressed'] !== undefined
+    ? props['aria-pressed']
+    : (isClickable && selected ? true : undefined);
+
   return (
     <div
-      role={isClickable ? 'button' : undefined}
-      tabIndex={isClickable ? 0 : undefined}
+      {...props}
+      role={resolvedRole}
+      tabIndex={resolvedTabIndex}
+      aria-selected={resolvedAriaSelected}
+      aria-pressed={resolvedAriaPressed}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className={cn(

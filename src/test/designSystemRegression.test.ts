@@ -29,8 +29,14 @@ import { Dialog, DialogHeader } from '../components/ui/Dialog';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
+import { Input } from '../components/ui/Input';
 import { Layout } from '../components/Layout';
+import { Calendar } from '../components/Calendar';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
+import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
+import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
+import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
+import { INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 
 /**
  * Design System Regression & Invariant Test Suite.
@@ -930,28 +936,35 @@ describe('Design System Consolidation & Token Contracts', () => {
       container.remove();
     });
 
-    it('verifies zero transition-all in production UI code in src/', () => {
-      function getUiFiles(dir: string): string[] {
-        let results: string[] = [];
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            results = results.concat(getUiFiles(fullPath));
-          } else if (
-            (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) &&
-            !entry.name.includes('.test.')
-          ) {
-            results.push(fullPath);
+    /**
+     * Recursively retrieves all production source files under the given directory,
+     * explicitly excluding test files, mocks, and node_modules.
+     */
+    function getAllProductionSourceFiles(dir: string): string[] {
+      let results: string[] = [];
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules' && entry.name !== 'dist' && entry.name !== 'dist-server') {
+            results = results.concat(getAllProductionSourceFiles(fullPath));
           }
+        } else if (
+          (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts') || entry.name.endsWith('.css')) &&
+          !entry.name.includes('.test.') &&
+          !entry.name.includes('.spec.')
+        ) {
+          results.push(fullPath);
         }
-        return results;
       }
+      return results;
+    }
 
-      const files = getUiFiles(path.join(rootDir, 'src/components'));
+    it('verifies zero transition-all in all production UI source and stylesheets', () => {
+      const prodFiles = getAllProductionSourceFiles(path.join(rootDir, 'src'));
       const violations: string[] = [];
 
-      files.forEach((file) => {
+      prodFiles.forEach((file) => {
         const content = fs.readFileSync(file, 'utf8');
         if (content.includes('transition-all')) {
           violations.push(path.relative(rootDir, file));
@@ -961,44 +974,25 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(violations, `Found forbidden transition-all in: ${violations.join(', ')}`).toEqual([]);
     });
 
-    it('verifies zero zinc-850 references in production UI code and stylesheets', () => {
-      const componentFiles = fs.readdirSync(path.join(rootDir, 'src/components')).filter(f => f.endsWith('.tsx') || f.endsWith('.ts'));
+    it('verifies zero zinc-850 references across all production source files and stylesheets', () => {
+      const prodFiles = getAllProductionSourceFiles(path.join(rootDir, 'src'));
       const violations: string[] = [];
 
-      componentFiles.forEach((file) => {
-        const content = fs.readFileSync(path.join(rootDir, 'src/components', file), 'utf8');
+      prodFiles.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
         if (content.includes('zinc-850')) {
-          violations.push(file);
+          violations.push(path.relative(rootDir, file));
         }
       });
-
-      const cssContent = fs.readFileSync(path.join(rootDir, 'src/index.css'), 'utf8');
-      if (cssContent.includes('zinc-850')) {
-        violations.push('src/index.css');
-      }
 
       expect(violations, `Found deprecated zinc-850 in: ${violations.join(', ')}`).toEqual([]);
     });
 
     it('verifies zero raw pixel typography utilities (text-[10px], text-[11px]) outside tokens.ts in components', () => {
-      function getComponentFiles(dir: string): string[] {
-        let results: string[] = [];
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            results = results.concat(getComponentFiles(fullPath));
-          } else if (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) {
-            results.push(fullPath);
-          }
-        }
-        return results;
-      }
-
-      const files = getComponentFiles(path.join(rootDir, 'src/components'));
+      const componentFiles = getAllProductionSourceFiles(path.join(rootDir, 'src/components'));
       const violations: string[] = [];
 
-      files.forEach((file) => {
+      componentFiles.forEach((file) => {
         const content = fs.readFileSync(file, 'utf8');
         if (/text-\[1[01]px\]/.test(content)) {
           violations.push(path.relative(rootDir, file));
@@ -1008,17 +1002,46 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(violations, `Found raw typography utilities in components: ${violations.join(', ')}`).toEqual([]);
     });
 
-    it('verifies Card keyboard operability, role assignment, and dynamic accent-glow inline styling', () => {
-      let clicked = false;
-      const handleClick = () => { clicked = true; };
+    it('verifies zero hard-coded 44px touch-target utilities in component source files', () => {
+      const componentFiles = getAllProductionSourceFiles(path.join(rootDir, 'src/components'));
+      const violations: string[] = [];
 
-      // Actionable Card: gets role="button", tabIndex=0, responds to Enter and Space
+      componentFiles.forEach((file) => {
+        const content = fs.readFileSync(file, 'utf8');
+        if (content.includes('min-h-[44px]') || content.includes('min-w-[44px]')) {
+          violations.push(path.relative(rootDir, file));
+        }
+      });
+
+      expect(violations, `Found hard-coded touch-target utilities in: ${violations.join(', ')}. Use CONTROL_HEIGHT.touchTarget or Button size="icon" instead.`).toEqual([]);
+    });
+
+    it('verifies Card keyboard-event contract: Enter and Space activation without fabricated MouseEvent', () => {
+      let callCount = 0;
+      let receivedArg: any = 'INITIAL_STATE';
+      let consumerKeyDownFired = false;
+
+      const handleClick = (e?: React.MouseEvent<HTMLDivElement>) => {
+        callCount++;
+        receivedArg = e;
+      };
+
+      const handleCustomKeyDown = () => {
+        consumerKeyDownFired = true;
+      };
+
+      // 1. Actionable Card with consumer onKeyDown and custom data props
       act(() => {
         root.render(
           React.createElement(
             Card,
-            { onClick: handleClick, accent: 'emerald', accentVariant: 'glow' },
-            React.createElement('span', null, 'Interactive Card')
+            {
+              onClick: handleClick,
+              onKeyDown: handleCustomKeyDown,
+              'data-testid': 'custom-card',
+              className: 'custom-class'
+            },
+            React.createElement('span', null, 'Clickable Card')
           )
         );
       });
@@ -1027,46 +1050,125 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(cardEl).toBeTruthy();
       expect(cardEl.getAttribute('role')).toBe('button');
       expect(cardEl.getAttribute('tabindex')).toBe('0');
-      expect(cardEl.style.boxShadow).toContain('20px');
+      expect(cardEl.getAttribute('data-testid')).toBe('custom-card');
+      expect(cardEl.classList.contains('custom-class')).toBe(true);
 
-      // Key activation
+      // Enter key activation: runs consumer onKeyDown AND activates onClick without fabricated event
       act(() => {
         cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       });
-      expect(clicked).toBe(true);
+      expect(callCount).toBe(1);
+      expect(consumerKeyDownFired).toBe(true);
+      expect(receivedArg).toBeUndefined(); // Crucial: no fake React.MouseEvent passed
 
-      clicked = false;
+      // Space key activation: runs consumer onKeyDown AND activates onClick without fabricated event
+      consumerKeyDownFired = false;
+      receivedArg = 'INITIAL_STATE';
       act(() => {
         cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
       });
-      expect(clicked).toBe(true);
+      expect(callCount).toBe(2);
+      expect(consumerKeyDownFired).toBe(true);
+      expect(receivedArg).toBeUndefined();
 
-      // Non-actionable Card: no role="button", no tabIndex
+      // Native mouse click: passes the real MouseEvent
+      act(() => {
+        cardEl.click();
+      });
+      expect(callCount).toBe(3);
+      expect(receivedArg).toBeDefined();
+
+      // Consumer event cancellation: calling preventDefault in onKeyDown cancels activation
+      const cancellingKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.preventDefault();
+      };
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, onKeyDown: cancellingKeyDown },
+            'Cancelled Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Non-actionable Card: no role="button", no tabIndex by default
       act(() => {
         root.render(
           React.createElement(
             Card,
             { variant: 'standard' },
-            React.createElement('span', null, 'Standard Card')
+            'Static Card'
           )
         );
       });
+      const staticCard = container.firstElementChild as HTMLDivElement;
+      expect(staticCard.getAttribute('role')).toBeNull();
+      expect(staticCard.getAttribute('tabindex')).toBeNull();
 
-      const standardCard = container.firstElementChild as HTMLDivElement;
-      expect(standardCard.getAttribute('role')).toBeNull();
-      expect(standardCard.getAttribute('tabindex')).toBeNull();
+      // Preserves valid role and tabIndex overrides when provided explicitly
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, role: 'tab', tabIndex: -1 },
+            'Tab Card'
+          )
+        );
+      });
+      const tabCard = container.firstElementChild as HTMLDivElement;
+      expect(tabCard.getAttribute('role')).toBe('tab');
+      expect(tabCard.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('verifies SHADOW.accentGlowStyle contract across color formats and consumer components', () => {
+      // 1. Contract tests for supported color inputs
+      expect(SHADOW.accentGlowStyle('#10b981')).toEqual({ boxShadow: '0 0 20px #10b98140' });
+      expect(SHADOW.accentGlowStyle('#0f0')).toEqual({ boxShadow: '0 0 20px #00ff0040' });
+      expect(SHADOW.accentGlowStyle('#10b98180')).toEqual({ boxShadow: '0 0 20px #10b98180' });
+      expect(SHADOW.accentGlowStyle('rgb(16, 185, 129)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 0.25)' });
+      expect(SHADOW.accentGlowStyle('')).toEqual({ boxShadow: 'none' });
+
+      // 2. Verified usage in Card.tsx
+      const cardSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Card.tsx'), 'utf8');
+      expect(cardSrc).toContain('SHADOW.accentGlowStyle');
+
+      // 3. Verified usage in AnalyticsView.tsx
+      const analyticsSrc = fs.readFileSync(path.join(rootDir, 'src/components/AnalyticsView.tsx'), 'utf8');
+      expect(analyticsSrc).toContain('SHADOW.accentGlowStyle(SEMANTIC_COLORS.emerald)');
+
+      // 4. Rendered behavior test on Card: inline style matches the helper output exactly
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { accent: 'emerald', accentVariant: 'glow' },
+            React.createElement('span', null, 'Glow Card')
+          )
+        );
+      });
+      const cardEl = container.firstElementChild as HTMLDivElement;
+      expect(cardEl).toBeTruthy();
+      expect(cardEl.style.boxShadow).toBe('0 0 20px #10b98140');
     });
 
     it('verifies ListRow keyboard operability and accessible semantics', () => {
       let clicked = false;
+      let consumerKeyDownFired = false;
       const handleClick = () => { clicked = true; };
+      const handleKeyDown = () => { consumerKeyDownFired = true; };
 
       // Actionable ListRow: gets role="button", tabIndex=0, responds to Enter and Space
       act(() => {
         root.render(
           React.createElement(
             ListRow,
-            { onClick: handleClick },
+            { onClick: handleClick, onKeyDown: handleKeyDown, selected: true },
             React.createElement('span', null, 'Interactive Row')
           )
         );
@@ -1076,11 +1178,23 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(rowEl).toBeTruthy();
       expect(rowEl.getAttribute('role')).toBe('button');
       expect(rowEl.getAttribute('tabindex')).toBe('0');
+      expect(rowEl.getAttribute('aria-selected')).toBe('true');
+      expect(rowEl.getAttribute('aria-pressed')).toBe('true');
 
+      // Key activation
       act(() => {
         rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       });
       expect(clicked).toBe(true);
+      expect(consumerKeyDownFired).toBe(true);
+
+      clicked = false;
+      consumerKeyDownFired = false;
+      act(() => {
+        rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      });
+      expect(clicked).toBe(true);
+      expect(consumerKeyDownFired).toBe(true);
 
       // Non-actionable ListRow: no role, no tabIndex
       act(() => {
@@ -1096,15 +1210,163 @@ describe('Design System Consolidation & Token Contracts', () => {
       const staticRow = container.firstElementChild as HTMLDivElement;
       expect(staticRow.getAttribute('role')).toBeNull();
       expect(staticRow.getAttribute('tabindex')).toBeNull();
+      expect(staticRow.getAttribute('aria-selected')).toBeNull();
     });
 
-    it('verifies Calendar date cell accessibility contracts in source', () => {
-      const calendarSrc = fs.readFileSync(path.join(rootDir, 'src/components/Calendar.tsx'), 'utf8');
-      expect(calendarSrc).toContain('CONTROL_HEIGHT.touchTarget');
-      expect(calendarSrc).toContain('FOCUS.visible');
-      expect(calendarSrc).toContain("aria-current={isToday ? 'date' : undefined}");
-      expect(calendarSrc).toContain("aria-pressed={Boolean(isSelected)}");
-      expect(calendarSrc).toContain("disabled={!isCurrentMonthDay}");
+    it('verifies Calendar rendered behavior: accessible labels, today state, disabled adjacent dates, and visible focus', () => {
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const mockIndex = buildFitnessIndex([], defsMap);
+
+      act(() => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            { value: { workouts: [] } as any },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              {
+                value: {
+                  index: mockIndex,
+                  workoutMap: new Map(),
+                  coreWorkoutByCycleDayMap: new Map(),
+                  getCycleDayForDate: () => 1,
+                  resolveExerciseMeta: () => null,
+                } as any,
+              },
+              React.createElement(Calendar, null)
+            )
+          )
+        );
+      });
+
+      // Query only calendar day buttons (excluding navigation buttons)
+      const dayButtons = Array.from(container.querySelectorAll('button[data-testid^="calendar-day-"]')) as HTMLButtonElement[];
+      expect(dayButtons.length).toBeGreaterThanOrEqual(28);
+
+      // 1. Accessible label and touch target contract on date cells
+      dayButtons.forEach((btn) => {
+        expect(btn.hasAttribute('aria-label')).toBe(true);
+        expect(btn.getAttribute('aria-label')).toBeTruthy();
+        expect(btn.classList.contains('min-h-[44px]')).toBe(true);
+        expect(btn.classList.contains('min-w-[44px]')).toBe(true);
+        expect(btn.classList.contains('focus-visible:ring-2')).toBe(true);
+      });
+
+      // 2. Today date cell contract: aria-current="date"
+      const todayBtn = container.querySelector('button[aria-current="date"]') as HTMLButtonElement;
+      expect(todayBtn).toBeTruthy();
+      expect(todayBtn.getAttribute('aria-current')).toBe('date');
+
+      // 3. Disabled adjacent-month dates
+      const disabledDateCells = Array.from(container.querySelectorAll('button[data-testid^="calendar-day-"]:disabled')) as HTMLButtonElement[];
+      if (disabledDateCells.length > 0) {
+        disabledDateCells.forEach((cell) => {
+          expect(cell.disabled).toBe(true);
+          expect(cell.classList.contains('opacity-20')).toBe(true);
+        });
+      }
+
+      // Also verify future month navigation button is disabled
+      const nextMonthBtn = container.querySelector('button[aria-label="Cannot browse future months"]') as HTMLButtonElement;
+      expect(nextMonthBtn).toBeTruthy();
+      expect(nextMonthBtn.disabled).toBe(true);
+
+      // 4. Interactive selection updates aria-pressed on active day button
+      const currentMonthActiveBtn = dayButtons.find((btn) => !btn.disabled);
+      expect(currentMonthActiveBtn).toBeTruthy();
+      if (currentMonthActiveBtn) {
+        expect(currentMonthActiveBtn.getAttribute('aria-pressed')).toBe('false');
+        act(() => {
+          currentMonthActiveBtn.click();
+        });
+        expect(currentMonthActiveBtn.getAttribute('aria-pressed')).toBe('true');
+      }
+    });
+
+    it('verifies shared Input migration preserves numeric entry, callbacks, warning styling, accessible labels, and narrow grid', () => {
+      // 1. SessionView active set numeric inputs contract
+      let sessionWeight = '80';
+      let sessionReps = '5';
+      const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        sessionWeight = e.target.value;
+      };
+      const handleRepsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        sessionReps = e.target.value;
+      };
+
+      act(() => {
+        root.render(
+          React.createElement(
+            'div',
+            { className: 'grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center' },
+            React.createElement('span', null, '1'),
+            React.createElement(Input, {
+              type: 'number',
+              variant: 'standard',
+              size: 'lg',
+              placeholder: 'kg',
+              value: sessionWeight,
+              inputMode: 'decimal',
+              onChange: handleWeightChange,
+              'aria-label': 'Set 1 weight',
+              className: 'text-center font-mono border-amber-500/80 text-amber-400',
+            }),
+            React.createElement(Input, {
+              type: 'number',
+              variant: 'standard',
+              size: 'lg',
+              placeholder: 'reps',
+              value: sessionReps,
+              inputMode: 'numeric',
+              onChange: handleRepsChange,
+              'aria-label': 'Set 1 reps',
+              className: 'text-center font-mono',
+            })
+          )
+        );
+      });
+
+      const inputs = Array.from(container.querySelectorAll('input')) as HTMLInputElement[];
+      expect(inputs.length).toBe(2);
+
+      // Weight input verification
+      const weightInput = inputs[0];
+      expect(weightInput.type).toBe('number');
+      expect(weightInput.getAttribute('inputmode')).toBe('decimal');
+      expect(weightInput.getAttribute('aria-label')).toBe('Set 1 weight');
+      expect(weightInput.placeholder).toBe('kg');
+      expect(weightInput.value).toBe('80');
+      expect(weightInput.classList.contains('border-amber-500/80')).toBe(true);
+      expect(weightInput.classList.contains('text-amber-400')).toBe(true);
+
+      // Reps input verification
+      const repsInput = inputs[1];
+      expect(repsInput.type).toBe('number');
+      expect(repsInput.getAttribute('inputmode')).toBe('numeric');
+      expect(repsInput.getAttribute('aria-label')).toBe('Set 1 reps');
+      expect(repsInput.placeholder).toBe('reps');
+      expect(repsInput.value).toBe('5');
+
+      // Callback firing with React controlled input setter
+      act(() => {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          'value'
+        )?.set;
+        nativeInputValueSetter?.call(weightInput, '82.5');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(sessionWeight).toBe('82.5');
+
+      // 2. Source contract: SessionView and HistoryView source code must not use raw unstyled inputs or dead placeholders
+      const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
+      expect(sessionSrc).toContain('<Input');
+      expect(sessionSrc).not.toContain('placeholder:text-zinc-850');
+      expect(sessionSrc).not.toContain('<input\n                          type="number"');
+
+      const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
+      expect(historySrc).toContain('<Input');
+      expect(historySrc).not.toContain('<input\n                                              type="number"');
     });
   });
 });

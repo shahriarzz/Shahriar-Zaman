@@ -170,8 +170,33 @@ export const SHADOW = {
   elevation: 'shadow-md',
   panel: 'shadow-2xl',
   modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
-  // accentGlowStyle returns a dynamic CSSProperties boxShadow rather than an interpolated Tailwind class
-  accentGlowStyle: (hex: string) => ({ boxShadow: `0 0 20px ${hex}40` }),
+  /**
+   * Generates inline CSSProperties boxShadow for dynamic accent glow.
+   * Single source of truth for glow geometry (0 0 20px) and ~25% alpha.
+   * Handles 6-digit hex (#rrggbb), 3-digit hex (#rgb), 8-digit hex (#rrggbbaa),
+   * and rgb/rgba color strings safely without runtime Tailwind interpolation.
+   */
+  accentGlowStyle: (color: string): { boxShadow: string } => {
+    if (!color) return { boxShadow: 'none' };
+    const trimmed = color.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+      return { boxShadow: `0 0 20px ${trimmed}40` };
+    }
+    if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+      const r = trimmed[1];
+      const g = trimmed[2];
+      const b = trimmed[3];
+      return { boxShadow: `0 0 20px #${r}${r}${g}${g}${b}${b}40` };
+    }
+    if (/^#[0-9a-fA-F]{8}$/.test(trimmed)) {
+      return { boxShadow: `0 0 20px ${trimmed}` };
+    }
+    if (/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.test(trimmed)) {
+      const rgba = trimmed.replace(/rgb\(/i, 'rgba(').replace(/\)$/, ', 0.25)');
+      return { boxShadow: `0 0 20px ${rgba}` };
+    }
+    return { boxShadow: `0 0 20px ${trimmed}` };
+  },
   emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
   emeraldSubtle: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
   emeraldInset: 'shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]',
