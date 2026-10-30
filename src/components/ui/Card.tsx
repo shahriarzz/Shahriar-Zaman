@@ -89,7 +89,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
       isActionable && cn(
         BORDER.hover,
         INTERACTIVE.hover,
-        'active:scale-[0.99] select-none cursor-pointer',
+        INTERACTIVE.active,
+        TRANSITION.button,
+        'select-none cursor-pointer',
         FOCUS.visible
       )
     ),
@@ -134,6 +136,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     // Only apply built-in button keyboard behavior when resolvedRole is 'button' and actionable
     if (resolvedRole === 'button' && isActionable && !e.defaultPrevented) {
       if (e.key === 'Enter') {
+        // Native <button> triggers click repeatedly when Enter is held (e.repeat === true).
         e.preventDefault();
         onClick?.();
       } else if (e.key === ' ' || e.key === 'Spacebar') {
@@ -149,11 +152,12 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyUp?.(e);
 
-    if (resolvedRole === 'button' && isActionable && !e.defaultPrevented) {
+    if (resolvedRole === 'button' && isActionable) {
       if (e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        if (isSpacePressedRef.current) {
-          isSpacePressedRef.current = false;
+        const wasPressed = isSpacePressedRef.current;
+        isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
+        if (wasPressed && !e.defaultPrevented) {
+          e.preventDefault();
           onClick?.();
         }
       }
@@ -202,7 +206,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         variantClasses[variant] || variantClasses.standard,
         paddingClass,
         isActionable && FOCUS.visible,
-        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover),
+        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.interactive),
         isActionable && !hoverable && 'cursor-pointer',
         accentClasses,
         className

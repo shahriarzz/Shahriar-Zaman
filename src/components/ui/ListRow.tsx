@@ -41,6 +41,7 @@ export const ListRow: React.FC<ListRowProps> = ({
     // Only apply built-in button keyboard behavior when resolvedRole is 'button' and clickable
     if (resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
       if (e.key === 'Enter') {
+        // Native <button> triggers click repeatedly when Enter is held (e.repeat === true).
         e.preventDefault();
         onClick?.();
       } else if (e.key === ' ' || e.key === 'Spacebar') {
@@ -56,11 +57,12 @@ export const ListRow: React.FC<ListRowProps> = ({
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyUp?.(e);
 
-    if (resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
+    if (resolvedRole === 'button' && isClickable) {
       if (e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        if (isSpacePressedRef.current) {
-          isSpacePressedRef.current = false;
+        const wasPressed = isSpacePressedRef.current;
+        isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
+        if (wasPressed && !e.defaultPrevented) {
+          e.preventDefault();
           onClick?.();
         }
       }
@@ -108,7 +110,7 @@ export const ListRow: React.FC<ListRowProps> = ({
       onBlur={handleBlur}
       className={cn(
         "border flex items-center justify-between gap-3 text-xs text-zinc-200",
-        TRANSITION.interactive,
+        isClickable ? TRANSITION.button : TRANSITION.interactive,
         RADIUS.button,
         SPACING.compact,
         variant === 'subtle' && SURFACE.subtle,

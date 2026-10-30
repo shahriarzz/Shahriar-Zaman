@@ -18,9 +18,11 @@ import {
   DURATION,
   TRANSITION,
   MOTION_CONFIG,
+  INTERACTIVE,
   CANVAS_HEX,
   SemanticColorKey,
 } from '../styles/tokens';
+import { cn } from '../lib/utils';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -288,6 +290,36 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(TRANSITION.colors).toContain('motion-reduce:transition-none');
       expect(TRANSITION.interactive).toContain('motion-reduce:transition-none');
       expect(TRANSITION.button).toContain('motion-reduce:transition-none');
+    });
+
+    it('enforces transition tokens do not collide with INTERACTIVE state tokens during cn() merging', () => {
+      // INTERACTIVE.hover and INTERACTIVE.active must not contain transition-property utilities
+      expect(INTERACTIVE.hover).not.toContain('transition-');
+      expect(INTERACTIVE.active).not.toContain('transition-');
+      expect(INTERACTIVE.hover).toBe('hover:bg-zinc-800/60 hover:text-white');
+      expect(INTERACTIVE.active).toBe('active:scale-[0.99]');
+
+      // Combined button classes must preserve TRANSITION.button without dropping its multi-property definition
+      const mergedButton = cn(TRANSITION.button, INTERACTIVE.hover, INTERACTIVE.active);
+      expect(mergedButton).toContain('transition-[background-color,border-color,color,transform]');
+      expect(mergedButton).toContain('duration-200');
+      expect(mergedButton).toContain('motion-reduce:transition-none');
+      expect(mergedButton).toContain('hover:bg-zinc-800/60');
+      expect(mergedButton).toContain('hover:text-white');
+      expect(mergedButton).toContain('active:scale-[0.99]');
+
+      // Interactive rows and cards combining TRANSITION.interactive and INTERACTIVE.hover
+      const mergedInteractive = cn(TRANSITION.interactive, INTERACTIVE.hover);
+      expect(mergedInteractive).toContain('transition-[background-color,border-color,color]');
+      expect(mergedInteractive).toContain('duration-200');
+      expect(mergedInteractive).toContain('motion-reduce:transition-none');
+      expect(mergedInteractive).toContain('hover:bg-zinc-800/60');
+    });
+
+    it('preserves the deliberate 500ms set-completion celebration flash in SessionView', () => {
+      const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
+      expect(sessionSrc).toContain('transition-colors duration-500 motion-reduce:transition-none');
+      expect(sessionSrc).toContain('flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"');
     });
 
     it('verifies DESIGN_SYSTEM.md exists in root and is wired into AGENTS.md reading order and prohibited actions', () => {
@@ -1082,6 +1114,12 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(consumerKeyDownFired).toBe(true);
       expect(receivedArg).toBeUndefined();
 
+      // Enter key repeat: native button behavior triggers repeat clicks when Enter is held
+      act(() => {
+        cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true }));
+      });
+      expect(callCount).toBe(2);
+
       // Space keydown: prevents scroll, forwards consumer onKeyDown, does NOT activate immediately
       consumerKeyDownFired = false;
       receivedArg = 'INITIAL_STATE';
@@ -1093,19 +1131,19 @@ describe('Design System Consolidation & Token Contracts', () => {
       });
       expect(defaultPrevented).toBe(true); // Space keydown prevented default page scroll
       expect(consumerKeyDownFired).toBe(true);
-      expect(callCount).toBe(1); // No activation on Space keydown
+      expect(callCount).toBe(2); // No activation on Space keydown
 
       // Space key repeat: holding Space does NOT activate
       act(() => {
         cardEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true }));
       });
-      expect(callCount).toBe(1);
+      expect(callCount).toBe(2);
 
       // Space keyup: activates on keyup, forwards consumer onKeyUp, calls onClick without fabricated event
       act(() => {
         cardEl.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
       });
-      expect(callCount).toBe(2);
+      expect(callCount).toBe(3);
       expect(consumerKeyUpFired).toBe(true);
       expect(receivedArg).toBeUndefined();
 
@@ -1113,7 +1151,7 @@ describe('Design System Consolidation & Token Contracts', () => {
       act(() => {
         cardEl.click();
       });
-      expect(callCount).toBe(3);
+      expect(callCount).toBe(4);
       expect(receivedArg).toBeDefined();
 
       // Consumer event cancellation on Enter keydown: calling preventDefault cancels activation
@@ -1154,6 +1192,23 @@ describe('Design System Consolidation & Token Contracts', () => {
         container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
       });
       expect(callCount).toBe(0);
+
+      // After Space keyup cancellation, verify a fresh Space press/release activates cleanly (proves no stale state)
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Fresh Space Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
 
       // Focus loss (blur/focusout) cancels pending Space activation
       act(() => {
@@ -1286,10 +1341,10 @@ describe('Design System Consolidation & Token Contracts', () => {
     });
 
     it('verifies ListRow keyboard operability and accessible semantics', () => {
-      let clicked = false;
+      let callCount = 0;
       let consumerKeyDownFired = false;
       let consumerKeyUpFired = false;
-      const handleClick = () => { clicked = true; };
+      const handleClick = () => { callCount++; };
       const handleKeyDown = () => { consumerKeyDownFired = true; };
       const handleKeyUp = () => { consumerKeyUpFired = true; };
 
@@ -1315,25 +1370,150 @@ describe('Design System Consolidation & Token Contracts', () => {
       act(() => {
         rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       });
-      expect(clicked).toBe(true);
+      expect(callCount).toBe(1);
       expect(consumerKeyDownFired).toBe(true);
 
-      // Space key activation: prevents scroll on keydown, activates on keyup
-      clicked = false;
+      // Enter key repeat: native button behavior triggers repeat clicks when Enter is held
+      act(() => {
+        rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true }));
+      });
+      expect(callCount).toBe(2);
+
+      // Space keydown: prevents scroll on keydown, does NOT activate immediately
       consumerKeyDownFired = false;
+      let defaultPrevented = false;
       act(() => {
         const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
         rowEl.dispatchEvent(ev);
-        expect(ev.defaultPrevented).toBe(true);
+        defaultPrevented = ev.defaultPrevented;
       });
-      expect(clicked).toBe(false); // Does NOT activate on keydown
+      expect(defaultPrevented).toBe(true); // Space keydown prevented default page scroll
       expect(consumerKeyDownFired).toBe(true);
+      expect(callCount).toBe(2); // No activation on Space keydown
 
+      // Space key repeat: holding Space does NOT activate
+      act(() => {
+        rowEl.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true }));
+      });
+      expect(callCount).toBe(2);
+
+      // Space keyup: activates on keyup
       act(() => {
         rowEl.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
       });
-      expect(clicked).toBe(true); // Activates on keyup
+      expect(callCount).toBe(3);
       expect(consumerKeyUpFired).toBe(true);
+
+      // Consumer event cancellation on Enter keydown: calling preventDefault cancels activation
+      const cancellingKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.preventDefault();
+      };
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, onKeyDown: cancellingKeyDown },
+            React.createElement('span', null, 'Cancelled Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Consumer event cancellation on Space keydown: calling preventDefault cancels activation on keyup
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, onKeyDown: cancellingKeyDown },
+            React.createElement('span', null, 'Cancelled Space Down Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Consumer event cancellation on Space keyup: calling preventDefault cancels activation
+      const cancellingKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.preventDefault();
+      };
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, onKeyUp: cancellingKeyUp },
+            React.createElement('span', null, 'Cancelled Space Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // After Space keyup cancellation, verify a fresh Space press/release activates cleanly (proves no stale state)
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Fresh Space Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
+      // Focus loss (blur/focusout) cancels pending Space activation
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Blur Cancel Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+
+      // Non-button custom role does NOT inherit button keyboard activation
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, role: 'region' },
+            React.createElement('span', null, 'Region Row')
+          )
+        );
+      });
+      callCount = 0;
+      const regionRow = container.firstElementChild as HTMLDivElement;
+      expect(regionRow.getAttribute('role')).toBe('region');
+      act(() => {
+        regionRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        regionRow.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        regionRow.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
 
       // 2. Toggle-style ListRow: exposes aria-pressed without aria-selected
       act(() => {
@@ -1570,6 +1750,9 @@ describe('Design System Consolidation & Token Contracts', () => {
         weightInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(weightInput.value).toBe('85');
+      // Standard input does not have extreme warning classes
+      expect(weightInput.className).not.toContain('border-amber-500/80');
+      expect(weightInput.className).not.toContain('text-amber-400');
 
       act(() => {
         const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -1577,6 +1760,29 @@ describe('Design System Consolidation & Token Contracts', () => {
         repsInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(repsInput.value).toBe('6');
+      // Standard input does not have extreme warning classes
+      expect(repsInput.className).not.toContain('border-amber-500/80');
+      expect(repsInput.className).not.toContain('text-amber-400');
+
+      // Extreme weight value (>500kg) triggers warning classes
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '550');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(weightInput.value).toBe('550');
+      expect(weightInput.className).toContain('border-amber-500/80');
+      expect(weightInput.className).toContain('text-amber-400');
+
+      // Extreme reps value (>100 reps) triggers warning classes
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(repsInput, '120');
+        repsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(repsInput.value).toBe('120');
+      expect(repsInput.className).toContain('border-amber-500/80');
+      expect(repsInput.className).toContain('text-amber-400');
 
       // 2. Supplementary source-level contract checks for SessionView and HistoryView
       const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');

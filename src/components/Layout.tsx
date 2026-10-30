@@ -48,7 +48,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         "flex flex-col items-center justify-center relative group select-none",
         CONTROL_HEIGHT.touchTarget,
         FOCUS.visible,
-        TRANSITION.colors,
+        TRANSITION.button,
         NAV.item,
         NAV.itemGap,
         active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",

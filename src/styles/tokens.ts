@@ -156,8 +156,8 @@ export const MOTION_CONFIG = {
 } as const;
 
 export const INTERACTIVE = {
-  hover: 'hover:bg-zinc-800/60 hover:text-white transition-colors motion-reduce:transition-none',
-  active: 'active:scale-[0.99] transition-transform motion-reduce:transition-none',
+  hover: 'hover:bg-zinc-800/60 hover:text-white',
+  active: 'active:scale-[0.99]',
   disabled: 'opacity-40 cursor-not-allowed pointer-events-none select-none',
 } as const;
 
