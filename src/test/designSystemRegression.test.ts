@@ -36,6 +36,7 @@ import { Input } from '../components/ui/Input';
 import { Layout } from '../components/Layout';
 import { Calendar } from '../components/Calendar';
 import { SessionView } from '../components/SessionView';
+import { HistoryView } from '../components/HistoryView';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
@@ -1228,6 +1229,106 @@ describe('Design System Consolidation & Token Contracts', () => {
       });
       expect(callCount).toBe(0);
 
+      // Same-mounted-instance dynamic role transition:
+      // Space keydown -> change role to region -> keyup -> restore button role -> fresh Space press.
+      // Only the fresh press activates!
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Dynamic Role Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      expect(callCount).toBe(0);
+      // Change role to region on the same mounted element
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick, role: 'region' },
+            'Dynamic Role Card'
+          )
+        );
+      });
+      // Keyup fires while role is region: must not activate and must clear stale space state
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+      // Restore button role
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Dynamic Role Card'
+          )
+        );
+      });
+      expect(callCount).toBe(0);
+      // Fresh Space press: activates cleanly
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
+      // Same-mounted-instance dynamic actionability transition:
+      // Space keydown -> remove onClick -> keyup -> restore onClick -> fresh Space press.
+      // Only the fresh press activates!
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Dynamic Actionable Card'
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      expect(callCount).toBe(0);
+      // Remove onClick on the same mounted element
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            null,
+            'Dynamic Actionable Card'
+          )
+        );
+      });
+      // Keyup fires while not actionable: must not activate and must clear stale space state
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+      // Restore onClick
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { onClick: handleClick },
+            'Dynamic Actionable Card'
+          )
+        );
+      });
+      expect(callCount).toBe(0);
+      // Fresh Space press: activates cleanly
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
       // Non-button custom role does NOT inherit button keyboard activation
       act(() => {
         root.render(
@@ -1495,6 +1596,106 @@ describe('Design System Consolidation & Token Contracts', () => {
       });
       expect(callCount).toBe(0);
 
+      // Same-mounted-instance dynamic role transition:
+      // Space keydown -> change role to region -> keyup -> restore button role -> fresh Space press.
+      // Only the fresh press activates!
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Dynamic Role Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      expect(callCount).toBe(0);
+      // Change role to region on the same mounted element
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick, role: 'region' },
+            React.createElement('span', null, 'Dynamic Role Row')
+          )
+        );
+      });
+      // Keyup fires while role is region: must not activate and must clear stale space state
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+      // Restore button role
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Dynamic Role Row')
+          )
+        );
+      });
+      expect(callCount).toBe(0);
+      // Fresh Space press: activates cleanly
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
+      // Same-mounted-instance dynamic actionability transition:
+      // Space keydown -> remove onClick -> keyup -> restore onClick -> fresh Space press.
+      // Only the fresh press activates!
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Dynamic Actionable Row')
+          )
+        );
+      });
+      callCount = 0;
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      expect(callCount).toBe(0);
+      // Remove onClick on the same mounted element
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            null,
+            React.createElement('span', null, 'Dynamic Actionable Row')
+          )
+        );
+      });
+      // Keyup fires while not actionable: must not activate and must clear stale space state
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(0);
+      // Restore onClick
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: handleClick },
+            React.createElement('span', null, 'Dynamic Actionable Row')
+          )
+        );
+      });
+      expect(callCount).toBe(0);
+      // Fresh Space press: activates cleanly
+      act(() => {
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        container.firstElementChild?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(callCount).toBe(1);
+
       // Non-button custom role does NOT inherit button keyboard activation
       act(() => {
         root.render(
@@ -1560,6 +1761,97 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(staticRow.getAttribute('tabindex')).toBeNull();
       expect(staticRow.getAttribute('aria-selected')).toBeNull();
       expect(staticRow.getAttribute('aria-pressed')).toBeNull();
+    });
+
+    it('verifies actual component transition compositions across Card and ListRow variants', () => {
+      // 1. Standard actionable Card: cursor-pointer and focus visible, but no hover/active scale transitions
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { variant: 'standard', onClick: () => {} },
+            'Standard Actionable Card'
+          )
+        );
+      });
+      const stdCard = container.firstElementChild as HTMLDivElement;
+      expect(stdCard.className).toContain('cursor-pointer');
+      expect(stdCard.className).toContain('focus-visible:ring-2');
+      expect(stdCard.className).not.toContain('transition-');
+      expect(stdCard.className).not.toContain('active:scale-[0.99]');
+
+      // 2. Interactive Card (actionable): active scale feedback, hover colors, and TRANSITION.button
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { variant: 'interactive', onClick: () => {} },
+            'Interactive Card'
+          )
+        );
+      });
+      const interactiveCard = container.firstElementChild as HTMLDivElement;
+      expect(interactiveCard.className).toContain('transition-[background-color,border-color,color,transform]');
+      expect(interactiveCard.className).toContain('duration-200');
+      expect(interactiveCard.className).toContain('motion-reduce:transition-none');
+      expect(interactiveCard.className).toContain('hover:bg-zinc-800/60');
+      expect(interactiveCard.className).toContain('hover:text-white');
+      expect(interactiveCard.className).toContain('active:scale-[0.99]');
+
+      // 3. Interactive + hoverable Card: TRANSITION.button survives and is NOT overridden by TRANSITION.interactive
+      act(() => {
+        root.render(
+          React.createElement(
+            Card,
+            { variant: 'interactive', hoverable: true, onClick: () => {} },
+            'Interactive Hoverable Card'
+          )
+        );
+      });
+      const interactiveHoverableCard = container.firstElementChild as HTMLDivElement;
+      expect(interactiveHoverableCard.className).toContain('transition-[background-color,border-color,color,transform]');
+      expect(interactiveHoverableCard.className).toContain('duration-200');
+      expect(interactiveHoverableCard.className).toContain('motion-reduce:transition-none');
+      expect(interactiveHoverableCard.className).toContain('hover:bg-zinc-800/60');
+      expect(interactiveHoverableCard.className).toContain('hover:text-white');
+      expect(interactiveHoverableCard.className).toContain('active:scale-[0.99]');
+
+      // 4. Clickable ListRow: TRANSITION.button, hover states, active scale feedback
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            { onClick: () => {} },
+            React.createElement('span', null, 'Clickable Row')
+          )
+        );
+      });
+      const clickableRow = container.firstElementChild as HTMLDivElement;
+      expect(clickableRow.className).toContain('transition-[background-color,border-color,color,transform]');
+      expect(clickableRow.className).toContain('duration-200');
+      expect(clickableRow.className).toContain('motion-reduce:transition-none');
+      expect(clickableRow.className).toContain('hover:bg-zinc-800/60');
+      expect(clickableRow.className).toContain('hover:text-white');
+      expect(clickableRow.className).toContain('active:scale-[0.99]');
+      expect(clickableRow.className).toContain('cursor-pointer');
+
+      // 5. Non-clickable ListRow: TRANSITION.interactive, no active scale, no cursor-pointer
+      act(() => {
+        root.render(
+          React.createElement(
+            ListRow,
+            null,
+            React.createElement('span', null, 'Non-clickable Row')
+          )
+        );
+      });
+      const nonClickableRow = container.firstElementChild as HTMLDivElement;
+      expect(nonClickableRow.className).toContain('transition-[background-color,border-color,color]');
+      expect(nonClickableRow.className).not.toContain('transition-[background-color,border-color,color,transform]');
+      expect(nonClickableRow.className).toContain('duration-200');
+      expect(nonClickableRow.className).toContain('motion-reduce:transition-none');
+      expect(nonClickableRow.className).not.toContain('active:scale-[0.99]');
+      expect(nonClickableRow.className).not.toContain('cursor-pointer');
     });
 
     it('verifies Calendar rendered behavior: accessible labels, today state, disabled adjacent dates, and visible focus', () => {
@@ -1750,6 +2042,10 @@ describe('Design System Consolidation & Token Contracts', () => {
         weightInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(weightInput.value).toBe('85');
+      // Assert actual callback propagation to updateActiveSessionSets
+      const latestCallWeight = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallWeight).toBeDefined();
+      expect(latestCallWeight['bench-press'][0].weight).toBe('85');
       // Standard input does not have extreme warning classes
       expect(weightInput.className).not.toContain('border-amber-500/80');
       expect(weightInput.className).not.toContain('text-amber-400');
@@ -1760,29 +2056,61 @@ describe('Design System Consolidation & Token Contracts', () => {
         repsInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(repsInput.value).toBe('6');
+      // Assert actual callback propagation to updateActiveSessionSets
+      const latestCallReps = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallReps).toBeDefined();
+      expect(latestCallReps['bench-press'][0].reps).toBe('6');
       // Standard input does not have extreme warning classes
       expect(repsInput.className).not.toContain('border-amber-500/80');
       expect(repsInput.className).not.toContain('text-amber-400');
 
-      // Extreme weight value (>500kg) triggers warning classes
+      // Extreme weight value (>500kg) triggers warning classes and propagates state
       act(() => {
         const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
         nativeSetter?.call(weightInput, '550');
         weightInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(weightInput.value).toBe('550');
+      const latestCallExtW = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallExtW['bench-press'][0].weight).toBe('550');
       expect(weightInput.className).toContain('border-amber-500/80');
       expect(weightInput.className).toContain('text-amber-400');
 
-      // Extreme reps value (>100 reps) triggers warning classes
+      // Return weight to normal: verify warning state is removed again when value returns to normal
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '90');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(weightInput.value).toBe('90');
+      const latestCallNormW = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallNormW['bench-press'][0].weight).toBe('90');
+      expect(weightInput.className).not.toContain('border-amber-500/80');
+      expect(weightInput.className).not.toContain('text-amber-400');
+
+      // Extreme reps value (>100 reps) triggers warning classes and propagates state
       act(() => {
         const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
         nativeSetter?.call(repsInput, '120');
         repsInput.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(repsInput.value).toBe('120');
+      const latestCallExtR = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallExtR['bench-press'][0].reps).toBe('120');
       expect(repsInput.className).toContain('border-amber-500/80');
       expect(repsInput.className).toContain('text-amber-400');
+
+      // Return reps to normal: verify warning state is removed again when value returns to normal
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(repsInput, '8');
+        repsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(repsInput.value).toBe('8');
+      const latestCallNormR = mockFitnessContextValue.updateActiveSessionSets.mock.calls.at(-1)?.[0];
+      expect(latestCallNormR['bench-press'][0].reps).toBe('8');
+      expect(repsInput.className).not.toContain('border-amber-500/80');
+      expect(repsInput.className).not.toContain('text-amber-400');
 
       // 2. Supplementary source-level contract checks for SessionView and HistoryView
       const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
@@ -1793,6 +2121,176 @@ describe('Design System Consolidation & Token Contracts', () => {
       const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
       expect(historySrc).toContain('<Input');
       expect(historySrc).not.toContain('<input\n                                              type="number"');
+    });
+
+    it('renders and verifies real HistoryView editing region inputs, validation, and save callback propagation', async () => {
+      const mockWorkout: Workout = {
+        id: 'push-a',
+        name: 'Push Protocol Alpha',
+        badge: 'PUSH A',
+        cycleDay: 1,
+        type: 'push',
+        exercises: [
+          {
+            sets: 3,
+            reps: '5-8',
+            exerciseDefinitionId: 'bench-press',
+          },
+        ],
+      };
+
+      const mockHistoricalLog: SessionLog = {
+        id: 'history-log-1',
+        date: '2026-10-25',
+        workoutId: 'push-a',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          'bench-press': [
+            { id: 'h-s1', reps: '8', weight: '80', done: true }
+          ]
+        }
+      };
+
+      const mockAddLog = vi.fn().mockResolvedValue(undefined);
+      const mockDeleteLog = vi.fn().mockResolvedValue(undefined);
+
+      const mockHistoryFitnessContext = {
+        logs: [mockHistoricalLog],
+        workouts: [mockWorkout],
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        appState: { cycleStart: '2026-10-25' },
+        addLog: mockAddLog,
+        deleteLog: mockDeleteLog,
+        updateCycleStart: vi.fn(),
+        activeSession: null,
+        startActiveSession: vi.fn(),
+        updateActiveSessionSets: vi.fn(),
+        clearActiveSession: vi.fn(),
+        user: null,
+      };
+
+      const historyDefsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const historyIndex = buildFitnessIndex([mockHistoricalLog], historyDefsMap);
+
+      const mockHistoryDerivedContext = {
+        sortedLogs: [mockHistoricalLog],
+        workoutMap: new Map([[mockWorkout.id, mockWorkout]]),
+        index: historyIndex,
+        prEvents: [],
+        getStrengthTrendForRange: () => [],
+        getVolumeForRange: () => [],
+      };
+
+      await act(async () => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            { value: mockHistoryFitnessContext as any },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              { value: mockHistoryDerivedContext as any },
+              React.createElement(
+                ConfirmContext.Provider,
+                { value: { confirm: vi.fn().mockResolvedValue(true) } as any },
+                React.createElement(HistoryView, { initialDate: '2026-10-25' })
+              )
+            )
+          )
+        );
+      });
+
+      // 1. Open the session editor by clicking "Edit session logs"
+      const editButton = container.querySelector('button[aria-label="Edit session logs"]') as HTMLButtonElement;
+      expect(editButton).toBeTruthy();
+      await act(async () => {
+        editButton.click();
+      });
+
+      // 2. Query rendered editing inputs
+      const weightInput = container.querySelector('input[aria-label="Set 1 weight"]') as HTMLInputElement;
+      const repsInput = container.querySelector('input[aria-label="Set 1 reps"]') as HTMLInputElement;
+      expect(weightInput).toBeTruthy();
+      expect(repsInput).toBeTruthy();
+      expect(weightInput.value).toBe('80');
+      expect(repsInput.value).toBe('8');
+
+      // 3. Edit weight through the real input and verify controlled rerender
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '85');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(weightInput.value).toBe('85');
+      expect(weightInput.className).not.toContain('border-amber-500');
+
+      // 4. Edit reps through the real input and verify controlled rerender
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(repsInput, '10');
+        repsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(repsInput.value).toBe('10');
+      expect(repsInput.className).not.toContain('border-amber-500');
+
+      // 5. Test extreme weight input (>500kg) triggers extreme warning styling
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '550');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(weightInput.value).toBe('550');
+      expect(weightInput.className).toContain('border-amber-500');
+      expect(weightInput.className).toContain('text-amber-400');
+
+      // Return weight to normal: verify warning styling is removed
+      act(() => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeSetter?.call(weightInput, '85');
+        weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(weightInput.value).toBe('85');
+      expect(weightInput.className).not.toContain('border-amber-500');
+      expect(weightInput.className).not.toContain('text-amber-400');
+
+      // 6. Test verification checkbox and save propagation
+      const verifyCheckbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(verifyCheckbox).toBeTruthy();
+      expect(verifyCheckbox.checked).toBe(false);
+
+      const confirmButton = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.includes('Confirm Modifications')
+      ) as HTMLButtonElement;
+      expect(confirmButton).toBeTruthy();
+      expect(confirmButton.disabled).toBe(true);
+
+      // Checking verification enables the save button
+      act(() => {
+        verifyCheckbox.click();
+      });
+      expect(verifyCheckbox.checked).toBe(true);
+      expect(confirmButton.disabled).toBe(false);
+
+      // Confirm modifications: invokes addLog callback with updated log data
+      await act(async () => {
+        confirmButton.click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockAddLog).toHaveBeenCalledWith(
+        'history-log-1',
+        expect.objectContaining({
+          id: 'history-log-1',
+          sets: expect.objectContaining({
+            'bench-press': [
+              expect.objectContaining({
+                weight: '85',
+                reps: '10',
+              }),
+            ],
+          }),
+        })
+      );
     });
   });
 });

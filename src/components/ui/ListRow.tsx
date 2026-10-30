@@ -57,14 +57,12 @@ export const ListRow: React.FC<ListRowProps> = ({
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyUp?.(e);
 
-    if (resolvedRole === 'button' && isClickable) {
-      if (e.key === ' ' || e.key === 'Spacebar') {
-        const wasPressed = isSpacePressedRef.current;
-        isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
-        if (wasPressed && !e.defaultPrevented) {
-          e.preventDefault();
-          onClick?.();
-        }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      const wasPressed = isSpacePressedRef.current;
+      isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
+      if (wasPressed && resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
+        e.preventDefault();
+        onClick?.();
       }
     }
   };

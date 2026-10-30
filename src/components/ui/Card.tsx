@@ -78,6 +78,18 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
 
   const paddingClass = SPACING[padding || 'standard'] || SPACING.standard;
 
+  const isInteractiveActionable = variant === 'interactive' && isActionable;
+  const isHoverableActionable = hoverable && isActionable;
+
+  // Single authoritative transition token based on complete interaction state:
+  // Actionable interactive cards with active scale feedback retain TRANSITION.button.
+  // Hoverable-only actionable cards use TRANSITION.interactive.
+  const resolvedTransition = isInteractiveActionable
+    ? TRANSITION.button
+    : isHoverableActionable
+    ? TRANSITION.interactive
+    : undefined;
+
   const variantClasses: Record<CardVariant, string> = {
     standard: cn(BORDER.standard, RADIUS.card, 'border'),
     recessed: cn(BORDER.standard, RADIUS.card, 'border'),
@@ -90,7 +102,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         BORDER.hover,
         INTERACTIVE.hover,
         INTERACTIVE.active,
-        TRANSITION.button,
         'select-none cursor-pointer',
         FOCUS.visible
       )
@@ -152,14 +163,12 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyUp?.(e);
 
-    if (resolvedRole === 'button' && isActionable) {
-      if (e.key === ' ' || e.key === 'Spacebar') {
-        const wasPressed = isSpacePressedRef.current;
-        isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
-        if (wasPressed && !e.defaultPrevented) {
-          e.preventDefault();
-          onClick?.();
-        }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      const wasPressed = isSpacePressedRef.current;
+      isSpacePressedRef.current = false; // Unconditionally clear on Space keyup to prevent stale activation
+      if (wasPressed && resolvedRole === 'button' && isActionable && !e.defaultPrevented) {
+        e.preventDefault();
+        onClick?.();
       }
     }
   };
@@ -205,9 +214,10 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
         surfaceClasses[effectiveSurface],
         variantClasses[variant] || variantClasses.standard,
         paddingClass,
+        resolvedTransition,
         isActionable && FOCUS.visible,
-        hoverable && isActionable && cn(BORDER.hover, INTERACTIVE.hover, TRANSITION.interactive),
-        isActionable && !hoverable && 'cursor-pointer',
+        isHoverableActionable && cn(BORDER.hover, INTERACTIVE.hover),
+        isActionable && !isInteractiveActionable && !hoverable && 'cursor-pointer',
         accentClasses,
         className
       )}
