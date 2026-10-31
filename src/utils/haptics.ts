@@ -16,5 +16,6 @@ export const haptics = {
   selectionChanged: () => runHaptic(() => Haptics.selectionChanged()),
   success: () => runHaptic(() => Haptics.notification({ type: NotificationType.Success })),
   warning: () => runHaptic(() => Haptics.notification({ type: NotificationType.Warning })),
+  destructive: () => runHaptic(() => Haptics.notification({ type: NotificationType.Error })),
   vibrate: (duration = 200) => runHaptic(() => Haptics.vibrate({ duration }))
 };

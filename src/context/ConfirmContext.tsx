@@ -6,6 +6,8 @@ interface ConfirmOptions {
   title: string;
   message: string;
   isDanger?: boolean;
+  confirmText?: string;
+  cancelText?: string;
 }
 
 interface ConfirmContextType {
@@ -122,7 +124,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 size="md"
                 onClick={() => handleClose(false)}
               >
-                ABORT
+                {options.cancelText || 'ABORT'}
               </Button>
               <Button
                 type="button"
@@ -131,7 +133,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 size="md"
                 onClick={() => handleClose(true)}
               >
-                EXECUTE
+                {options.confirmText || 'EXECUTE'}
               </Button>
             </DialogFooter>
           </>

@@ -6,7 +6,7 @@ import { formatDateStr } from '../utils/dashboardSelectors';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
 import { useConfirm } from '../context/ConfirmContext';
-import { useDashboardData } from '../hooks/useDashboardData';
+import { useDashboardData, parseStrictBodyWeight } from '../hooks/useDashboardData';
 import {
   Section,
   SectionHeader,
@@ -49,6 +49,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     hasWorkouts,
     workouts,
     weightSummary,
+    recentMilestones,
     clearActiveSession,
     resetToCycleDay1,
     reloadInitialWorkouts
@@ -58,23 +59,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   const shouldReduceMotion = useReducedMotion();
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const [weightInput, setWeightInput] = React.useState('');
+  const [weightError, setWeightError] = React.useState<string | null>(null);
+  const [isSubmittingWeight, setIsSubmittingWeight] = React.useState(false);
 
+  const triggerButtonRef = React.useRef<HTMLButtonElement>(null);
+  const dropdownContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown on pointerdown outside
   React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isDropdownOpen && !(event.target as Element).closest('.dropdown-container')) {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        isDropdownOpen &&
+        dropdownContainerRef.current &&
+        !dropdownContainerRef.current.contains(event.target as Node)
+      ) {
         setIsDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [isDropdownOpen]);
+
+  // Close dropdown on Escape and restore focus to trigger button
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isDropdownOpen && event.key === 'Escape') {
+        event.preventDefault();
+        setIsDropdownOpen(false);
+        triggerButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDropdownOpen]);
 
   const handleLogWeightSubmit = () => {
-    const val = parseFloat(weightInput);
-    if (!val || val < 20 || val > 300) return;
-    haptics.success();
-    weightSummary.logWeight(val);
-    setWeightInput('');
+    if (isSubmittingWeight) return;
+    const { value, error } = parseStrictBodyWeight(weightInput);
+    if (error || value === null) {
+      haptics.warning();
+      setWeightError(error);
+      return;
+    }
+    setWeightError(null);
+    setIsSubmittingWeight(true);
+    try {
+      haptics.success();
+      weightSummary.logWeight(value);
+      setWeightInput('');
+    } finally {
+      setIsSubmittingWeight(false);
+    }
   };
 
   return (
@@ -93,8 +128,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           <StatCard
             label="Scheduled Training Streak"
             value={trainingStreak.currentStreak}
-            unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
-            sublabel={`Best: ${trainingStreak.longestStreak}d`}
+            unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
+            sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
             accent="orange"
             icon={TrendingUp}
             size="standard"
@@ -104,7 +139,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             value={trainingFrequency.sessionsPerWeek}
             formatValue={(val) => val.toFixed(1)}
             unit="/ week"
-            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
+            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs prev 28d`}
             accent="emerald"
             icon={CalendarIcon}
             size="standard"
@@ -116,8 +151,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             unit="%"
             sublabel={
               strengthTrend.percentChange !== null
-                ? '28-day vs previous 28d'
-                : 'Building baseline'
+                ? `${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'exercise' : 'exercises'} (${strengthTrend.confidence} confidence)`
+                : 'Insufficient 28d baseline'
             }
             isUnavailable={strengthTrend.percentChange === null}
             accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
@@ -154,9 +189,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 <Button
                   variant="outline"
                   size="md"
-                  onClick={() => {
+                  onClick={async () => {
                     haptics.warning();
-                    clearActiveSession();
+                    const confirmed = await confirm({
+                      title: 'Discard Unfinished Session?',
+                      message: 'All unsubmitted progress and logged sets in this active session will be lost.',
+                      confirmText: 'Discard Session',
+                      isDanger: true,
+                    });
+                    if (confirmed) {
+                      haptics.destructive();
+                      clearActiveSession();
+                    }
                   }}
                   className="flex-1 sm:flex-initial"
                 >
@@ -207,14 +251,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <Stack spacing="xs">
-                <Badge
-                  label={todayWorkout.badge}
-                  colorOverride={WORKOUT_COLORS[todayWorkout.type]}
-                  variant="subtle"
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded border", SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
+                    DAY {currentCycleDay} / 8
+                  </span>
+                  <Badge
+                    label={todayWorkout.type === 'rest' ? 'RECOVERY DAY' : 'TRAINING DAY'}
+                    color={todayWorkout.type === 'rest' ? 'emerald' : 'orange'}
+                    variant="subtle"
+                  />
+                  <Badge
+                    label={todayWorkout.badge}
+                    colorOverride={WORKOUT_COLORS[todayWorkout.type]}
+                    variant="subtle"
+                  />
+                </div>
                 <h2 className={TYPOGRAPHY.titlePage}>{todayWorkout.name}</h2>
                 <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
-                  {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises · Approx 60 min`}
+                  {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises`}
                 </p>
               </Stack>
 
@@ -245,6 +299,90 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             }}
           />
         )}
+      </Section>
+
+      {/* Recent Milestones */}
+      <Section
+        eyebrow="Milestones"
+        eyebrowColor="orange"
+        title="Recent Achievements"
+        padding="section"
+      >
+        <Stack spacing="lg">
+          {/* Training Volume Rolling 7-Day Card */}
+          <div className={cn("p-4 rounded border flex flex-col sm:flex-row sm:items-center justify-between gap-4", SURFACE.recessed, BORDER.subtle)}>
+            <div>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Training Volume</span>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className={cn(TYPOGRAPHY.statValue, "text-white")}>
+                  {formatCompactWeight(recentMilestones.recentVolume.volume)}
+                </span>
+                <span className={TYPOGRAPHY.unit}>kg</span>
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+                {recentMilestones.recentVolume.dateRangeLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Personal Records Sub-block */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Personal Records</span>
+              <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono")}>
+                {recentMilestones.recentPREvents.length > 0 ? `Latest ${recentMilestones.recentPREvents.length}` : 'All-time verified'}
+              </span>
+            </div>
+
+            {recentMilestones.recentPREvents.length === 0 ? (
+              <EmptyState
+                size="compact"
+                title="No Recent Personal Records"
+                description="Personal records appear automatically as you log qualifying lifts."
+              />
+            ) : (
+              <Grid cols={1} gap="xs">
+                {recentMilestones.recentPREvents.map((pr) => (
+                  <div
+                    key={pr.id}
+                    className={cn(
+                      "flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded border gap-3",
+                      SURFACE.recessed,
+                      BORDER.subtle
+                    )}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>
+                          {pr.exerciseName}
+                        </span>
+                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono")}>
+                          {formatDateStr(pr.date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
+                        <span>{pr.weight} kg × {pr.reps} reps</span>
+                        <span className="text-zinc-600">·</span>
+                        <span>e1RM: <strong className="text-white">{pr.e1rm}</strong> kg</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 self-start sm:self-center">
+                      {pr.isWeightPR && (
+                        <Badge label="WEIGHT PR" color="orange" variant="subtle" />
+                      )}
+                      {pr.isE1RMPR && (
+                        <Badge label="E1RM PR" color="emerald" variant="subtle" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </Grid>
+            )}
+          </div>
+        </Stack>
       </Section>
 
       {/* Body Weight Log */}
@@ -279,66 +417,94 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     placeholder="0.0"
                     unit="kg"
                     value={weightInput}
-                    onChange={(e) => setWeightInput(e.target.value)}
+                    onChange={(e) => {
+                      setWeightInput(e.target.value);
+                      if (weightError) setWeightError(null);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         handleLogWeightSubmit();
                       }
                     }}
+                    aria-invalid={Boolean(weightError)}
+                    aria-describedby={weightError ? "body-weight-error" : undefined}
                     className="text-center font-mono font-bold"
                   />
                 </div>
                 <Button
                   variant="primary"
                   color="orange"
+                  disabled={isSubmittingWeight}
                   onClick={handleLogWeightSubmit}
                   className="whitespace-nowrap"
                 >
-                  Log
+                  {isSubmittingWeight ? 'Logging...' : 'Log'}
                 </Button>
               </div>
+              {weightError && (
+                <p id="body-weight-error" role="alert" className={cn(TYPOGRAPHY.caption, "text-red-400 mt-1")}>
+                  {weightError}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Sparkline */}
-          {weightSummary.sparklineData && (
-            <Stack spacing="xs">
-              <div className="relative h-12 w-full">
-                <svg viewBox="0 0 100 32" className="w-full h-full" preserveAspectRatio="none">
-                  <polyline
-                    points={weightSummary.sparklineData.sorted.map((e, i) => 
-                      `${i * weightSummary.sparklineData!.w},${32 - ((e[1] - weightSummary.sparklineData!.min) / weightSummary.sparklineData!.range) * 28}`
-                    ).join(' ')}
-                    fill="none"
-                    stroke={SEMANTIC_COLORS.orange}
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  {weightSummary.sparklineData.sorted.map((e, i) => (
-                    <circle
-                      key={`spark-${e[0]}-${i}`}
-                      cx={i * weightSummary.sparklineData!.w}
-                      cy={32 - ((e[1] - weightSummary.sparklineData!.min) / weightSummary.sparklineData!.range) * 28}
-                      r="2"
-                      fill={SEMANTIC_COLORS.orange}
+          {weightSummary.sparklineData && (() => {
+            const { sorted, min, max, range, w } = weightSummary.sparklineData;
+            const safeRange = range > 0 ? range : 1;
+            const firstDate = sorted[0][0];
+            const lastDate = sorted[sorted.length - 1][0];
+            const sparklineAriaLabel = `Body weight trend from ${formatDateStr(firstDate)} to ${formatDateStr(lastDate)}, ranging from ${min} kg to ${max} kg`;
+
+            return (
+              <Stack spacing="xs">
+                <div
+                  className="relative h-12 w-full"
+                  role="img"
+                  aria-label={sparklineAriaLabel}
+                >
+                  <svg
+                    viewBox="0 0 100 32"
+                    className="w-full h-full"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <polyline
+                      points={sorted.map((e, i) =>
+                        `${i * w},${32 - ((e[1] - min) / safeRange) * 28}`
+                      ).join(' ')}
+                      fill="none"
+                      stroke={SEMANTIC_COLORS.orange}
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                       vectorEffect="non-scaling-stroke"
                     />
-                  ))}
-                </svg>
-              </div>
+                    {sorted.map((e, i) => (
+                      <circle
+                        key={`spark-${e[0]}-${i}`}
+                        cx={i * w}
+                        cy={32 - ((e[1] - min) / safeRange) * 28}
+                        r="2"
+                        fill={SEMANTIC_COLORS.orange}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ))}
+                  </svg>
+                </div>
 
-              {/* Min/Max labels */}
-              <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-600")}>
-                <span>{weightSummary.sparklineData.sorted[0][0].slice(5)}</span>
-                <span className="text-zinc-500">
-                  {Math.min(...weightSummary.sparklineData.weights)}kg → {Math.max(...weightSummary.sparklineData.weights)}kg
-                </span>
-                <span>{weightSummary.sparklineData.sorted[weightSummary.sparklineData.sorted.length - 1][0].slice(5)}</span>
-              </div>
-            </Stack>
-          )}
+                {/* Min/Max labels */}
+                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-600")} aria-hidden="true">
+                  <span>{firstDate.slice(5)}</span>
+                  <span className="text-zinc-500">
+                    {min}kg → {max}kg
+                  </span>
+                  <span>{lastDate.slice(5)}</span>
+                </div>
+              </Stack>
+            );
+          })()}
 
           {/* Empty state */}
           {weightSummary.weightEntries.length === 0 && (
@@ -355,7 +521,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Recent Logs</div>
               <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {weightSummary.recentWeightLogs.map(([date, weight]) => (
-                  <Card key={date} variant="standard" padding="compact" className="flex items-center justify-between text-xs font-mono">
+                  <div
+                    key={date}
+                    className={cn(
+                      "flex items-center justify-between py-2 px-3 rounded text-xs font-mono border",
+                      SURFACE.recessed,
+                      BORDER.subtle
+                    )}
+                  >
                     <span className="text-zinc-400">{formatDateStr(date)}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-white font-bold">{weight} <span className={cn(TYPOGRAPHY.unit, "ml-0.5")}>kg</span></span>
@@ -379,7 +552,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         title="Delete Entry"
                       />
                     </div>
-                  </Card>
+                  </div>
                 ))}
               </Grid>
             </div>
@@ -394,10 +567,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         title="Routine Library"
         padding="none"
       >
-        <div className="relative dropdown-container">
-          <Button 
+        <div ref={dropdownContainerRef} className="relative dropdown-container">
+          <Button
+            ref={triggerButtonRef}
             variant="secondary"
             fullWidth
+            aria-expanded={isDropdownOpen}
+            aria-controls="routine-library-dropdown"
+            aria-haspopup="true"
             onClick={() => {
               haptics.light();
               setIsDropdownOpen(!isDropdownOpen);
@@ -412,43 +589,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           >
             <span className="text-zinc-300">Browse All Routines</span>
           </Button>
-          
+
           {isDropdownOpen && (
-            <div className={cn(
-              "absolute z-40 left-0 right-0 mt-2 border p-2 space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar",
-              SURFACE.elevated,
-              BORDER.standard,
-              RADIUS.card,
-              SHADOW.elevation
-            )}>
-              {workouts.map((wo) => (
-                <ListRow
-                  key={wo.id}
-                  onClick={() => {
-                    haptics.selection();
-                    if (wo.type !== 'rest') onStartWorkout(wo.id);
-                    setIsDropdownOpen(false);
-                  }}
-                  leading={<WorkoutColorIndicator type={wo.type} size="sm" />}
-                  content={
-                    <div>
-                      <div className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>{wo.name}</div>
-                      <div className={cn(TYPOGRAPHY.caption, "mt-1")}>Day {wo.cycleDay} · {wo.badge}</div>
-                    </div>
-                  }
-                  trailing={
-                    wo.type !== 'rest' ? (
-                      <div className="flex items-center gap-2">
-                        <Badge label={`${wo.exercises.length} EXERCISES`} color="zinc" variant="subtle" />
-                        <ChevronRight size={14} className="text-zinc-500" />
+            <div
+              id="routine-library-dropdown"
+              className={cn(
+                "absolute z-40 left-0 right-0 mt-2 border p-2 space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar",
+                SURFACE.elevated,
+                BORDER.standard,
+                RADIUS.card,
+                SHADOW.elevation
+              )}
+            >
+              {workouts.map((wo) => {
+                const isRest = wo.type === 'rest';
+                return (
+                  <ListRow
+                    key={wo.id}
+                    onClick={
+                      isRest
+                        ? undefined
+                        : () => {
+                            haptics.selection();
+                            onStartWorkout(wo.id);
+                            setIsDropdownOpen(false);
+                          }
+                    }
+                    leading={<WorkoutColorIndicator type={wo.type} size="sm" />}
+                    content={
+                      <div>
+                        <div className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>{wo.name}</div>
+                        <div className={cn(TYPOGRAPHY.caption, "mt-1")}>Day {wo.cycleDay} · {wo.badge}</div>
                       </div>
-                    ) : undefined
-                  }
-                  className={cn(
-                    wo.type === 'rest' ? "opacity-30 grayscale cursor-not-allowed" : "cursor-pointer"
-                  )}
-                />
-              ))}
+                    }
+                    trailing={
+                      !isRest ? (
+                        <div className="flex items-center gap-2">
+                          <Badge label={`${wo.exercises.length} EXERCISES`} color="zinc" variant="subtle" />
+                          <ChevronRight size={14} className="text-zinc-500" />
+                        </div>
+                      ) : undefined
+                    }
+                    className={cn(
+                      isRest ? "opacity-30 grayscale cursor-not-allowed select-none" : "cursor-pointer"
+                    )}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
