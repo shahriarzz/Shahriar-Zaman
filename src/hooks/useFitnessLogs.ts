@@ -4,7 +4,7 @@ import { SessionLog, AppState, Workout } from '../types/fitness';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveLog, deleteLog as deleteLogFirestore, saveAppState, deleteLogsBatch } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
-import { sanitizeSessionLog } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, BODY_WEIGHT_LIMITS } from '../utils/fitnessCalculations';
 
 interface UseFitnessLogsProps {
   user: User | null;
@@ -124,9 +124,13 @@ export function useFitnessLogs({
 
   const logBodyWeight = useCallback(async (date: string, weight: number): Promise<void> => {
     try {
+      if (!Number.isFinite(weight) || weight < BODY_WEIGHT_LIMITS.min || weight > BODY_WEIGHT_LIMITS.max) {
+        return;
+      }
+      const roundedWeight = Math.round(weight * 10) / 10;
       const now = Date.now();
       const currentAppState = appStateRef.current;
-      const weightEntry = { weight, updatedAt: now };
+      const weightEntry = { weight: roundedWeight, updatedAt: now };
       const nextState = { 
         ...currentAppState, 
         weightLog: { ...(currentAppState.weightLog || {}), [date]: weightEntry },

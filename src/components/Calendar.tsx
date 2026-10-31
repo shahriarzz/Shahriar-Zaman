@@ -56,8 +56,9 @@ interface CalendarProps {
 
 export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
   const { workouts } = useFitness();
-  const { index, workoutMap, coreWorkoutByCycleDayMap, getCycleDayForDate, resolveExerciseMeta } = useFitnessDerivedData();
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const { index, workoutMap, coreWorkoutByCycleDayMap, getCycleDayForDate, resolveExerciseMeta, currentDate } = useFitnessDerivedData();
+  const todayDate = currentDate || new Date();
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
@@ -92,11 +93,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
 
   // Forward navigation cap: disable navigating beyond the current calendar month
   const isCurrentOrFutureMonth = useMemo(() => {
-    const today = new Date();
-    return isSameMonth(currentMonth, today) || isAfter(currentMonth, today);
-  }, [currentMonth]);
+    return isSameMonth(currentMonth, todayDate) || isAfter(currentMonth, todayDate);
+  }, [currentMonth, todayDate]);
 
-  const isSameMonthAsToday = isSameMonth(currentMonth, new Date());
+  const isSameMonthAsToday = isSameMonth(currentMonth, todayDate);
 
   // 3. Compute status for each day in calendar cell
   const getDayStatus = (date: Date, dateStr: string) => {
@@ -109,7 +109,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     return resolveCalendarDayStatus({
       date,
       dateStr,
-      today: new Date(),
+      today: todayDate,
       log,
       dayDetail,
       workout: wo,
@@ -130,9 +130,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
     : null;
 
   const isSelectedDateFuture = selectedDate
-    ? isAfter(startOfDay(selectedDate), startOfDay(new Date()))
+    ? isAfter(startOfDay(selectedDate), startOfDay(todayDate))
     : false;
-  const isSelectedDateToday = selectedDate ? isSameDay(selectedDate, new Date()) : false;
+  const isSelectedDateToday = selectedDate ? isSameDay(selectedDate, todayDate) : false;
   const isSelectedDatePast = selectedDate && !isSelectedDateToday && !isSelectedDateFuture;
 
   // Canonical completed / planned sets and volume for selected date from index
@@ -215,7 +215,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
               {days.map(day => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const status = getDayStatus(day, dateStr);
-                const isToday = isSameDay(day, new Date());
+                const isToday = isSameDay(day, todayDate);
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
                 const isCurrentMonthDay = isSameMonth(day, monthStart);
 
@@ -240,7 +240,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                       RADIUS.card,
                       !isCurrentMonthDay && "opacity-20 pointer-events-none disabled:cursor-not-allowed",
                       isSelected
-                        ? cn("border-emerald-400/70 bg-emerald-500/15", SHADOW.emeraldSubtle)
+                        ? cn("border-emerald-400/80 bg-emerald-500/15 ring-1 ring-emerald-400/50", SHADOW.emeraldSubtle)
                         : isToday
                           ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
                           : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
@@ -250,17 +250,18 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                     <span
                       className={cn(
                         "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
+                        TYPOGRAPHY.listValue,
                         TRANSITION.colors,
-                        isToday
-                          ? cn("bg-emerald-500 text-black font-black", SHADOW.emeraldDate)
-                          : isSelected
-                            ? "bg-white text-black font-black"
+                        status ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : 'border-2 border-transparent',
+                        isSelected
+                          ? "bg-white text-black font-black"
+                          : isToday
+                            ? cn("bg-emerald-500/20 text-emerald-400 font-black", SHADOW.emeraldDate)
                             : status
                               ? "text-zinc-200"
-                              : "text-zinc-500",
-                        status && !isSelected && !isToday && (status.isFuture ? 'border-2 border-dashed' : 'border-2')
+                              : "text-zinc-500"
                       )}
-                      style={status && !isSelected && !isToday ? { borderColor: status.color } : undefined}
+                      style={status ? { borderColor: status.color } : undefined}
                     >
                       {format(day, 'd')}
                     </span>

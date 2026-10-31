@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { TrendingUp, Calendar as CalendarIcon, Repeat, Trophy, ChevronRight, Trash2, Dumbbell } from 'lucide-react';
+import { TrendingUp, Calendar as CalendarIcon, Repeat, ChevronRight, Trash2, Dumbbell, Weight, CheckCircle2 } from 'lucide-react';
 import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { formatDateStr } from '../utils/dashboardSelectors';
 import { Calendar } from './Calendar';
@@ -11,7 +11,6 @@ import {
   Section,
   SectionHeader,
   StatCard,
-  Card,
   Badge,
   EmptyState,
   Button,
@@ -25,7 +24,6 @@ import {
   SURFACE,
   BORDER,
   RADIUS,
-  SPACING,
   SHADOW,
   TYPOGRAPHY,
 } from './ui';
@@ -52,7 +50,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     recentMilestones,
     clearActiveSession,
     resetToCycleDay1,
-    reloadInitialWorkouts
+    reloadInitialWorkouts,
+    isTodayCompleted,
+    todayCompletedSummary,
+    nextScheduledWorkout,
+    adherence
   } = useDashboardData();
 
   const { confirm } = useConfirm();
@@ -93,7 +95,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDropdownOpen]);
 
-  const handleLogWeightSubmit = () => {
+  const handleStartWorkoutWithConfirmation = async (targetWorkoutId: string) => {
+    if (unfinishedSession && unfinishedSession.workoutId !== targetWorkoutId) {
+      const confirmed = await confirm({
+        title: 'Discard Unfinished Session?',
+        message: 'All unsubmitted progress and logged sets in this active session will be lost.',
+        confirmText: 'Discard Session',
+        isDanger: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      haptics.destructive();
+      clearActiveSession();
+    }
+    onStartWorkout(targetWorkoutId);
+  };
+
+  const handleLogWeightSubmit = async () => {
     if (isSubmittingWeight) return;
     const { value, error } = parseStrictBodyWeight(weightInput);
     if (error || value === null) {
@@ -104,9 +123,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     setWeightError(null);
     setIsSubmittingWeight(true);
     try {
+      await weightSummary.logWeight(value);
       haptics.success();
-      weightSummary.logWeight(value);
       setWeightInput('');
+    } catch {
+      haptics.warning();
+      setWeightError('Failed to save body weight.');
     } finally {
       setIsSubmittingWeight(false);
     }
@@ -115,10 +137,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
       {/* Header + StatCards Hero Block */}
-      <div className="space-y-6">
+      <Stack spacing="lg">
         <SectionHeader
           eyebrow={heroDateStr}
-          eyebrowColor="orange"
+          eyebrowColor="zinc"
           title="Stay Aggressive"
           size="page"
         />
@@ -126,7 +148,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         {/* Stats Grid */}
         <Grid cols={2} colsMd={4} gap="md">
           <StatCard
-            label="Scheduled Training Streak"
+            label="Streak"
             value={trainingStreak.currentStreak}
             unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
             sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
@@ -159,23 +181,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             icon={Dumbbell}
             size="standard"
           />
-          <StatCard
-            label="Total Volume"
-            value={stats.totalWeight}
-            formatValue={formatCompactWeight}
-            unit="kg"
-            sublabel="Lifetime"
-            accent="emerald"
-            icon={Trophy}
-            size="standard"
-          />
+          {adherence ? (
+            <StatCard
+              label="Adherence"
+              value={adherence.percent}
+              unit="%"
+              sublabel={
+                adherence.evaluatedScheduledWorkouts > 0
+                  ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
+                  : 'Building baseline'
+              }
+              accent="emerald"
+              icon={CheckCircle2}
+              size="standard"
+            />
+          ) : (
+            <StatCard
+              label="Total Volume"
+              value={stats.totalWeight}
+              formatValue={formatCompactWeight}
+              unit="kg"
+              sublabel="Lifetime"
+              accent="emerald"
+              icon={Weight}
+              size="standard"
+            />
+          )}
         </Grid>
-      </div>
+      </Stack>
 
       {/* Unfinished Session Alert */}
       {unfinishedSession && (
         <motion.div
-          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -20 }}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={shouldReduceMotion ? { duration: 0 } : undefined}
         >
@@ -190,7 +228,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   variant="outline"
                   size="md"
                   onClick={async () => {
-                    haptics.warning();
                     const confirmed = await confirm({
                       title: 'Discard Unfinished Session?',
                       message: 'All unsubmitted progress and logged sets in this active session will be lost.',
@@ -209,8 +246,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 <Button
                   variant="warning"
                   size="md"
+                  haptic="medium"
                   onClick={() => {
-                    haptics.medium();
                     onStartWorkout(unfinishedSession.workoutId);
                   }}
                   className="flex-1 sm:flex-initial"
@@ -226,9 +263,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Today's Workout */}
       <Section
         eyebrow="Today's Protocol"
-        eyebrowColor="emerald"
+        eyebrowColor="zinc"
         title="Active Target"
-        padding="none"
+        variant="standard"
+        padding="section"
       >
         {!hasWorkouts ? (
           <EmptyState
@@ -238,56 +276,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             action={{
               label: 'Reload Engine',
               onClick: () => {
-                haptics.medium();
                 reloadInitialWorkouts();
               }
             }}
           />
         ) : todayWorkout ? (
-          <Card
-            variant="standard"
-            padding="section"
-            className="group relative overflow-hidden"
-          >
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <Stack spacing="xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded border", SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
-                    DAY {currentCycleDay} / 8
-                  </span>
-                  <Badge
-                    label={todayWorkout.type === 'rest' ? 'RECOVERY DAY' : 'TRAINING DAY'}
-                    color={todayWorkout.type === 'rest' ? 'emerald' : 'orange'}
-                    variant="subtle"
-                  />
-                  <Badge
-                    label={todayWorkout.badge}
-                    colorOverride={WORKOUT_COLORS[todayWorkout.type]}
-                    variant="subtle"
-                  />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <Stack spacing="xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded border", SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
+                  DAY {currentCycleDay} / 8
+                </span>
+                <Badge
+                  label={isTodayCompleted ? 'COMPLETED TODAY' : todayWorkout.type === 'rest' ? 'RECOVERY DAY' : 'TRAINING DAY'}
+                  color={isTodayCompleted || todayWorkout.type === 'rest' ? 'emerald' : 'orange'}
+                  variant="subtle"
+                />
+                <Badge
+                  label={todayWorkout.badge}
+                  colorOverride={WORKOUT_COLORS[todayWorkout.type]}
+                  variant="subtle"
+                />
+              </div>
+              <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-lg md:text-xl text-white")}>
+                {todayWorkout.name}
+              </h3>
+              {isTodayCompleted && todayCompletedSummary ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
+                    <span>{todayCompletedSummary.setsCount} {todayCompletedSummary.setsCount === 1 ? 'set' : 'sets'}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span>{todayCompletedSummary.durationMinutes} min</span>
+                    <span className="text-zinc-600">·</span>
+                    <span>{formatCompactWeight(todayCompletedSummary.totalVolume)} kg</span>
+                  </div>
+                  {nextScheduledWorkout && (
+                    <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+                      Next Scheduled: Day {nextScheduledWorkout.cycleDay} · {nextScheduledWorkout.name}
+                    </span>
+                  )}
                 </div>
-                <h2 className={TYPOGRAPHY.titlePage}>{todayWorkout.name}</h2>
+              ) : (
                 <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
                   {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises`}
                 </p>
-              </Stack>
+              )}
+            </Stack>
 
-              <Button
-                variant={todayWorkout.type === 'rest' ? 'secondary' : 'success'}
-                size="lg"
-                disabled={todayWorkout.type === 'rest'}
-                onClick={() => {
-                  if (todayWorkout.type !== 'rest') {
-                    haptics.medium();
-                    onStartWorkout(todayWorkout.id);
-                  }
-                }}
-                className="w-full md:w-auto"
-              >
-                {todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
-              </Button>
-            </div>
-          </Card>
+            <Button
+              variant={isTodayCompleted || todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
+              size="lg"
+              disabled={isTodayCompleted || todayWorkout.type === 'rest'}
+              onClick={() => {
+                if (!isTodayCompleted && todayWorkout.type !== 'rest') {
+                  handleStartWorkoutWithConfirmation(todayWorkout.id);
+                }
+              }}
+              className="w-full md:w-auto"
+            >
+              {isTodayCompleted ? 'Completed' : todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
+            </Button>
+          </div>
         ) : (
           <EmptyState
             icon={Repeat}
@@ -304,7 +353,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Recent Milestones */}
       <Section
         eyebrow="Milestones"
-        eyebrowColor="orange"
+        eyebrowColor="zinc"
         title="Recent Achievements"
         padding="section"
       >
@@ -388,7 +437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       {/* Body Weight Log */}
       <Section
         eyebrow="Biometrics"
-        eyebrowColor="orange"
+        eyebrowColor="zinc"
         title="Body Weight Tracker"
         padding="section"
       >
@@ -407,16 +456,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
             {/* Quick log input */}
             <div className="flex flex-col gap-1 w-full sm:w-auto">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 hidden sm:block")}>Quick Entry</span>
+              <label htmlFor="quick-body-weight-input" className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>
+                Body Weight
+              </label>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="w-full sm:w-36">
                   <Input
-                    type="number"
+                    id="quick-body-weight-input"
+                    name="bodyWeight"
+                    type="text"
                     inputMode="decimal"
-                    step="0.1"
                     placeholder="0.0"
                     unit="kg"
                     value={weightInput}
+                    aria-label="Body Weight"
                     onChange={(e) => {
                       setWeightInput(e.target.value);
                       if (weightError) setWeightError(null);
@@ -434,6 +487,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 <Button
                   variant="primary"
                   color="orange"
+                  haptic="none"
                   disabled={isSubmittingWeight}
                   onClick={handleLogWeightSubmit}
                   className="whitespace-nowrap"
@@ -451,11 +505,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
           {/* Sparkline */}
           {weightSummary.sparklineData && (() => {
-            const { sorted, min, max, range, w } = weightSummary.sparklineData;
+            const { sorted, min, max, observedMin, observedMax, range, w } = weightSummary.sparklineData;
             const safeRange = range > 0 ? range : 1;
             const firstDate = sorted[0][0];
             const lastDate = sorted[sorted.length - 1][0];
-            const sparklineAriaLabel = `Body weight trend from ${formatDateStr(firstDate)} to ${formatDateStr(lastDate)}, ranging from ${min} kg to ${max} kg`;
+            const sparklineAriaLabel = `Body weight trend for last ${sorted.length} entries from ${formatDateStr(firstDate)} to ${formatDateStr(lastDate)}, ranging from ${observedMin} kg to ${observedMax} kg`;
 
             return (
               <Stack spacing="xs">
@@ -475,7 +529,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         `${i * w},${32 - ((e[1] - min) / safeRange) * 28}`
                       ).join(' ')}
                       fill="none"
-                      stroke={SEMANTIC_COLORS.orange}
+                      stroke={SEMANTIC_COLORS.emerald}
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -487,7 +541,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         cx={i * w}
                         cy={32 - ((e[1] - min) / safeRange) * 28}
                         r="2"
-                        fill={SEMANTIC_COLORS.orange}
+                        fill={SEMANTIC_COLORS.emerald}
                         vectorEffect="non-scaling-stroke"
                       />
                     ))}
@@ -495,12 +549,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
 
                 {/* Min/Max labels */}
-                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-600")} aria-hidden="true">
-                  <span>{firstDate.slice(5)}</span>
-                  <span className="text-zinc-500">
-                    {min}kg → {max}kg
+                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-500 font-mono")} aria-hidden="true">
+                  <span>{formatDateStr(firstDate)}</span>
+                  <span className="text-zinc-400">
+                    {observedMin}kg → {observedMax}kg
                   </span>
-                  <span>{lastDate.slice(5)}</span>
+                  <span>{formatDateStr(lastDate)}</span>
                 </div>
               </Stack>
             );
@@ -519,42 +573,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {weightSummary.recentWeightLogs.length > 0 && (
             <div className={cn("border-t pt-4 space-y-2", BORDER.subtle)}>
               <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Recent Logs</div>
-              <Grid cols={1} gap="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
+              <Stack spacing="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {weightSummary.recentWeightLogs.map(([date, weight]) => (
-                  <div
+                  <ListRow
                     key={date}
-                    className={cn(
-                      "flex items-center justify-between py-2 px-3 rounded text-xs font-mono border",
-                      SURFACE.recessed,
-                      BORDER.subtle
-                    )}
-                  >
-                    <span className="text-zinc-400">{formatDateStr(date)}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white font-bold">{weight} <span className={cn(TYPOGRAPHY.unit, "ml-0.5")}>kg</span></span>
+                    content={
+                      <div className="flex items-center gap-3">
+                        <span className="text-zinc-400 font-mono text-xs">{formatDateStr(date)}</span>
+                        <span className="text-white font-mono font-bold text-xs">
+                          {weight} <span className={cn(TYPOGRAPHY.unit, "ml-0.5")}>kg</span>
+                        </span>
+                      </div>
+                    }
+                    trailing={
                       <Button
                         variant="ghost"
                         size="icon"
                         icon={<Trash2 size={14} />}
                         onClick={async () => {
-                          haptics.warning();
                           const proceed = await confirm({
                             title: 'Delete Weight Log',
                             message: `Are you sure you want to delete your weight log for ${formatDateStr(date)}?`,
+                            confirmText: 'Delete Entry',
                             isDanger: true,
                           });
                           if (proceed) {
-                            weightSummary.deleteWeight(date);
+                            await weightSummary.deleteWeight(date);
                           }
                         }}
                         className="text-zinc-600 hover:text-red-400"
-                        aria-label="Delete Entry"
+                        aria-label={`Delete weight entry for ${formatDateStr(date)}`}
                         title="Delete Entry"
                       />
-                    </div>
-                  </div>
+                    }
+                  />
                 ))}
-              </Grid>
+              </Stack>
             </div>
           )}
         </Stack>
@@ -565,7 +619,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         eyebrow="Protocols"
         eyebrowColor="zinc"
         title="Routine Library"
-        padding="none"
+        variant="standard"
+        padding="compact"
       >
         <div ref={dropdownContainerRef} className="relative dropdown-container">
           <Button
@@ -576,7 +631,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             aria-controls="routine-library-dropdown"
             aria-haspopup="true"
             onClick={() => {
-              haptics.light();
               setIsDropdownOpen(!isDropdownOpen);
             }}
             className={cn(
@@ -606,20 +660,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 return (
                   <ListRow
                     key={wo.id}
-                    onClick={
-                      isRest
-                        ? undefined
-                        : () => {
-                            haptics.selection();
-                            onStartWorkout(wo.id);
-                            setIsDropdownOpen(false);
-                          }
-                    }
+                    disabled={isRest}
+                    onClick={() => {
+                      if (!isRest) {
+                        handleStartWorkoutWithConfirmation(wo.id);
+                        setIsDropdownOpen(false);
+                      }
+                    }}
                     leading={<WorkoutColorIndicator type={wo.type} size="sm" />}
                     content={
                       <div>
                         <div className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>{wo.name}</div>
-                        <div className={cn(TYPOGRAPHY.caption, "mt-1")}>Day {wo.cycleDay} · {wo.badge}</div>
+                        <div className={cn(TYPOGRAPHY.caption, "mt-1")}>
+                          {wo.cycleDay != null ? `Day ${wo.cycleDay} · ${wo.badge}` : (wo.badge || 'Bonus Protocol')}
+                        </div>
                       </div>
                     }
                     trailing={
@@ -630,9 +684,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         </div>
                       ) : undefined
                     }
-                    className={cn(
-                      isRest ? "opacity-30 grayscale cursor-not-allowed select-none" : "cursor-pointer"
-                    )}
                   />
                 );
               })}

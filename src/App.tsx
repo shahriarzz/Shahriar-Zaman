@@ -237,7 +237,19 @@ function AppContent() {
     );
   }
 
-  const handleStartSession = (workoutId: string) => {
+  const handleStartSession = async (workoutId: string) => {
+    if (activeSession && activeSession.workoutId !== workoutId) {
+      const confirmed = await confirm({
+        title: 'Discard Unfinished Session?',
+        message: 'All unsubmitted progress and logged sets in this active session will be lost.',
+        confirmText: 'Discard Session',
+        isDanger: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      clearActiveSession();
+    }
     setSelectedWorkoutId(workoutId);
     setActiveTab('session');
   };

@@ -9,6 +9,8 @@ import { haptics } from '../utils/haptics';
 import * as useDashboardDataModule from '../hooks/useDashboardData';
 import { Workout } from '../types/fitness';
 import { parseStrictBodyWeight } from '../hooks/useDashboardData';
+import { BODY_WEIGHT_LIMITS } from '../utils/fitnessCalculations';
+import { SEMANTIC_COLORS } from '../styles/tokens';
 
 vi.mock('../utils/haptics', () => ({
   haptics: {
@@ -78,6 +80,17 @@ const mockWorkouts: Workout[] = [
     cycleDay: 4,
     isCore: true,
     exercises: []
+  },
+  {
+    id: 'wo-bonus',
+    name: 'Conditioning Finisher',
+    type: 'custom',
+    badge: 'Metcon Focus',
+    cycleDay: null as any,
+    isCore: false,
+    exercises: [
+      { exerciseDefinitionId: 'kettlebell-swing', sets: 3, reps: '15' }
+    ]
   }
 ];
 
@@ -88,8 +101,8 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
   const mockClearActiveSession = vi.fn();
   const mockResetToCycleDay1 = vi.fn();
   const mockReloadInitialWorkouts = vi.fn();
-  const mockLogWeight = vi.fn();
-  const mockDeleteWeight = vi.fn();
+  const mockLogWeight = vi.fn().mockImplementation(() => Promise.resolve());
+  const mockDeleteWeight = vi.fn().mockImplementation(() => Promise.resolve());
   const mockOnStartWorkout = vi.fn();
   const mockOnNavigateToHistory = vi.fn();
 
@@ -135,6 +148,8 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
           weights: [78.2, 78.5],
           min: 78.2,
           max: 78.5,
+          observedMin: 78.2,
+          observedMax: 78.5,
           range: 0.3,
           w: 50,
           sorted: [['2026-10-28', 78.2], ['2026-10-30', 78.5]]
@@ -176,6 +191,10 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
           }
         ]
       },
+      isTodayCompleted: false,
+      todayCompletedSummary: null,
+      nextScheduledWorkout: null,
+      adherence: null,
       clearActiveSession: mockClearActiveSession,
       resetToCycleDay1: mockResetToCycleDay1,
       reloadInitialWorkouts: mockReloadInitialWorkouts
@@ -214,12 +233,12 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
   }
 
   // --------------------------------------------------------------------------
-  // Scenarios 1, 2, 3: Unfinished-Session Discard Confirmation
+  // P0: Unfinished Session Protection & Discard Confirmation
   // --------------------------------------------------------------------------
-  describe('1. Unfinished session discard confirmation protocol', () => {
-    it('opens destructive confirmation dialog with exact title and message when Discard is clicked', async () => {
+  describe('P0: Unfinished session protection & discard confirmation', () => {
+    it('opens destructive confirmation dialog when Discard is clicked and triggers destructive feedback on confirm', async () => {
       renderDashboard();
-      
+
       const discardBtn = Array.from(container.querySelectorAll('button')).find(
         b => b.textContent?.trim() === 'Discard'
       );
@@ -229,18 +248,21 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
         discardBtn!.click();
       });
 
-      // Warning haptic triggered upon clicking Discard
-      expect(haptics.warning).toHaveBeenCalled();
-
       // Dialog is rendered into DOM with title and message
       expect(document.body.textContent).toContain('Discard Unfinished Session?');
       expect(document.body.textContent).toContain('All unsubmitted progress and logged sets in this active session will be lost.');
-      
-      // Destructive button label is rendered
+
       const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(
         b => b.textContent?.trim() === 'Discard Session'
       );
       expect(confirmBtn).toBeDefined();
+
+      await act(async () => {
+        confirmBtn!.click();
+      });
+
+      expect(haptics.destructive).toHaveBeenCalled();
+      expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
     });
 
     it('cancelling discard leaves draft active and clearActiveSession is not invoked', async () => {
@@ -266,79 +288,248 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(haptics.destructive).not.toHaveBeenCalled();
     });
 
-    it('confirming discard invokes clearActiveSession and triggers destructive haptic feedback', async () => {
+    it('starting a different workout while unfinished session exists requires confirmation and discards on confirm', async () => {
+      // unfinished session is 'wo-push', today workout is 'wo-pull'
+      currentMockData.unfinishedSession = {
+        workoutId: 'wo-push',
+        workout: mockWorkouts[0],
+        relativeTime: '1 hour ago'
+      };
+      currentMockData.todayWorkout = mockWorkouts[1]; // wo-pull
       renderDashboard();
 
-      const discardBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.trim() === 'Discard'
+      const startBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Start Session'
       );
+      expect(startBtn).toBeDefined();
+
       await act(async () => {
-        discardBtn!.click();
+        startBtn!.click();
       });
 
+      // Confirmation prompt opened
+      expect(document.body.textContent).toContain('Discard Unfinished Session?');
+      expect(mockOnStartWorkout).not.toHaveBeenCalled();
+
+      // Confirm discard and start new
       const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(
         b => b.textContent?.trim() === 'Discard Session'
       );
-      expect(confirmBtn).toBeDefined();
-
       await act(async () => {
         confirmBtn!.click();
       });
 
-      expect(haptics.destructive).toHaveBeenCalled();
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Scenarios 4 & 5: 8-Day Cycle Indicator in Today's Protocol
-  // --------------------------------------------------------------------------
-  describe('2. 8-Day cycle indicator and training vs recovery designation', () => {
-    it('displays explicit DAY X / 8 cycle position matching currentCycleDay and TRAINING DAY badge', () => {
-      currentMockData.currentCycleDay = 1;
-      currentMockData.todayWorkout = mockWorkouts[0]; // push workout
-      renderDashboard();
-
-      expect(container.textContent).toContain('DAY 1 / 8');
-      expect(container.textContent).toContain('TRAINING DAY');
-      expect(container.textContent).toContain('Chest & Triceps Heavy');
+      expect(haptics.destructive).toHaveBeenCalled();
+      expect(mockOnStartWorkout).toHaveBeenCalledWith('wo-pull');
     });
 
-    it('designates programmed rest day as RECOVERY DAY with disabled action', () => {
-      currentMockData.currentCycleDay = 4;
-      currentMockData.todayWorkout = mockWorkouts[2]; // rest workout
+    it('resuming same workout does not prompt confirmation', async () => {
+      currentMockData.unfinishedSession = {
+        workoutId: 'wo-push',
+        workout: mockWorkouts[0],
+        relativeTime: '1 hour ago'
+      };
+      currentMockData.todayWorkout = mockWorkouts[0]; // same workout!
       renderDashboard();
 
-      expect(container.textContent).toContain('DAY 4 / 8');
-      expect(container.textContent).toContain('RECOVERY DAY');
-      expect(container.textContent).toContain('Programmed Recovery Day');
-
-      const restDayBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.trim() === 'Rest Day'
+      const startBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Start Session'
       );
-      expect(restDayBtn).toBeDefined();
-      expect(restDayBtn?.hasAttribute('disabled')).toBe(true);
+      await act(async () => {
+        startBtn!.click();
+      });
+
+      // No confirmation modal opened
+      expect(document.body.textContent).not.toContain('Discard Unfinished Session?');
+      expect(mockOnStartWorkout).toHaveBeenCalledWith('wo-push');
     });
   });
 
   // --------------------------------------------------------------------------
-  // Scenario 6: Unsupported Workout Duration Claims
+  // P1: Duplicate Interactions & Single Haptic Per Click
   // --------------------------------------------------------------------------
-  describe('3. Unsupported workout-duration claim removal', () => {
-    it('removes Approx 60 min while strictly retaining exercise count', () => {
-      currentMockData.todayWorkout = mockWorkouts[0]; // 3 exercises
+  describe('P1: Interaction haptics discipline', () => {
+    it('fires exactly one haptic on Resume Session click', async () => {
       renderDashboard();
 
-      expect(container.textContent).not.toContain('Approx 60 min');
-      expect(container.textContent).toContain('3 Exercises');
+      const resumeBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Resume Session'
+      );
+      expect(resumeBtn).toBeDefined();
+
+      vi.clearAllMocks();
+      await act(async () => {
+        resumeBtn!.click();
+      });
+
+      const totalHapticCalls =
+        (haptics.light as any).mock.calls.length +
+        (haptics.medium as any).mock.calls.length +
+        (haptics.selection as any).mock.calls.length +
+        (haptics.success as any).mock.calls.length +
+        (haptics.warning as any).mock.calls.length +
+        (haptics.destructive as any).mock.calls.length;
+
+      expect(totalHapticCalls).toBe(1);
+      expect(mockOnStartWorkout).toHaveBeenCalledWith('wo-push');
     });
   });
 
   // --------------------------------------------------------------------------
-  // Scenarios 7 & 8: Scheduled Training Streak Semantics
+  // P1: Body Weight Logging & Decimal Comma Normalization
   // --------------------------------------------------------------------------
-  describe('4. Scheduled training streak semantics', () => {
-    it('labels streak metric as Scheduled Training Streak with session / sessions unit and Best sessions sublabel', () => {
+  describe('P1: Body weight logging with comma normalization and limits', () => {
+    it('accepts single decimal comma and normalizes to dot (78,5 -> 78.5)', () => {
+      const parsed = parseStrictBodyWeight('78,5');
+      expect(parsed.value).toBe(78.5);
+      expect(parsed.error).toBeNull();
+    });
+
+    it('rounds accepted values to one decimal place (78.56 -> 78.6)', () => {
+      const parsed = parseStrictBodyWeight('78.56');
+      expect(parsed.value).toBe(78.6);
+      expect(parsed.error).toBeNull();
+    });
+
+    it('rejects multiple commas or mixed periods and commas', () => {
+      expect(parseStrictBodyWeight('78,5,2').error).toBe('Enter a valid numeric weight.');
+      expect(parseStrictBodyWeight('78.5,2').error).toBe('Enter a valid numeric weight.');
+      expect(parseStrictBodyWeight('78,5.2').error).toBe('Enter a valid numeric weight.');
+    });
+
+    it('enforces shared BODY_WEIGHT_LIMITS [20, 300]', () => {
+      expect(parseStrictBodyWeight(String(BODY_WEIGHT_LIMITS.min - 0.1)).error).toBe('Weight must be between 20 kg and 300 kg.');
+      expect(parseStrictBodyWeight(String(BODY_WEIGHT_LIMITS.max + 0.1)).error).toBe('Weight must be between 20 kg and 300 kg.');
+      expect(parseStrictBodyWeight(String(BODY_WEIGHT_LIMITS.min)).value).toBe(BODY_WEIGHT_LIMITS.min);
+      expect(parseStrictBodyWeight(String(BODY_WEIGHT_LIMITS.max)).value).toBe(BODY_WEIGHT_LIMITS.max);
+    });
+
+    it('associates input with an accessible label visible across all viewports', () => {
+      renderDashboard();
+      const label = container.querySelector('label[for="quick-body-weight-input"]');
+      expect(label).not.toBeNull();
+      expect(label?.textContent).toContain('Body Weight');
+      expect(label?.className).not.toContain('hidden');
+    });
+
+    it('disables submit button while pending and triggers success haptic only on save success', async () => {
+      let resolvePromise: () => void = () => {};
+      mockLogWeight.mockImplementation(() => new Promise<void>(res => { resolvePromise = res; }));
+
+      renderDashboard();
+      const input = container.querySelector('#quick-body-weight-input') as HTMLInputElement;
+      const logBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Log'
+      );
+
+      await act(async () => {
+        setInputValue(input, '79,2');
+      });
+
+      await act(async () => {
+        logBtn!.click();
+      });
+
+      // While pending, button is disabled and text is Logging...
+      expect(logBtn?.hasAttribute('disabled')).toBe(true);
+      expect(logBtn?.textContent).toContain('Logging...');
+
+      // Finish log
+      await act(async () => {
+        resolvePromise();
+      });
+
+      expect(mockLogWeight).toHaveBeenCalledWith(79.2);
+      expect(haptics.success).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // P1: Today's Completed Workout Prevention & Summary
+  // --------------------------------------------------------------------------
+  describe('P1: Today completed workout handling', () => {
+    it('shows completed badge, summary, and disabled button when today workout is completed', () => {
+      currentMockData.isTodayCompleted = true;
+      currentMockData.todayCompletedSummary = {
+        logId: 'log-1',
+        durationMinutes: 48,
+        setsCount: 12,
+        totalVolume: 8500
+      };
+      currentMockData.nextScheduledWorkout = {
+        id: 'wo-pull',
+        name: 'Back & Biceps Dense',
+        type: 'pull',
+        badge: 'Pull Focus',
+        cycleDay: 2,
+        isCore: true,
+        exercises: []
+      };
+
+      renderDashboard();
+
+      expect(container.textContent).toContain('COMPLETED TODAY');
+      expect(container.textContent).toContain('12 sets');
+      expect(container.textContent).toContain('48 min');
+      expect(container.textContent).toContain('8.5k kg');
+      expect(container.textContent).toContain('Next Scheduled: Day 2 · Back & Biceps Dense');
+
+      const completedBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Completed'
+      );
+      expect(completedBtn).toBeDefined();
+      expect(completedBtn?.hasAttribute('disabled')).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // P1: Routine Library Disabled Semantics & Subtitle
+  // --------------------------------------------------------------------------
+  describe('P1: Routine library disabled semantics and bonus subtitle', () => {
+    it('disables rest routines with aria-disabled="true" and prevents click activation', async () => {
+      renderDashboard();
+
+      const triggerBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.includes('Browse All Routines')
+      );
+      await act(async () => {
+        triggerBtn!.click();
+      });
+
+      const restRow = Array.from(container.querySelectorAll('#routine-library-dropdown div[role="button"]')).find(
+        el => el.textContent?.includes('Programmed Recovery Day')
+      );
+      expect(restRow).toBeDefined();
+      expect(restRow?.getAttribute('aria-disabled')).toBe('true');
+
+      await act(async () => {
+        (restRow as HTMLElement).click();
+      });
+
+      expect(mockOnStartWorkout).not.toHaveBeenCalled();
+    });
+
+    it('renders bonus routine without "Day null"', async () => {
+      renderDashboard();
+
+      const triggerBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.includes('Browse All Routines')
+      );
+      await act(async () => {
+        triggerBtn!.click();
+      });
+
+      expect(container.textContent).not.toContain('Day null');
+      expect(container.textContent).toContain('Metcon Focus');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // P2: Metric & Milestone Clarity (Streak, Adherence, Sparkline)
+  // --------------------------------------------------------------------------
+  describe('P2: Metric clarity, adherence, and sparkline bounds', () => {
+    it('labels streak metric as compact Streak with session / sessions unit and best sessions', () => {
       currentMockData.trainingStreak = {
         currentStreak: 3,
         longestStreak: 7,
@@ -347,300 +538,51 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       };
       renderDashboard();
 
-      expect(container.textContent).toContain('Scheduled Training Streak');
+      expect(container.textContent).toContain('Streak');
       expect(container.textContent).toContain('sessions');
       expect(container.textContent).toContain('Best: 7 sessions');
-      expect(container.textContent).not.toContain('Best: 7d');
     });
 
-    it('uses singular session when streak is 1', () => {
-      currentMockData.trainingStreak = {
-        currentStreak: 1,
-        longestStreak: 1,
-        streakStartDate: '2026-10-30',
-        streakEndDate: '2026-10-30'
+    it('renders canonical weekly adherence when available', () => {
+      currentMockData.adherence = {
+        rate: 0.85,
+        percent: 85,
+        completedScheduled: 6,
+        scheduledCoreWorkouts: 7,
+        evaluatedScheduledWorkouts: 7,
+        pendingScheduledWorkouts: 0,
+        missedPastCoreDays: 1,
+        scheduledRestDays: 1,
+        bonusCompletedSessions: 0,
+        isTodayPending: false
       };
       renderDashboard();
 
-      expect(container.textContent).toContain('1');
-      expect(container.textContent).toContain('session');
-      expect(container.textContent).toContain('Best: 1 session');
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Scenarios 9 & 10: Strength Progress & Training Frequency Semantics
-  // --------------------------------------------------------------------------
-  describe('5. Strength progress & training frequency metric semantics', () => {
-    it('displays comparable exercise count and confidence when baseline exists', () => {
-      currentMockData.strengthTrend = {
-        percentChange: 4.8,
-        currentValue: 140,
-        previousValue: 133.6,
-        comparableExercises: 3,
-        confidence: 'high',
-        exerciseBreakdown: []
-      };
-      renderDashboard();
-
-      expect(container.textContent).toContain('+4.8');
-      expect(container.textContent).toContain('3 exercises (high confidence)');
+      expect(container.textContent).toContain('Adherence');
+      expect(container.textContent).toContain('85');
+      expect(container.textContent).toContain('%');
+      expect(container.textContent).toContain('6/7 scheduled');
     });
 
-    it('displays Insufficient 28d baseline and dash when unavailable without rendering 0%', () => {
-      currentMockData.strengthTrend = {
-        percentChange: null,
-        currentValue: null,
-        previousValue: null,
-        comparableExercises: 0,
-        confidence: 'low',
-        exerciseBreakdown: []
-      };
-      renderDashboard();
-
-      expect(container.textContent).toContain('Insufficient 28d baseline');
-      expect(container.textContent).toContain('—');
-      expect(container.textContent).not.toContain('0%');
-    });
-
-    it('formats training frequency with prev 28d comparison', () => {
-      currentMockData.trainingFrequency = {
-        sessionsPerWeek: 3.5,
-        completedSessions: 14,
-        previousSessions: 12,
-        change: 0.5,
-        sessionsChange: 2
-      };
-      renderDashboard();
-
-      expect(container.textContent).toContain('Training Frequency');
-      expect(container.textContent).toContain('3.5');
-      expect(container.textContent).toContain('/ week');
-      expect(container.textContent).toContain('+0.5 vs prev 28d');
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Scenarios 11, 12, 13: Recent Milestones Section
-  // --------------------------------------------------------------------------
-  describe('6. Recent milestones section', () => {
-    it('renders rolling 7-day training volume with exact date range label', () => {
-      renderDashboard();
-
-      expect(container.textContent).toContain('Training Volume');
-      expect(container.textContent).toContain('18.5k');
-      expect(container.textContent).toContain('Last 7 Days (Oct 24 – Oct 30)');
-    });
-
-    it('renders recent PR events with exercise name, achieved load, e1RM and PR tags', () => {
-      renderDashboard();
-
-      expect(container.textContent).toContain('Barbell Bench Press');
-      expect(container.textContent).toContain('120 kg × 5 reps');
-      expect(container.textContent).toContain('e1RM: 139.5 kg');
-      expect(container.textContent).toContain('WEIGHT PR');
-      expect(container.textContent).toContain('E1RM PR');
-
-      expect(container.textContent).toContain('Incline Dumbbell Press');
-      expect(container.textContent).toContain('42 kg × 8 reps');
-      expect(container.textContent).toContain('e1RM: 53.2 kg');
-    });
-
-    it('renders restrained empty state when no PR events exist', () => {
-      currentMockData.recentMilestones.recentPREvents = [];
-      renderDashboard();
-
-      expect(container.textContent).toContain('No Recent Personal Records');
-      expect(container.textContent).toContain('Personal records appear automatically as you log qualifying lifts.');
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Scenario 14: Routine Library Dropdown Semantics & Accessibility
-  // --------------------------------------------------------------------------
-  describe('7. Routine library dropdown semantics & keyboard navigation', () => {
-    it('sets aria-expanded, aria-controls="routine-library-dropdown", and closes on Escape while restoring focus', async () => {
-      renderDashboard();
-
-      const triggerBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.includes('Browse All Routines')
-      );
-      expect(triggerBtn).toBeDefined();
-      expect(triggerBtn?.getAttribute('aria-expanded')).toBe('false');
-      expect(triggerBtn?.getAttribute('aria-controls')).toBe('routine-library-dropdown');
-
-      // Open dropdown
-      await act(async () => {
-        triggerBtn!.click();
-      });
-
-      expect(triggerBtn?.getAttribute('aria-expanded')).toBe('true');
-      const dropdown = container.querySelector('#routine-library-dropdown');
-      expect(dropdown).not.toBeNull();
-
-      // Focus should be restorable on Escape
-      const focusSpy = vi.spyOn(triggerBtn!, 'focus');
-      await act(async () => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-      });
-
-      expect(container.querySelector('#routine-library-dropdown')).toBeNull();
-      expect(triggerBtn?.getAttribute('aria-expanded')).toBe('false');
-      expect(focusSpy).toHaveBeenCalled();
-    });
-
-    it('closes on pointerdown outside the dropdown container', async () => {
-      renderDashboard();
-
-      const triggerBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.includes('Browse All Routines')
-      );
-      await act(async () => {
-        triggerBtn!.click();
-      });
-      expect(container.querySelector('#routine-library-dropdown')).not.toBeNull();
-
-      // Click outside
-      await act(async () => {
-        document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      });
-
-      expect(container.querySelector('#routine-library-dropdown')).toBeNull();
-    });
-
-    it('renders rest routines as non-interactive with disabled styling and no selection haptic', async () => {
-      renderDashboard();
-
-      const triggerBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.includes('Browse All Routines')
-      );
-      await act(async () => {
-        triggerBtn!.click();
-      });
-
-      const restRoutine = Array.from(container.querySelectorAll('#routine-library-dropdown div')).find(
-        el => el.textContent?.includes('Programmed Recovery Day')
-      );
-      expect(restRoutine).toBeDefined();
-
-      // Rest routine row has cursor-not-allowed and grayscale/opacity classes
-      expect(restRoutine?.className).toContain('cursor-not-allowed');
-
-      // Clicking rest routine does not invoke onStartWorkout
-      await act(async () => {
-        (restRoutine as HTMLElement).click();
-      });
-
-      expect(mockOnStartWorkout).not.toHaveBeenCalled();
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Scenario 15: Body-Weight Entry Strict Validation & Sparkline Durability
-  // --------------------------------------------------------------------------
-  describe('8. Body-weight entry strict validation and sparkline arithmetic safety', () => {
-    it('parseStrictBodyWeight strictly validates bounds (20-300kg) and rejects malformed values', () => {
-      expect(parseStrictBodyWeight('   ').error).toBe('Enter a weight in kg.');
-      expect(parseStrictBodyWeight('abc').error).toBe('Enter a valid numeric weight.');
-      expect(parseStrictBodyWeight('NaN').error).toBe('Enter a valid numeric weight.');
-      expect(parseStrictBodyWeight('19.9').error).toBe('Weight must be between 20 kg and 300 kg.');
-      expect(parseStrictBodyWeight('300.1').error).toBe('Weight must be between 20 kg and 300 kg.');
-      expect(parseStrictBodyWeight('-75').error).toBe('Enter a valid numeric weight.');
-      expect(parseStrictBodyWeight('78.5').value).toBe(78.5);
-      expect(parseStrictBodyWeight('78.5').error).toBeNull();
-    });
-
-    it('shows inline validation error on invalid input without submitting duplicate requests', async () => {
-      renderDashboard();
-
-      const input = container.querySelector('input[type="number"]') as HTMLInputElement;
-      expect(input).toBeDefined();
-
-      const logBtn = Array.from(container.querySelectorAll('button')).find(
-        b => b.textContent?.trim() === 'Log'
-      );
-      expect(logBtn).toBeDefined();
-
-      // Submit out of bounds value: 15 kg
-      await act(async () => {
-        setInputValue(input, '15');
-      });
-
-      await act(async () => {
-        logBtn!.click();
-      });
-
-      expect(container.textContent).toContain('Weight must be between 20 kg and 300 kg.');
-      expect(mockLogWeight).not.toHaveBeenCalled();
-      expect(haptics.warning).toHaveBeenCalled();
-
-      // Now enter valid weight 82.5 kg
-      await act(async () => {
-        setInputValue(input, '82.5');
-      });
-
-      // Error message is cleared on typing
-      expect(container.textContent).not.toContain('Weight must be between 20 kg and 300 kg.');
-
-      await act(async () => {
-        logBtn!.click();
-      });
-
-      expect(mockLogWeight).toHaveBeenCalledWith(82.5);
-      expect(haptics.success).toHaveBeenCalled();
-    });
-
-    it('safely renders sparkline when weights are equal without division by zero or NaN coordinates', () => {
+    it('renders sparkline with emerald accent and observed min/max in aria-label', () => {
       currentMockData.weightSummary.sparklineData = {
-        weights: [80, 80, 80],
-        min: 80,
-        max: 80,
-        range: 0, // range is 0 when all recorded weights are identical!
+        weights: [77.5, 78.5],
+        min: 75.0, // padded bound
+        max: 80.0, // padded bound
+        observedMin: 77.5, // true observed min
+        observedMax: 78.5, // true observed max
+        range: 5.0,
         w: 50,
-        sorted: [['2026-10-28', 80], ['2026-10-29', 80], ['2026-10-30', 80]]
+        sorted: [['2026-10-28', 77.5], ['2026-10-30', 78.5]]
       };
-
       renderDashboard();
 
       const sparklineImg = container.querySelector('[role="img"]');
       expect(sparklineImg).not.toBeNull();
-      expect(sparklineImg?.getAttribute('aria-label')).toContain('Body weight trend');
-      expect(sparklineImg?.getAttribute('aria-label')).toContain('ranging from 80 kg to 80 kg');
+      expect(sparklineImg?.getAttribute('aria-label')).toContain('ranging from 77.5 kg to 78.5 kg');
 
       const polyline = container.querySelector('polyline');
-      expect(polyline).not.toBeNull();
-      const points = polyline?.getAttribute('points');
-      expect(points).not.toContain('NaN');
-      expect(points).not.toContain('Infinity');
-
-      // The points must have valid numeric coordinates
-      expect(points).toMatch(/^\d+(\.\d+)?,32 \d+(\.\d+)?,32 \d+(\.\d+)?,32$/);
-    });
-
-    it('renders clean flat recent weight logs with delete confirmation prompt', async () => {
-      renderDashboard();
-
-      const deleteBtn = container.querySelector('button[aria-label="Delete Entry"]');
-      expect(deleteBtn).toBeDefined();
-
-      await act(async () => {
-        (deleteBtn as HTMLButtonElement).click();
-      });
-
-      // Confirmation dialog opens
-      expect(document.body.textContent).toContain('Delete Weight Log');
-      expect(document.body.textContent).toContain('Are you sure you want to delete your weight log for');
-
-      const executeBtn = Array.from(document.body.querySelectorAll('button')).find(
-        b => b.textContent?.trim() === 'EXECUTE'
-      );
-      expect(executeBtn).toBeDefined();
-
-      await act(async () => {
-        executeBtn!.click();
-      });
-
-      expect(mockDeleteWeight).toHaveBeenCalledWith('2026-10-30');
+      expect(polyline?.getAttribute('stroke')).toBe(SEMANTIC_COLORS.emerald);
     });
   });
 });

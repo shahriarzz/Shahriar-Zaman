@@ -8,6 +8,7 @@ export interface ListRowProps extends React.HTMLAttributes<HTMLDivElement> {
   trailing?: React.ReactNode;
   children?: React.ReactNode;
   selected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
   className?: string;
   variant?: 'standard' | 'subtle' | 'recessed';
@@ -19,6 +20,7 @@ export const ListRow: React.FC<ListRowProps> = ({
   trailing,
   children,
   selected = false,
+  disabled = false,
   onClick,
   onKeyDown,
   onKeyUp,
@@ -29,10 +31,10 @@ export const ListRow: React.FC<ListRowProps> = ({
   variant = 'subtle',
   ...props
 }) => {
-  const isClickable = Boolean(onClick);
+  const isClickable = Boolean(onClick) && !disabled;
   const isSpacePressedRef = React.useRef(false);
 
-  const resolvedRole = role !== undefined ? role : (isClickable ? 'button' : undefined);
+  const resolvedRole = role !== undefined ? role : ((Boolean(onClick) || disabled) ? 'button' : undefined);
   const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -81,9 +83,18 @@ export const ListRow: React.FC<ListRowProps> = ({
     resolvedRole === 'treeitem'
   );
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+    onClick?.();
+  };
+
   const {
     'aria-selected': ariaSelectedProp,
     'aria-pressed': ariaPressedProp,
+    'aria-disabled': ariaDisabledProp,
     ...restProps
   } = props;
 
@@ -95,6 +106,9 @@ export const ListRow: React.FC<ListRowProps> = ({
   // aria-pressed is emitted for role="button" toggle buttons when aria-pressed is explicitly provided
   const resolvedAriaPressed = resolvedRole === 'button' ? ariaPressedProp : undefined;
 
+  // aria-disabled indicates disabled interaction
+  const resolvedAriaDisabled = disabled ? 'true' : (ariaDisabledProp !== undefined ? ariaDisabledProp : undefined);
+
   return (
     <div
       {...restProps}
@@ -102,7 +116,8 @@ export const ListRow: React.FC<ListRowProps> = ({
       tabIndex={resolvedTabIndex}
       aria-selected={resolvedAriaSelected}
       aria-pressed={resolvedAriaPressed}
-      onClick={onClick}
+      aria-disabled={resolvedAriaDisabled}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onBlur={handleBlur}
@@ -115,7 +130,8 @@ export const ListRow: React.FC<ListRowProps> = ({
         variant === 'recessed' && SURFACE.recessed,
         variant === 'standard' && SURFACE.default,
         BORDER.standard,
-        isClickable && cn(INTERACTIVE.hover, INTERACTIVE.active, "cursor-pointer select-none", FOCUS.visible),
+        disabled && cn(INTERACTIVE.disabled, "cursor-not-allowed pointer-events-none select-none"),
+        !disabled && isClickable && cn(INTERACTIVE.hover, INTERACTIVE.active, "cursor-pointer select-none", FOCUS.visible),
         selected && "border-orange-500 bg-orange-500/10 text-white",
         className
       )}

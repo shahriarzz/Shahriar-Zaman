@@ -3,6 +3,7 @@ import { WorkoutType } from '../types/fitness';
 // Re-export canonical calculations and resolver functions
 export {
   CYCLE_LENGTH,
+  BODY_WEIGHT_LIMITS,
   dk,
   formatDateStr,
   formatCompactWeight,

@@ -11,6 +11,11 @@ import {
 
 export const CYCLE_LENGTH = 8;
 
+export const BODY_WEIGHT_LIMITS = {
+  min: 20,
+  max: 300,
+} as const;
+
 /**
  * Standard date key formatter: YYYY-MM-DD
  */
@@ -467,6 +472,8 @@ export interface SparklineData {
   weights: number[];
   min: number;
   max: number;
+  observedMin: number;
+  observedMax: number;
   range: number;
   w: number;
 }
@@ -488,11 +495,13 @@ export function getWeightSparklineData(
   if (raw.length <= 1) return null;
   const sorted = [...raw].sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
   const weights = sorted.map(e => e[1]);
-  const min = Math.min(...weights) - 0.5;
-  const max = Math.max(...weights) + 0.5;
+  const observedMin = Math.min(...weights);
+  const observedMax = Math.max(...weights);
+  const min = observedMin - 0.5;
+  const max = observedMax + 0.5;
   const range = max - min || 1;
-  const w = 100 / (sorted.length - 1);
-  return { sorted, weights, min, max, range, w };
+  const w = sorted.length > 1 ? 100 / (sorted.length - 1) : 100;
+  return { sorted, weights, min, max, observedMin, observedMax, range, w };
 }
 
 export function getRelativeTimeString(startTime: number, now: number = Date.now()): string {

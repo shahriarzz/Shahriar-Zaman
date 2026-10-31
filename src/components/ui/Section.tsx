@@ -30,7 +30,7 @@ export const Section: React.FC<SectionProps> = ({
   headingLevel,
   headerProps,
   headerClassName,
-  variant = 'panel',
+  variant = 'standard',
   padding = 'section',
   className,
   children,
@@ -46,7 +46,7 @@ export const Section: React.FC<SectionProps> = ({
     size,
     headingLevel,
     ...headerProps,
-    className: cn("mb-6", headerClassName, headerProps?.className),
+    className: cn("mb-6", padding === 'none' && "px-6 pt-6", headerClassName, headerProps?.className),
   };
 
   const hasHeader = Boolean(

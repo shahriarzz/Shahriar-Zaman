@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { dk, getRollingDateRange, formatDateStr } from '../utils/fitnessCalculations';
+import { dk, getRollingDateRange, formatDateStr, isCompletedSession, BODY_WEIGHT_LIMITS, CYCLE_LENGTH } from '../utils/fitnessCalculations';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
 import { getRelativeTimeString } from '../utils/dashboardSelectors';
@@ -10,8 +10,11 @@ import {
   StreakInsight,
   TrainingFrequencyInsight,
   StrengthTrendInsight,
+  AdherenceInsight,
   PREvent
 } from '../utils/trainingIntelligence';
+
+export { BODY_WEIGHT_LIMITS };
 
 export interface DashboardStats {
   totalWeight: number;
@@ -35,13 +38,20 @@ export interface DashboardMilestones {
   recentVolume: RecentVolumeInfo;
 }
 
+export interface CompletedWorkoutSummary {
+  logId: string;
+  durationMinutes: number;
+  setsCount: number;
+  totalVolume: number;
+}
+
 export interface WeightSummary {
   currentWeight: string | number;
   weightEntries: [string, number][];
   recentWeightLogs: [string, number][];
   sparklineData: SparklineData | null;
-  logWeight: (weight: number) => void;
-  deleteWeight: (dateStr: string) => void;
+  logWeight: (weight: number) => Promise<void>;
+  deleteWeight: (dateStr: string) => Promise<void>;
 }
 
 export interface DashboardData {
@@ -50,8 +60,12 @@ export interface DashboardData {
   trainingStreak: StreakInsight;
   trainingFrequency: TrainingFrequencyInsight;
   strengthTrend: StrengthTrendInsight;
+  adherence: AdherenceInsight;
   unfinishedSession: UnfinishedSessionInfo | null;
   todayWorkout: Workout | undefined;
+  isTodayCompleted: boolean;
+  todayCompletedSummary: CompletedWorkoutSummary | null;
+  nextScheduledWorkout: Workout | null;
   currentCycleDay: number;
   hasWorkouts: boolean;
   workouts: Workout[];
@@ -64,14 +78,24 @@ export interface DashboardData {
 
 /**
  * Strictly parses and validates a raw body weight input.
- * Allowed range: 20 to 300 kg.
+ * Normalizes single comma to decimal point.
+ * Allowed range: 20 to 300 kg (BODY_WEIGHT_LIMITS).
+ * Rounds accepted values to 1 decimal place.
  * Rejects empty, non-numeric, or non-finite inputs.
  */
 export function parseStrictBodyWeight(raw: string): { value: number | null; error: string | null } {
-  const trimmed = raw.trim();
+  let trimmed = raw.trim();
   if (!trimmed) {
     return { value: null, error: 'Enter a weight in kg.' };
   }
+  const commaCount = (trimmed.match(/,/g) || []).length;
+  const periodCount = (trimmed.match(/\./g) || []).length;
+  if (commaCount === 1 && periodCount === 0) {
+    trimmed = trimmed.replace(',', '.');
+  } else if (commaCount > 1 || (commaCount >= 1 && periodCount >= 1)) {
+    return { value: null, error: 'Enter a valid numeric weight.' };
+  }
+
   if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     return { value: null, error: 'Enter a valid numeric weight.' };
   }
@@ -79,10 +103,11 @@ export function parseStrictBodyWeight(raw: string): { value: number | null; erro
   if (isNaN(val) || !Number.isFinite(val)) {
     return { value: null, error: 'Enter a valid finite weight.' };
   }
-  if (val < 20 || val > 300) {
-    return { value: null, error: 'Weight must be between 20 kg and 300 kg.' };
+  if (val < BODY_WEIGHT_LIMITS.min || val > BODY_WEIGHT_LIMITS.max) {
+    return { value: null, error: `Weight must be between ${BODY_WEIGHT_LIMITS.min} kg and ${BODY_WEIGHT_LIMITS.max} kg.` };
   }
-  return { value: val, error: null };
+  const rounded = Math.round(val * 10) / 10;
+  return { value: rounded, error: null };
 }
 
 export function useDashboardData(): DashboardData {
@@ -100,6 +125,8 @@ export function useDashboardData(): DashboardData {
 
   const {
     currentDate,
+    todayStr,
+    index,
     lifetimeStats,
     weightSummary: derivedWeightSummary,
     nextCycleDay: currentCycleDay,
@@ -107,6 +134,7 @@ export function useDashboardData(): DashboardData {
     trainingStreak,
     trainingFrequency,
     strengthTrend,
+    adherenceInsight,
     prEvents,
     getVolumeForRange
   } = useFitnessDerivedData();
@@ -119,6 +147,45 @@ export function useDashboardData(): DashboardData {
   // 2. Cycle & Today's Workout from canonical validated core map
   const todayWorkout = React.useMemo(() => {
     return coreWorkoutByCycleDayMap.get(currentCycleDay);
+  }, [coreWorkoutByCycleDayMap, currentCycleDay]);
+
+  // Derive completed status for today's scheduled workout from canonical logs
+  const todayCompletedInfo = React.useMemo<{ isCompleted: boolean; summary: CompletedWorkoutSummary | null }>(() => {
+    if (!todayWorkout || todayWorkout.type === 'rest') {
+      return { isCompleted: false, summary: null };
+    }
+    const todayLogs = index.logsByDate.get(todayStr) || [];
+    const completedLog = todayLogs.find(l => isCompletedSession(l) && l.workoutId === todayWorkout.id);
+    if (!completedLog) {
+      return { isCompleted: false, summary: null };
+    }
+    let totalSets = 0;
+    let totalVolume = 0;
+    Object.values(completedLog.sets || {}).forEach(sets => {
+      sets.forEach(s => {
+        if (s.done) {
+          totalSets++;
+          const w = Number(s.weight) || 0;
+          const r = Number(s.reps) || 0;
+          totalVolume += (w * r);
+        }
+      });
+    });
+    return {
+      isCompleted: true,
+      summary: {
+        logId: completedLog.id,
+        durationMinutes: completedLog.durationMinutes,
+        setsCount: totalSets,
+        totalVolume
+      }
+    };
+  }, [todayWorkout, index.logsByDate, todayStr]);
+
+  // Derive next scheduled core workout in the 8-day cycle
+  const nextScheduledWorkout = React.useMemo<Workout | null>(() => {
+    const nextDay = (currentCycleDay % CYCLE_LENGTH) + 1;
+    return coreWorkoutByCycleDayMap.get(nextDay) || null;
   }, [coreWorkoutByCycleDayMap, currentCycleDay]);
 
   // 3. Stats & Metrics from canonical derived pipeline
@@ -141,7 +208,9 @@ export function useDashboardData(): DashboardData {
       dateRangeLabel: `Last 7 Days (${startFormatted} – ${endFormatted})`
     };
 
-    const recentPREvents = [...prEvents].reverse().slice(0, 3);
+    // Sort PR events newest-first by date before taking the latest three
+    const sortedPREvents = [...prEvents].sort((a, b) => b.date.localeCompare(a.date));
+    const recentPREvents = sortedPREvents.slice(0, 3);
 
     return {
       recentPREvents,
@@ -163,13 +232,14 @@ export function useDashboardData(): DashboardData {
   }, [activeSession, workouts]);
 
   // 6. Body Weight Biometrics from canonical pipeline
-  const handleLogWeight = React.useCallback((val: number) => {
-    if (!val || val < 20 || val > 300) return;
-    logBodyWeight(dk(), val);
+  const handleLogWeight = React.useCallback(async (val: number): Promise<void> => {
+    if (!val || val < BODY_WEIGHT_LIMITS.min || val > BODY_WEIGHT_LIMITS.max) return;
+    const rounded = Math.round(val * 10) / 10;
+    await logBodyWeight(dk(), rounded);
   }, [logBodyWeight]);
 
-  const handleDeleteWeight = React.useCallback((dateStr: string) => {
-    deleteBodyWeight(dateStr);
+  const handleDeleteWeight = React.useCallback(async (dateStr: string): Promise<void> => {
+    await deleteBodyWeight(dateStr);
   }, [deleteBodyWeight]);
 
   const weightSummary: WeightSummary = {
@@ -196,8 +266,12 @@ export function useDashboardData(): DashboardData {
     trainingStreak,
     trainingFrequency,
     strengthTrend,
+    adherence: adherenceInsight,
     unfinishedSession,
     todayWorkout,
+    isTodayCompleted: todayCompletedInfo.isCompleted,
+    todayCompletedSummary: todayCompletedInfo.summary,
+    nextScheduledWorkout,
     currentCycleDay,
     hasWorkouts: (workouts || []).length > 0,
     workouts: workouts || [],
