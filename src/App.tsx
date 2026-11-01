@@ -257,6 +257,11 @@ function AppContent() {
   const handleTabChange = async (tab: string) => {
     if (activeTab === 'session' && tab !== 'session') {
       await leaveSession(tab as ActiveTab);
+    } else if (tab === 'session') {
+      if (activeSession) {
+        setSelectedWorkoutId(activeSession.workoutId);
+      }
+      setActiveTab('session');
     } else {
       setActiveTab(tab as ActiveTab);
     }

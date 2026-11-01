@@ -1005,7 +1005,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
             key={wo.id ? `wo-${wo.id}-${woIdx}` : `wo-${woIdx}`}
             variant="interactive"
             padding="md"
-            onClick={() => setSelectedWorkoutId(wo.id)}
+            onClick={async () => {
+              if (activeSession && activeSession.workoutId !== wo.id) {
+                const proceed = await confirm({
+                  title: 'Discard Unfinished Session?',
+                  message: 'All unsubmitted progress and logged sets in this active session will be lost.',
+                  confirmText: 'Discard Session',
+                  isDanger: true,
+                });
+                if (!proceed) return;
+                clearActiveSession();
+              }
+              setSelectedWorkoutId(wo.id);
+            }}
             className="text-left cursor-pointer"
           >
             <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>

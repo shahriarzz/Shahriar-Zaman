@@ -42,6 +42,8 @@ vi.mock('../context/FitnessContext', () => ({
 
 vi.mock('../hooks/useFitnessDerivedData', () => ({
   useFitnessDerivedData: () => ({
+    currentDate: new Date('2026-10-15'),
+    todayStr: '2026-10-15',
     index: {
       logsByDate: mockLogsByDate,
       volumeByDate: {},

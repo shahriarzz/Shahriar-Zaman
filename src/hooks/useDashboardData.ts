@@ -233,7 +233,12 @@ export function useDashboardData(): DashboardData {
 
   // 6. Body Weight Biometrics from canonical pipeline
   const handleLogWeight = React.useCallback(async (val: number): Promise<void> => {
-    if (!val || val < BODY_WEIGHT_LIMITS.min || val > BODY_WEIGHT_LIMITS.max) return;
+    if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
+      throw new Error('Enter a valid numeric weight.');
+    }
+    if (val < BODY_WEIGHT_LIMITS.min || val > BODY_WEIGHT_LIMITS.max) {
+      throw new Error(`Weight must be between ${BODY_WEIGHT_LIMITS.min} kg and ${BODY_WEIGHT_LIMITS.max} kg.`);
+    }
     const rounded = Math.round(val * 10) / 10;
     await logBodyWeight(dk(), rounded);
   }, [logBodyWeight]);

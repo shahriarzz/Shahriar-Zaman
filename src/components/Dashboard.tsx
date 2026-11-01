@@ -95,23 +95,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDropdownOpen]);
 
-  const handleStartWorkoutWithConfirmation = async (targetWorkoutId: string) => {
-    if (unfinishedSession && unfinishedSession.workoutId !== targetWorkoutId) {
-      const confirmed = await confirm({
-        title: 'Discard Unfinished Session?',
-        message: 'All unsubmitted progress and logged sets in this active session will be lost.',
-        confirmText: 'Discard Session',
-        isDanger: true,
-      });
-      if (!confirmed) {
-        return;
-      }
-      haptics.destructive();
-      clearActiveSession();
-    }
-    onStartWorkout(targetWorkoutId);
-  };
-
   const handleLogWeightSubmit = async () => {
     if (isSubmittingWeight) return;
     const { value, error } = parseStrictBodyWeight(weightInput);
@@ -126,9 +109,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       await weightSummary.logWeight(value);
       haptics.success();
       setWeightInput('');
-    } catch {
+    } catch (err) {
       haptics.warning();
-      setWeightError('Failed to save body weight.');
+      setWeightError(err instanceof Error ? err.message : 'Failed to save body weight.');
     } finally {
       setIsSubmittingWeight(false);
     }
@@ -181,16 +164,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             icon={Dumbbell}
             size="standard"
           />
-          {adherence ? (
+          {adherence && adherence.evaluatedScheduledWorkouts > 0 ? (
             <StatCard
               label="Adherence"
               value={adherence.percent}
               unit="%"
-              sublabel={
-                adherence.evaluatedScheduledWorkouts > 0
-                  ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
-                  : 'Building baseline'
-              }
+              sublabel={`${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`}
               accent="emerald"
               icon={CheckCircle2}
               size="standard"
@@ -312,7 +291,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   </div>
                   {nextScheduledWorkout && (
                     <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
-                      Next Scheduled: Day {nextScheduledWorkout.cycleDay} · {nextScheduledWorkout.name}
+                      Next Scheduled: {nextScheduledWorkout.cycleDay != null ? `Day ${nextScheduledWorkout.cycleDay} · ` : ''}{nextScheduledWorkout.name}
                     </span>
                   )}
                 </div>
@@ -329,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               disabled={isTodayCompleted || todayWorkout.type === 'rest'}
               onClick={() => {
                 if (!isTodayCompleted && todayWorkout.type !== 'rest') {
-                  handleStartWorkoutWithConfirmation(todayWorkout.id);
+                  onStartWorkout(todayWorkout.id);
                 }
               }}
               className="w-full md:w-auto"
@@ -663,7 +642,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     disabled={isRest}
                     onClick={() => {
                       if (!isRest) {
-                        handleStartWorkoutWithConfirmation(wo.id);
+                        onStartWorkout(wo.id);
                         setIsDropdownOpen(false);
                       }
                     }}
@@ -693,7 +672,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       </Section>
 
       {/* Calendar Section */}
-      <Calendar onNavigateToHistory={onNavigateToHistory} />
+      <Calendar onNavigateToHistory={onNavigateToHistory} onStartWorkout={onStartWorkout} />
     </Stack>
   );
 };

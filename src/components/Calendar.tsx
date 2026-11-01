@@ -52,13 +52,14 @@ import {
 
 interface CalendarProps {
   onNavigateToHistory?: (dateStr?: string) => void;
+  onStartWorkout?: (workoutId: string) => void;
 }
 
-export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
+export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStartWorkout }) => {
   const { workouts } = useFitness();
   const { index, workoutMap, coreWorkoutByCycleDayMap, getCycleDayForDate, resolveExerciseMeta, currentDate } = useFitnessDerivedData();
   const todayDate = currentDate || new Date();
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => todayDate);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
@@ -546,6 +547,20 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory }) => {
                             <span>Cardio: {expectedWoForSelected.cardio.name}</span>
                             <span className="text-zinc-500">{expectedWoForSelected.cardio.duration}</span>
                           </Card>
+                        )}
+
+                        {isSelectedDateToday && onStartWorkout && (
+                          <Button
+                            variant="primary"
+                            size="md"
+                            fullWidth
+                            onClick={() => {
+                              onStartWorkout(expectedWoForSelected.id);
+                            }}
+                            className="mt-2"
+                          >
+                            Start Scheduled Session
+                          </Button>
                         )}
                       </div>
                     )}
