@@ -208,9 +208,9 @@ export function useDashboardData(): DashboardData {
       dateRangeLabel: `Last 7 Days (${startFormatted} – ${endFormatted})`
     };
 
-    // Sort PR events newest-first by date before taking the latest three
+    // Sort PR events newest-first by date before taking the latest four for 2x2 grid
     const sortedPREvents = [...prEvents].sort((a, b) => b.date.localeCompare(a.date));
-    const recentPREvents = sortedPREvents.slice(0, 3);
+    const recentPREvents = sortedPREvents.slice(0, 4);
 
     return {
       recentPREvents,

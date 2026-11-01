@@ -266,16 +266,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded border", SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
                   DAY {currentCycleDay} / 8
                 </span>
-                <Badge
-                  label={isTodayCompleted ? 'COMPLETED TODAY' : todayWorkout.type === 'rest' ? 'RECOVERY DAY' : 'TRAINING DAY'}
-                  color={isTodayCompleted || todayWorkout.type === 'rest' ? 'emerald' : 'orange'}
-                  variant="subtle"
-                />
-                <Badge
-                  label={todayWorkout.badge}
-                  colorOverride={WORKOUT_COLORS[todayWorkout.type]}
-                  variant="subtle"
-                />
+                {todayWorkout.type !== 'rest' && (
+                  <Badge
+                    label={isTodayCompleted ? 'COMPLETED TODAY' : 'TRAINING DAY'}
+                    color={isTodayCompleted ? 'emerald' : 'orange'}
+                    variant="subtle"
+                  />
+                )}
+                {todayWorkout.badge && todayWorkout.badge !== 'DAY 8 · REST' && (
+                  <Badge
+                    label={todayWorkout.badge}
+                    colorOverride={WORKOUT_COLORS[todayWorkout.type]}
+                    variant="subtle"
+                  />
+                )}
               </div>
               <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-lg md:text-xl text-white")}>
                 {todayWorkout.name}
@@ -297,7 +301,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
               ) : (
                 <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
-                  {todayWorkout.type === 'rest' ? 'Rest & Recovery Protocol' : `${todayWorkout.exercises.length} Exercises`}
+                  {todayWorkout.type === 'rest' ? 'Scheduled recovery' : `${todayWorkout.exercises.length} Exercises`}
                 </p>
               )}
             </Stack>
@@ -371,39 +375,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 description="Personal records appear automatically as you log qualifying lifts."
               />
             ) : (
-              <Grid cols={1} gap="xs">
+              <Grid cols={1} colsSm={2} gap="md">
                 {recentMilestones.recentPREvents.map((pr) => (
                   <div
                     key={pr.id}
                     className={cn(
-                      "flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded border gap-3",
+                      "flex flex-col justify-between p-3.5 rounded border gap-2.5",
                       SURFACE.recessed,
                       BORDER.subtle
                     )}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white break-words flex-1 min-w-0")}>
                           {pr.exerciseName}
                         </span>
-                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono")}>
+                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono shrink-0 whitespace-nowrap")}>
                           {formatDateStr(pr.date)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
-                        <span>{pr.weight} kg × {pr.reps} reps</span>
-                        <span className="text-zinc-600">·</span>
-                        <span>e1RM: <strong className="text-white">{pr.e1rm}</strong> kg</span>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {pr.isWeightPR && (
+                          <Badge label="WEIGHT PR" color="orange" variant="subtle" />
+                        )}
+                        {pr.isE1RMPR && (
+                          <Badge label="E1RM PR" color="emerald" variant="subtle" />
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 self-start sm:self-center">
-                      {pr.isWeightPR && (
-                        <Badge label="WEIGHT PR" color="orange" variant="subtle" />
-                      )}
-                      {pr.isE1RMPR && (
-                        <Badge label="E1RM PR" color="emerald" variant="subtle" />
-                      )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/60 text-xs font-mono">
+                      <span className="text-zinc-300 whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
+                      <span className="text-zinc-400 whitespace-nowrap">e1RM: <strong className="text-white font-bold">{pr.e1rm}</strong> kg</span>
                     </div>
                   </div>
                 ))}
@@ -514,17 +517,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       strokeLinejoin="round"
                       vectorEffect="non-scaling-stroke"
                     />
-                    {sorted.map((e, i) => (
-                      <circle
-                        key={`spark-${e[0]}-${i}`}
-                        cx={i * w}
-                        cy={32 - ((e[1] - min) / safeRange) * 28}
-                        r="2"
-                        fill={SEMANTIC_COLORS.emerald}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    ))}
                   </svg>
+
+                  {/* Overlaid circular point markers matching E1RM chart points */}
+                  <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                    {sorted.map((e, i) => {
+                      const leftPct = i * w;
+                      const yCoord = 32 - ((e[1] - min) / safeRange) * 28;
+                      const topPct = (yCoord / 32) * 100;
+                      return (
+                        <div
+                          key={`spark-dot-${e[0]}-${i}`}
+                          data-testid="bodyweight-marker"
+                          className="absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-zinc-950 bg-emerald-500"
+                          style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Min/Max labels */}

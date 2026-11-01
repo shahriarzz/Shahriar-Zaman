@@ -201,9 +201,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
             </div>
           }
         >
-          {/* Days Grid Responsive Scroll Container */}
-          <div className="overflow-x-auto -mx-1 px-1 custom-scrollbar">
-            <div className="grid grid-cols-7 gap-1.5 pt-2 min-w-[344px] [&>*]:min-w-0">
+          {/* Days Grid Responsive Container */}
+          <div className="w-full">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 pt-2 w-full [&>*]:min-w-0">
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
                 <div
                   key={d}
@@ -234,14 +234,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       setSelectedDate(day);
                     }}
                     className={cn(
-                      "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
+                      "group relative aspect-square sm:aspect-auto sm:min-h-[54px] p-1 sm:p-1.5 border flex flex-col items-center justify-center overflow-hidden cursor-pointer",
                       CONTROL_HEIGHT.touchTarget,
                       FOCUS.visible,
                       TRANSITION.interactive,
                       RADIUS.card,
                       !isCurrentMonthDay && "opacity-20 pointer-events-none disabled:cursor-not-allowed",
                       isSelected
-                        ? cn("border-emerald-400/80 bg-emerald-500/15 ring-1 ring-emerald-400/50", SHADOW.emeraldSubtle)
+                        ? cn("border-emerald-400/80 bg-zinc-800/90 ring-1 ring-emerald-400/50", SHADOW.emeraldSubtle)
                         : isToday
                           ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
                           : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
@@ -250,12 +250,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                     {/* Date Number Badge */}
                     <span
                       className={cn(
-                        "text-xs font-mono leading-none w-7 h-7 flex items-center justify-center rounded-full font-bold",
+                        "text-xs font-mono leading-none w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full font-bold",
                         TYPOGRAPHY.listValue,
                         TRANSITION.colors,
                         status ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : 'border-2 border-transparent',
                         isSelected
-                          ? "bg-white text-black font-black"
+                          ? (isToday ? "bg-zinc-800 text-emerald-400 font-black" : "bg-zinc-800 text-white font-bold")
                           : isToday
                             ? cn("bg-emerald-500/20 text-emerald-400 font-black", SHADOW.emeraldDate)
                             : status
