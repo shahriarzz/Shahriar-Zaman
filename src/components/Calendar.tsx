@@ -152,12 +152,13 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
 
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         {/* Calendar Grid Container */}
-        <div className="flex-1 w-full">
+        <div className="flex-1 w-full min-w-0">
         <Section
           eyebrow="Timeline"
           eyebrowColor="emerald"
           title={`${format(currentMonth, 'MMMM')} ${format(currentMonth, 'yyyy')}`}
-          padding="section"
+          padding="standard"
+          className="p-3.5 sm:p-6 w-full min-w-0"
           action={
             <div className="flex gap-2 items-center">
               {!isSameMonthAsToday && (
@@ -285,7 +286,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
           </div>
 
           {/* Legend */}
-          <div className={cn("mt-6 pt-5 border-t flex flex-wrap gap-x-5 gap-y-2.5", BORDER.standard)}>
+          <div className={cn("mt-6 pt-5 border-t flex flex-wrap gap-x-3.5 sm:gap-x-5 gap-y-2", BORDER.standard)}>
             {[
               { label: 'Push', color: WORKOUT_COLORS.push },
               { label: 'Pull', color: WORKOUT_COLORS.pull },
