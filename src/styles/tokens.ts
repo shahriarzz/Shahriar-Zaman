@@ -134,10 +134,10 @@ export const MOTION_CONFIG = {
   },
   // Calendar day detail side-panel entrance
   calendarPanel: {
-    initial: { opacity: 0, x: 16 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: 16 },
-    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 6 },
+    transition: { duration: DURATION.fast / 1000, ease: 'easeOut' },
   },
   // Accordion drawer expansion (200ms standard)
   collapse: {

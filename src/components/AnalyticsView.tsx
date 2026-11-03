@@ -466,6 +466,8 @@ export const AnalyticsView: React.FC = () => {
                       domain={['dataMin - 5', 'dataMax + 5']}
                     />
                     <Tooltip
+                      isAnimationActive={false}
+                      animationDuration={0}
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
@@ -483,6 +485,7 @@ export const AnalyticsView: React.FC = () => {
                       }}
                     />
                     <Line
+                      isAnimationActive={false}
                       type="monotone"
                       dataKey="epley1RM"
                       stroke={CHART_THEME.emerald}
@@ -561,6 +564,8 @@ export const AnalyticsView: React.FC = () => {
                   <XAxis type="number" stroke={CHART_THEME.axisText} fontSize={10} axisLine={false} tickLine={false} />
                   <YAxis dataKey="category" type="category" stroke={CHART_THEME.axisText} fontSize={11} axisLine={false} tickLine={false} width={80} />
                   <Tooltip
+                    isAnimationActive={false}
+                    animationDuration={0}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;
@@ -574,7 +579,7 @@ export const AnalyticsView: React.FC = () => {
                       return null;
                     }}
                   />
-                  <Bar dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
+                  <Bar isAnimationActive={false} dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -896,6 +901,7 @@ export const AnalyticsView: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
+                    isAnimationActive={false}
                     data={workoutPieData}
                     cx="50%"
                     cy="50%"
@@ -914,6 +920,8 @@ export const AnalyticsView: React.FC = () => {
                     ))}
                   </Pie>
                   <Tooltip
+                    isAnimationActive={false}
+                    animationDuration={0}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;

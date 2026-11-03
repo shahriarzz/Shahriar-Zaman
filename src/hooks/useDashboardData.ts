@@ -247,14 +247,14 @@ export function useDashboardData(): DashboardData {
     await deleteBodyWeight(dateStr);
   }, [deleteBodyWeight]);
 
-  const weightSummary: WeightSummary = {
+  const weightSummary: WeightSummary = React.useMemo(() => ({
     currentWeight: derivedWeightSummary.currentWeight,
     weightEntries: derivedWeightSummary.weightEntries,
     recentWeightLogs: derivedWeightSummary.recentWeightLogs,
     sparklineData: derivedWeightSummary.sparklineData,
     logWeight: handleLogWeight,
     deleteWeight: handleDeleteWeight
-  };
+  }), [derivedWeightSummary, handleLogWeight, handleDeleteWeight]);
 
   // 7. Action Handlers
   const resetToCycleDay1 = React.useCallback(() => {

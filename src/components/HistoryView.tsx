@@ -1061,6 +1061,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               tickFormatter={(val) => `${val}kg`}
                                             />
                                             <Tooltip
+                                              isAnimationActive={false}
+                                              animationDuration={0}
                                               contentStyle={{
                                                 backgroundColor: CHART_THEME.background,
                                                 borderColor: CHART_THEME.grid,
@@ -1075,6 +1077,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                                               labelFormatter={(label) => `Date: ${label}`}
                                             />
                                             <Line
+                                              isAnimationActive={false}
                                               type="monotone"
                                               dataKey="maxW"
                                               stroke={exColor}
