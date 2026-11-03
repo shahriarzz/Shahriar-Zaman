@@ -75,6 +75,11 @@ export function useFitnessData() {
   const [workouts, setWorkoutsState] = useState<Workout[]>(initialData.workouts);
   const [logs, setLogsState] = useState<Record<string, SessionLog>>(initialData.logs);
   const [appState, setAppStateState] = useState<AppState>(initialData.appState);
+  // Invariant (Synchronous Local Hydration):
+  // loadInitialFitnessData() reads and validates localStorage (canonical snapshot, staging,
+  // or legacy keys) synchronously in useState's initializer before the first render.
+  // Therefore, isInitialized is truthfully true from the initial frame, allowing the
+  // Dashboard to display valid local state immediately without blocking on remote auth or sync.
   const [isInitialized, setIsInitialized] = useState(true);
 
   // Synchronous refs for async & subscription operations

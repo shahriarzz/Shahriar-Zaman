@@ -18,62 +18,12 @@ const HistoryView = lazy(() => import('./components/HistoryView').then(m => ({ d
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const ManageView = lazy(() => import('./components/ManageView').then(m => ({ default: m.ManageView })));
 
-// Preload secondary views in background idle time after Dashboard is rendered
-export const preloadSecondaryViews = () => {
-  import('./components/SessionView');
-  import('./components/HistoryView');
-  import('./components/AnalyticsView');
-  import('./components/ManageView');
-};
-
 function AppContent() {
   const { loading, isInitialized, activeSession, clearActiveSession, syncStatus, user } = useFitness();
   const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
-
-  // Track tabs visited to lazy-load on demand while preserving tab state when switching back
-  const [visitedTabs, setVisitedTabs] = useState<Record<ActiveTab, boolean>>({
-    dashboard: true,
-    session: false,
-    history: false,
-    analytics: false,
-    manage: false,
-  });
-
-  const markTabVisited = useCallback((tab: ActiveTab) => {
-    setVisitedTabs(prev => prev[tab] ? prev : { ...prev, [tab]: true });
-  }, []);
-
-  useEffect(() => {
-    if (activeTab !== 'session') {
-      markTabVisited(activeTab);
-    }
-  }, [activeTab, markTabVisited]);
-
-  // One-time idle preload of secondary view chunks after Dashboard renders
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    let idleCallbackId: number | null = null;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-
-    if ('requestIdleCallback' in window) {
-      idleCallbackId = (window as any).requestIdleCallback(preloadSecondaryViews, { timeout: 2000 });
-    } else {
-      timerId = setTimeout(preloadSecondaryViews, 200);
-    }
-
-    return () => {
-      if (idleCallbackId !== null && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleCallbackId);
-      }
-      if (timerId !== null) {
-        clearTimeout(timerId);
-      }
-    };
-  }, []);
 
   // Set up native status bar style and background color on launch
   useEffect(() => {
@@ -333,7 +283,7 @@ function AppContent() {
             </div>
           }
         >
-          <div className={activeTab === 'dashboard' ? undefined : 'hidden'} aria-hidden={activeTab !== 'dashboard'}>
+          {activeTab === 'dashboard' && (
             <Dashboard 
               onStartWorkout={handleStartSession} 
               onNavigateToHistory={(date) => {
@@ -341,7 +291,7 @@ function AppContent() {
                 setActiveTab('history');
               }}
             />
-          </div>
+          )}
 
           {activeTab === 'session' && (
             <SessionView
@@ -353,25 +303,19 @@ function AppContent() {
             />
           )}
 
-          {visitedTabs.history && (
-            <div className={activeTab === 'history' ? undefined : 'hidden'} aria-hidden={activeTab !== 'history'}>
-              <HistoryView 
-                initialDate={historySearchDate} 
-                onClearInitialDate={() => setHistorySearchDate(null)} 
-              />
-            </div>
+          {activeTab === 'history' && (
+            <HistoryView 
+              initialDate={historySearchDate} 
+              onClearInitialDate={() => setHistorySearchDate(null)} 
+            />
           )}
 
-          {visitedTabs.analytics && (
-            <div className={activeTab === 'analytics' ? undefined : 'hidden'} aria-hidden={activeTab !== 'analytics'}>
-              <AnalyticsView />
-            </div>
+          {activeTab === 'analytics' && (
+            <AnalyticsView />
           )}
 
-          {visitedTabs.manage && (
-            <div className={activeTab === 'manage' ? undefined : 'hidden'} aria-hidden={activeTab !== 'manage'}>
-              <ManageView />
-            </div>
+          {activeTab === 'manage' && (
+            <ManageView />
           )}
         </Suspense>
       </Layout>

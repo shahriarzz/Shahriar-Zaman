@@ -48,12 +48,6 @@
   --canvas-color: #09090e;
 }
 
-html {
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 body {
   background-color: var(--canvas-color);
   @apply text-zinc-200 antialiased;
@@ -68,12 +62,6 @@ body {
 
 button, [role="button"], a, input, select, textarea {
   touch-action: manipulation;
-}
-
-/* GPU compositor layer promotion for 60/120fps fluid transitions */
-.transform-gpu {
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 
 input, textarea, [contenteditable="true"], .selectable-text {

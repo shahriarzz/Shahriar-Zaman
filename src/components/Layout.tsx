@@ -82,16 +82,11 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         INTERACTIVE.active
       )}
     >
-      <motion.div
-        transition={
-          shouldReduceMotion
-            ? { duration: 0 }
-            : { duration: 0.15, ease: 'easeOut' }
-        }
+      <div
         className={cn(
-          "flex items-center justify-center rounded-full transition-colors duration-200",
+          "flex items-center justify-center rounded-full",
           active
-            ? "bg-zinc-900/90 border border-orange-500/40 text-orange-500 px-3 py-1.5 shadow-sm"
+            ? "bg-zinc-900/90 border border-orange-500/40 text-orange-500 px-3 py-1.5"
             : "text-zinc-400 hover:text-zinc-200 p-2 border border-transparent"
         )}
       >
@@ -99,28 +94,18 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
           {icon}
         </div>
 
-        <AnimatePresence initial={false}>
-          {active && (
-            <motion.span
-              key={`mobile-label-${id}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: shouldReduceMotion ? 0 : 0.12,
-                ease: 'easeOut'
-              }}
-              className={cn(
-                TYPOGRAPHY.navLabel,
-                "overflow-hidden whitespace-nowrap text-orange-500 font-bold pl-1.5 leading-none uppercase tracking-wider"
-              )}
-              aria-hidden="true"
-            >
-              {label}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.div>
+        {active && (
+          <span
+            className={cn(
+              TYPOGRAPHY.navLabel,
+              "overflow-hidden whitespace-nowrap text-orange-500 font-bold pl-1.5 leading-none uppercase tracking-wider"
+            )}
+            aria-hidden="true"
+          >
+            {label}
+          </span>
+        )}
+      </div>
     </button>
   );
 };
@@ -136,19 +121,24 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
   const [showTooltip, setShowTooltip] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
-  // Scroll position reset: immediately reset window and document scroll upon actual activeTab change
+  // Scroll preservation policy:
+  // - Save scroll position of previous tab on switch
+  // - Restore saved position for visited tabs, or reset to 0 for new tabs once after commit
+  const tabScrollPositionsRef = React.useRef<Partial<Record<ActiveTab, number>>>({});
   const prevTabRef = React.useRef<ActiveTab>(activeTab);
-  React.useLayoutEffect(() => {
-    if (prevTabRef.current !== activeTab) {
-      prevTabRef.current = activeTab;
+
+  React.useEffect(() => {
+    const currentTab = activeTab;
+    const prevTab = prevTabRef.current;
+
+    if (prevTab !== currentTab) {
       if (typeof window !== 'undefined') {
-        window.scrollTo(0, 0);
-        if (document.documentElement) {
-          document.documentElement.scrollTop = 0;
-        }
-        if (document.body) {
-          document.body.scrollTop = 0;
-        }
+        tabScrollPositionsRef.current[prevTab] = window.scrollY;
+      }
+      prevTabRef.current = currentTab;
+      if (typeof window !== 'undefined') {
+        const targetScroll = tabScrollPositionsRef.current[currentTab] ?? 0;
+        window.scrollTo(0, targetScroll);
       }
     }
   }, [activeTab]);

@@ -170,8 +170,8 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
     vi.restoreAllMocks();
   });
 
-  describe('1. Tab Scroll Reset Behavior (Layout.tsx)', () => {
-    it('resets scroll position to top when activeTab changes (Dashboard -> Analytics)', () => {
+  describe('1. Tab Scroll Policy: Single Reset & Position Preservation (Layout.tsx)', () => {
+    it('resets scroll position to top when switching to a new tab for the first time', () => {
       let currentTab: ActiveTab = 'dashboard';
       const mockFitness = createMockFitnessContext();
 
@@ -192,26 +192,19 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       scrollToSpy.mockClear();
 
       // Simulate user scrolling down 500px in Dashboard
-      document.documentElement.scrollTop = 500;
-      document.body.scrollTop = 500;
       window.scrollY = 500;
 
-      expect(document.documentElement.scrollTop).toBe(500);
-
-      // Navigate from Dashboard to Analytics
+      // Navigate from Dashboard to Analytics (new tab, not visited yet)
       act(() => {
         currentTab = 'analytics';
         root.render(<TestHarness tab={currentTab} />);
       });
 
-      // Assert that window.scrollTo(0, 0) was invoked immediately
+      // Assert that window.scrollTo was called with (0, 0) once after destination committed
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      // Assert that documentElement and body scroll tops are reset to 0
-      expect(document.documentElement.scrollTop).toBe(0);
-      expect(document.body.scrollTop).toBe(0);
     });
 
-    it('resets scroll position across all 4 primary tabs and session view transitions', () => {
+    it('preserves scroll position when returning to a previously scrolled tab', () => {
       let currentTab: ActiveTab = 'dashboard';
       const mockFitness = createMockFitnessContext();
 
@@ -228,54 +221,34 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       });
       scrollToSpy.mockClear();
 
-      // Transition 1: Dashboard -> Session (user begins a workout)
-      document.documentElement.scrollTop = 400;
-      act(() => {
-        currentTab = 'session';
-        root.render(<TestHarness tab={currentTab} />);
-      });
-      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      expect(document.documentElement.scrollTop).toBe(0);
-      scrollToSpy.mockClear();
+      // User scrolls down 500px in Dashboard
+      window.scrollY = 500;
 
-      // Transition 2: Session -> History (user finishes workout and checks history)
-      document.documentElement.scrollTop = 550;
+      // Navigate to History (new tab -> scroll 0)
       act(() => {
         currentTab = 'history';
         root.render(<TestHarness tab={currentTab} />);
       });
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      expect(document.documentElement.scrollTop).toBe(0);
       scrollToSpy.mockClear();
 
-      // Transition 3: History -> Analytics
-      document.documentElement.scrollTop = 350;
-      act(() => {
-        currentTab = 'analytics';
-        root.render(<TestHarness tab={currentTab} />);
-      });
-      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      expect(document.documentElement.scrollTop).toBe(0);
-      scrollToSpy.mockClear();
+      // In History, user scrolls down 200px
+      window.scrollY = 200;
 
-      // Transition 4: Analytics -> Manage
-      document.documentElement.scrollTop = 600;
-      act(() => {
-        currentTab = 'manage';
-        root.render(<TestHarness tab={currentTab} />);
-      });
-      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      expect(document.documentElement.scrollTop).toBe(0);
-      scrollToSpy.mockClear();
-
-      // Transition 5: Manage -> Dashboard
-      document.documentElement.scrollTop = 420;
+      // Navigate back to Dashboard -> restores Dashboard's 500px scroll position!
       act(() => {
         currentTab = 'dashboard';
         root.render(<TestHarness tab={currentTab} />);
       });
-      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-      expect(document.documentElement.scrollTop).toBe(0);
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 500);
+      scrollToSpy.mockClear();
+
+      // Navigate back to History -> restores History's 200px scroll position!
+      act(() => {
+        currentTab = 'history';
+        root.render(<TestHarness tab={currentTab} />);
+      });
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 200);
     });
 
     it('does NOT reset scroll when component rerenders without changing activeTab identity', () => {
@@ -296,8 +269,7 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       scrollToSpy.mockClear();
 
       // Set scroll position
-      document.documentElement.scrollTop = 300;
-      document.body.scrollTop = 300;
+      window.scrollY = 300;
 
       // Re-render with counter=2 but activeTab="dashboard" (same identity)
       act(() => {
@@ -306,40 +278,7 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
 
       // Assert scrollTo was NOT called again
       expect(scrollToSpy).not.toHaveBeenCalled();
-      // Scroll position remains unchanged
-      expect(document.documentElement.scrollTop).toBe(300);
-      expect(document.body.scrollTop).toBe(300);
-    });
-
-    it('resets document.body.scrollTop for Android WebView scrolling compatibility', () => {
-      const mockFitness = createMockFitnessContext();
-
-      act(() => {
-        root.render(
-          <FitnessContext.Provider value={mockFitness}>
-            <Layout activeTab="dashboard" onTabChange={() => {}}>
-              <div>Content</div>
-            </Layout>
-          </FitnessContext.Provider>
-        );
-      });
-      scrollToSpy.mockClear();
-
-      // In Android WebView, document.body may act as the scrolling element
-      document.body.scrollTop = 750;
-      expect(document.body.scrollTop).toBe(750);
-
-      act(() => {
-        root.render(
-          <FitnessContext.Provider value={mockFitness}>
-            <Layout activeTab="manage" onTabChange={() => {}}>
-              <div>Content</div>
-            </Layout>
-          </FitnessContext.Provider>
-        );
-      });
-
-      expect(document.body.scrollTop).toBe(0);
+      expect(window.scrollY).toBe(300);
     });
   });
 
