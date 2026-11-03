@@ -29,37 +29,99 @@ interface NavItemProps {
   icon: React.ReactNode;
   active: boolean;
   onClick: () => void;
+  isMobile?: boolean;
 }
 
-const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick }) => {
+const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick, isMobile = false }) => {
+  const shouldReduceMotion = useReducedMotion();
+
   const handleClick = () => {
     haptics.selection();
     onClick();
   };
 
+  if (!isMobile) {
+    return (
+      <button
+        id={`nav-item-${id}`}
+        type="button"
+        onClick={handleClick}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          "flex flex-col items-center justify-center relative group select-none",
+          CONTROL_HEIGHT.touchTarget,
+          FOCUS.visible,
+          TRANSITION.button,
+          NAV.item,
+          NAV.itemGap,
+          active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
+          INTERACTIVE.active
+        )}
+      >
+        <div className={TRANSITION.transform}>
+          {icon}
+        </div>
+        <span className={cn(TYPOGRAPHY.navLabel, "leading-none")}>{label}</span>
+        {active && <NavigationActiveIndicator />}
+      </button>
+    );
+  }
+
   return (
     <button
-      id={`nav-item-${id}`}
+      id={`mobile-nav-item-${id}`}
       type="button"
       onClick={handleClick}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex flex-col items-center justify-center relative group select-none",
+        "flex items-center justify-center relative select-none rounded-full",
         CONTROL_HEIGHT.touchTarget,
         FOCUS.visible,
-        TRANSITION.button,
-        NAV.item,
-        NAV.itemGap,
-        active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
         INTERACTIVE.active
       )}
     >
-      <div className={TRANSITION.transform}>
-        {icon}
-      </div>
-      <span className={cn(TYPOGRAPHY.navLabel, "leading-none")}>{label}</span>
-      {active && <NavigationActiveIndicator />}
+      <motion.div
+        layout={!shouldReduceMotion}
+        transition={
+          shouldReduceMotion
+            ? { duration: 0 }
+            : { type: 'spring', stiffness: 380, damping: 30 }
+        }
+        className={cn(
+          "flex items-center justify-center rounded-full transition-colors duration-200",
+          active
+            ? "bg-zinc-900/90 border border-orange-500/40 text-orange-500 px-3 py-1.5 shadow-sm"
+            : "text-zinc-400 hover:text-zinc-200 p-2 border border-transparent"
+        )}
+      >
+        <div className={cn("shrink-0 flex items-center justify-center", active ? "text-orange-500" : "text-zinc-400")}>
+          {icon}
+        </div>
+
+        <AnimatePresence initial={false}>
+          {active && (
+            <motion.span
+              key={`mobile-label-${id}`}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, x: -6 }}
+              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, width: 'auto', x: 0 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, x: -6 }}
+              transition={{
+                duration: shouldReduceMotion ? 0 : 0.18,
+                ease: 'easeInOut'
+              }}
+              className={cn(
+                TYPOGRAPHY.navLabel,
+                "overflow-hidden whitespace-nowrap text-orange-500 font-bold pl-1.5 leading-none uppercase tracking-wider"
+              )}
+              aria-hidden="true"
+            >
+              {label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </button>
   );
 };
@@ -256,17 +318,21 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </main>
 
       {/* Mobile Bottom Bar */}
-      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t flex items-center justify-around pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-4", BORDER.standard, SURFACE.canvasHeader)}>
-        {navConfig.map(item => (
-          <NavigationItem
-            key={item.id}
-            id={item.id}
-            label={item.label}
-            icon={item.icon(20)}
-            active={activeTab === item.id}
-            onClick={() => onTabChange(item.id)}
-          />
-        ))}
+      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-3", BORDER.standard, SURFACE.canvasHeader)}>
+        <div className="w-full max-w-md mx-auto grid grid-cols-4 items-center h-full">
+          {navConfig.map(item => (
+            <div key={item.id} className="w-full h-full flex items-center justify-center">
+              <NavigationItem
+                id={item.id}
+                label={item.label}
+                icon={item.icon(20)}
+                active={activeTab === item.id}
+                onClick={() => onTabChange(item.id)}
+                isMobile
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
