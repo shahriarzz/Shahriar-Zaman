@@ -75,11 +75,7 @@ export function useFitnessData() {
   const [workouts, setWorkoutsState] = useState<Workout[]>(initialData.workouts);
   const [logs, setLogsState] = useState<Record<string, SessionLog>>(initialData.logs);
   const [appState, setAppStateState] = useState<AppState>(initialData.appState);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    setIsInitialized(true);
-  }, []);
+  const [isInitialized, setIsInitialized] = useState(true);
 
   // Synchronous refs for async & subscription operations
   const exerciseDefsRef = useRef<ExerciseDefinition[]>(exerciseDefinitions);
@@ -157,7 +153,12 @@ export function useFitnessData() {
   }, [applyFitnessDatabaseSnapshot]);
 
   // Unified single-point persistence to localStorage
+  const isFirstMountRef = useRef(true);
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
     if (!isInitialized) return;
     persistFitnessDatabase({
       exerciseDefinitions,

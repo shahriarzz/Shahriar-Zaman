@@ -117,6 +117,42 @@ describe('GAINLOG Loading and Transition Refinement Suite', () => {
       // Suspense boundary must be present inside Layout with aria-busy fallback
       expect(appSrc).toContain('<Suspense');
       expect(appSrc).toContain('aria-busy="true"');
+      expect(appSrc).not.toContain('min-h-[50vh]');
+    });
+
+    it('verifies App.tsx includes idle preloading of secondary view chunks', () => {
+      const appSrc = fs.readFileSync(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+      expect(appSrc).toContain('preloadSecondaryViews');
+      expect(appSrc).toContain("import('./components/SessionView')");
+      expect(appSrc).toContain("import('./components/HistoryView')");
+      expect(appSrc).toContain("import('./components/AnalyticsView')");
+      expect(appSrc).toContain("import('./components/ManageView')");
+      expect(appSrc).toContain('requestIdleCallback');
+    });
+
+    it('verifies Layout.tsx removed layout animation and horizontal motion from mobile nav pill', () => {
+      const layoutSrc = fs.readFileSync(path.join(process.cwd(), 'src/components/Layout.tsx'), 'utf8');
+
+      // Must not animate layout width/position
+      expect(layoutSrc).not.toContain('layout={!shouldReduceMotion}');
+
+      // Must be opacity-only without horizontal translation
+      expect(layoutSrc).not.toContain('x: -4');
+      expect(layoutSrc).toContain('initial={{ opacity: 0 }}');
+      expect(layoutSrc).toContain('animate={{ opacity: 1 }}');
+      expect(layoutSrc).toContain('exit={{ opacity: 0 }}');
+    });
+
+    it('verifies useFitnessData initializes isInitialized synchronously and gates initial mount persist', () => {
+      const hookSrc = fs.readFileSync(path.join(process.cwd(), 'src/hooks/useFitnessData.ts'), 'utf8');
+
+      // Must initialize to true synchronously so client renders Dashboard immediately
+      expect(hookSrc).toContain('const [isInitialized, setIsInitialized] = useState(true);');
+
+      // Must use isFirstMountRef to avoid redundant write back on initial mount
+      expect(hookSrc).toContain('isFirstMountRef');
+      expect(hookSrc).toContain('if (isFirstMountRef.current)');
     });
 
     it('verifies App.tsx gates boot screen on !isInitialized rather than cloud sync loading', () => {

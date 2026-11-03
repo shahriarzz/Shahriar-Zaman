@@ -83,7 +83,6 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       )}
     >
       <motion.div
-        layout={!shouldReduceMotion}
         transition={
           shouldReduceMotion
             ? { duration: 0 }
@@ -104,11 +103,11 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
           {active && (
             <motion.span
               key={`mobile-label-${id}`}
-              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}
-              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{
-                duration: shouldReduceMotion ? 0 : 0.15,
+                duration: shouldReduceMotion ? 0 : 0.12,
                 ease: 'easeOut'
               }}
               className={cn(

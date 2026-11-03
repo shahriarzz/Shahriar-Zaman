@@ -18,6 +18,14 @@ const HistoryView = lazy(() => import('./components/HistoryView').then(m => ({ d
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const ManageView = lazy(() => import('./components/ManageView').then(m => ({ default: m.ManageView })));
 
+// Preload secondary views in background idle time after Dashboard is rendered
+export const preloadSecondaryViews = () => {
+  import('./components/SessionView');
+  import('./components/HistoryView');
+  import('./components/AnalyticsView');
+  import('./components/ManageView');
+};
+
 function AppContent() {
   const { loading, isInitialized, activeSession, clearActiveSession, syncStatus, user } = useFitness();
   const { confirm } = useConfirm();
@@ -43,6 +51,29 @@ function AppContent() {
       markTabVisited(activeTab);
     }
   }, [activeTab, markTabVisited]);
+
+  // One-time idle preload of secondary view chunks after Dashboard renders
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let idleCallbackId: number | null = null;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    if ('requestIdleCallback' in window) {
+      idleCallbackId = (window as any).requestIdleCallback(preloadSecondaryViews, { timeout: 2000 });
+    } else {
+      timerId = setTimeout(preloadSecondaryViews, 200);
+    }
+
+    return () => {
+      if (idleCallbackId !== null && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleCallbackId);
+      }
+      if (timerId !== null) {
+        clearTimeout(timerId);
+      }
+    };
+  }, []);
 
   // Set up native status bar style and background color on launch
   useEffect(() => {
@@ -295,10 +326,10 @@ function AppContent() {
         <Suspense
           fallback={
             <div
-              className="min-h-[50vh] w-full flex items-center justify-center py-12"
+              className="w-full py-8 flex items-center justify-center"
               aria-busy="true"
             >
-              <div className="w-8 h-8 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />
+              <div className="w-6 h-6 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />
             </div>
           }
         >
