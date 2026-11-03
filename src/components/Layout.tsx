@@ -87,7 +87,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         transition={
           shouldReduceMotion
             ? { duration: 0 }
-            : { type: 'spring', stiffness: 380, damping: 30 }
+            : { duration: 0.15, ease: 'easeOut' }
         }
         className={cn(
           "flex items-center justify-center rounded-full transition-colors duration-200",
@@ -104,12 +104,12 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
           {active && (
             <motion.span
               key={`mobile-label-${id}`}
-              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, x: -6 }}
-              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, width: 'auto', x: 0 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, x: -6 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}
+              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}
               transition={{
-                duration: shouldReduceMotion ? 0 : 0.18,
-                ease: 'easeInOut'
+                duration: shouldReduceMotion ? 0 : 0.15,
+                ease: 'easeOut'
               }}
               className={cn(
                 TYPOGRAPHY.navLabel,
@@ -304,17 +304,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </nav>
 
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-5xl mx-auto px-4 md:px-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
-            transition={{ duration: shouldReduceMotion ? 0 : DURATION.standard / 1000 }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        {children}
       </main>
 
       {/* Mobile Bottom Bar */}

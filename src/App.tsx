@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -7,21 +7,42 @@ import { FitnessProvider, useFitness } from './context/FitnessContext';
 import { ConfirmProvider, useConfirm } from './context/ConfirmContext';
 import { Layout, ActiveTab } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
-import { SessionView } from './components/SessionView';
-import { HistoryView } from './components/HistoryView';
-import { AnalyticsView } from './components/AnalyticsView';
-import { ManageView } from './components/ManageView';
 import { isFirebaseConfigured, firebaseConfigState } from './lib/firebase';
 import { cn } from './lib/utils';
 import { ToastContainer, Card, TYPOGRAPHY } from './components/ui';
 import { CANVAS_HEX, SURFACE } from './styles/tokens';
 
+// Lazy-load secondary views to reduce initial bundle size while keeping Dashboard static
+const SessionView = lazy(() => import('./components/SessionView').then(m => ({ default: m.SessionView })));
+const HistoryView = lazy(() => import('./components/HistoryView').then(m => ({ default: m.HistoryView })));
+const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const ManageView = lazy(() => import('./components/ManageView').then(m => ({ default: m.ManageView })));
+
 function AppContent() {
-  const { loading, activeSession, clearActiveSession, syncStatus, user } = useFitness();
+  const { loading, isInitialized, activeSession, clearActiveSession, syncStatus, user } = useFitness();
   const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
+
+  // Track tabs visited to lazy-load on demand while preserving tab state when switching back
+  const [visitedTabs, setVisitedTabs] = useState<Record<ActiveTab, boolean>>({
+    dashboard: true,
+    session: false,
+    history: false,
+    analytics: false,
+    manage: false,
+  });
+
+  const markTabVisited = useCallback((tab: ActiveTab) => {
+    setVisitedTabs(prev => prev[tab] ? prev : { ...prev, [tab]: true });
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'session') {
+      markTabVisited(activeTab);
+    }
+  }, [activeTab, markTabVisited]);
 
   // Set up native status bar style and background color on launch
   useEffect(() => {
@@ -46,7 +67,7 @@ function AppContent() {
       });
     }, 3000);
 
-    if (!loading) {
+    if (isInitialized) {
       // Small timeout to allow browser to paint ready state before hiding splash
       const timer = setTimeout(() => {
         SplashScreen.hide().catch(err => {
@@ -60,7 +81,7 @@ function AppContent() {
     }
 
     return () => clearTimeout(safetyTimer);
-  }, [loading]);
+  }, [isInitialized]);
 
   // Current-state refs to maintain a stable Android back handler without re-registration cycles
   const activeTabRef = useRef<ActiveTab>(activeTab);
@@ -143,7 +164,7 @@ function AppContent() {
     };
   }, []);
 
-  if (loading) {
+  if (!isInitialized) {
     // Determine dynamic network and connection details for highly accurate loader logging
     const getStatusDetails = () => {
       if (!isFirebaseConfigured) {
@@ -271,32 +292,57 @@ function AppContent() {
     <>
       <ToastContainer />
       <Layout activeTab={activeTab} onTabChange={handleTabChange}>
-        {activeTab === 'dashboard' && (
-          <Dashboard 
-            onStartWorkout={handleStartSession} 
-            onNavigateToHistory={(date) => {
-              setHistorySearchDate(date);
-              setActiveTab('history');
-            }}
-          />
-        )}
-        {activeTab === 'session' && (
-          <SessionView
-            workoutId={selectedWorkoutId}
-            onExit={() => {
-              setSelectedWorkoutId(null);
-              setActiveTab('dashboard');
-            }}
-          />
-        )}
-        {activeTab === 'history' && (
-          <HistoryView 
-            initialDate={historySearchDate} 
-            onClearInitialDate={() => setHistorySearchDate(null)} 
+        <Suspense
+          fallback={
+            <div
+              className="min-h-[50vh] w-full flex items-center justify-center py-12"
+              aria-busy="true"
+            >
+              <div className="w-8 h-8 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />
+            </div>
+          }
+        >
+          <div className={activeTab === 'dashboard' ? undefined : 'hidden'} aria-hidden={activeTab !== 'dashboard'}>
+            <Dashboard 
+              onStartWorkout={handleStartSession} 
+              onNavigateToHistory={(date) => {
+                setHistorySearchDate(date);
+                setActiveTab('history');
+              }}
             />
-        )}
-        {activeTab === 'analytics' && <AnalyticsView />}
-        {activeTab === 'manage' && <ManageView />}
+          </div>
+
+          {activeTab === 'session' && (
+            <SessionView
+              workoutId={selectedWorkoutId}
+              onExit={() => {
+                setSelectedWorkoutId(null);
+                setActiveTab('dashboard');
+              }}
+            />
+          )}
+
+          {visitedTabs.history && (
+            <div className={activeTab === 'history' ? undefined : 'hidden'} aria-hidden={activeTab !== 'history'}>
+              <HistoryView 
+                initialDate={historySearchDate} 
+                onClearInitialDate={() => setHistorySearchDate(null)} 
+              />
+            </div>
+          )}
+
+          {visitedTabs.analytics && (
+            <div className={activeTab === 'analytics' ? undefined : 'hidden'} aria-hidden={activeTab !== 'analytics'}>
+              <AnalyticsView />
+            </div>
+          )}
+
+          {visitedTabs.manage && (
+            <div className={activeTab === 'manage' ? undefined : 'hidden'} aria-hidden={activeTab !== 'manage'}>
+              <ManageView />
+            </div>
+          )}
+        </Suspense>
       </Layout>
     </>
   );
