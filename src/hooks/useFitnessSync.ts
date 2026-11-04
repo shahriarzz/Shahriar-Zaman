@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { auth, signInWithGoogle, onAuthStateChanged, getRedirectResult, User } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
-import { dk } from '../utils/fitnessHelpers';
 import { 
   sanitizeExerciseDefinition, 
   sanitizeWorkout, 
@@ -12,7 +11,6 @@ import {
   getDeletedIdsTracker, 
   removeDeletedId,
   clearDeletedIdsTracker, 
-  areLogsEqual,
   resolveLocalCloudRecord,
   mergeDefinitions,
   mergeWorkouts,

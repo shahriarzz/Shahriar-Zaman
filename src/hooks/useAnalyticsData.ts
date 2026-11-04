@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { SessionLog, Workout, ExerciseDefinition, AppState, WorkoutType } from '../types/fitness';
+import { Workout, WorkoutType } from '../types/fitness';
 import {
-  selectTimeRangeAnalytics,
-  FitnessIndex
+  selectTimeRangeAnalytics
 } from '../utils/fitnessDerivedSelectors';
 import {
   MUSCLE_CATEGORIES,
@@ -42,17 +41,27 @@ export function useAnalyticsData({
   // Active 1RM selection
   const active1RMExerciseId = selected1RMExerciseId || priorityExercises[0]?.id || '';
 
-  // 1. Time Range Slice & Aggregated Metrics via selector over canonical index
-  const aggregated = useMemo(() => {
+  // 1. Time Range Slice & Aggregated Metrics via selector over canonical index (decoupled from active1RMExerciseId)
+  const baseAggregated = useMemo(() => {
     return selectTimeRangeAnalytics(
       index,
       workoutMap,
       coreWorkoutByCycleDayMap,
       timeRange,
-      appState?.cycleStart,
-      active1RMExerciseId
+      appState?.cycleStart
     );
-  }, [index, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, active1RMExerciseId]);
+  }, [index, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart]);
+
+  // Dedicated 1RM progression calculation - updates only 1RM trend when selected exercise changes
+  const active1RMTrend = useMemo(() => {
+    if (!active1RMExerciseId) return [];
+    return index.e1rmHistoryByExercise.get(active1RMExerciseId) || [];
+  }, [index.e1rmHistoryByExercise, active1RMExerciseId]);
+
+  const aggregated = useMemo(() => ({
+    ...baseAggregated,
+    active1RMTrend
+  }), [baseAggregated, active1RMTrend]);
 
   // 2. Heatmap calendar data consuming canonical index
   const heatmapData = useCalendarGrid({

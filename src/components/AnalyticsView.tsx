@@ -38,6 +38,8 @@ import {
   isSameMonth
 } from 'date-fns';
 import { MuscleBalanceRecovery } from './MuscleBalanceRecovery';
+import { DeferredViewSection } from './DeferredViewSection';
+import { AnalyticsTabState } from '../types/tabViewState';
 import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
 import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
@@ -89,14 +91,28 @@ function getHeatmapIntensity(vol: number, maxVol: number) {
   return HEATMAP_INTENSITY_STEPS[4];
 }
 
-export const AnalyticsView: React.FC = () => {
-  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
-  const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>('volume');
-  const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(null);
-  const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(new Date());
+export interface AnalyticsViewProps {
+  savedState?: AnalyticsTabState;
+  onSaveState?: (state: AnalyticsTabState) => void;
+}
+
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSaveState }) => {
+  const [timeRange, setTimeRange] = useState<TimeRange>(savedState?.timeRange ?? '30d');
+  const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>(savedState?.muscleMetric ?? 'volume');
+  const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(savedState?.selected1RMExerciseId ?? null);
+  const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(savedState?.currentHeatmapMonth ?? new Date());
   const [showAllRecords, setShowAllRecords] = useState<boolean>(false);
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
   const shouldReduceMotion = useReducedMotion();
+
+  React.useEffect(() => {
+    onSaveState?.({
+      timeRange,
+      muscleMetric,
+      selected1RMExerciseId,
+      currentHeatmapMonth
+    });
+  }, [timeRange, muscleMetric, selected1RMExerciseId, currentHeatmapMonth, onSaveState]);
 
   const {
     trainingStreak,
@@ -407,6 +423,7 @@ export const AnalyticsView: React.FC = () => {
       </motion.div>
 
       {/* 4. SECTION 3: STRENGTH PROGRESSION (1RM TREND) */}
+      <DeferredViewSection minHeight={320}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -526,8 +543,10 @@ export const AnalyticsView: React.FC = () => {
           </Stack>
         </Section>
       </motion.div>
+      </DeferredViewSection>
 
       {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES, ROUTINES) */}
+      <DeferredViewSection minHeight={340}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -650,8 +669,10 @@ export const AnalyticsView: React.FC = () => {
           </Stack>
         </Section>
       </motion.div>
+      </DeferredViewSection>
 
       {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
+      <DeferredViewSection minHeight={300}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -671,6 +692,7 @@ export const AnalyticsView: React.FC = () => {
           />
         </Section>
       </motion.div>
+      </DeferredViewSection>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}
       <Section
@@ -889,74 +911,76 @@ export const AnalyticsView: React.FC = () => {
         </Section>
 
         {/* Routine Distribution Pie Chart */}
-        <Section
-          eyebrow="Split Breakdown"
-          eyebrowColor="zinc"
-          title="Routine Distribution"
-          padding="section"
-          className="flex flex-col justify-between"
-        >
-          {workoutPieData.length > 0 ? (
-            <div className="h-48 w-full relative my-auto">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    isAnimationActive={false}
-                    data={workoutPieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={70}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {workoutPieData.map((entry, idx) => (
-                      <Cell
-                        key={`cell-${entry.type || idx}`}
-                        fill={entry.color}
-                        stroke={CHART_THEME.background}
-                        strokeWidth={2}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    isAnimationActive={false}
-                    animationDuration={0}
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const d = payload[0].payload;
-                        return (
-                          <ChartTooltip>
-                            <span style={{ color: d.color }}>{d.name}: </span>
-                            <strong className="text-white">{d.value} {d.value === 1 ? 'session' : 'sessions'}</strong>
-                          </ChartTooltip>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className={cn(TYPOGRAPHY.body, "h-48 flex items-center justify-center text-zinc-500")}>
-              No session data in range
-            </div>
-          )}
+        <DeferredViewSection minHeight={240}>
+          <Section
+            eyebrow="Split Breakdown"
+            eyebrowColor="zinc"
+            title="Routine Distribution"
+            padding="section"
+            className="flex flex-col justify-between"
+          >
+            {workoutPieData.length > 0 ? (
+              <div className="h-48 w-full relative my-auto">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      isAnimationActive={false}
+                      data={workoutPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={70}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {workoutPieData.map((entry, idx) => (
+                        <Cell
+                          key={`cell-${entry.type || idx}`}
+                          fill={entry.color}
+                          stroke={CHART_THEME.background}
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      isAnimationActive={false}
+                      animationDuration={0}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const d = payload[0].payload;
+                          return (
+                            <ChartTooltip>
+                              <span style={{ color: d.color }}>{d.name}: </span>
+                              <strong className="text-white">{d.value} {d.value === 1 ? 'session' : 'sessions'}</strong>
+                            </ChartTooltip>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className={cn(TYPOGRAPHY.body, "h-48 flex items-center justify-center text-zinc-500")}>
+                No session data in range
+              </div>
+            )}
 
-          {/* Compact Routine Legend (Top 5) */}
-          <div className={cn("flex flex-wrap pt-3 border-t", GAP.sm, BORDER.subtle)}>
-            {workoutPieData.slice(0, 5).map((p, idx) => (
-              <Badge
-                key={`badge-${p.type || idx}`}
-                label={`${p.name} (${p.value})`}
-                colorOverride={p.color}
-                variant="subtle"
-                size="sm"
-              />
-            ))}
-          </div>
-        </Section>
+            {/* Compact Routine Legend (Top 5) */}
+            <div className={cn("flex flex-wrap pt-3 border-t", GAP.sm, BORDER.subtle)}>
+              {workoutPieData.slice(0, 5).map((p, idx) => (
+                <Badge
+                  key={`badge-${p.type || idx}`}
+                  label={`${p.name} (${p.value})`}
+                  colorOverride={p.color}
+                  variant="subtle"
+                  size="sm"
+                />
+              ))}
+            </div>
+          </Section>
+        </DeferredViewSection>
       </Grid>
     </Stack>
   );

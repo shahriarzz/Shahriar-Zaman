@@ -37,26 +37,47 @@ import {
   TRANSITION,
   MOTION_CONFIG
 } from './ui';
+import { DeferredViewSection } from './DeferredViewSection';
+import { HistoryTabState } from '../types/tabViewState';
 
 interface HistoryViewProps {
   initialDate?: string | null;
   onClearInitialDate?: () => void;
+  savedState?: HistoryTabState;
+  onSaveState?: (state: HistoryTabState) => void;
 }
 
-export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearInitialDate }) => {
+export const HistoryView: React.FC<HistoryViewProps> = ({ 
+  initialDate, 
+  onClearInitialDate,
+  savedState,
+  onSaveState
+}) => {
   const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
   const { sortedLogs, workoutMap, index, prEvents, getStrengthTrendForRange, getVolumeForRange } = useFitnessDerivedData();
   const { confirm } = useConfirm();
-  const [search, setSearch] = useState('');
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [selectedExKey, setSelectedExKey] = useState<string | null>(null); // Format: "YYYY-MM-DD_exerciseDefinitionId"
+
+  // Restore lightweight preferences across tab changes
+  const [search, setSearch] = useState(savedState?.search ?? '');
+  const [expandedDate, setExpandedDate] = useState<string | null>(savedState?.expandedDate ?? null);
+  const [selectedExKey, setSelectedExKey] = useState<string | null>(savedState?.selectedExKey ?? null); // Format: "YYYY-MM-DD_exerciseDefinitionId"
   
   // Custom states for Month-End reports and secure inline log editing
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editSessionState, setEditSessionState] = useState<SessionLog | null>(null);
   const [editVerified, setEditVerified] = useState(false);
-  const [activeMonthTab, setActiveMonthTab] = useState<string | null>(null);
+  const [activeMonthTab, setActiveMonthTab] = useState<string | null>(savedState?.activeMonthTab ?? null);
   const shouldReduceMotion = useReducedMotion();
+
+  // Save lightweight state outside the view so preferences survive tab switches
+  useEffect(() => {
+    onSaveState?.({
+      search,
+      expandedDate,
+      selectedExKey,
+      activeMonthTab
+    });
+  }, [search, expandedDate, selectedExKey, activeMonthTab, onSaveState]);
 
   // Sync initialDate search and auto-expand it if provided
   useEffect(() => {
@@ -74,28 +95,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
   // Workouts by ID for workout-level metadata
   const workoutsById = workoutMap;
 
-  // Group logs by exercise - accessed directly from canonical index
-  const exerciseHistory = React.useMemo(() => {
-    const history: Record<string, any[]> = {};
-    index.exerciseIndex.forEach((entry, exId) => {
-      history[exId] = entry.sessions.map(s => ({
-        date: s.date,
-        maxW: s.maxW,
-        sets: s.sets
-      }));
-    });
-    return history;
-  }, [index]);
-
   // Get chronological session list from canonical pipeline
   const sessionsList = sortedLogs;
 
-  // Filter day sessions based on search
+  // Filter day sessions based on search with hoisted lowercase string
   const filteredSessions = React.useMemo(() => {
+    const lowercaseSearch = search.trim().toLowerCase();
+    if (!lowercaseSearch) return sessionsList;
+
     return sessionsList.filter(session => {
       const wo = workoutsById.get(session.workoutId);
       const workoutName = wo?.name || 'Session';
-      const lowercaseSearch = search.toLowerCase();
       
       const matchesDate = session.date.includes(lowercaseSearch);
       const matchesWorkout = workoutName.toLowerCase().includes(lowercaseSearch);
@@ -132,15 +142,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       workoutsByType: Record<string, number>; // type -> count of completed runs
     }> = {};
 
-    const sortedLogsChronological = sortedLogs.slice().reverse().filter(isCompletedSession);
-    const runningPRs: Record<string, number> = {};
+    const completedLogs = sortedLogs.filter(isCompletedSession);
 
-    sortedLogsChronological.forEach(log => {
+    // Group PR counts by month once with O(P) single pass
+    const prCountsByMonth = new Map<string, number>();
+    for (const pr of prEvents || []) {
+      if (pr.monthKey) {
+        prCountsByMonth.set(pr.monthKey, (prCountsByMonth.get(pr.monthKey) || 0) + 1);
+      }
+    }
+
+    completedLogs.forEach(log => {
       const monthKey = log.date.substring(0, 7); // "YYYY-MM"
       if (!monthKey) return;
 
       const [year, month] = monthKey.split('-');
-      const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const dateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
       const monthName = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
       if (!summaries[monthKey]) {
@@ -150,7 +167,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           sessionsCount: 0,
           totalDuration: 0,
           totalVolume: 0,
-          prCount: 0,
+          prCount: prCountsByMonth.get(monthKey) || 0,
           peakLifts: {},
           workoutsByType: { push: 0, pull: 0, legs: 0, custom: 0 }
         };
@@ -183,18 +200,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
       });
     });
 
-    // Populate canonical monthly volume from canonical range volume selector and PR counts
+    // Populate canonical monthly volume from canonical range volume selector
     Object.values(summaries).forEach(summary => {
       const [year, month] = summary.monthKey.split('-').map(Number);
       const lastDayOfCurMonth = new Date(year, month, 0).getDate();
       const monthStart = `${summary.monthKey}-01`;
       const monthEnd = `${summary.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
       summary.totalVolume = getVolumeForRange(monthStart, monthEnd);
-      summary.prCount = (prEvents || []).filter(pr => pr.monthKey === summary.monthKey).length;
     });
 
-    return Object.values(summaries).slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [sortedLogs, workoutsById, index, prEvents, getVolumeForRange]);
+    return Object.values(summaries).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  }, [sortedLogs, workoutsById, index.exerciseMetaById, prEvents, getVolumeForRange]);
 
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
@@ -306,7 +322,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
           }
           padding="section"
         >
-          <div className="space-y-4">
+          <DeferredViewSection minHeight={150}>
+            <div className="space-y-4">
             <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
               {monthlySummaries.map((summary) => {
                 const isSelected = activeMonthTab === summary.monthKey;
@@ -576,7 +593,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
               })()}
             </AnimatePresence>
           </div>
-        </Section>
+        </DeferredViewSection>
+      </Section>
       )}
 
       {/* Main Days Drill Down Hierarchy */}
@@ -954,8 +972,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ initialDate, onClearIn
                           const exKey = `${session.date}_${exId}`;
                           const isSelected = selectedExKey === exKey;
 
-                          // Canonical PR calculation from index
-                          const historyLogs = (exerciseHistory[exId] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+                          // Canonical PR calculation directly from canonical index
+                          const historyLogs = index.exerciseIndex.get(exId)?.sessions || [];
                           const canonicalPR = index.exerciseIndex.get(exId)?.weightPR;
                           const prWeight = canonicalPR?.weight ?? (index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0));
                           const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);

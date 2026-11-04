@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
+import { useActiveSessionContext } from '../context/ActiveSessionContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, SessionLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
 import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
@@ -173,13 +174,36 @@ export interface GhostDataEntry {
   allTimePR: WeightPRRecord | null;
 }
 
+export const SessionClock: React.FC<{ startTime: number | null }> = React.memo(({ startTime }) => {
+  const [elapsed, setElapsed] = useState(() => {
+    return startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+  });
+
+  useEffect(() => {
+    if (!startTime) return;
+    setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return (
+    <span className="text-sm sm:text-base font-bold tabular-nums text-white">
+      {`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`}
+    </span>
+  );
+});
+
 interface ExerciseCardProps {
   ex: Exercise;
   workoutType: WorkoutType;
   ghostData?: GhostDataEntry;
-  aiAdvice: Record<string, string>;
-  loadingAdvice: string | null;
-  sessionSets: Record<string, SetLog[]>;
+  advice?: string;
+  isLoadingAdvice: boolean;
+  sets: SetLog[];
   getAiAdvice: (ex: Exercise) => void;
   updateSet: (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => void;
   addSet: (exId: string) => void;
@@ -188,13 +212,13 @@ interface ExerciseCardProps {
   onToggleExpand: () => void;
 }
 
-const ExerciseCard: React.FC<ExerciseCardProps> = ({
+const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   ex,
   workoutType,
   ghostData,
-  aiAdvice,
-  loadingAdvice,
-  sessionSets,
+  advice,
+  isLoadingAdvice,
+  sets,
   getAiAdvice,
   updateSet,
   addSet,
@@ -203,7 +227,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
   onToggleExpand,
 }) => {
   const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
-  const setsForEx = sessionSets[ex.id] || [];
+  const setsForEx = sets;
   const isDone = setsForEx.slice(0, ex.sets).every(s => s.done);
 
   const prevIsDoneRef = useRef(false);
@@ -298,14 +322,14 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             variant="ghost"
             size="icon"
             onClick={() => getAiAdvice(ex)}
-            disabled={loadingAdvice === ex.id}
+            disabled={isLoadingAdvice}
             aria-label="Get Coach tip"
             className="text-zinc-500 hover:text-zinc-300"
             icon={
               <Zap 
                 size={18} 
-                className={loadingAdvice === ex.id ? 'opacity-50' : ''} 
-                style={{ color: loadingAdvice === ex.id ? WORKOUT_COLORS[workoutType] : undefined }}
+                className={isLoadingAdvice ? 'opacity-50' : ''} 
+                style={{ color: isLoadingAdvice ? WORKOUT_COLORS[workoutType] : undefined }}
               />
             }
           />
@@ -332,13 +356,13 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
             className="overflow-hidden"
           >
             {/* AI Advice Box */}
-            {aiAdvice[ex.id] && (
+            {advice && (
               <div className="mx-6 mb-4">
                 <Banner
                   variant="achievement"
                   size="compact"
                   badge="COACH TIP"
-                  title={aiAdvice[ex.id]}
+                  title={advice}
                 />
               </div>
             )}
@@ -506,7 +530,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       </AnimatePresence>
     </motion.div>
   );
-};
+});
 
 interface SessionViewProps {
   onExit: () => void;
@@ -520,12 +544,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     appState,
     addLog, 
     updateCycleStart,
+    user
+  } = useFitness();
+  const {
     activeSession,
     startActiveSession,
     updateActiveSessionSets,
-    clearActiveSession,
-    user
-  } = useFitness();
+    clearActiveSession
+  } = useActiveSessionContext();
   const { getLatestForExercise, getWeightPRForExercise, getE1RMPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
@@ -533,7 +559,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [sessionSets, setSessionSets] = useState<Record<string, SetLog[]>>({});
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [duration, setDuration] = useState(0);
+  const [finishedDuration, setFinishedDuration] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
   const [sessionPRs, setSessionPRs] = useState<SessionPR[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -555,6 +581,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
   const getLatestForExerciseRef = useRef(getLatestForExercise);
   getLatestForExerciseRef.current = getLatestForExercise;
+
+  const activeWorkoutRef = useRef(activeWorkout);
+  activeWorkoutRef.current = activeWorkout;
+
+  const sessionSetsRef = useRef(sessionSets);
+  sessionSetsRef.current = sessionSets;
 
   const initializedWorkoutIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
@@ -607,7 +639,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       initializedWorkoutIdRef.current = targetWorkoutId;
       isInitializedRef.current = true;
       setStartTime(currentActiveSession.startTime);
-      setDuration(Math.floor((Date.now() - currentActiveSession.startTime) / 1000));
+      setFinishedDuration(Math.floor((Date.now() - currentActiveSession.startTime) / 1000));
       // Normalized sessionSets consumed directly without generating redundant IDs
       setSessionSets(currentActiveSession.sessionSets);
       return;
@@ -618,7 +650,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     isInitializedRef.current = true;
     const sessionStart = Date.now();
     setStartTime(sessionStart);
-    setDuration(0);
+    setFinishedDuration(0);
     setIsFinishing(false);
     setSessionPRs([]);
     
@@ -644,24 +676,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     setSessionSets(initialSets);
     startActiveSessionRef.current(wo.id, initialSets, sessionStart);
   }, [targetWorkoutId, workouts]);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (startTime && !isFinishing) {
-      interval = setInterval(() => {
-        setDuration(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [startTime, isFinishing]);
-
-  const formatTime = React.useCallback((seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }, []);
 
   // Ghost data & All-Time Weight PR computed via canonical derived index (O(exercises in workout) map lookup)
   const ghostData = React.useMemo<Record<string, GhostDataEntry>>(() => {
@@ -690,15 +704,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     }
   }, [sessionSets, updateActiveSessionSets, isFinishing]);
 
-  // Unified atomic mutation pathway for sessionSets
-  const mutateSessionSets = useCallback((
-    updater: (prev: Record<string, SetLog[]>) => Record<string, SetLog[]>
-  ) => {
-    setSessionSets(prev => updater(prev));
-  }, []);
-
   // Resilient set mutation with defensive fallback and input validation
-  const updateSet = (exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
+  const updateSet = useCallback((exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
     // Input validation & sanitization
     if (typeof value === 'string') {
       if (value.length > 7) return; // Prevent unreasonable input length
@@ -718,12 +725,12 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       const updatedExSets = currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s);
       const nextSets = { ...prev, [exId]: updatedExSets };
 
-      if (field === 'done' && value === true && activeWorkout) {
-        const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exId);
+      if (field === 'done' && value === true && activeWorkoutRef.current) {
+        const ex = activeWorkoutRef.current.exercises.find(e => e.exerciseDefinitionId === exId);
         if (ex) {
           const isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
           if (isNowDone) {
-            const nextIncomplete = activeWorkout.exercises.find(e => 
+            const nextIncomplete = activeWorkoutRef.current.exercises.find(e => 
               !(nextSets[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
             );
             if (nextIncomplete) {
@@ -737,20 +744,20 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
       return nextSets;
     });
-  };
+  }, []);
 
-  const addSet = (exId: string) => {
-    mutateSessionSets(prev => {
+  const addSet = useCallback((exId: string) => {
+    setSessionSets(prev => {
       const currentSets = prev[exId] || [];
       return {
         ...prev,
         [exId]: [...currentSets, { id: generateId(), weight: '', reps: '', done: false }]
       };
     });
-  };
+  }, []);
 
-  const deleteSet = async (exId: string, setIndex: number) => {
-    const sets = sessionSets[exId] || [];
+  const deleteSet = useCallback(async (exId: string, setIndex: number) => {
+    const sets = sessionSetsRef.current[exId] || [];
     if (sets.length <= 1) return;
     
     const setToDelete = sets[setIndex];
@@ -763,7 +770,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       if (!proceed) return;
     }
 
-    mutateSessionSets(prev => {
+    setSessionSets(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
       return {
@@ -771,7 +778,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         [exId]: currentSets.filter((_, i) => i !== setIndex)
       };
     });
-  };
+  }, [confirm]);
+
+  const handleToggleExpand = useCallback((exDefId: string) => {
+    setExpandedExId(prev => prev === exDefId ? null : exDefId);
+  }, []);
 
   const getAiAdvice = async (ex: Exercise) => {
     // Canonical data identity: ex is the resolved Exercise where ex.id === ex.exerciseDefinitionId
@@ -927,6 +938,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
 
     try {
       haptics.success();
+      const elapsedSecs = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+      setFinishedDuration(elapsedSecs);
+      const calculatedDurationMinutes = Math.floor(elapsedSecs / 60);
+
       const logId = `${dk()}_${activeWorkout.id}_${Date.now()}`;
       const rawLog = {
         id: logId,
@@ -934,7 +949,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         date: dk(),
         sets: sessionSets,
         complete: true,
-        durationMinutes: Math.floor(duration / 60)
+        durationMinutes: calculatedDurationMinutes
       };
       
       // Harden log according to GainLog contract
@@ -1042,7 +1057,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         <Grid cols={2} gap="md">
           <StatCard
             label="Duration"
-            value={Math.floor(duration / 60)}
+            value={Math.floor(finishedDuration / 60)}
             unit="min"
             accent="blue"
           />
@@ -1158,7 +1173,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           <div className={cn("flex items-center gap-1.5 font-mono px-2.5 py-1.5 border text-zinc-300", RADIUS.button, SURFACE.default, BORDER.standard)}>
             <Clock size={15} className="text-zinc-500 shrink-0" />
-            <span className="text-sm sm:text-base font-bold tabular-nums text-white">{formatTime(duration)}</span>
+            <SessionClock startTime={startTime} />
           </div>
 
           <Badge
@@ -1203,17 +1218,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               ex={resolvedEx}
               workoutType={activeWorkout.type}
               ghostData={ghostData[exDefId]}
-              aiAdvice={aiAdvice}
-              loadingAdvice={loadingAdvice}
-              sessionSets={sessionSets}
+              advice={aiAdvice[exDefId]}
+              isLoadingAdvice={loadingAdvice === exDefId}
+              sets={sessionSets[exDefId] || []}
               getAiAdvice={getAiAdvice}
               updateSet={updateSet}
               addSet={addSet}
               deleteSet={deleteSet}
               isExpanded={expandedExId === exDefId}
-              onToggleExpand={() => {
-                setExpandedExId(prev => prev === exDefId ? null : exDefId);
-              }}
+              onToggleExpand={() => handleToggleExpand(exDefId)}
             />
           );
         })}

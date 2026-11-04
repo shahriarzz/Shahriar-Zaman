@@ -29,12 +29,11 @@ interface NavItemProps {
   icon: React.ReactNode;
   active: boolean;
   onClick: () => void;
+  onPointerDown?: () => void;
   isMobile?: boolean;
 }
 
-const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick, isMobile = false }) => {
-  const shouldReduceMotion = useReducedMotion();
-
+const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick, onPointerDown, isMobile = false }) => {
   const handleClick = () => {
     haptics.selection();
     onClick();
@@ -46,6 +45,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         id={`nav-item-${id}`}
         type="button"
         onClick={handleClick}
+        onPointerDown={onPointerDown}
         aria-label={label}
         aria-current={active ? 'page' : undefined}
         className={cn(
@@ -73,6 +73,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       id={`mobile-nav-item-${id}`}
       type="button"
       onClick={handleClick}
+      onPointerDown={onPointerDown}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
@@ -113,17 +114,18 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
 interface LayoutProps {
   activeTab: ActiveTab;
   onTabChange: (id: ActiveTab) => void;
+  onPrewarm?: (id: ActiveTab) => void;
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children }) => {
+export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewarm, children }) => {
   const { user, syncStatus, syncError } = useFitness();
   const [showTooltip, setShowTooltip] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
   // Scroll preservation policy:
   // - Save scroll position of previous tab on switch
-  // - Restore saved position for visited tabs, or reset to 0 for new tabs once after commit
+  // - Restore saved position for visited tabs, or reset to 0 for new tabs
   const tabScrollPositionsRef = React.useRef<Partial<Record<ActiveTab, number>>>({});
   const prevTabRef = React.useRef<ActiveTab>(activeTab);
 
@@ -175,7 +177,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       activeTab === 'session' && "session-active"
     )}>
       {/* Top Banner / Nav */}
-      <nav className={cn("sticky top-0 z-50 transform-gpu will-change-transform border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.standard, SURFACE.canvasHeader)}>
+      <nav className={cn("sticky top-0 z-50 border-b px-4 flex items-center justify-between pt-safe h-[calc(3.5rem+env(safe-area-inset-top,0px))]", BORDER.standard, SURFACE.canvasHeader)}>
         <div className="flex items-center gap-2">
           <div className={cn("w-8 h-8 bg-orange-500 flex items-center justify-center", RADIUS.badge)}>
             <Dumbbell size={18} className="text-black stroke-[3px]" />
@@ -194,6 +196,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
               icon={item.icon(18)}
               active={activeTab === item.id}
               onClick={() => onTabChange(item.id)}
+              onPointerDown={() => onPrewarm?.(item.id)}
             />
           ))}
         </div>
@@ -297,7 +300,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
       </main>
 
       {/* Mobile Bottom Bar */}
-      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 transform-gpu will-change-transform border-t pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-3", BORDER.standard, SURFACE.canvasHeader)}>
+      <div className={cn("md:hidden fixed bottom-0 left-0 right-0 z-50 border-t pb-safe h-[calc(4rem+env(safe-area-inset-bottom,0px))] px-3", BORDER.standard, SURFACE.canvasHeader)}>
         <div className="w-full max-w-md mx-auto grid grid-cols-4 items-center h-full">
           {navConfig.map(item => (
             <div key={item.id} className="w-full h-full flex items-center justify-center">
@@ -307,6 +310,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
                 icon={item.icon(20)}
                 active={activeTab === item.id}
                 onClick={() => onTabChange(item.id)}
+                onPointerDown={() => onPrewarm?.(item.id)}
                 isMobile
               />
             </div>

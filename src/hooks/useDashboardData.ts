@@ -1,5 +1,6 @@
 import React from 'react';
 import { useFitness } from '../context/FitnessContext';
+import { useActiveSessionContext } from '../context/ActiveSessionContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { dk, getRollingDateRange, formatDateStr, isCompletedSession, BODY_WEIGHT_LIMITS, CYCLE_LENGTH } from '../utils/fitnessCalculations';
 import { INITIAL_WORKOUTS } from '../types/initialData';
@@ -116,12 +117,12 @@ export function useDashboardData(): DashboardData {
     workouts,
     appState,
     updateCycleStart,
-    activeSession,
-    clearActiveSession,
     logBodyWeight,
     deleteBodyWeight,
     setWorkouts
   } = useFitness();
+
+  const { activeSession, clearActiveSession } = useActiveSessionContext();
 
   const {
     currentDate,

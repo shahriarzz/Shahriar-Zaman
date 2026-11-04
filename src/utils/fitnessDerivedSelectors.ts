@@ -1122,17 +1122,20 @@ export function selectTimeRangeAnalytics(
   const isInCurrentRange = (date: string) =>
     (!cutoffDateStr || date >= cutoffDateStr) && date <= todayStr;
 
-  // Canonical completion filter for analytics
-  const rangeLogs = index.sortedLogsAscending
-    .filter(isCompletedSession)
-    .filter(l => Boolean(l.date) && isInCurrentRange(l.date));
+  // Single-pass canonical completion filter for current and prior range logs
+  const rangeLogs: SessionLog[] = [];
+  const priorLogs: SessionLog[] = [];
 
-  const priorLogs = index.sortedLogsAscending
-    .filter(isCompletedSession)
-    .filter(l => {
-      if (!cutoffDateStr || !priorCutoffDateStr || !l.date) return false;
-      return l.date >= priorCutoffDateStr && l.date < cutoffDateStr;
-    });
+  for (let i = 0; i < index.sortedLogsAscending.length; i++) {
+    const l = index.sortedLogsAscending[i];
+    if (!isCompletedSession(l) || !l.date) continue;
+    if (isInCurrentRange(l.date)) {
+      rangeLogs.push(l);
+    }
+    if (cutoffDateStr && priorCutoffDateStr && l.date >= priorCutoffDateStr && l.date < cutoffDateStr) {
+      priorLogs.push(l);
+    }
+  }
 
   // Calculate range and prior volumes using indexed volumeByDate
   const rangeDates = new Set(rangeLogs.map(l => l.date));
@@ -1272,6 +1275,8 @@ export function selectTimeRangeAnalytics(
     }
   }
 
+  const calStreak = computeCalendarTrainingStreak(index.sortedLogsDescending, validNow);
+
   return {
     totalLogsCount: index.lifetimeStats.totalSessions,
     rangeLogsCount: rangeLogs.length,
@@ -1292,12 +1297,12 @@ export function selectTimeRangeAnalytics(
     isTodayCorePending: adherence.isTodayPending,
     adherencePct: adherence.percent,
     scheduledTrainingStreak: trainingStreak,
-    calendarTrainingStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
+    calendarTrainingStreak: calStreak,
     // Compatibility properties for existing callers
     currentStreak: trainingStreak.currentStreak,
     longestStreak: trainingStreak.longestStreak,
-    consecutiveDaysStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
-    consecutiveCalendarStreak: computeCalendarTrainingStreak(index.sortedLogsDescending, validNow),
+    consecutiveDaysStreak: calStreak,
+    consecutiveCalendarStreak: calStreak,
     trainingStreak,
     adherence,
     avgDuration,

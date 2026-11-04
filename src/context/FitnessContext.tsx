@@ -9,12 +9,13 @@ import { useFitnessLogs } from '../hooks/useFitnessLogs';
 import { useActiveSession, ActiveSession } from '../hooks/useActiveSession';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
 import { FitnessDerivedProvider } from './FitnessDerivedContext';
+import { ActiveSessionProvider, registerFitnessContextForFallback } from './ActiveSessionContext';
 
 export interface FitnessContextType {
   // Auth & Sync state
   user: User | null;
   loading: boolean;
-  isInitialized: boolean;
+  isInitialized?: boolean;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'failed';
   syncError: string | null;
   login: () => Promise<void>;
@@ -49,11 +50,11 @@ export interface FitnessContextType {
   resetLogs: () => Promise<void>;
   updateCycleStart: (date: string) => Promise<void>;
 
-  // Active Session Actions
-  activeSession: ActiveSession | null;
-  startActiveSession: (workoutId: string, sets: Record<string, SetLog[]>, startTime?: number) => void;
-  updateActiveSessionSets: (sets: Record<string, SetLog[]>) => void;
-  clearActiveSession: () => void;
+  // Active Session Actions (Optional on FitnessContextType for mock compatibility; canonical home is ActiveSessionContext)
+  activeSession?: ActiveSession | null;
+  startActiveSession?: (workoutId: string, sets: Record<string, SetLog[]>, startTime?: number) => void;
+  updateActiveSessionSets?: (sets: Record<string, SetLog[]>) => void;
+  clearActiveSession?: () => void;
 
   // Body Weight Actions
   logBodyWeight: (date: string, weight: number) => Promise<void>;
@@ -69,6 +70,7 @@ export interface FitnessContextType {
 }
 
 export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
+registerFitnessContextForFallback(FitnessContext);
 
 export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Core local state store
@@ -138,13 +140,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSyncError: sync.setSyncError
   });
 
-  // 5. Active session manager
-  const activeSession = useActiveSession();
-
   const value = useMemo<FitnessContextType>(() => ({
     user: sync.user,
     loading: sync.loading,
-    isInitialized: data.isInitialized,
     syncStatus: sync.syncStatus,
     syncError: sync.syncError,
     login: sync.login,
@@ -171,11 +169,6 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     resetLogs: logs.resetLogs,
     updateCycleStart: logs.updateCycleStart,
 
-    activeSession: activeSession.activeSession,
-    startActiveSession: activeSession.startActiveSession,
-    updateActiveSessionSets: activeSession.updateActiveSessionSets,
-    clearActiveSession: activeSession.clearActiveSession,
-
     logBodyWeight: logs.logBodyWeight,
     deleteBodyWeight: logs.deleteBodyWeight,
 
@@ -193,7 +186,6 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     sync.login,
     sync.logout,
     sync.retrySync,
-    data.isInitialized,
     data.exerciseDefinitions,
     data.workouts,
     data.logs,
@@ -210,10 +202,6 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logs.deleteLog,
     logs.resetLogs,
     logs.updateCycleStart,
-    activeSession.activeSession,
-    activeSession.startActiveSession,
-    activeSession.updateActiveSessionSets,
-    activeSession.clearActiveSession,
     logs.logBodyWeight,
     logs.deleteBodyWeight,
     backups.pushAutoBackup,
@@ -227,7 +215,9 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <FitnessContext.Provider value={value}>
       <FitnessDerivedProvider>
-        {children}
+        <ActiveSessionProvider>
+          {children}
+        </ActiveSessionProvider>
       </FitnessDerivedProvider>
     </FitnessContext.Provider>
   );
