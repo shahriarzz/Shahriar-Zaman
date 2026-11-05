@@ -197,7 +197,7 @@ export const SessionClock: React.FC<{ startTime: number | null }> = React.memo((
   );
 });
 
-interface ExerciseCardProps {
+export interface ExerciseCardProps {
   ex: Exercise;
   workoutType: WorkoutType;
   ghostData?: GhostDataEntry;
@@ -212,7 +212,7 @@ interface ExerciseCardProps {
   onToggleExpand: (exDefId: string) => void;
 }
 
-const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
+export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   ex,
   workoutType,
   ghostData,
@@ -695,6 +695,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     });
     return data;
   }, [activeWorkout, getLatestForExercise, getWeightPRForExercise]);
+
+  // Memoize resolved workout exercises so references remain stable across transient set updates
+  const resolvedExercises = React.useMemo<Record<string, Exercise>>(() => {
+    const map: Record<string, Exercise> = {};
+    if (!activeWorkout) return map;
+    activeWorkout.exercises.forEach(ex => {
+      map[ex.exerciseDefinitionId] = resolveWorkoutExercise(ex, exerciseDefinitions);
+    });
+    return map;
+  }, [activeWorkout, exerciseDefinitions]);
 
   // Synchronize active session sets to persistent activeSession state safely in an effect
   const isInitialSyncRef = useRef(true);
@@ -1222,8 +1232,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
       {/* Exercises List */}
       <Stack spacing="lg">
         {activeWorkout.exercises.map((ex, exIdx) => {
-          const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
           const exDefId = ex.exerciseDefinitionId;
+          const resolvedEx = resolvedExercises[exDefId] || resolveWorkoutExercise(ex, exerciseDefinitions);
           return (
             <ExerciseCard
               key={`session-ex-${exDefId}-${exIdx}`}

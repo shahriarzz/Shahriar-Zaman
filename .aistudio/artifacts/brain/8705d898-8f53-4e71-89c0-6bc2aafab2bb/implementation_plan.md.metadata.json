@@ -1,6 +1,6 @@
 {
-  "summary": "Targeted regression and performance fixes completed:\n- Fixed stale-UID sync race in useFitnessSync.ts via auth generation counter, in-flight invalidation, and UID-scoped queue\n- Fixed active-session reset ensuring exactly one ActiveSessionProvider, clean logout reset, and visibility flush protection\n- Fixed visibilitychange listener leak on unmount in ActiveSessionContext.tsx\n- Completed ExerciseCard memoization in SessionView.tsx with stable toggle and AI advice callbacks\n- Enhanced Layout.tsx with continuous scroll position tracking and divergent-height restoration\n- Wired Dashboard pointer/hover prewarming for SessionView chunk\n- Respected reduced-motion preferences in DeferredViewSection.tsx\n- Calibrated Analytics deferred section placeholder heights to prevent layout shifts\n- Added comprehensive regression tests in targetedPerformanceRegressionPass2.test.tsx\n- All 35 test files (574 tests), TypeScript checks, and production builds passed with 100% success rate",
-  "updatedAt": "2026-11-05T11:16:03.974718550Z",
+  "summary": "Muscle Balance & Recovery Analytics implementation plan and architectural specification restored:\n- 15 canonical anatomical groups and 3-tier WSE attribution\n- Deterministic 14-day exponential residual decay formula\n- Single-pass buildFitnessIndex integration\n- Zero-pill UI layout and view-all transparency rules",
+  "updatedAt": "2026-11-05T17:23:37.462977279Z",
   "requestFeedback": true,
   "userFacing": true
 }
