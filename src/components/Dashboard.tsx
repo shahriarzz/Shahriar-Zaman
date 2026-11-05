@@ -32,9 +32,10 @@ import { cn } from '../lib/utils';
 interface DashboardProps {
   onStartWorkout: (id: string) => void;
   onNavigateToHistory: (dateStr?: string) => void;
+  onPrewarmSession?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigateToHistory }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigateToHistory, onPrewarmSession }) => {
   const {
     heroDateStr,
     stats,
@@ -226,6 +227,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   variant="warning"
                   size="md"
                   haptic="medium"
+                  onPointerDown={() => onPrewarmSession?.()}
+                  onMouseEnter={() => onPrewarmSession?.()}
                   onClick={() => {
                     onStartWorkout(unfinishedSession.workoutId);
                   }}
@@ -310,6 +313,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               variant={isTodayCompleted || todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
               size="lg"
               disabled={isTodayCompleted || todayWorkout.type === 'rest'}
+              onPointerDown={() => onPrewarmSession?.()}
+              onMouseEnter={() => onPrewarmSession?.()}
               onClick={() => {
                 if (!isTodayCompleted && todayWorkout.type !== 'rest') {
                   onStartWorkout(todayWorkout.id);

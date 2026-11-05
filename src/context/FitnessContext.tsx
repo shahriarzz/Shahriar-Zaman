@@ -9,7 +9,7 @@ import { useFitnessLogs } from '../hooks/useFitnessLogs';
 import { useActiveSession, ActiveSession } from '../hooks/useActiveSession';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
 import { FitnessDerivedProvider } from './FitnessDerivedContext';
-import { ActiveSessionProvider, registerFitnessContextForFallback } from './ActiveSessionContext';
+import { ActiveSessionProvider, useActiveSessionContext, registerFitnessContextForFallback } from './ActiveSessionContext';
 
 export interface FitnessContextType {
   // Auth & Sync state
@@ -72,9 +72,19 @@ export interface FitnessContextType {
 export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 registerFitnessContextForFallback(FitnessContext);
 
-export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const activeSessionContext = useActiveSessionContext();
   // 1. Core local state store
   const data = useFitnessData();
+
+  // Unified reset callback that clears both database snapshot and active session
+  const unifiedResetToDefaultData = React.useCallback(() => {
+    data.resetToDefaultData();
+    activeSessionContext.clearActiveSession();
+    try {
+      localStorage.removeItem('gl_active_session');
+    } catch {}
+  }, [data.resetToDefaultData, activeSessionContext.clearActiveSession]);
 
   // 2. Realtime Firebase sync & Auth
   const sync = useFitnessSync({
@@ -86,7 +96,7 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkouts: data.setWorkouts,
     setLogs: data.setLogs,
     setAppState: data.setAppState,
-    resetToDefaultData: data.resetToDefaultData
+    resetToDefaultData: unifiedResetToDefaultData
   });
 
   // 3. Backups manager
@@ -215,11 +225,19 @@ export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <FitnessContext.Provider value={value}>
       <FitnessDerivedProvider>
-        <ActiveSessionProvider>
-          {children}
-        </ActiveSessionProvider>
+        {children}
       </FitnessDerivedProvider>
     </FitnessContext.Provider>
+  );
+};
+
+export const FitnessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ActiveSessionProvider>
+      <FitnessProviderInner>
+        {children}
+      </FitnessProviderInner>
+    </ActiveSessionProvider>
   );
 };
 

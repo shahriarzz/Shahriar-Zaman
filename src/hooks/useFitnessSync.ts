@@ -64,8 +64,10 @@ export function useFitnessSync({
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
-  const syncQueuedRef = useRef(false);
+  const queuedSyncUidRef = useRef<string | null>(null);
   const previousUidRef = useRef<string | null>(null);
+  const currentUidRef = useRef<string | null>(null);
+  const authGenerationRef = useRef(0);
 
   // Auth listener
   useEffect(() => {
@@ -76,6 +78,13 @@ export function useFitnessSync({
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       const prevUid = previousUidRef.current;
       const currentUid = u ? u.uid : null;
+      currentUidRef.current = currentUid;
+
+      // Invalidate any in-flight syncs immediately on account change or logout
+      if (prevUid !== currentUid) {
+        authGenerationRef.current += 1;
+        queuedSyncUidRef.current = null;
+      }
 
       // When switching accounts or logging out from an existing account, isolate data by resetting local state
       // This strictly prevents Account A's workout data or tombstones from being merged or uploaded into Account B
@@ -115,6 +124,9 @@ export function useFitnessSync({
 
   const logout = useCallback(async () => {
     try {
+      authGenerationRef.current += 1;
+      queuedSyncUidRef.current = null;
+      currentUidRef.current = null;
       const currentUid = auth.currentUser?.uid || previousUidRef.current;
       await auth.signOut();
       clearDeletedIdsTracker(currentUid);
@@ -129,20 +141,29 @@ export function useFitnessSync({
 
   // Sync logic with guaranteed queued follow-up execution
   const syncDataBackground = useCallback(async (uid: string) => {
+    // If auth generation changes or user has switched/logged out, do not start
+    if (currentUidRef.current !== uid) {
+      return;
+    }
+    const currentGen = authGenerationRef.current;
+
     if (isSyncingRef.current) {
-      // Queue a follow-up sync to ensure latest changes are not discarded
-      syncQueuedRef.current = true;
+      // Queue a follow-up sync specifically for this UID
+      queuedSyncUidRef.current = uid;
       return;
     }
     isSyncingRef.current = true;
     setSyncStatus('syncing');
     setSyncError(null);
 
+    const isStale = () => authGenerationRef.current !== currentGen || currentUidRef.current !== uid;
+
     try {
       // 0. Purge offline deleted items for this UID (failed deletions stay in queue for retry)
       const deletedTracker = getDeletedIdsTracker(uid);
       if (deletedTracker.defs.length > 0) {
         for (const defId of [...deletedTracker.defs]) {
+          if (isStale()) return;
           try {
             await deleteExerciseDefinition(uid, defId);
             removeDeletedId('defs', defId, uid);
@@ -153,6 +174,7 @@ export function useFitnessSync({
       }
       if (deletedTracker.workouts.length > 0) {
         for (const woId of [...deletedTracker.workouts]) {
+          if (isStale()) return;
           try {
             await deleteWorkout(uid, woId);
             removeDeletedId('workouts', woId, uid);
@@ -163,6 +185,7 @@ export function useFitnessSync({
       }
       if (deletedTracker.logs.length > 0) {
         for (const logId of [...deletedTracker.logs]) {
+          if (isStale()) return;
           try {
             await deleteLog(uid, logId);
             removeDeletedId('logs', logId, uid);
@@ -172,6 +195,8 @@ export function useFitnessSync({
         }
       }
 
+      if (isStale()) return;
+
       // Parallel download
       const [rawCloudDefs, rawCloudWorkouts, rawCloudLogs, cloudState] = await Promise.all([
         getExerciseDefinitions(uid),
@@ -179,6 +204,8 @@ export function useFitnessSync({
         getLogs(uid),
         getAppState(uid)
       ]);
+
+      if (isStale()) return;
 
       // Filter cloud records against active tombstones to prevent resurrection
       const activeTracker = getDeletedIdsTracker(uid);
@@ -194,8 +221,10 @@ export function useFitnessSync({
       // 1. Deterministic App State Sync
       const { merged: mergedState, needsUpload: stateNeedsUpload } = mergeAppState(appStateRef.current, cloudState);
       if (stateNeedsUpload) {
+        if (isStale()) return;
         await saveAppState(uid, mergedState, true);
       }
+      if (isStale()) return;
       setAppState(mergedState);
 
       // 2. Deterministic Defs Sync
@@ -205,8 +234,10 @@ export function useFitnessSync({
         activeTracker.defs
       );
       if (defsToUpload.length > 0) {
+        if (isStale()) return;
         await saveExerciseDefinitionsBatch(uid, defsToUpload);
       }
+      if (isStale()) return;
       setExerciseDefinitions(mergedDefs);
 
       // 3. Deterministic Workouts Sync
@@ -216,8 +247,10 @@ export function useFitnessSync({
         activeTracker.workouts
       );
       if (workoutsToUpload.length > 0) {
+        if (isStale()) return;
         await saveWorkoutsBatch(uid, workoutsToUpload);
       }
+      if (isStale()) return;
       setWorkouts(mergedWorkouts);
 
       // 4. Deterministic Logs Sync
@@ -227,12 +260,20 @@ export function useFitnessSync({
         activeTracker.logs
       );
       if (Object.keys(logsToUpload).length > 0) {
+        if (isStale()) return;
         await saveLogsBatch(uid, logsToUpload);
       }
+      if (isStale()) return;
       setLogs(mergedLogs);
 
-      setSyncStatus('synced');
+      if (!isStale()) {
+        setSyncStatus('synced');
+      }
     } catch (err: any) {
+      if (isStale()) {
+        // Stale sync error must never update current sync status or UI
+        return;
+      }
       console.error("Background sync error:", err);
       handleFirestoreError(err, OperationType.GET, `users/${uid}`);
       setSyncStatus('failed');
@@ -240,11 +281,12 @@ export function useFitnessSync({
       throw err;
     } finally {
       isSyncingRef.current = false;
-      // If a concurrent sync request was queued while this sync was in progress, execute the follow-up
-      if (syncQueuedRef.current) {
-        syncQueuedRef.current = false;
+      // If a concurrent sync request was queued while this sync was in progress, execute the follow-up only if it matches current UID and generation
+      const nextUid = queuedSyncUidRef.current;
+      queuedSyncUidRef.current = null;
+      if (nextUid && nextUid === currentUidRef.current && authGenerationRef.current === currentGen) {
         setTimeout(() => {
-          syncDataBackground(uid).catch(() => {});
+          syncDataBackground(nextUid).catch(() => {});
         }, 50);
       }
     }
@@ -258,7 +300,7 @@ export function useFitnessSync({
     let retryTimeoutId: any = null;
 
     const executeWithRetry = async (retriesLeft = 3, delayMs = 2000) => {
-      if (!isMounted) return;
+      if (!isMounted || currentUidRef.current !== user.uid) return;
       try {
         await syncDataBackground(user.uid);
       } catch (err: any) {

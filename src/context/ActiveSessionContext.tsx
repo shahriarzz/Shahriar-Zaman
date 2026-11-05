@@ -25,32 +25,50 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     sessionRef.current = sessionManager.activeSession;
   }, [sessionManager.activeSession]);
 
+  const clearActiveSession = React.useCallback(() => {
+    sessionRef.current = null;
+    sessionManager.clearActiveSession();
+    try {
+      localStorage.removeItem('gl_active_session');
+    } catch {}
+  }, [sessionManager.clearActiveSession]);
+
   // Flush in-flight active session state on visibility change / before unload for robust durability
   useEffect(() => {
     const handleFlush = () => {
       try {
         if (sessionRef.current) {
           localStorage.setItem('gl_active_session', JSON.stringify(sessionRef.current));
+        } else {
+          localStorage.removeItem('gl_active_session');
         }
       } catch (err) {
         console.warn('Failed to flush gl_active_session during unload/backgrounding', err);
       }
     };
 
-    window.addEventListener('beforeunload', handleFlush);
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         handleFlush();
       }
-    });
+    };
+
+    window.addEventListener('beforeunload', handleFlush);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('beforeunload', handleFlush);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
+  const value = React.useMemo(() => ({
+    ...sessionManager,
+    clearActiveSession
+  }), [sessionManager, clearActiveSession]);
+
   return (
-    <ActiveSessionContext.Provider value={sessionManager}>
+    <ActiveSessionContext.Provider value={value}>
       {children}
     </ActiveSessionContext.Provider>
   );

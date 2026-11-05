@@ -124,10 +124,30 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
   const shouldReduceMotion = useReducedMotion();
 
   // Scroll preservation policy:
-  // - Save scroll position of previous tab on switch
-  // - Restore saved position for visited tabs, or reset to 0 for new tabs
+  // - Track continuous scroll position passively
+  // - Save scroll position before old content is removed, or continuously track it
+  // - Restore immediately and post-commit for divergent content heights
+  // - Preserve first-visit top-reset behavior
   const tabScrollPositionsRef = React.useRef<Partial<Record<ActiveTab, number>>>({});
+  const currentScrollRef = React.useRef<number>(0);
   const prevTabRef = React.useRef<ActiveTab>(activeTab);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onScroll = () => {
+      currentScrollRef.current = window.scrollY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const handleNavClick = (id: ActiveTab) => {
+    if (typeof window !== 'undefined') {
+      const scrollPos = window.scrollY || currentScrollRef.current;
+      tabScrollPositionsRef.current[activeTab] = scrollPos;
+    }
+    onTabChange(id);
+  };
 
   React.useEffect(() => {
     const currentTab = activeTab;
@@ -135,12 +155,25 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
 
     if (prevTab !== currentTab) {
       if (typeof window !== 'undefined') {
-        tabScrollPositionsRef.current[prevTab] = window.scrollY;
+        const scrollPos = window.scrollY || currentScrollRef.current;
+        if (tabScrollPositionsRef.current[prevTab] === undefined || scrollPos > 0) {
+          tabScrollPositionsRef.current[prevTab] = scrollPos;
+        }
       }
       prevTabRef.current = currentTab;
       if (typeof window !== 'undefined') {
         const targetScroll = tabScrollPositionsRef.current[currentTab] ?? 0;
+        // Synchronous restoration
         window.scrollTo(0, targetScroll);
+        currentScrollRef.current = targetScroll;
+
+        // Restore after destination content commits in case destination has divergent or pending layout height
+        if (targetScroll > 0) {
+          requestAnimationFrame(() => {
+            window.scrollTo(0, targetScroll);
+            currentScrollRef.current = targetScroll;
+          });
+        }
       }
     }
   }, [activeTab]);
@@ -195,7 +228,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
               label={item.label}
               icon={item.icon(18)}
               active={activeTab === item.id}
-              onClick={() => onTabChange(item.id)}
+              onClick={() => handleNavClick(item.id)}
               onPointerDown={() => onPrewarm?.(item.id)}
             />
           ))}
@@ -309,7 +342,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
                 label={item.label}
                 icon={item.icon(20)}
                 active={activeTab === item.id}
-                onClick={() => onTabChange(item.id)}
+                onClick={() => handleNavClick(item.id)}
                 onPointerDown={() => onPrewarm?.(item.id)}
                 isMobile
               />

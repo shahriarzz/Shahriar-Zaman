@@ -423,7 +423,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </motion.div>
 
       {/* 4. SECTION 3: STRENGTH PROGRESSION (1RM TREND) */}
-      <DeferredViewSection minHeight={320}>
+      <DeferredViewSection minHeight={420}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -546,7 +546,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </DeferredViewSection>
 
       {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES, ROUTINES) */}
-      <DeferredViewSection minHeight={340}>
+      <DeferredViewSection minHeight={480}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -672,7 +672,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </DeferredViewSection>
 
       {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
-      <DeferredViewSection minHeight={300}>
+      <DeferredViewSection minHeight={360}>
       <motion.div
         initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
         animate={MOTION_CONFIG.entrance.animate}
@@ -911,7 +911,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         </Section>
 
         {/* Routine Distribution Pie Chart */}
-        <DeferredViewSection minHeight={240}>
+        <DeferredViewSection minHeight={260}>
           <Section
             eyebrow="Split Breakdown"
             eyebrowColor="zinc"

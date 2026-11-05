@@ -209,7 +209,7 @@ interface ExerciseCardProps {
   addSet: (exId: string) => void;
   deleteSet: (exId: string, setIndex: number) => void;
   isExpanded: boolean;
-  onToggleExpand: () => void;
+  onToggleExpand: (exDefId: string) => void;
 }
 
 const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
@@ -233,6 +233,10 @@ const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   const prevIsDoneRef = useRef(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [flashingSets, setFlashingSets] = useState<Set<number>>(new Set());
+
+  const handleToggle = useCallback(() => {
+    onToggleExpand(ex.exerciseDefinitionId || ex.id);
+  }, [onToggleExpand, ex.exerciseDefinitionId, ex.id]);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -294,7 +298,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
     >
       {/* Header */}
       <div 
-        onClick={onToggleExpand}
+        onClick={handleToggle}
         className={cn("p-6 cursor-pointer hover:bg-zinc-800/10 flex items-start justify-between gap-4", TRANSITION.colors)}
       >
         <div className="space-y-1">
@@ -784,7 +788,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     setExpandedExId(prev => prev === exDefId ? null : exDefId);
   }, []);
 
-  const getAiAdvice = async (ex: Exercise) => {
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  const getHistoryForExerciseRef = useRef(getHistoryForExercise);
+  getHistoryForExerciseRef.current = getHistoryForExercise;
+
+  const getAiAdvice = useCallback(async (ex: Exercise) => {
     // Canonical data identity: ex is the resolved Exercise where ex.id === ex.exerciseDefinitionId
     const exDefId = ex.exerciseDefinitionId || ex.id;
 
@@ -797,14 +807,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
     abortControllersRef.current.set(exDefId, controller);
 
     setLoadingAdvice(exDefId);
+    let history: any[] = [];
     try {
       // Historical lookup using canonical derived index (most recent 3 sessions)
-      const history = getHistoryForExercise(exDefId).slice(0, 3);
+      history = getHistoryForExerciseRef.current(exDefId).slice(0, 3);
 
       let idToken = '';
-      if (user && typeof user.getIdToken === 'function') {
+      const currentUser = userRef.current;
+      if (currentUser && typeof currentUser.getIdToken === 'function') {
         try {
-          idToken = await user.getIdToken();
+          idToken = await currentUser.getIdToken();
         } catch (tokenErr) {
           console.warn("Could not retrieve Firebase ID token:", tokenErr);
         }
@@ -890,7 +902,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
         setLoadingAdvice(null);
       }
     }
-  };
+  }, []);
 
   // Calculate volume: only done === true sets count as completed training volume
   const calculateVolumeLocal = () => {
@@ -1226,7 +1238,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               addSet={addSet}
               deleteSet={deleteSet}
               isExpanded={expandedExId === exDefId}
-              onToggleExpand={() => handleToggleExpand(exDefId)}
+              onToggleExpand={handleToggleExpand}
             />
           );
         })}

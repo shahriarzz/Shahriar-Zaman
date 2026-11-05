@@ -208,6 +208,7 @@ function AppContent() {
           {activeTab === 'dashboard' && (
             <Dashboard 
               onStartWorkout={handleStartSession} 
+              onPrewarmSession={() => prewarmTab('session')}
               onNavigateToHistory={(date) => {
                 setHistorySearchDate(date);
                 setActiveTab('history');
