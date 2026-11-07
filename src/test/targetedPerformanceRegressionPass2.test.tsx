@@ -15,6 +15,7 @@ import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initial
 import { useFitnessSync } from '../hooks/useFitnessSync';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import * as firestoreService from '../services/fitnessFirestore';
+import * as firestoreErrorHandler from '../lib/firestoreErrorHandler';
 
 vi.mock('../utils/haptics', () => ({
   haptics: {
@@ -337,6 +338,171 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     expect(hookResult.syncStatus).toBe('idle');
   });
 
+  // 1c. Captured Account A Firestore listener callbacks invoked after switching to Account B
+  it('1c. Captured Account A Firestore listener callbacks invoked after switching to Account B: no Account A data or errors enter Account B state', async () => {
+    let authCallback: any = null;
+    vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, callback: any) => {
+      authCallback = callback;
+      return vi.fn();
+    });
+
+    const setDefsSpy = vi.fn();
+    const setWorkoutsSpy = vi.fn();
+    const setLogsSpy = vi.fn();
+    const setAppStateSpy = vi.fn();
+    const setSyncStatusSpy = vi.fn();
+    const resetToDefaultDataSpy = vi.fn();
+
+    const errorHandlerSpy = vi.spyOn(firestoreErrorHandler, 'handleFirestoreError');
+
+    let capturedDefsCbA: any = null;
+    let capturedDefsErrA: any = null;
+    let capturedWorkoutsCbA: any = null;
+    let capturedWorkoutsErrA: any = null;
+    let capturedLogsCbA: any = null;
+    let capturedLogsErrA: any = null;
+    let capturedStateCbA: any = null;
+    let capturedStateErrA: any = null;
+
+    vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockImplementation((uid, onNext, onError) => {
+      if (uid === 'user-A') {
+        capturedDefsCbA = onNext;
+        capturedDefsErrA = onError;
+      }
+      return vi.fn();
+    });
+    vi.spyOn(firestoreService, 'subscribeWorkouts').mockImplementation((uid, onNext, onError) => {
+      if (uid === 'user-A') {
+        capturedWorkoutsCbA = onNext;
+        capturedWorkoutsErrA = onError;
+      }
+      return vi.fn();
+    });
+    vi.spyOn(firestoreService, 'subscribeLogs').mockImplementation((uid, onNext, onError) => {
+      if (uid === 'user-A') {
+        capturedLogsCbA = onNext;
+        capturedLogsErrA = onError;
+      }
+      return vi.fn();
+    });
+    vi.spyOn(firestoreService, 'subscribeAppState').mockImplementation((uid, onNext, onError) => {
+      if (uid === 'user-A') {
+        capturedStateCbA = onNext;
+        capturedStateErrA = onError;
+      }
+      return vi.fn();
+    });
+
+    vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+    vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+    vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+    vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+
+    const defsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+    const workoutsRef = { current: INITIAL_WORKOUTS };
+    const logsRef = { current: {} };
+    const appStateRef = { current: { cycleStart: '2026-10-01' } };
+
+    function TestSyncComponent() {
+      useFitnessSync({
+        exerciseDefsRef: defsRef as any,
+        workoutsRef: workoutsRef as any,
+        logsRef: logsRef as any,
+        appStateRef: appStateRef as any,
+        setExerciseDefinitions: setDefsSpy,
+        setWorkouts: setWorkoutsSpy,
+        setLogs: setLogsSpy,
+        setAppState: setAppStateSpy,
+        setSyncStatus: setSyncStatusSpy,
+        resetToDefaultData: resetToDefaultDataSpy
+      });
+      return null;
+    }
+
+    act(() => {
+      root.render(<TestSyncComponent />);
+    });
+
+    // 1. Log in as Account A
+    await act(async () => {
+      authCallback({ uid: 'user-A', email: 'userA@test.com' });
+    });
+
+    expect(capturedDefsCbA).toBeTruthy();
+    expect(capturedDefsErrA).toBeTruthy();
+    expect(capturedWorkoutsCbA).toBeTruthy();
+    expect(capturedWorkoutsErrA).toBeTruthy();
+    expect(capturedLogsCbA).toBeTruthy();
+    expect(capturedLogsErrA).toBeTruthy();
+    expect(capturedStateCbA).toBeTruthy();
+    expect(capturedStateErrA).toBeTruthy();
+
+    // 2. Switch auth to Account B
+    await act(async () => {
+      authCallback({ uid: 'user-B', email: 'userB@test.com' });
+    });
+
+    setDefsSpy.mockClear();
+    setWorkoutsSpy.mockClear();
+    setLogsSpy.mockClear();
+    setAppStateSpy.mockClear();
+    setSyncStatusSpy.mockClear();
+    errorHandlerSpy.mockClear();
+
+    // 3. Stale Account A snapshot callbacks fire with Account A changes
+    act(() => {
+      capturedDefsCbA([
+        {
+          type: 'added',
+          doc: {
+            id: 'stale-def-A',
+            data: () => ({ name: 'Stale A Def', target: 'Pecs', tags: ['compound'] }),
+            metadata: { hasPendingWrites: false }
+          }
+        }
+      ]);
+      capturedWorkoutsCbA([
+        {
+          type: 'added',
+          doc: {
+            id: 'stale-wo-A',
+            data: () => ({ name: 'Stale A Workout', badge: 'PUSH A', type: 'push', exercises: [] }),
+            metadata: { hasPendingWrites: false }
+          }
+        }
+      ]);
+      capturedLogsCbA([
+        {
+          type: 'added',
+          doc: {
+            id: 'stale-log-A',
+            data: () => ({ workoutId: 'stale-wo-A', date: '2026-11-01', durationMinutes: 60, sets: {}, complete: true }),
+            metadata: { hasPendingWrites: false }
+          }
+        }
+      ]);
+      capturedStateCbA({ cycleStart: '2020-01-01', updatedAt: 999999999999 }, false);
+    });
+
+    // Assert: No Account A data entered Account B's state
+    expect(setDefsSpy).not.toHaveBeenCalled();
+    expect(setWorkoutsSpy).not.toHaveBeenCalled();
+    expect(setLogsSpy).not.toHaveBeenCalled();
+    expect(setAppStateSpy).not.toHaveBeenCalled();
+
+    // 4. Stale Account A error callbacks fire with Account A errors
+    act(() => {
+      capturedDefsErrA(new Error('Stale A Defs Error'));
+      capturedWorkoutsErrA(new Error('Stale A Workouts Error'));
+      capturedLogsErrA(new Error('Stale A Logs Error'));
+      capturedStateErrA(new Error('Stale A State Error'));
+    });
+
+    // Assert: No Account A error entered error reporting or updated sync status
+    expect(errorHandlerSpy).not.toHaveBeenCalled();
+    expect(setSyncStatusSpy).not.toHaveBeenCalled();
+  });
+
   // 2. Strengthened active-session isolation test: switch auth from Account A to Account B through the actual FitnessContext/auth flow
   it('2. Account A active workout is cleared on auth switch through real FitnessContext flow and cannot reappear on visibility change', async () => {
     let authCallback: any = null;
@@ -454,11 +620,11 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
   // 4. Real ExerciseCard / SessionView implementation React.memo isolation test without mutating ExerciseCard.type
   it('4. Editing one exercise set does not re-render unaffected real ExerciseCards (SessionView React.memo isolation)', () => {
     const mockFitness = createMockFitnessContext();
-    const renderCounts: Record<string, number> = {};
+    const commitCounts: Record<string, number> = {};
 
-    // Standard supported instrumentation callback
-    const onCardRender = vi.fn((exDefId: string) => {
-      renderCounts[exDefId] = (renderCounts[exDefId] || 0) + 1;
+    // Standard supported instrumentation callback reporting committed renders only
+    const onCardCommit = vi.fn((exDefId: string) => {
+      commitCounts[exDefId] = (commitCounts[exDefId] || 0) + 1;
     });
 
     act(() => {
@@ -470,7 +636,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
                 <SessionView
                   workoutId="push-a"
                   onExit={vi.fn()}
-                  onCardRender={onCardRender}
+                  onCardCommit={onCardCommit}
                 />
               </ConfirmProvider>
             </ActiveSessionProvider>
@@ -480,11 +646,11 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     });
 
     // Workout push-a has exercises with definitions e1, e2, e3, e4, e5, e6
-    // Capture baseline render counts after mount
-    const initialE1Renders = renderCounts['e1'];
-    const initialE2Renders = renderCounts['e2'];
-    expect(initialE1Renders).toBeGreaterThan(0);
-    expect(initialE2Renders).toBeGreaterThan(0);
+    // Capture baseline committed render counts after mount
+    const initialE1Commits = commitCounts['e1'];
+    const initialE2Commits = commitCounts['e2'];
+    expect(initialE1Commits).toBeGreaterThan(0);
+    expect(initialE2Commits).toBeGreaterThan(0);
 
     // Find real "Mark set complete" buttons in the rendered SessionView
     const markDoneButtons = container.querySelectorAll('button[aria-label="Mark set complete"]');
@@ -495,11 +661,11 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
       (markDoneButtons[0] as HTMLButtonElement).click();
     });
 
-    // The edited card (e1) re-rendered to update its set state and row animation
-    expect(renderCounts['e1']).toBeGreaterThan(initialE1Renders);
+    // The edited card (e1) committed an update to its set state and row animation
+    expect(commitCounts['e1']).toBeGreaterThan(initialE1Commits);
 
-    // The unaffected real card (e2) did NOT re-render (React.memo bailout)
-    expect(renderCounts['e2']).toBe(initialE2Renders);
+    // The unaffected real card (e2) did NOT commit another render (React.memo bailout)
+    expect(commitCounts['e2']).toBe(initialE2Commits);
   });
 
   // 5. Real Layout tab controls scroll restoration test (including tab with asynchronous content height expansion)
@@ -508,8 +674,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
 
     const origScrollTo = window.scrollTo;
     const origRAF = window.requestAnimationFrame;
-    const origScrollYDesc = Object.getOwnPropertyDescriptor(window, 'scrollY') ||
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window), 'scrollY');
+    const origScrollYDesc = Object.getOwnPropertyDescriptor(window, 'scrollY');
 
     let rafQueue: FrameRequestCallback[] = [];
     window.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
@@ -526,6 +691,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         rafQueue = [];
         currentBatch.forEach(cb => cb(performance.now()));
       }
+      expect(rafQueue.length).toBe(0);
     }
 
     try {

@@ -63,10 +63,12 @@ export function useFitnessSync({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setInternalSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
+  const externalSetSyncStatusRef = useRef(externalSetSyncStatus);
+  externalSetSyncStatusRef.current = externalSetSyncStatus;
   const setSyncStatus = useCallback((status: 'idle' | 'syncing' | 'synced' | 'failed') => {
     setInternalSyncStatus(status);
-    externalSetSyncStatus?.(status);
-  }, [externalSetSyncStatus]);
+    externalSetSyncStatusRef.current?.(status);
+  }, []);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
@@ -302,7 +304,7 @@ export function useFitnessSync({
         }, 50);
       }
     }
-  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
+  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState, setSyncStatus]);
 
   // Realtime Listeners
   useEffect(() => {
@@ -311,17 +313,21 @@ export function useFitnessSync({
     let isMounted = true;
     let retryTimeoutId: any = null;
 
+    const isListenerValid = () => isMounted && currentUidRef.current === user.uid;
+
     const executeWithRetry = async (retriesLeft = 3, delayMs = 2000) => {
-      if (!isMounted || currentUidRef.current !== user.uid) return;
+      if (!isListenerValid()) return;
       try {
         await syncDataBackground(user.uid);
       } catch (err: any) {
+        if (!isListenerValid()) return;
+
         const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || 
                           err?.code === 'unavailable' || 
                           (err?.message || '').toLowerCase().includes('offline');
 
         if (isOffline) {
-          if (isMounted) {
+          if (isListenerValid()) {
             setSyncStatus('failed');
             setSyncError("Working offline. Synchronization will resume when connection is restored.");
           }
@@ -330,7 +336,7 @@ export function useFitnessSync({
 
         if (retriesLeft > 1 && isMounted) {
           retryTimeoutId = setTimeout(() => executeWithRetry(retriesLeft - 1, delayMs * 2), delayMs);
-        } else if (isMounted) {
+        } else if (isListenerValid()) {
           setSyncStatus('failed');
           setSyncError("Cloud synchronization failed.");
         }
@@ -342,6 +348,7 @@ export function useFitnessSync({
     const unsubDefs = subscribeExerciseDefinitions(
       user.uid,
       (changes) => {
+        if (!isListenerValid()) return;
         let hasChanges = false;
         const current = [...exerciseDefsRef.current];
         const tombstones = getDeletedIdsTracker(user.uid).defs;
@@ -377,12 +384,16 @@ export function useFitnessSync({
         });
         if (hasChanges) setExerciseDefinitions(current);
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/exerciseDefinitions`)
+      (err) => {
+        if (!isListenerValid()) return;
+        handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/exerciseDefinitions`);
+      }
     );
 
     const unsubWorkouts = subscribeWorkouts(
       user.uid,
       (changes) => {
+        if (!isListenerValid()) return;
         let hasChanges = false;
         const current = [...workoutsRef.current];
         const tombstones = getDeletedIdsTracker(user.uid).workouts;
@@ -418,12 +429,16 @@ export function useFitnessSync({
         });
         if (hasChanges) setWorkouts(current);
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/workouts`)
+      (err) => {
+        if (!isListenerValid()) return;
+        handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/workouts`);
+      }
     );
 
     const unsubLogs = subscribeLogs(
       user.uid,
       (changes) => {
+        if (!isListenerValid()) return;
         let hasChanges = false;
         const current = { ...logsRef.current };
         const tombstones = getDeletedIdsTracker(user.uid).logs;
@@ -453,12 +468,16 @@ export function useFitnessSync({
         });
         if (hasChanges) setLogs(current);
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/logs`)
+      (err) => {
+        if (!isListenerValid()) return;
+        handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/logs`);
+      }
     );
 
     const unsubState = subscribeAppState(
       user.uid,
       (cloudState, hasPendingWrites) => {
+        if (!isListenerValid()) return;
         if (!hasPendingWrites && cloudState) {
           const localState = appStateRef.current;
           const { merged } = mergeAppState(localState, cloudState);
@@ -467,7 +486,10 @@ export function useFitnessSync({
           }
         }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}`)
+      (err) => {
+        if (!isListenerValid()) return;
+        handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+      }
     );
 
     const handleOnline = () => executeWithRetry();
