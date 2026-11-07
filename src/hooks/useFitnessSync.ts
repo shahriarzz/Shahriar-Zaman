@@ -45,6 +45,7 @@ interface UseFitnessSyncProps {
   setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
   setAppState: (state: AppState | ((prev: AppState) => AppState)) => void;
   resetToDefaultData?: () => void;
+  setSyncStatus?: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
 }
 
 export function useFitnessSync({
@@ -56,11 +57,16 @@ export function useFitnessSync({
   setWorkouts,
   setLogs,
   setAppState,
-  resetToDefaultData
+  resetToDefaultData,
+  setSyncStatus: externalSetSyncStatus
 }: UseFitnessSyncProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
+  const [syncStatus, setInternalSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
+  const setSyncStatus = useCallback((status: 'idle' | 'syncing' | 'synced' | 'failed') => {
+    setInternalSyncStatus(status);
+    externalSetSyncStatus?.(status);
+  }, [externalSetSyncStatus]);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
@@ -83,6 +89,7 @@ export function useFitnessSync({
       // Invalidate any in-flight syncs immediately on account change or logout
       if (prevUid !== currentUid) {
         authGenerationRef.current += 1;
+        isSyncingRef.current = false;
         queuedSyncUidRef.current = null;
       }
 
@@ -125,8 +132,11 @@ export function useFitnessSync({
   const logout = useCallback(async () => {
     try {
       authGenerationRef.current += 1;
+      isSyncingRef.current = false;
       queuedSyncUidRef.current = null;
       currentUidRef.current = null;
+      setSyncStatus('idle');
+      setSyncError(null);
       const currentUid = auth.currentUser?.uid || previousUidRef.current;
       await auth.signOut();
       clearDeletedIdsTracker(currentUid);
@@ -137,7 +147,7 @@ export function useFitnessSync({
     } catch (e) {
       console.error("Sign out error:", e);
     }
-  }, [resetToDefaultData]);
+  }, [resetToDefaultData, setSyncStatus]);
 
   // Sync logic with guaranteed queued follow-up execution
   const syncDataBackground = useCallback(async (uid: string) => {
@@ -280,7 +290,9 @@ export function useFitnessSync({
       setSyncError("Cloud synchronization failed. Operating in offline mode.");
       throw err;
     } finally {
-      isSyncingRef.current = false;
+      if (authGenerationRef.current === currentGen) {
+        isSyncingRef.current = false;
+      }
       // If a concurrent sync request was queued while this sync was in progress, execute the follow-up only if it matches current UID and generation
       const nextUid = queuedSyncUidRef.current;
       queuedSyncUidRef.current = null;

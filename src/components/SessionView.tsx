@@ -210,6 +210,7 @@ export interface ExerciseCardProps {
   deleteSet: (exId: string, setIndex: number) => void;
   isExpanded: boolean;
   onToggleExpand: (exDefId: string) => void;
+  onRender?: (exDefId: string) => void;
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
@@ -225,7 +226,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   deleteSet,
   isExpanded,
   onToggleExpand,
+  onRender,
 }) => {
+  onRender?.(ex.exerciseDefinitionId || ex.id);
   const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
   const setsForEx = sets;
   const isDone = setsForEx.slice(0, ex.sets).every(s => s.done);
@@ -539,9 +542,10 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
 interface SessionViewProps {
   onExit: () => void;
   workoutId?: string | null;
+  onCardRender?: (exDefId: string) => void;
 }
 
-export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) => {
+export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onCardRender }) => {
   const { 
     workouts, 
     exerciseDefinitions,
@@ -1249,6 +1253,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId }) =
               deleteSet={deleteSet}
               isExpanded={expandedExId === exDefId}
               onToggleExpand={handleToggleExpand}
+              onRender={onCardRender}
             />
           );
         })}
