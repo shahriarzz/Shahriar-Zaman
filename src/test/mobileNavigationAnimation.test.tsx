@@ -183,5 +183,15 @@ describe('GAINLOG Mobile Navigation Animation & Accessibility Suite', () => {
       expect(dashBtn.classList.contains('min-w-[44px]')).toBe(true);
       expect(dashBtn.textContent).toContain('Dash');
     });
+
+    it('renders desktop active indicator as a plain div without shared-layout layoutId animation', () => {
+      renderLayout('dashboard');
+
+      const indicator = container.querySelector('[data-testid="navigation-active-indicator"]');
+      expect(indicator).toBeTruthy();
+      expect(indicator?.tagName.toLowerCase()).toBe('div');
+      expect(indicator?.getAttribute('data-layout-id')).toBeNull();
+      expect(indicator?.getAttribute('layoutid')).toBeNull();
+    });
   });
 });

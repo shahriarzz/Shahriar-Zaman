@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { SetLog } from '../types/fitness';
 
 export interface ActiveSession {
@@ -74,6 +74,11 @@ export function normalizeActiveSession(raw: unknown): ActiveSession | null {
   };
 }
 
+export interface ActiveSessionMeta {
+  workoutId: string;
+  startTime: number;
+}
+
 export function useActiveSession() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(() => {
     try {
@@ -85,48 +90,133 @@ export function useActiveSession() {
     }
   });
 
-  useEffect(() => {
+  const latestSessionRef = useRef<ActiveSession | null>(activeSession);
+  latestSessionRef.current = activeSession;
+
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushActiveSession = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     try {
-      if (activeSession) {
-        localStorage.setItem('gl_active_session', JSON.stringify(activeSession));
+      if (latestSessionRef.current) {
+        localStorage.setItem('gl_active_session', JSON.stringify(latestSessionRef.current));
       } else {
         localStorage.removeItem('gl_active_session');
       }
     } catch (e) {
-      console.warn("Failed to update gl_active_session in localStorage", e);
+      console.warn("Failed to flush gl_active_session to localStorage", e);
     }
-  }, [activeSession]);
+  }, []);
+
+  const scheduleDebouncedSave = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      try {
+        if (latestSessionRef.current) {
+          localStorage.setItem('gl_active_session', JSON.stringify(latestSessionRef.current));
+        } else {
+          localStorage.removeItem('gl_active_session');
+        }
+      } catch (e) {
+        console.warn("Failed to save debounced gl_active_session", e);
+      }
+    }, 250);
+  }, []);
+
+  // Flush synchronously on page hide, before unload, and visibility change to hidden
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushActiveSession();
+      }
+    };
+
+    window.addEventListener('beforeunload', flushActiveSession);
+    window.addEventListener('pagehide', flushActiveSession);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', flushActiveSession);
+      window.removeEventListener('pagehide', flushActiveSession);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [flushActiveSession]);
 
   const startActiveSession = useCallback((
     workoutId: string, 
     sets: Record<string, SetLog[]>, 
     startTime = Date.now()
   ) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     const session: ActiveSession = { workoutId, startTime, sessionSets: sets };
+    latestSessionRef.current = session;
     setActiveSession(session);
+    try {
+      localStorage.setItem('gl_active_session', JSON.stringify(session));
+    } catch (e) {
+      console.warn("Failed to synchronously initialize gl_active_session", e);
+    }
   }, []);
 
-  const updateActiveSessionSets = useCallback((sets: Record<string, SetLog[]>) => {
+  const updateActiveSessionSets = useCallback((
+    updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>)
+  ) => {
     setActiveSession(prev => {
       if (!prev) return null;
-      return { ...prev, sessionSets: sets };
+      const nextSets = typeof updater === 'function' ? updater(prev.sessionSets) : updater;
+      const updated: ActiveSession = { ...prev, sessionSets: nextSets };
+      latestSessionRef.current = updated;
+      return updated;
     });
-  }, []);
+    scheduleDebouncedSave();
+  }, [scheduleDebouncedSave]);
 
   const clearActiveSession = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    latestSessionRef.current = null;
     setActiveSession(null);
+    try {
+      localStorage.removeItem('gl_active_session');
+    } catch {}
   }, []);
+
+  const activeSessionMeta = useMemo<ActiveSessionMeta | null>(() => {
+    if (!activeSession) return null;
+    return {
+      workoutId: activeSession.workoutId,
+      startTime: activeSession.startTime
+    };
+  }, [activeSession?.workoutId, activeSession?.startTime]);
 
   return useMemo(() => ({
     activeSession,
+    activeSessionMeta,
     startActiveSession,
     updateActiveSessionSets,
-    clearActiveSession
+    clearActiveSession,
+    flushActiveSession
   }), [
     activeSession,
+    activeSessionMeta,
     startActiveSession,
     updateActiveSessionSets,
-    clearActiveSession
+    clearActiveSession,
+    flushActiveSession
   ]);
 }
 

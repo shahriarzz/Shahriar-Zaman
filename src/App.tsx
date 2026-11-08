@@ -4,7 +4,7 @@ import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { FitnessProvider, useFitness } from './context/FitnessContext';
-import { useActiveSessionContext } from './context/ActiveSessionContext';
+import { useActiveSessionMeta } from './context/ActiveSessionContext';
 import { ConfirmProvider, useConfirm } from './context/ConfirmContext';
 import { Layout, ActiveTab } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -24,7 +24,7 @@ const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(m => 
 const ManageView = lazy(() => import('./components/ManageView').then(m => ({ default: m.ManageView })));
 
 function AppContent() {
-  const { activeSession, clearActiveSession } = useActiveSessionContext();
+  const { activeSession, clearActiveSession } = useActiveSessionMeta();
   const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);

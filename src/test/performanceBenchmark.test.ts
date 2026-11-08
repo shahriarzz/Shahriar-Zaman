@@ -1,5 +1,14 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { describe, it, expect, vi } from 'vitest';
+import { SessionView } from '../components/SessionView';
+import { FitnessContext } from '../context/FitnessContext';
+import { FitnessDerivedProvider } from '../context/FitnessDerivedContext';
+import { ConfirmProvider } from '../context/ConfirmContext';
+import { ActiveSessionProvider, useActiveSessionMeta } from '../context/ActiveSessionContext';
+import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import {
   ExerciseDefinition,
   Workout,
@@ -261,7 +270,7 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         console.log(`[PERF BENCHMARK] History Exercise Resolution (${count} logs): ${durationMs.toFixed(2)} ms`);
       });
 
-      it(`measures SessionView active-set mutation simulation (zero historical index rebuild)`, () => {
+      it(`measures plain-object active-set mutation microbenchmark (baseline)`, () => {
         // Simulates rapid typing of weight and reps into transient activeSession
         const activeSets: Record<string, SetLog[]> = {
           bench: [
@@ -281,6 +290,118 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         console.log(`[PERF BENCHMARK] SessionView Transient Set Mutations (50 edits, ${count} logs): ${durationMs.toFixed(3)} ms`);
         expect(activeSets.bench[1].weight).toBeDefined();
       });
+    });
+  });
+
+  describe('8.2 Real SessionView UI Interaction & Persistence Benchmark', () => {
+    it('measures real SessionView set editing responsiveness, React.memo card isolation, and debounced persistence', async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+
+      const cardCommits: Record<string, number> = {};
+      const onCardCommit = vi.fn((exDefId: string) => {
+        cardCommits[exDefId] = (cardCommits[exDefId] || 0) + 1;
+      });
+
+      let shellCommits = 0;
+      function TrackingShell({ children }: { children?: React.ReactNode }) {
+        useActiveSessionMeta();
+        shellCommits++;
+        return React.createElement(React.Fragment, null, children);
+      }
+
+      const mockFitness: any = {
+        user: null,
+        loading: false,
+        isInitialized: true,
+        syncStatus: 'idle',
+        syncError: null,
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        workouts: INITIAL_WORKOUTS,
+        logs: {},
+        appState: { cycleStart: '2026-10-01' },
+        addLog: vi.fn().mockResolvedValue(undefined),
+        updateCycleStart: vi.fn().mockResolvedValue(undefined),
+      };
+
+      await act(async () => {
+        root.render(
+          React.createElement(FitnessContext.Provider, { value: mockFitness },
+            React.createElement(FitnessDerivedProvider, null,
+              React.createElement(ActiveSessionProvider, null,
+                React.createElement(ConfirmProvider, null,
+                  React.createElement(TrackingShell, null,
+                    React.createElement(SessionView, {
+                      workoutId: 'push-a',
+                      onExit: vi.fn(),
+                      onCardCommit: onCardCommit
+                    })
+                  )
+                )
+              )
+            )
+          )
+        );
+      });
+
+      // Baseline commits after initial mount
+      const baselineE1Commits = cardCommits['e1'] || 0;
+      const baselineE2Commits = cardCommits['e2'] || 0;
+      const baselineShellCommits = shellCommits;
+
+      expect(baselineE1Commits).toBeGreaterThan(0);
+      expect(baselineE2Commits).toBeGreaterThan(0);
+
+      // Find the weight input for the first set of Exercise e1
+      const weightInputs = container.querySelectorAll('input');
+      const firstWeightInput = weightInputs[0] as HTMLInputElement;
+      expect(firstWeightInput).toBeTruthy();
+
+      // Spy on localStorage.setItem to measure write frequency during rapid typing
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+      setItemSpy.mockClear();
+
+      const runs = 10;
+      const latencies: number[] = [];
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+      for (let i = 0; i < runs; i++) {
+        const newValue = `${100 + i * 2.5}`;
+        const t0 = performance.now();
+        await act(async () => {
+          nativeSetter?.call(firstWeightInput, newValue);
+          firstWeightInput.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const t1 = performance.now();
+        latencies.push(t1 - t0);
+      }
+
+      latencies.sort((a, b) => a - b);
+      const medianLatencyMs = latencies[Math.floor(runs / 2)];
+      console.log(`[PERF BENCHMARK] Real SessionView Set Input Median Latency (${runs} runs): ${medianLatencyMs.toFixed(2)} ms`);
+
+      // 1. Acceptance Criterion: Edited card committed updates to reflect typed values
+      expect(cardCommits['e1']).toBeGreaterThan(baselineE1Commits);
+
+      // 2. Acceptance Criterion: Unaffected card committed ZERO extra renders (React.memo bailout)
+      expect(cardCommits['e2']).toBe(baselineE2Commits);
+
+      // 3. Acceptance Criterion: Application shell committed ZERO extra renders
+      expect(shellCommits).toBe(baselineShellCommits);
+
+      // 4. Acceptance Criterion: Synchronous persistence is debounced (NOT called on every keystroke)
+      const activeSessionWrites = setItemSpy.mock.calls.filter(c => c[0] === 'gl_active_session').length;
+      expect(activeSessionWrites).toBeLessThan(runs);
+
+      // 5. Verification threshold: Input-to-commit median latency is responsive
+      expect(medianLatencyMs).toBeLessThan(250);
+
+      setItemSpy.mockRestore();
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
     });
   });
 });

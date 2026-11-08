@@ -9,15 +9,9 @@ import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRA
 export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
 
 const NavigationActiveIndicator: React.FC = () => {
-  const shouldReduceMotion = useReducedMotion();
-  if (shouldReduceMotion) {
-    return (
-      <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full" />
-    );
-  }
   return (
-    <motion.div
-      layoutId="nav-pill"
+    <div
+      data-testid="navigation-active-indicator"
       className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full"
     />
   );

@@ -72,7 +72,7 @@ export function useFitnessSync({
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const isSyncingRef = useRef(false);
-  const queuedSyncUidRef = useRef<string | null>(null);
+  const queuedSyncRef = useRef<{ uid: string; generation: number } | null>(null);
   const previousUidRef = useRef<string | null>(null);
   const currentUidRef = useRef<string | null>(null);
   const authGenerationRef = useRef(0);
@@ -92,7 +92,7 @@ export function useFitnessSync({
       if (prevUid !== currentUid) {
         authGenerationRef.current += 1;
         isSyncingRef.current = false;
-        queuedSyncUidRef.current = null;
+        queuedSyncRef.current = null;
       }
 
       // When switching accounts or logging out from an existing account, isolate data by resetting local state
@@ -135,7 +135,7 @@ export function useFitnessSync({
     try {
       authGenerationRef.current += 1;
       isSyncingRef.current = false;
-      queuedSyncUidRef.current = null;
+      queuedSyncRef.current = null;
       currentUidRef.current = null;
       setSyncStatus('idle');
       setSyncError(null);
@@ -160,8 +160,8 @@ export function useFitnessSync({
     const currentGen = authGenerationRef.current;
 
     if (isSyncingRef.current) {
-      // Queue a follow-up sync specifically for this UID
-      queuedSyncUidRef.current = uid;
+      // Queue a follow-up sync specifically for this UID and generation
+      queuedSyncRef.current = { uid, generation: currentGen };
       return;
     }
     isSyncingRef.current = true;
@@ -294,14 +294,18 @@ export function useFitnessSync({
     } finally {
       if (authGenerationRef.current === currentGen) {
         isSyncingRef.current = false;
-      }
-      // If a concurrent sync request was queued while this sync was in progress, execute the follow-up only if it matches current UID and generation
-      const nextUid = queuedSyncUidRef.current;
-      queuedSyncUidRef.current = null;
-      if (nextUid && nextUid === currentUidRef.current && authGenerationRef.current === currentGen) {
-        setTimeout(() => {
-          syncDataBackground(nextUid).catch(() => {});
-        }, 50);
+        // Only the finishing sync whose generation is still current may drain the queue
+        const queued = queuedSyncRef.current;
+        if (queued && queued.generation === currentGen && queued.uid === currentUidRef.current) {
+          queuedSyncRef.current = null;
+          const nextUid = queued.uid;
+          const nextGen = queued.generation;
+          setTimeout(() => {
+            if (authGenerationRef.current === nextGen && currentUidRef.current === nextUid) {
+              syncDataBackground(nextUid).catch(() => {});
+            }
+          }, 50);
+        }
       }
     }
   }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState, setSyncStatus]);

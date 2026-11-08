@@ -10,7 +10,8 @@ import { SessionView, ExerciseCard } from '../components/SessionView';
 import { FitnessContext, FitnessContextType, FitnessProvider, useFitness } from '../context/FitnessContext';
 import { FitnessDerivedProvider } from '../context/FitnessDerivedContext';
 import { ConfirmProvider } from '../context/ConfirmContext';
-import { ActiveSessionProvider, useActiveSessionContext } from '../context/ActiveSessionContext';
+import { ActiveSessionProvider, useActiveSessionContext, useActiveSessionMeta } from '../context/ActiveSessionContext';
+import { useFitnessBackups } from '../hooks/useFitnessBackups';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { useFitnessSync } from '../hooks/useFitnessSync';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
@@ -503,6 +504,116 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     expect(setSyncStatusSpy).not.toHaveBeenCalled();
   });
 
+  // 1d. Cross-account queued-sync race
+  it('1d. Cross-account queued-sync race: stale Account A finishing cannot consume or clear Account B queued sync', async () => {
+    let authCallback: any = null;
+    vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, callback: any) => {
+      authCallback = callback;
+      return vi.fn();
+    });
+
+    const setDefsSpy = vi.fn();
+    const setWorkoutsSpy = vi.fn();
+    const setLogsSpy = vi.fn();
+    const setAppStateSpy = vi.fn();
+    const setSyncStatusSpy = vi.fn();
+    const resetToDefaultDataSpy = vi.fn();
+
+    const defsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+    const workoutsRef = { current: INITIAL_WORKOUTS };
+    const logsRef = { current: {} };
+    const appStateRef = { current: { cycleStart: '2026-10-01' } };
+
+    let hookResult: any = null;
+    function TestSyncComponent() {
+      hookResult = useFitnessSync({
+        exerciseDefsRef: defsRef as any,
+        workoutsRef: workoutsRef as any,
+        logsRef: logsRef as any,
+        appStateRef: appStateRef as any,
+        setExerciseDefinitions: setDefsSpy,
+        setWorkouts: setWorkoutsSpy,
+        setLogs: setLogsSpy,
+        setAppState: setAppStateSpy,
+        setSyncStatus: setSyncStatusSpy,
+        resetToDefaultData: resetToDefaultDataSpy
+      });
+      return null;
+    }
+
+    act(() => {
+      root.render(<TestSyncComponent />);
+    });
+
+    let resolveADefs: any;
+    const aDefsPromise = new Promise<ExerciseDefinition[]>((res) => { resolveADefs = res; });
+
+    let bSyncExecutionCount = 0;
+    let resolveBDefs1: any;
+    const bDefsPromise1 = new Promise<ExerciseDefinition[]>((res) => { resolveBDefs1 = res; });
+    let resolveBDefs2: any;
+    const bDefsPromise2 = new Promise<ExerciseDefinition[]>((res) => { resolveBDefs2 = res; });
+
+    vi.spyOn(firestoreService, 'getExerciseDefinitions').mockImplementation((uid) => {
+      if (uid === 'user-A') {
+        return aDefsPromise;
+      }
+      if (uid === 'user-B') {
+        bSyncExecutionCount++;
+        return bSyncExecutionCount === 1 ? bDefsPromise1 : bDefsPromise2;
+      }
+      return Promise.resolve([]);
+    });
+    vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+    vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+    vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+
+    // 1. Log in as Account A -> starts A sync (in-flight, delayed)
+    act(() => {
+      authCallback({ uid: 'user-A', email: 'userA@test.com' });
+    });
+    expect(setSyncStatusSpy).toHaveBeenCalledWith('syncing');
+
+    // 2. Switch to Account B -> starts B sync 1 (in-flight, delayed)
+    await act(async () => {
+      authCallback({ uid: 'user-B', email: 'userB@test.com' });
+      await new Promise(r => setTimeout(r, 10));
+    });
+    expect(bSyncExecutionCount).toBe(1);
+
+    // 3. Queue another sync for Account B while B sync 1 is still in flight
+    act(() => {
+      hookResult.retrySync();
+    });
+
+    // 4. Resolve stale Account A sync first
+    await act(async () => {
+      resolveADefs([{ id: 'def-a', name: 'A Def', target: 'Pecs', tags: ['compound'] }]);
+      await new Promise(r => setTimeout(r, 20));
+    });
+
+    // Account A's resolution must NOT have executed B's queued sync or cleared it
+    expect(bSyncExecutionCount).toBe(1);
+
+    // 5. Now resolve Account B's first sync
+    await act(async () => {
+      resolveBDefs1([{ id: 'def-b1', name: 'B Def 1', target: 'Pecs', tags: ['compound'] }]);
+      // Allow the 50ms queue drain timer to fire
+      await new Promise(r => setTimeout(r, 100));
+    });
+
+    // Account B's completion properly drained the queue and started the follow-up B sync
+    expect(bSyncExecutionCount).toBe(2);
+
+    // 6. Resolve the follow-up B sync
+    await act(async () => {
+      resolveBDefs2([{ id: 'def-b2', name: 'B Def 2', target: 'Pecs', tags: ['compound'] }]);
+      await new Promise(r => setTimeout(r, 20));
+    });
+
+    expect(hookResult.syncStatus).toBe('synced');
+  });
+
   // 2. Strengthened active-session isolation test: switch auth from Account A to Account B through the actual FitnessContext/auth flow
   it('2. Account A active workout is cleared on auth switch through real FitnessContext flow and cannot reappear on visibility change', async () => {
     let authCallback: any = null;
@@ -666,6 +777,89 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
 
     // The unaffected real card (e2) did NOT commit another render (React.memo bailout)
     expect(commitCounts['e2']).toBe(initialE2Commits);
+  });
+
+  // 4b. Active session debounced persistence and synchronous flush on visibilitychange (with context and card isolation)
+  it('4b. Rapid set typing debounces localStorage writes, flushes on visibilitychange hidden, and keeps unaffected cards and shell isolated', async () => {
+    const mockFitness = createMockFitnessContext();
+    const commitCounts: Record<string, number> = {};
+    const onCardCommit = vi.fn((exDefId: string) => {
+      commitCounts[exDefId] = (commitCounts[exDefId] || 0) + 1;
+    });
+
+    let shellCommits = 0;
+    function TrackingShell({ children }: { children: React.ReactNode }) {
+      useActiveSessionMeta();
+      shellCommits++;
+      return <>{children}</>;
+    }
+
+    act(() => {
+      root.render(
+        <FitnessContext.Provider value={mockFitness}>
+          <FitnessDerivedProvider>
+            <ActiveSessionProvider>
+              <ConfirmProvider>
+                <TrackingShell>
+                  <SessionView
+                    workoutId="push-a"
+                    onExit={vi.fn()}
+                    onCardCommit={onCardCommit}
+                  />
+                </TrackingShell>
+              </ConfirmProvider>
+            </ActiveSessionProvider>
+          </FitnessDerivedProvider>
+        </FitnessContext.Provider>
+      );
+    });
+
+    const baselineE1Commits = commitCounts['e1'] || 0;
+    const baselineE2Commits = commitCounts['e2'] || 0;
+    const baselineShellCommits = shellCommits;
+
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    setItemSpy.mockClear();
+
+    // Find the first weight input of exercise e1
+    const weightInputs = container.querySelectorAll('input');
+    const firstWeightInput = weightInputs[0] as HTMLInputElement;
+    expect(firstWeightInput).toBeTruthy();
+
+    // Rapidly type 5 keystrokes
+    const keystrokes = ['105', '107', '110', '112', '115'];
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    for (const val of keystrokes) {
+      act(() => {
+        nativeSetter?.call(firstWeightInput, val);
+        firstWeightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    // 1. Persistence is debounced: localStorage writes are fewer than total keystrokes
+    const activeSessionWrites = setItemSpy.mock.calls.filter(c => c[0] === 'gl_active_session').length;
+    expect(activeSessionWrites).toBeLessThan(keystrokes.length);
+
+    // 2. Unaffected card e2 committed zero extra renders
+    expect(commitCounts['e2']).toBe(baselineE2Commits);
+
+    // 3. Application shell (TrackingShell using useActiveSessionMeta) committed zero extra renders
+    expect(shellCommits).toBe(baselineShellCommits);
+
+    // 4. Dispatch visibilitychange to hidden -> flushes active session to localStorage synchronously
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    const savedRaw = localStorage.getItem('gl_active_session');
+    expect(savedRaw).toBeTruthy();
+    const savedSession = JSON.parse(savedRaw!);
+    expect(savedSession.workoutId).toBe('push-a');
+    // First set weight is immediately flushed with the latest typed value '115'
+    expect(savedSession.sessionSets['e1'][0].weight).toBe('115');
+
+    setItemSpy.mockRestore();
   });
 
   // 5. Real Layout tab controls scroll restoration test (including tab with asynchronous content height expansion)
@@ -910,4 +1104,94 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
 
     expect(onStartWorkoutSpy).toHaveBeenCalled();
   });
+
+  // 7. Auto-backup storage efficiency & 5,000 logs restore integrity
+  it('7. Pushing auto-backup with 5,000 logs avoids writing full history to localStorage and restoreAutoBackup preserves all 5,000 logs', async () => {
+    // Generate synthetic 5,000 logs
+    const syntheticLogs: Record<string, SessionLog> = {};
+    const baseDate = new Date('2010-01-01T00:00:00Z').getTime();
+    for (let i = 0; i < 5000; i++) {
+      const logId = `syn_log_${i}`;
+      const dateStr = new Date(baseDate + i * 86400000).toISOString().split('T')[0];
+      syntheticLogs[logId] = {
+        id: logId,
+        workoutId: 'push-a',
+        date: dateStr,
+        durationMinutes: 45,
+        complete: true,
+        sets: {
+          e1: [{ id: `s_${i}`, weight: '100', reps: '5', done: true }]
+        }
+      };
+    }
+
+    let appliedSnapshot: any = null;
+    let hookBackups: any = null;
+
+    const defsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+    const workoutsRef = { current: INITIAL_WORKOUTS };
+    const logsRef = { current: syntheticLogs };
+    const appStateRef = { current: { cycleStart: '2026-10-01' } };
+
+    function BackupTestComponent() {
+      hookBackups = useFitnessBackups({
+        user: null,
+        exerciseDefsRef: defsRef as any,
+        workoutsRef: workoutsRef as any,
+        logsRef: logsRef as any,
+        appStateRef: appStateRef as any,
+        applyFitnessDatabaseSnapshot: (snap) => {
+          appliedSnapshot = snap;
+        },
+        setExerciseDefinitions: vi.fn(),
+        setWorkouts: vi.fn(),
+        setLogs: vi.fn(),
+        setAppState: vi.fn()
+      });
+      return null;
+    }
+
+    act(() => {
+      root.render(<BackupTestComponent />);
+    });
+
+    // 1. Push auto-backup with 5,000 logs
+    act(() => {
+      hookBackups.pushAutoBackup(
+        INITIAL_WORKOUTS,
+        syntheticLogs,
+        { cycleStart: '2026-10-01' },
+        'auto-session',
+        'Session with 5000 historical logs'
+      );
+    });
+
+    // 2. Assert: Full 5,000 logs are NOT serialized into localStorage ('gl_auto_backups' is empty/absent)
+    expect(localStorage.getItem('gl_auto_backups')).toBeNull();
+
+    // 3. Assert: Only compact metadata is in localStorage
+    const metaRaw = localStorage.getItem('gl_auto_backups_meta');
+    expect(metaRaw).toBeTruthy();
+    expect(metaRaw!.length).toBeLessThan(500); // Compact metadata is < 500 bytes, not megabytes
+
+    // 4. Assert: Checkpoints in cache reflect the backup
+    const checkpoints = hookBackups.getAutoBackups();
+    expect(checkpoints.length).toBeGreaterThan(0);
+    const latestCheckpoint = checkpoints[0];
+    expect(latestCheckpoint.desc).toBe('Session with 5000 historical logs');
+    expect(Object.keys(latestCheckpoint.logs).length).toBe(5000);
+
+    // 5. Restore from checkpoint and assert full data integrity
+    await act(async () => {
+      const res = await hookBackups.restoreAutoBackup(latestCheckpoint.timestamp);
+      expect(res.success).toBe(true);
+    });
+
+    expect(appliedSnapshot).toBeTruthy();
+    expect(Object.keys(appliedSnapshot.logs).length).toBe(5000);
+    expect(appliedSnapshot.workouts.length).toBe(INITIAL_WORKOUTS.length);
+    expect(appliedSnapshot.exerciseDefinitions.length).toBe(INITIAL_EXERCISE_DEFINITIONS.length);
+    expect(appliedSnapshot.appState.cycleStart).toBe('2026-10-01');
+  });
 });
+

@@ -548,6 +548,8 @@ export interface SessionViewProps {
   onCardCommit?: (exDefId: string) => void;
 }
 
+const EMPTY_SESSION_SETS: Record<string, SetLog[]> = {};
+
 export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onCardCommit }) => {
   const { 
     workouts, 
@@ -568,7 +570,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
-  const [sessionSets, setSessionSets] = useState<Record<string, SetLog[]>>({});
+
+  // Target Workout ID to run
+  const targetWorkoutId = workoutId || selectedWorkoutId || activeSession?.workoutId || null;
+
+  // Canonical session sets derived directly from activeSession without duplicate local state
+  const sessionSets = (activeSession && activeSession.workoutId === targetWorkoutId && activeSession.sessionSets)
+    ? activeSession.sessionSets
+    : EMPTY_SESSION_SETS;
+
   const [startTime, setStartTime] = useState<number | null>(null);
   const [finishedDuration, setFinishedDuration] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
@@ -579,9 +589,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   const [expandedExId, setExpandedExId] = useState<string | null>(null);
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  
-  // Target Workout ID to run
-  const targetWorkoutId = workoutId || selectedWorkoutId || activeSession?.workoutId || null;
 
   // Storing stable refs to prevent initialization effect from re-running when context state updates
   const activeSessionRef = useRef(activeSession);
@@ -651,8 +658,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       isInitializedRef.current = true;
       setStartTime(currentActiveSession.startTime);
       setFinishedDuration(Math.floor((Date.now() - currentActiveSession.startTime) / 1000));
-      // Normalized sessionSets consumed directly without generating redundant IDs
-      setSessionSets(currentActiveSession.sessionSets);
       return;
     }
 
@@ -684,7 +689,6 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       });
     });
 
-    setSessionSets(initialSets);
     startActiveSessionRef.current(wo.id, initialSets, sessionStart);
   }, [targetWorkoutId, workouts]);
 
@@ -713,19 +717,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     return map;
   }, [activeWorkout, exerciseDefinitions]);
 
-  // Synchronize active session sets to persistent activeSession state safely in an effect
-  const isInitialSyncRef = useRef(true);
-  useEffect(() => {
-    if (isInitialSyncRef.current) {
-      isInitialSyncRef.current = false;
-      return;
-    }
-    if (isInitializedRef.current && Object.keys(sessionSets).length > 0 && !isFinishing) {
-      updateActiveSessionSets(sessionSets);
-    }
-  }, [sessionSets, updateActiveSessionSets, isFinishing]);
+  const updateActiveSessionSetsRef = useRef(updateActiveSessionSets);
+  updateActiveSessionSetsRef.current = updateActiveSessionSets;
 
-  // Resilient set mutation with defensive fallback and input validation
+  // Resilient set mutation directly updating canonical active session sets
   const updateSet = useCallback((exId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
     // Input validation & sanitization
     if (typeof value === 'string') {
@@ -740,7 +735,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
     }
 
-    setSessionSets(prev => {
+    updateActiveSessionSetsRef.current(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
       const updatedExSets = currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s);
@@ -768,7 +763,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   }, []);
 
   const addSet = useCallback((exId: string) => {
-    setSessionSets(prev => {
+    updateActiveSessionSetsRef.current(prev => {
       const currentSets = prev[exId] || [];
       return {
         ...prev,
@@ -791,7 +786,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       if (!proceed) return;
     }
 
-    setSessionSets(prev => {
+    updateActiveSessionSetsRef.current(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
       return {

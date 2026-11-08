@@ -51,13 +51,14 @@ export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): void 
       localStorage.removeItem('gl_snapshot_staging');
     }
 
-    // 4. Best-effort mirror to legacy discrete keys
+    // 4. Best-effort mirror to lightweight legacy discrete keys (without duplicating full logs history)
     try {
       localStorage.setItem('gl_exercise_definitions', JSON.stringify(snapshot.exerciseDefinitions));
       localStorage.setItem('gl_workouts', JSON.stringify(snapshot.workouts));
-      localStorage.setItem('gl_logs', JSON.stringify(snapshot.logs));
       localStorage.setItem('gl_state', JSON.stringify(snapshot.appState));
       localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
+      // Remove obsolete duplicated gl_logs mirror from previous versions to conserve quota
+      localStorage.removeItem('gl_logs');
     } catch {
       // Discrete key mirroring failure is non-fatal; gl_database_snapshot is authoritative
     }

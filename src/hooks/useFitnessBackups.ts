@@ -6,6 +6,14 @@ import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitn
 import { saveExerciseDefinitionsBatch, saveWorkoutsBatch, saveLogsBatch, saveAppState } from '../services/fitnessFirestore';
 import { FitnessDatabaseSnapshot } from './useFitnessData';
 
+import { 
+  saveBackupToDb, 
+  getAllBackupsFromDb, 
+  pruneBackupsInDb, 
+  clearAllBackupsFromDb, 
+  migrateLegacyLocalStorageBackups 
+} from '../utils/fitnessBackupDb';
+
 export interface AutoBackupEntry {
   timestamp: string;
   workouts: Workout[];
@@ -37,6 +45,24 @@ export function useFitnessBackups({
   appStateRef,
   applyFitnessDatabaseSnapshot
 }: UseFitnessBackupsProps) {
+  const backupsCacheRef = React.useRef<AutoBackupEntry[]>([]);
+  const isInitializedRef = React.useRef(false);
+
+  if (!isInitializedRef.current) {
+    isInitializedRef.current = true;
+    // 1. Check if legacy localStorage exists and migrate
+    const migrated = migrateLegacyLocalStorageBackups();
+    if (migrated.length > 0) {
+      backupsCacheRef.current = migrated.slice(0, 8);
+    } else {
+      // 2. Load from IndexedDB
+      getAllBackupsFromDb().then(items => {
+        if (items.length > 0) {
+          backupsCacheRef.current = items.slice(0, 8);
+        }
+      }).catch(() => {});
+    }
+  }
 
   const pushAutoBackup = useCallback((
     w: Workout[], 
@@ -47,10 +73,6 @@ export function useFitnessBackups({
     defs?: ExerciseDefinition[]
   ) => {
     try {
-      const saved = localStorage.getItem('gl_auto_backups');
-      let list: AutoBackupEntry[] = saved ? JSON.parse(saved) : [];
-      if (!Array.isArray(list)) list = [];
-
       const entry: AutoBackupEntry = {
         timestamp: new Date().toISOString(),
         workouts: w,
@@ -61,28 +83,33 @@ export function useFitnessBackups({
         desc
       };
 
-      list.unshift(entry);
-      if (list.length > 8) {
-        list = list.slice(0, 8);
-      }
-      localStorage.setItem('gl_auto_backups', JSON.stringify(list));
+      const updated = [entry, ...backupsCacheRef.current.filter(b => b.timestamp !== entry.timestamp)].slice(0, 8);
+      backupsCacheRef.current = updated;
+
+      // Persist full snapshot to IndexedDB without blocking the main thread or blowing localStorage quota
+      saveBackupToDb(entry).catch(err => console.warn("Failed saving backup to IndexedDB:", err));
+      pruneBackupsInDb(updated.map(u => u.timestamp)).catch(() => {});
+
+      // Keep lightweight metadata in localStorage
+      try {
+        const meta = updated.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
+        localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
+      } catch {}
     } catch (e) {
       console.error("Failed to push checkpoint auto backup", e);
     }
   }, [exerciseDefsRef]);
 
   const getAutoBackups = useCallback((): AutoBackupEntry[] => {
-    try {
-      const saved = localStorage.getItem('gl_auto_backups');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    return backupsCacheRef.current;
   }, []);
 
   const clearAutoBackups = useCallback((): void => {
+    backupsCacheRef.current = [];
     try {
       localStorage.removeItem('gl_auto_backups');
+      localStorage.removeItem('gl_auto_backups_meta');
+      clearAllBackupsFromDb().catch(() => {});
     } catch {}
   }, []);
 

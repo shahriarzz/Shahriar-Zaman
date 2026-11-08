@@ -9,7 +9,7 @@ import { useFitnessLogs } from '../hooks/useFitnessLogs';
 import { useActiveSession, ActiveSession } from '../hooks/useActiveSession';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
 import { FitnessDerivedProvider } from './FitnessDerivedContext';
-import { ActiveSessionProvider, useActiveSessionContext, registerFitnessContextForFallback } from './ActiveSessionContext';
+import { ActiveSessionProvider, useActiveSessionMeta, registerFitnessContextForFallback } from './ActiveSessionContext';
 
 export interface FitnessContextType {
   // Auth & Sync state
@@ -73,18 +73,18 @@ export const FitnessContext = createContext<FitnessContextType | undefined>(unde
 registerFitnessContextForFallback(FitnessContext);
 
 const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const activeSessionContext = useActiveSessionContext();
+  const { clearActiveSession } = useActiveSessionMeta();
   // 1. Core local state store
   const data = useFitnessData();
 
   // Unified reset callback that clears both database snapshot and active session
   const unifiedResetToDefaultData = React.useCallback(() => {
     data.resetToDefaultData();
-    activeSessionContext.clearActiveSession();
+    clearActiveSession();
     try {
       localStorage.removeItem('gl_active_session');
     } catch {}
-  }, [data.resetToDefaultData, activeSessionContext.clearActiveSession]);
+  }, [data.resetToDefaultData, clearActiveSession]);
 
   // 2. Realtime Firebase sync & Auth
   const sync = useFitnessSync({
