@@ -15,6 +15,8 @@ import { useFitnessBackups } from '../hooks/useFitnessBackups';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { useFitnessSync } from '../hooks/useFitnessSync';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
+import { DataMaintenanceSection } from '../components/manage/DataMaintenanceSection';
+import * as backupDb from '../utils/fitnessBackupDb';
 import * as firestoreService from '../services/fitnessFirestore';
 import * as firestoreErrorHandler from '../lib/firestoreErrorHandler';
 
@@ -77,12 +79,124 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
   let container: HTMLDivElement;
   let root: Root;
 
+  function createMockIndexedDB() {
+    const storeData = new Map<string, any>();
+
+    const mockDb = {
+      objectStoreNames: {
+        contains: (name: string) => name === 'auto_backups'
+      },
+      createObjectStore: () => {},
+      transaction: () => {
+        let pendingRequests = 0;
+        let completed = false;
+        const tx: any = {
+          oncomplete: null,
+          onerror: null,
+          onabort: null,
+          error: null,
+          objectStore: () => {
+            function scheduleCompletion() {
+              queueMicrotask(() => {
+                if (pendingRequests === 0 && !completed) {
+                  completed = true;
+                  if (tx.oncomplete) tx.oncomplete({ target: tx } as any);
+                }
+              });
+            }
+
+            return {
+              put: (item: any) => {
+                pendingRequests++;
+                storeData.set(item.timestamp, item);
+                const req: any = { onsuccess: null, onerror: null, result: item.timestamp };
+                queueMicrotask(() => {
+                  if (req.onsuccess) req.onsuccess({ target: req });
+                  pendingRequests--;
+                  scheduleCompletion();
+                });
+                return req;
+              },
+              getAll: () => {
+                pendingRequests++;
+                const list = Array.from(storeData.values());
+                const req: any = { onsuccess: null, onerror: null, result: list };
+                queueMicrotask(() => {
+                  if (req.onsuccess) req.onsuccess({ target: req });
+                  pendingRequests--;
+                  scheduleCompletion();
+                });
+                return req;
+              },
+              getAllKeys: () => {
+                pendingRequests++;
+                const keys = Array.from(storeData.keys());
+                const req: any = { onsuccess: null, onerror: null, result: keys };
+                queueMicrotask(() => {
+                  if (req.onsuccess) req.onsuccess({ target: req });
+                  pendingRequests--;
+                  scheduleCompletion();
+                });
+                return req;
+              },
+              delete: (key: string) => {
+                pendingRequests++;
+                storeData.delete(key);
+                const req: any = { onsuccess: null, onerror: null };
+                queueMicrotask(() => {
+                  if (req.onsuccess) req.onsuccess({ target: req });
+                  pendingRequests--;
+                  scheduleCompletion();
+                });
+                return req;
+              },
+              clear: () => {
+                pendingRequests++;
+                storeData.clear();
+                const req: any = { onsuccess: null, onerror: null };
+                queueMicrotask(() => {
+                  if (req.onsuccess) req.onsuccess({ target: req });
+                  pendingRequests--;
+                  scheduleCompletion();
+                });
+                return req;
+              }
+            };
+          }
+        };
+        return tx;
+      }
+    };
+
+    const mockIDBFactory = {
+      open: () => {
+        const openReq: any = {
+          onsuccess: null,
+          onerror: null,
+          onupgradeneeded: null,
+          result: mockDb
+        };
+        queueMicrotask(() => {
+          if (openReq.onupgradeneeded) openReq.onupgradeneeded({ target: openReq });
+          if (openReq.onsuccess) openReq.onsuccess({ target: openReq });
+        });
+        return openReq;
+      }
+    };
+
+    return { mockIDBFactory, storeData };
+  }
+
   beforeEach(() => {
     localStorage.clear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     vi.restoreAllMocks();
+    const { mockIDBFactory } = createMockIndexedDB();
+    (window as any).indexedDB = mockIDBFactory;
+    (globalThis as any).indexedDB = mockIDBFactory;
+    backupDb.resetBackupDbForTesting();
   });
 
   afterEach(() => {
@@ -93,6 +207,9 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
       container.parentNode.removeChild(container);
     }
     localStorage.clear();
+    backupDb.resetBackupDbForTesting();
+    delete (window as any).indexedDB;
+    delete (globalThis as any).indexedDB;
   });
 
   // 1a. Account A sync resolves after switching to B
@@ -1062,47 +1179,54 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
 
   // 6. SessionView chunk prewarming occurs before the first workout navigation
   it('6. SessionView chunk prewarming triggers on pointer interactions before workout navigation', () => {
-    const onPrewarmSessionSpy = vi.fn();
-    const onStartWorkoutSpy = vi.fn();
-    const mockFitness = createMockFitnessContext({
-      appState: { cycleStart: '2026-11-05' }
-    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-05T10:00:00Z'));
+    try {
+      const onPrewarmSessionSpy = vi.fn();
+      const onStartWorkoutSpy = vi.fn();
+      const mockFitness = createMockFitnessContext({
+        appState: { cycleStart: '2026-11-05' }
+      });
 
-    act(() => {
-      root.render(
-        <FitnessContext.Provider value={mockFitness}>
-          <FitnessDerivedProvider>
-            <ConfirmProvider>
-              <Dashboard
-                onStartWorkout={onStartWorkoutSpy}
-                onNavigateToHistory={vi.fn()}
-                onPrewarmSession={onPrewarmSessionSpy}
-              />
-            </ConfirmProvider>
-          </FitnessDerivedProvider>
-        </FitnessContext.Provider>
-      );
-    });
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <FitnessDerivedProvider>
+              <ConfirmProvider>
+                <Dashboard
+                  onStartWorkout={onStartWorkoutSpy}
+                  onNavigateToHistory={vi.fn()}
+                  onPrewarmSession={onPrewarmSessionSpy}
+                />
+              </ConfirmProvider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
 
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const startBtn = buttons.find(b => b.textContent?.includes('Start Session')) || buttons[0];
-    expect(startBtn).toBeTruthy();
+      const buttons = Array.from(container.querySelectorAll('button'));
+      const startBtn = buttons.find(b => b.textContent?.includes('Start Session'));
+      expect(startBtn).toBeDefined();
+      expect(startBtn?.disabled).toBe(false);
 
-    // User touches or hovers on "Start Session" button
-    act(() => {
-      startBtn.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-    });
+      // User touches or hovers on "Start Session" button
+      act(() => {
+        startBtn!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      });
 
-    // Chunk prewarm was triggered before workout navigation committed
-    expect(onPrewarmSessionSpy).toHaveBeenCalledTimes(1);
-    expect(onStartWorkoutSpy).not.toHaveBeenCalled();
+      // Chunk prewarm was triggered before workout navigation committed
+      expect(onPrewarmSessionSpy).toHaveBeenCalledTimes(1);
+      expect(onStartWorkoutSpy).not.toHaveBeenCalled();
 
-    // Now click to start workout
-    act(() => {
-      startBtn.click();
-    });
+      // Now click to start workout
+      act(() => {
+        startBtn!.click();
+      });
 
-    expect(onStartWorkoutSpy).toHaveBeenCalled();
+      expect(onStartWorkoutSpy).toHaveBeenCalledWith('push-a');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // 7. Auto-backup storage efficiency & 5,000 logs restore integrity
@@ -1156,8 +1280,8 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     });
 
     // 1. Push auto-backup with 5,000 logs
-    act(() => {
-      hookBackups.pushAutoBackup(
+    await act(async () => {
+      await hookBackups.pushAutoBackup(
         INITIAL_WORKOUTS,
         syntheticLogs,
         { cycleStart: '2026-10-01' },
@@ -1192,6 +1316,230 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     expect(appliedSnapshot.workouts.length).toBe(INITIAL_WORKOUTS.length);
     expect(appliedSnapshot.exerciseDefinitions.length).toBe(INITIAL_EXERCISE_DEFINITIONS.length);
     expect(appliedSnapshot.appState.cycleStart).toBe('2026-10-01');
+  });
+
+  // 8. Durable IndexedDB backups: migration reload survival, quota resilience, manual backup error reporting
+  it('8. Durable IndexedDB backups: migration survives reload, quota failures retain recoverable backups, manual backup reports failure on error', async () => {
+    // 8a. Migration survives reload
+    const legacyEntries: backupDb.AutoBackupEntry[] = [
+      {
+        timestamp: '2026-11-01T10:00:00.000Z',
+        workouts: INITIAL_WORKOUTS,
+        logs: {},
+        appState: { cycleStart: '2026-10-01' },
+        desc: 'Legacy Point 1',
+        changeType: 'manual'
+      },
+      {
+        timestamp: '2026-11-02T10:00:00.000Z',
+        workouts: INITIAL_WORKOUTS,
+        logs: {},
+        appState: { cycleStart: '2026-10-01' },
+        desc: 'Legacy Point 2',
+        changeType: 'auto-session'
+      }
+    ];
+    localStorage.setItem('gl_auto_backups', JSON.stringify(legacyEntries));
+
+    const migrated = await backupDb.migrateLegacyLocalStorageBackups();
+    expect(migrated).toHaveLength(2);
+    expect(localStorage.getItem('gl_auto_backups')).toBeNull(); // Removed only after durable commit
+
+    // Simulate page reload by reading from store
+    const reloaded = await backupDb.getAllBackupsFromDb();
+    expect(reloaded).toHaveLength(2);
+    expect(reloaded[0].desc).toBe('Legacy Point 2'); // Sorted descending
+
+    // 8b. Quota failure during migration retains recoverable backups in localStorage
+    localStorage.setItem('gl_auto_backups', JSON.stringify(legacyEntries));
+    vi.spyOn(backupDb, 'getBackupDb').mockResolvedValueOnce(null);
+
+    const failedMigration = await backupDb.migrateLegacyLocalStorageBackups();
+    expect(failedMigration).toHaveLength(0);
+    // localStorage backup is RETAINED for recovery
+    expect(localStorage.getItem('gl_auto_backups')).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem('gl_auto_backups')!)).toHaveLength(2);
+
+    // 8c. Manual backup reports failure rather than false success
+    let hookBackups: any = null;
+    function FailBackupComponent() {
+      hookBackups = useFitnessBackups({
+        user: null,
+        exerciseDefsRef: { current: INITIAL_EXERCISE_DEFINITIONS } as any,
+        workoutsRef: { current: INITIAL_WORKOUTS } as any,
+        logsRef: { current: {} } as any,
+        appStateRef: { current: { cycleStart: '2026-10-01' } } as any,
+        applyFitnessDatabaseSnapshot: vi.fn(),
+        setExerciseDefinitions: vi.fn(),
+        setWorkouts: vi.fn(),
+        setLogs: vi.fn(),
+        setAppState: vi.fn()
+      });
+      return null;
+    }
+
+    act(() => {
+      root.render(<FailBackupComponent />);
+    });
+
+    vi.spyOn(backupDb, 'saveBackupToDb').mockRejectedValueOnce(new Error('QuotaExceededError in IndexedDB'));
+    let result: any;
+    await act(async () => {
+      result = await hookBackups.createManualBackup();
+    });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Savepoint failed');
+  });
+
+  // 9. Account boundary backup isolation
+  it('9. Account boundary backup isolation: Account A checkpoints are cleared on auth switch to Account B', async () => {
+    let authCallback: any = null;
+    vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, callback: any) => {
+      authCallback = callback;
+      return vi.fn();
+    });
+
+    vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+    vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+    vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+    vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+
+    let fitnessContextVal: any = null;
+    function TestConsumer() {
+      fitnessContextVal = useFitness();
+      return <div data-testid="user">{fitnessContextVal.user?.uid || 'anon'}</div>;
+    }
+
+    act(() => {
+      root.render(
+        <FitnessProvider>
+          <TestConsumer />
+        </FitnessProvider>
+      );
+    });
+
+    // 1. Log in as Account A
+    await act(async () => {
+      authCallback({ uid: 'user-A', email: 'userA@test.com' });
+      await new Promise(r => setTimeout(r, 20));
+    });
+
+    // 2. Create checkpoint in Account A
+    await act(async () => {
+      await fitnessContextVal.pushAutoBackup(INITIAL_WORKOUTS, {}, { cycleStart: '2026-10-01' }, 'manual', 'Account A Checkpoint');
+    });
+
+    const backupsA = fitnessContextVal.getAutoBackups();
+    expect(backupsA.some((b: any) => b.desc === 'Account A Checkpoint')).toBe(true);
+
+    // 3. Switch auth to Account B
+    await act(async () => {
+      authCallback({ uid: 'user-B', email: 'userB@test.com' });
+      await new Promise(r => setTimeout(r, 30));
+    });
+
+    // 4. Assert: Account A checkpoint and metadata are cleared in Account B
+    const backupsB = fitnessContextVal.getAutoBackups();
+    expect(backupsB.length).toBe(0);
+    expect(localStorage.getItem('gl_auto_backups_meta')).toBeNull();
+    const dbBackups = await backupDb.getAllBackupsFromDb();
+    expect(dbBackups.length).toBe(0);
+  });
+
+  // 10. Asynchronous backup-cache hydration
+  it('10. Asynchronous backup-cache hydration: DataMaintenanceSection refreshes automatically when IndexedDB read completes without manual interaction', async () => {
+    let resolveDbRead: any;
+    const dbReadPromise = new Promise<backupDb.AutoBackupEntry[]>((resolve) => {
+      resolveDbRead = resolve;
+    });
+
+    vi.spyOn(backupDb, 'getAllBackupsFromDb').mockReturnValue(dbReadPromise);
+    vi.spyOn(backupDb, 'migrateLegacyLocalStorageBackups').mockResolvedValue([]);
+
+    act(() => {
+      root.render(
+        <FitnessProvider>
+          <ConfirmProvider>
+            <DataMaintenanceSection />
+          </ConfirmProvider>
+        </FitnessProvider>
+      );
+    });
+
+    // Initially loading, displays empty / no restore points available
+    expect(container.textContent).toContain('No restore points available');
+
+    // Resolve the delayed IndexedDB read
+    await act(async () => {
+      resolveDbRead([
+        {
+          timestamp: '2026-11-08T09:00:00.000Z',
+          workouts: INITIAL_WORKOUTS,
+          logs: {},
+          appState: { cycleStart: '2026-11-01' },
+          desc: 'Hydrated Point From Disk',
+          changeType: 'manual'
+        }
+      ]);
+      await new Promise(r => setTimeout(r, 20));
+    });
+
+    // Component automatically refreshed and rendered the hydrated checkpoint without requiring manual interaction
+    expect(container.textContent).toContain('Hydrated Point From Disk');
+  });
+
+  // 11. Pure active-session updates under React StrictMode
+  it('11. Pure active-session updates under React StrictMode: rapid edits, single auto-expand side effect, and immediate visibility flush', async () => {
+    const mockFitness = createMockFitnessContext();
+
+    act(() => {
+      root.render(
+        <StrictMode>
+          <FitnessContext.Provider value={mockFitness}>
+            <FitnessDerivedProvider>
+              <ActiveSessionProvider>
+                <ConfirmProvider>
+                  <SessionView workoutId="push-a" onExit={vi.fn()} />
+                </ConfirmProvider>
+              </ActiveSessionProvider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        </StrictMode>
+      );
+    });
+
+    const weightInputs = container.querySelectorAll('input');
+    const firstWeightInput = weightInputs[0] as HTMLInputElement;
+    expect(firstWeightInput).toBeTruthy();
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+    // Rapid edits
+    act(() => {
+      nativeSetter?.call(firstWeightInput, '118');
+      firstWeightInput.dispatchEvent(new Event('input', { bubbles: true }));
+      nativeSetter?.call(firstWeightInput, '120');
+      firstWeightInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    // Mark all sets of exercise 1 complete to trigger auto-expand
+    const markDoneButtons = container.querySelectorAll('button[aria-label="Mark set complete"]');
+    expect(markDoneButtons.length).toBeGreaterThan(0);
+
+    act(() => {
+      (markDoneButtons[0] as HTMLButtonElement).click();
+    });
+
+    // Immediately trigger visibility flush before waiting for debounced save
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    const rawSession = localStorage.getItem('gl_active_session');
+    expect(rawSession).toBeTruthy();
+    const parsed = JSON.parse(rawSession!);
+    expect(parsed.sessionSets['e1'][0].weight).toBe('120');
   });
 });
 

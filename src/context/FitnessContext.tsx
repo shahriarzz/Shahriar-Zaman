@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, SetLog, ExerciseDefinition, WorkoutExercise } from '../types/fitness';
 import { useFitnessData } from '../hooks/useFitnessData';
@@ -61,12 +61,13 @@ export interface FitnessContextType {
   deleteBodyWeight: (date: string) => Promise<void>;
 
   // Backup & Restore Actions
-  pushAutoBackup: (w: Workout[], l: Record<string, SessionLog>, s: AppState, changeType: 'auto-session' | 'auto-edit' | 'manual', desc: string, defs?: ExerciseDefinition[]) => void;
+  pushAutoBackup: (w: Workout[], l: Record<string, SessionLog>, s: AppState, changeType: 'auto-session' | 'auto-edit' | 'manual', desc: string, defs?: ExerciseDefinition[]) => Promise<{ success: boolean; message?: string }> | void;
   getAutoBackups: () => AutoBackupEntry[];
   restoreAutoBackup: (timestamp: string) => Promise<{ success: boolean; message: string }>;
   createManualBackup: () => Promise<{ success: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (backupJson: string) => Promise<{ success: boolean; message: string }>;
+  isBackupsLoading?: boolean;
 }
 
 export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
@@ -76,10 +77,12 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
   const { clearActiveSession } = useActiveSessionMeta();
   // 1. Core local state store
   const data = useFitnessData();
+  const clearAutoBackupsRef = useRef<() => void>(() => {});
 
-  // Unified reset callback that clears both database snapshot and active session
+  // Unified reset callback that clears database snapshot, active session, and backups
   const unifiedResetToDefaultData = React.useCallback(() => {
     data.resetToDefaultData();
+    clearAutoBackupsRef.current();
     clearActiveSession();
     try {
       localStorage.removeItem('gl_active_session');
@@ -112,6 +115,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     setLogs: data.setLogs,
     setAppState: data.setAppState
   });
+  clearAutoBackupsRef.current = backups.clearAutoBackups;
 
   // 4. Domain hooks
   const exercises = useFitnessExercises({
@@ -187,7 +191,8 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     restoreAutoBackup: backups.restoreAutoBackup,
     createManualBackup: backups.createManualBackup,
     exportBackup: backups.exportBackup,
-    importBackup: backups.importBackup
+    importBackup: backups.importBackup,
+    isBackupsLoading: backups.isBackupsLoading
   }), [
     sync.user,
     sync.loading,
@@ -219,7 +224,8 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     backups.restoreAutoBackup,
     backups.createManualBackup,
     backups.exportBackup,
-    backups.importBackup
+    backups.importBackup,
+    backups.isBackupsLoading
   ]);
 
   return (

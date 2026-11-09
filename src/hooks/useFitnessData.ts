@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
+import { clearAllBackupsFromDb } from '../utils/fitnessBackupDb';
 
 export interface FitnessDatabaseSnapshot {
   exerciseDefinitions: ExerciseDefinition[];
@@ -139,7 +140,10 @@ export function useFitnessData() {
     localStorage.removeItem('gl_state');
     localStorage.removeItem('gl_deleted_ids');
     localStorage.removeItem('gl_auto_backups');
+    localStorage.removeItem('gl_auto_backups_meta');
     localStorage.removeItem('gl_active_session');
+
+    clearAllBackupsFromDb().catch(() => {});
 
     const fresh = loadInitialFitnessData();
     const snapshot: FitnessDatabaseSnapshot = {

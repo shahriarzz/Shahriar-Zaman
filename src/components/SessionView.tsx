@@ -735,6 +735,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
     }
 
+    let shouldExpandNextId: string | null = null;
+
     updateActiveSessionSetsRef.current(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
@@ -750,9 +752,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
               !(nextSets[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
             );
             if (nextIncomplete) {
-              setTimeout(() => {
-                setExpandedExId(nextIncomplete.exerciseDefinitionId);
-              }, 0);
+              shouldExpandNextId = nextIncomplete.exerciseDefinitionId;
             }
           }
         }
@@ -760,6 +760,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
       return nextSets;
     });
+
+    if (shouldExpandNextId) {
+      setExpandedExId(shouldExpandNextId);
+    }
   }, []);
 
   const addSet = useCallback((exId: string) => {

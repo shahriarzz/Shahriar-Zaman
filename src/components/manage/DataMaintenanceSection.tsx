@@ -49,7 +49,8 @@ export const DataMaintenanceSection: React.FC = () => {
     importBackup,
     getAutoBackups,
     restoreAutoBackup,
-    createManualBackup
+    createManualBackup,
+    isBackupsLoading
   } = useFitness();
   const { confirm } = useConfirm();
   const shouldReduceMotion = useReducedMotion();
@@ -71,7 +72,7 @@ export const DataMaintenanceSection: React.FC = () => {
     return `${totalWorkouts} Workouts · ${totalExercises} Exercises · ${completedSessions} Completed Sessions`;
   }, [workouts, exerciseDefinitions, logs]);
 
-  const checkpointHistory = useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups]);
+  const checkpointHistory = useMemo(() => getAutoBackups(), [autoBackupsTick, getAutoBackups, isBackupsLoading]);
 
   const handleExport = async () => {
     if (loadingAction) return;

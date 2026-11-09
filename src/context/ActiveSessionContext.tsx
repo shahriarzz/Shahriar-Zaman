@@ -10,11 +10,6 @@ export interface ActiveSessionMetaContextType {
   flushActiveSession: () => void;
 }
 
-export interface ActiveSessionDataContextType {
-  activeSession: ActiveSession | null;
-  updateActiveSessionSets: (updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>)) => void;
-}
-
 export interface ActiveSessionContextType {
   activeSession: ActiveSession | null;
   activeSessionMeta: ActiveSessionMeta | null;
@@ -25,7 +20,6 @@ export interface ActiveSessionContextType {
 }
 
 export const ActiveSessionMetaContext = createContext<ActiveSessionMetaContextType | undefined>(undefined);
-export const ActiveSessionDataContext = createContext<ActiveSessionDataContextType | undefined>(undefined);
 export const ActiveSessionContext = createContext<ActiveSessionContextType | undefined>(undefined);
 
 // Registration for test mocks that provide FitnessContext directly without ActiveSessionProvider
@@ -50,14 +44,6 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     sessionManager.flushActiveSession
   ]);
 
-  const dataValue = useMemo<ActiveSessionDataContextType>(() => ({
-    activeSession: sessionManager.activeSession,
-    updateActiveSessionSets: sessionManager.updateActiveSessionSets
-  }), [
-    sessionManager.activeSession,
-    sessionManager.updateActiveSessionSets
-  ]);
-
   const combinedValue = useMemo<ActiveSessionContextType>(() => ({
     activeSession: sessionManager.activeSession,
     activeSessionMeta: sessionManager.activeSessionMeta,
@@ -76,11 +62,9 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   return (
     <ActiveSessionMetaContext.Provider value={metaValue}>
-      <ActiveSessionDataContext.Provider value={dataValue}>
-        <ActiveSessionContext.Provider value={combinedValue}>
-          {children}
-        </ActiveSessionContext.Provider>
-      </ActiveSessionDataContext.Provider>
+      <ActiveSessionContext.Provider value={combinedValue}>
+        {children}
+      </ActiveSessionContext.Provider>
     </ActiveSessionMetaContext.Provider>
   );
 };

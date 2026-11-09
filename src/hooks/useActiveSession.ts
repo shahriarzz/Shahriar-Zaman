@@ -173,13 +173,17 @@ export function useActiveSession() {
   const updateActiveSessionSets = useCallback((
     updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>)
   ) => {
-    setActiveSession(prev => {
-      if (!prev) return null;
-      const nextSets = typeof updater === 'function' ? updater(prev.sessionSets) : updater;
-      const updated: ActiveSession = { ...prev, sessionSets: nextSets };
-      latestSessionRef.current = updated;
-      return updated;
-    });
+    const current = latestSessionRef.current;
+    if (!current) return;
+
+    const nextSets = typeof updater === 'function' ? updater(current.sessionSets) : updater;
+    const nextSession: ActiveSession = {
+      ...current,
+      sessionSets: nextSets
+    };
+
+    latestSessionRef.current = nextSession;
+    setActiveSession(nextSession);
     scheduleDebouncedSave();
   }, [scheduleDebouncedSave]);
 

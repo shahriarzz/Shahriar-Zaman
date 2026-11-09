@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, ExerciseDefinition, FitnessDatabase, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
@@ -45,33 +45,56 @@ export function useFitnessBackups({
   appStateRef,
   applyFitnessDatabaseSnapshot
 }: UseFitnessBackupsProps) {
-  const backupsCacheRef = React.useRef<AutoBackupEntry[]>([]);
-  const isInitializedRef = React.useRef(false);
+  const backupsCacheRef = useRef<AutoBackupEntry[]>([]);
+  const [isBackupsLoading, setIsBackupsLoading] = useState(true);
+  const [backupsVersion, setBackupsVersion] = useState(0);
+  const resetEpochRef = useRef(0);
 
-  if (!isInitializedRef.current) {
-    isInitializedRef.current = true;
-    // 1. Check if legacy localStorage exists and migrate
-    const migrated = migrateLegacyLocalStorageBackups();
-    if (migrated.length > 0) {
-      backupsCacheRef.current = migrated.slice(0, 8);
-    } else {
-      // 2. Load from IndexedDB
-      getAllBackupsFromDb().then(items => {
-        if (items.length > 0) {
+  // Controlled one-time asynchronous initialization and legacy migration effect
+  useEffect(() => {
+    let isCurrent = true;
+    const currentEpoch = resetEpochRef.current;
+
+    const initializeBackups = async () => {
+      try {
+        setIsBackupsLoading(true);
+        // 1. Asynchronously migrate legacy localStorage if present
+        const migrated = await migrateLegacyLocalStorageBackups();
+        if (!isCurrent || resetEpochRef.current !== currentEpoch) return;
+
+        if (migrated.length > 0) {
+          backupsCacheRef.current = migrated.slice(0, 8);
+        } else {
+          // 2. Load from IndexedDB
+          const items = await getAllBackupsFromDb();
+          if (!isCurrent || resetEpochRef.current !== currentEpoch) return;
           backupsCacheRef.current = items.slice(0, 8);
         }
-      }).catch(() => {});
-    }
-  }
+      } catch (err) {
+        console.warn("Error during backup hydration from IndexedDB:", err);
+      } finally {
+        if (isCurrent && resetEpochRef.current === currentEpoch) {
+          setIsBackupsLoading(false);
+          setBackupsVersion(v => v + 1);
+        }
+      }
+    };
 
-  const pushAutoBackup = useCallback((
+    initializeBackups();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  const pushAutoBackup = useCallback(async (
     w: Workout[], 
     l: Record<string, SessionLog>, 
     s: AppState, 
     changeType: 'auto-session' | 'auto-edit' | 'manual', 
     desc: string,
     defs?: ExerciseDefinition[]
-  ) => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       const entry: AutoBackupEntry = {
         timestamp: new Date().toISOString(),
@@ -84,33 +107,40 @@ export function useFitnessBackups({
       };
 
       const updated = [entry, ...backupsCacheRef.current.filter(b => b.timestamp !== entry.timestamp)].slice(0, 8);
-      backupsCacheRef.current = updated;
 
-      // Persist full snapshot to IndexedDB without blocking the main thread or blowing localStorage quota
-      saveBackupToDb(entry).catch(err => console.warn("Failed saving backup to IndexedDB:", err));
-      pruneBackupsInDb(updated.map(u => u.timestamp)).catch(() => {});
+      // Persist full snapshot to IndexedDB and await genuine transaction completion
+      await saveBackupToDb(entry);
+      await pruneBackupsInDb(updated.map(u => u.timestamp)).catch(() => {});
+
+      backupsCacheRef.current = updated;
 
       // Keep lightweight metadata in localStorage
       try {
         const meta = updated.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
         localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
       } catch {}
-    } catch (e) {
-      console.error("Failed to push checkpoint auto backup", e);
+
+      setBackupsVersion(v => v + 1);
+      return { success: true };
+    } catch (e: any) {
+      console.error("Failed to persist checkpoint auto backup:", e);
+      return { success: false, message: e?.message || String(e) };
     }
   }, [exerciseDefsRef]);
 
   const getAutoBackups = useCallback((): AutoBackupEntry[] => {
     return backupsCacheRef.current;
-  }, []);
+  }, [backupsVersion]);
 
   const clearAutoBackups = useCallback((): void => {
+    resetEpochRef.current += 1;
     backupsCacheRef.current = [];
     try {
       localStorage.removeItem('gl_auto_backups');
       localStorage.removeItem('gl_auto_backups_meta');
       clearAllBackupsFromDb().catch(() => {});
     } catch {}
+    setBackupsVersion(v => v + 1);
   }, []);
 
   const restoreAutoBackup = useCallback(async (timestamp: string): Promise<{ success: boolean; message: string }> => {
@@ -171,7 +201,17 @@ export function useFitnessBackups({
 
   const createManualBackup = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
-      pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Manual Vault Savepoint', exerciseDefsRef.current);
+      const res = await pushAutoBackup(
+        workoutsRef.current, 
+        logsRef.current, 
+        appStateRef.current, 
+        'manual', 
+        'Manual Vault Savepoint', 
+        exerciseDefsRef.current
+      );
+      if (!res.success) {
+        return { success: false, message: `Savepoint failed: ${res.message || 'Could not persist to durable storage.'}` };
+      }
       return { success: true, message: 'Manual restore savepoint created successfully.' };
     } catch (e: any) {
       return { success: false, message: `Savepoint failed: ${e.message || String(e)}` };
@@ -209,7 +249,8 @@ export function useFitnessBackups({
 
       const { exerciseDefinitions: restoredDefs, workouts: restoredWorkouts, logs: restoredLogs, appState: restoredAppState } = validation.data;
 
-      pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Import Savepoint', exerciseDefsRef.current);
+      // Await persistence of pre-import savepoint before applying new data
+      await pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Import Savepoint', exerciseDefsRef.current);
 
       clearDeletedIdsTracker();
 
@@ -248,7 +289,8 @@ export function useFitnessBackups({
     restoreAutoBackup,
     createManualBackup,
     exportBackup,
-    importBackup
+    importBackup,
+    isBackupsLoading
   }), [
     pushAutoBackup,
     getAutoBackups,
@@ -256,6 +298,7 @@ export function useFitnessBackups({
     restoreAutoBackup,
     createManualBackup,
     exportBackup,
-    importBackup
+    importBackup,
+    isBackupsLoading
   ]);
 }
