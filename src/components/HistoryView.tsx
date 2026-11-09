@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus, Sparkles } from 'lucide-react';
@@ -79,9 +79,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     });
   }, [search, expandedDate, selectedExKey, activeMonthTab, onSaveState]);
 
-  // Sync initialDate search and auto-expand it if provided
+  const consumedInitialDateRef = useRef<string | null>(null);
+
+  // Sync initialDate search and auto-expand it once on arrival, then explicitly consume it
   useEffect(() => {
-    if (initialDate) {
+    if (initialDate && consumedInitialDateRef.current !== initialDate) {
+      consumedInitialDateRef.current = initialDate;
       setSearch(initialDate);
       const matched = sortedLogs.find(log => log.date === initialDate);
       if (matched) {
@@ -89,8 +92,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       } else {
         setExpandedDate(initialDate);
       }
+      onClearInitialDate?.();
     }
-  }, [initialDate, sortedLogs]);
+  }, [initialDate, onClearInitialDate]);
 
   // Workouts by ID for workout-level metadata
   const workoutsById = workoutMap;

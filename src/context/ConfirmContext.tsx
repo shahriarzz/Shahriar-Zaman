@@ -1,8 +1,13 @@
-import React, { createContext, useContext, useState, useRef } from 'react';
+import React, { createContext, useContext, useRef, useReducer, useEffect, useCallback, useMemo } from 'react';
 import { TriangleAlert, HelpCircle } from 'lucide-react';
 import { Button, Dialog, DialogHeader, DialogFooter } from '../components/ui';
+import {
+  initialConfirmationState,
+  confirmationTransition,
+  ConfirmationRequest
+} from '../state/dialogs/confirmationMachine';
 
-interface ConfirmOptions {
+export interface ConfirmOptions {
   title: string;
   message: string;
   isDanger?: boolean;
@@ -10,7 +15,7 @@ interface ConfirmOptions {
   cancelText?: string;
 }
 
-interface ConfirmContextType {
+export interface ConfirmContextType {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
 }
 
@@ -25,24 +30,35 @@ export const useConfirm = () => {
 };
 
 export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [options, setOptions] = useState<ConfirmOptions | null>(null);
+  const [confirmState, dispatch] = useReducer(confirmationTransition, initialConfirmationState);
   
-  // Keep resolve fn in a ref to persist across renders
-  const resolveRef = useRef<((value: boolean) => void) | null>(null);
+  // Map of requestId -> resolve function
+  const resolversRef = useRef<Map<string, (val: boolean) => void>>(new Map());
 
-  // Unmount safety: resolve pending promise on unmount
-  React.useEffect(() => {
+  // Unmount safety: resolve all pending promises on unmount with false
+  useEffect(() => {
     return () => {
-      if (resolveRef.current) {
-        resolveRef.current(false);
-        resolveRef.current = null;
-      }
+      resolversRef.current.forEach(resolve => resolve(false));
+      resolversRef.current.clear();
+      dispatch({ type: 'RESET' });
     };
   }, []);
 
-  // Enter key support to confirm the dialog safely (Escape handled by Dialog)
-  React.useEffect(() => {
+  const activeRequest = confirmState.status === 'open' ? confirmState.active : null;
+  const isOpen = Boolean(activeRequest);
+
+  const handleClose = useCallback((value: boolean) => {
+    if (!activeRequest) return;
+    const resolver = resolversRef.current.get(activeRequest.id);
+    if (resolver) {
+      resolver(value);
+      resolversRef.current.delete(activeRequest.id);
+    }
+    dispatch({ type: 'RESOLVE', requestId: activeRequest.id });
+  }, [activeRequest]);
+
+  // Enter key support to confirm the active dialog safely
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -55,59 +71,57 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, handleClose]);
 
   const abortButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Focus the default ABORT option on mount for accessibility
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {
         abortButtonRef.current?.focus();
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, activeRequest?.id]);
 
-  const confirm = React.useCallback((opts: ConfirmOptions): Promise<boolean> => {
-    if (resolveRef.current) {
-      return Promise.resolve(false);
-    }
+  const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    const id = `confirm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const request: ConfirmationRequest = {
+      id,
+      title: opts.title,
+      message: opts.message,
+      isDanger: opts.isDanger,
+      confirmText: opts.confirmText,
+      cancelText: opts.cancelText
+    };
+
     return new Promise((resolve) => {
-      setOptions(opts);
-      setIsOpen(true);
-      resolveRef.current = resolve;
+      resolversRef.current.set(id, resolve);
+      dispatch({ type: 'ENQUEUE', request });
     });
   }, []);
 
-  const handleClose = (value: boolean) => {
-    if (resolveRef.current) {
-      resolveRef.current(value);
-      resolveRef.current = null;
-    }
-    setIsOpen(false);
-  };
-
-  const contextValue = React.useMemo(() => ({ confirm }), [confirm]);
+  const contextValue = useMemo(() => ({ confirm }), [confirm]);
 
   return (
     <ConfirmContext.Provider value={contextValue}>
       {children}
       <Dialog
-        isOpen={isOpen && Boolean(options)}
+        isOpen={isOpen && Boolean(activeRequest)}
         onClose={() => handleClose(false)}
         size="md"
-        ariaLabel={options?.title || 'System Protocol Confirmation'}
+        ariaLabel={activeRequest?.title || 'System Protocol Confirmation'}
       >
-        {options && (
+        {activeRequest && (
           <>
             <DialogHeader
               eyebrow="System Protocol"
-              title={options.title}
-              description={options.message}
-              isDanger={options.isDanger}
+              title={activeRequest.title}
+              description={activeRequest.message}
+              isDanger={activeRequest.isDanger}
               icon={
-                options.isDanger ? (
+                activeRequest.isDanger ? (
                   <TriangleAlert size={20} />
                 ) : (
                   <HelpCircle size={20} />
@@ -124,16 +138,16 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 size="md"
                 onClick={() => handleClose(false)}
               >
-                {options.cancelText || 'ABORT'}
+                {activeRequest.cancelText || 'ABORT'}
               </Button>
               <Button
                 type="button"
-                variant={options.isDanger ? "destructive" : "primary"}
-                color={options.isDanger ? "red" : "orange"}
+                variant={activeRequest.isDanger ? "destructive" : "primary"}
+                color={activeRequest.isDanger ? "red" : "orange"}
                 size="md"
                 onClick={() => handleClose(true)}
               >
-                {options.confirmText || 'EXECUTE'}
+                {activeRequest.confirmText || 'EXECUTE'}
               </Button>
             </DialogFooter>
           </>

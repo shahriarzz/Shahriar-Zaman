@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useReducer } from 'react';
 import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
 import { clearAllBackupsFromDb } from '../utils/fitnessBackupDb';
+import { DatabaseState, databaseTransition } from '../state/persistence/databaseMachine';
 
 export interface FitnessDatabaseSnapshot {
   exerciseDefinitions: ExerciseDefinition[];
@@ -156,6 +157,8 @@ export function useFitnessData() {
     return snapshot;
   }, [applyFitnessDatabaseSnapshot]);
 
+  const [databaseLifecycleState, dispatchDb] = useReducer(databaseTransition, { phase: 'ready' });
+
   // Unified single-point persistence to localStorage
   const isFirstMountRef = useRef(true);
   useEffect(() => {
@@ -163,12 +166,18 @@ export function useFitnessData() {
       isFirstMountRef.current = false;
       return;
     }
-    persistFitnessDatabase({
-      exerciseDefinitions,
-      workouts,
-      logs,
-      appState
-    });
+    dispatchDb({ type: 'WRITE_STARTED' });
+    try {
+      persistFitnessDatabase({
+        exerciseDefinitions,
+        workouts,
+        logs,
+        appState
+      });
+      dispatchDb({ type: 'WRITE_COMMITTED' });
+    } catch (err: any) {
+      dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });
+    }
   }, [exerciseDefinitions, workouts, logs, appState]);
 
   return {
@@ -188,6 +197,7 @@ export function useFitnessData() {
     setAppState,
     appStateRef,
 
+    databaseLifecycleState,
     applyFitnessDatabaseSnapshot,
     resetToDefaultData
   };

@@ -23,11 +23,19 @@ const HistoryView = lazy(() => import('./components/HistoryView').then(m => ({ d
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const ManageView = lazy(() => import('./components/ManageView').then(m => ({ default: m.ManageView })));
 
+import {
+  initialNavigationState,
+  navigationTransition,
+  getActiveTabFromRoute,
+  getSelectedWorkoutId
+} from './state/app/navigationMachine';
+
 function AppContent() {
   const { activeSession, clearActiveSession } = useActiveSessionMeta();
   const { confirm } = useConfirm();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  const [navState, dispatchNav] = React.useReducer(navigationTransition, initialNavigationState);
+  const activeTab = getActiveTabFromRoute(navState);
+  const selectedWorkoutId = getSelectedWorkoutId(navState);
   const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
 
   // Tab view state preservation across unmounts
@@ -96,6 +104,7 @@ function AppContent() {
   // Stable session exit/abandon flow using latest refs
   const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {
     if (activeSessionRef.current) {
+      dispatchNav({ type: 'REQUEST_LEAVE_SESSION', destination });
       const confirmExit = await confirmRef.current({
         title: 'Abandon Active Session?',
         message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
@@ -103,14 +112,13 @@ function AppContent() {
       });
       if (confirmExit) {
         clearActiveSessionRef.current();
-        setSelectedWorkoutId(null);
-        setActiveTab(destination);
+        dispatchNav({ type: 'CONFIRM_LEAVE_SESSION' });
         return true;
       }
+      dispatchNav({ type: 'CANCEL_LEAVE_SESSION' });
       return false;
     } else {
-      setSelectedWorkoutId(null);
-      setActiveTab(destination);
+      dispatchNav({ type: 'NAVIGATE', to: destination });
       return true;
     }
   }, []);
@@ -132,7 +140,7 @@ function AppContent() {
           if (currentTab === 'session') {
             await leaveSessionRef.current('dashboard');
           } else if (currentTab !== 'dashboard') {
-            setActiveTab('dashboard');
+            dispatchNav({ type: 'ANDROID_BACK' });
           } else {
             CapApp.minimizeApp();
           }
@@ -174,8 +182,7 @@ function AppContent() {
       }
       clearActiveSession();
     }
-    setSelectedWorkoutId(workoutId);
-    setActiveTab('session');
+    dispatchNav({ type: 'START_SESSION', workoutId });
   };
 
   const handleTabChange = async (tab: string) => {
@@ -183,11 +190,10 @@ function AppContent() {
       await leaveSession(tab as ActiveTab);
     } else if (tab === 'session') {
       if (activeSession) {
-        setSelectedWorkoutId(activeSession.workoutId);
+        dispatchNav({ type: 'RESUME_SESSION', workoutId: activeSession.workoutId });
       }
-      setActiveTab('session');
     } else {
-      setActiveTab(tab as ActiveTab);
+      dispatchNav({ type: 'NAVIGATE', to: tab as ActiveTab });
     }
   };
 
@@ -211,7 +217,7 @@ function AppContent() {
               onPrewarmSession={() => prewarmTab('session')}
               onNavigateToHistory={(date) => {
                 setHistorySearchDate(date);
-                setActiveTab('history');
+                dispatchNav({ type: 'NAVIGATE', to: 'history' });
               }}
             />
           )}
@@ -220,8 +226,7 @@ function AppContent() {
             <SessionView
               workoutId={selectedWorkoutId}
               onExit={() => {
-                setSelectedWorkoutId(null);
-                setActiveTab('dashboard');
+                dispatchNav({ type: 'SESSION_COMPLETED' });
               }}
             />
           )}

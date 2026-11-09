@@ -7,12 +7,14 @@ import { AccountSection } from './manage/AccountSection';
 import { DataMaintenanceSection } from './manage/DataMaintenanceSection';
 import { PrivacyPolicyModal } from './manage/PrivacyPolicyModal';
 import { ProgramEditor } from './manage/ProgramEditor';
+import { initialEditorMode, editorTransition } from '../state/editing/editorMachine';
 import { SectionHeader, Stack, Button, TYPOGRAPHY, MOTION_CONFIG } from './ui';
 import { cn } from '../lib/utils';
 
 export const ManageView: React.FC = () => {
   const { workouts } = useFitness();
-  const [isEditingProgram, setIsEditingProgram] = useState(false);
+  const [editorMode, dispatchEditor] = React.useReducer(editorTransition, initialEditorMode);
+  const isEditingProgram = editorMode.view === 'program_editor';
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
@@ -27,7 +29,7 @@ export const ManageView: React.FC = () => {
           transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.viewEntrance.transition}
           className="pt-4 pb-12"
         >
-          <ProgramEditor onBackToManage={() => setIsEditingProgram(false)} />
+          <ProgramEditor onBackToManage={() => dispatchEditor({ type: 'CLOSE_EDITOR' })} />
         </motion.div>
       ) : (
         <motion.div
@@ -49,7 +51,7 @@ export const ManageView: React.FC = () => {
             {/* 1. PRIMARY ZONE: PROGRAM IDENTITY */}
             <ProgramIdentityCard
               workouts={workouts}
-              onEditProgram={() => setIsEditingProgram(true)}
+              onEditProgram={() => dispatchEditor({ type: 'OPEN_PROGRAM_EDITOR', workoutId: 'current' })}
             />
 
             {/* 2. SECONDARY ZONE: ACCOUNT & SYNCHRONIZATION */}

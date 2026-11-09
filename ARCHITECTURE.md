@@ -100,6 +100,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 | **Session Summary PR detection** | `src/components/SessionView.tsx` (`calculateSessionPRs()`) | Current session's valid done sets snapshot against pre-session canonical index (`getWeightPRForExercise`, `getE1RMPRForExercise`) | Compare against in-session mutations or emit dual PR events for a single exercise |
 | **Cycle progression** | `src/utils/fitnessCalculations.ts` (`getCycleDay()`, `getAdjustedCycleStart()`) | Canonical `appState.cycleStart` anchor date string in `FitnessContext` | Infer the cycle from a separate UI-only rule, freeze cycle on missed days, or advance on bonus workouts |
 | **Sync conflicts & deletions** | `src/utils/fitnessSyncHelpers.ts` (`resolveLocalCloudRecord()`, `trackDeletedId()`, `commitBatchOperations()`) | Per-record `updatedAt` timestamps and UID-partitioned tombstones (`gl_deleted_ids_${uid}`) | Bypass tombstones, mix cross-account tombstones, or discard queued follow-up sync requests |
+| **Workflow lifecycles & transitions** | `src/state/` (Pure state machines indexed in `STATE_MACHINES.md`) | Canonical discriminated-union states (`NavigationState`, `SessionLifecycleState`, `AuthState`, `SyncPhase`, `DatabaseState`, `BackupPhase`, `EditorMode`, `ConfirmationState`) | Represent mutually exclusive phases via competing boolean flags, trigger duplicate transitions, or perform side-effects inside pure transition functions |
 | **Design tokens & shared UI** | `src/styles/tokens.ts`, `src/components/ui/` | Token definitions (`SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, etc.) and component primitives | Hardcode arbitrary styling classes, invent one-off dialogs/modals, or duplicate shared layouts |
 
 ---
@@ -405,12 +406,14 @@ GAINLOG enforces a consolidated 4-document core documentation system alongside `
 | **`ARCHITECTURE.md`** | Canonical System & Technical Contract | System map, layer hierarchy, downward dependency rules, 15 testable invariants, change protocol. |
 | **`AGENTS.md`** | AI Developer Operating Contract | Mandatory reading order, 6 high-risk subsystems, stop-and-approve gating, verification checklists. |
 | **`DATA_MODEL.md`** | Domain Entity & Storage Contract | TypeScript schemas, validation bounds, storage keys (`gl_database_snapshot`), migrations, Firestore model. |
+| **`STATE_MACHINES.md`** | Canonical State Machine Registry | Discriminated union states, named events, legal transitions, invariants, and test mappings. |
 | **`security_spec.md`** | Security & Isolation Specification | Server-side Firestore rules (`/users/{uid}/**`), client-side sanitization, account segregation. |
 
 ### B. Codebase References & Source Locations
 
 - **Product Requirements & Features**: `PRD.md`
 - **Agent Governance & Gating Rules**: `AGENTS.md`
+- **Domain Lifecycles & State Machines**: `STATE_MACHINES.md`, `src/state/`
 - **Data Entities, Storage Keys & Migrations**: `DATA_MODEL.md`, `src/types/fitness.ts`, `src/utils/fitnessMigration.ts`
 - **Initial Training Protocol & Workouts**: `src/types/initialData.ts`
 - **Local Persistence & Durability**: `src/hooks/useFitnessData.ts`, `src/utils/fitnessMigration.ts`
@@ -426,4 +429,5 @@ GAINLOG enforces a consolidated 4-document core documentation system alongside `
 - **Android Release & Signing Configuration**: `android/app/build.gradle`
 - **Performance Benchmark Test Suite**: `src/test/performanceBenchmark.test.ts`
 - **Architecture Contract Verification Test**: `src/test/architectureContract.test.ts`
+- **State Machine Architecture Contract Test**: `src/test/stateMachineContract.test.ts`
 

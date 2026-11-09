@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { SetLog } from '../types/fitness';
+import { SessionLifecycleState } from '../state/session/sessionMachine';
 
 export interface ActiveSession {
   workoutId: string;
@@ -207,9 +208,19 @@ export function useActiveSession() {
     };
   }, [activeSession?.workoutId, activeSession?.startTime]);
 
+  const sessionLifecycleState = useMemo<SessionLifecycleState>(() => {
+    if (!activeSession) return { phase: 'idle' };
+    return {
+      phase: 'running',
+      workoutId: activeSession.workoutId,
+      startTime: activeSession.startTime
+    };
+  }, [activeSession]);
+
   return useMemo(() => ({
     activeSession,
     activeSessionMeta,
+    sessionLifecycleState,
     startActiveSession,
     updateActiveSessionSets,
     clearActiveSession,
@@ -217,6 +228,7 @@ export function useActiveSession() {
   }), [
     activeSession,
     activeSessionMeta,
+    sessionLifecycleState,
     startActiveSession,
     updateActiveSessionSets,
     clearActiveSession,

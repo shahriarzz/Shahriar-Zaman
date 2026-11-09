@@ -13,6 +13,14 @@ import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import { buildApiUrl } from '../utils/apiConfig';
 import { generateClientCoachingFallback } from '../utils/aiAdviceFallback';
+import {
+  initialSessionLifecycleState,
+  sessionLifecycleTransition
+} from '../state/session/sessionMachine';
+import {
+  initialCoachingState,
+  coachingTransition
+} from '../state/session/coachingMachine';
 
 export interface SessionPR {
   exerciseDefinitionId: string;
@@ -581,11 +589,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [finishedDuration, setFinishedDuration] = useState(0);
-  const [isFinishing, setIsFinishing] = useState(false);
   const [sessionPRs, setSessionPRs] = useState<SessionPR[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
-  const [loadingAdvice, setLoadingAdvice] = useState<string | null>(null);
+  const [sessionLifecycle, dispatchSessionLifecycle] = React.useReducer(
+    sessionLifecycleTransition,
+    initialSessionLifecycleState
+  );
+  const isSubmitting = sessionLifecycle.phase === 'validating' || sessionLifecycle.phase === 'committing';
+  const isFinishing = sessionLifecycle.phase === 'completed';
+  const [coachingMap, dispatchCoaching] = React.useReducer(coachingTransition, initialCoachingState);
   const [expandedExId, setExpandedExId] = useState<string | null>(null);
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -658,6 +669,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       isInitializedRef.current = true;
       setStartTime(currentActiveSession.startTime);
       setFinishedDuration(Math.floor((Date.now() - currentActiveSession.startTime) / 1000));
+      dispatchSessionLifecycle({
+        type: 'RESTORE_DRAFT',
+        workoutId: targetWorkoutId,
+        startTime: currentActiveSession.startTime
+      });
       return;
     }
 
@@ -667,7 +683,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     const sessionStart = Date.now();
     setStartTime(sessionStart);
     setFinishedDuration(0);
-    setIsFinishing(false);
+    dispatchSessionLifecycle({
+      type: 'START',
+      workoutId: wo.id,
+      startTime: sessionStart
+    });
     setSessionPRs([]);
     
     const initialSets: Record<string, SetLog[]> = {};
@@ -822,7 +842,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     const controller = new AbortController();
     abortControllersRef.current.set(exDefId, controller);
 
-    setLoadingAdvice(exDefId);
+    dispatchCoaching({ type: 'REQUEST_STARTED', exerciseId: exDefId });
     let history: any[] = [];
     try {
       // Historical lookup using canonical derived index (most recent 3 sessions)
@@ -848,7 +868,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       const targetApiUrl = buildApiUrl('/api/fitness/advice');
       if (!targetApiUrl) {
         const clientAdvice = generateClientCoachingFallback(ex.name, ex.reps || '', history as any);
-        setAiAdvice(prev => ({ ...prev, [exDefId]: clientAdvice }));
+        dispatchCoaching({ type: 'REQUEST_FALLBACK', exerciseId: exDefId, advice: clientAdvice });
         return;
       }
 
@@ -886,10 +906,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
 
       const data = await response.json();
-      setAiAdvice(prev => ({ ...prev, [exDefId]: data.suggestion || "No advice provided. Stick to the program!" }));
+      dispatchCoaching({
+        type: 'REQUEST_SUCCEEDED',
+        exerciseId: exDefId,
+        advice: data.suggestion || "No advice provided. Stick to the program!"
+      });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Ignored, request was aborted
+        dispatchCoaching({ type: 'REQUEST_CANCELLED', exerciseId: exDefId });
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -908,14 +933,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
         }
       }
 
-      setAiAdvice(prev => ({ 
-        ...prev, 
-        [exDefId]: humanMsg 
-      }));
+      dispatchCoaching({
+        type: 'REQUEST_FALLBACK',
+        exerciseId: exDefId,
+        advice: humanMsg
+      });
     } finally {
       if (abortControllersRef.current.get(exDefId) === controller) {
         abortControllersRef.current.delete(exDefId);
-        setLoadingAdvice(null);
       }
     }
   }, []);
@@ -933,7 +958,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   // 5. Show completion summary
   const finishSession = async () => {
     if (!activeWorkout || isSubmitting || isFinishing) return;
-    setIsSubmitting(true);
+    dispatchSessionLifecycle({
+      type: 'REQUEST_FINISH',
+      workoutId: activeWorkout.id,
+      startTime: startTime || Date.now()
+    });
 
     // Safety checks for extreme or illogical inputs to secure tracking data
     const extremeSets: { exName: string; weight: number; reps: number }[] = [];
@@ -959,12 +988,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
         isDanger: true
       });
       if (!proceed) {
-        setIsSubmitting(false);
+        dispatchSessionLifecycle({ type: 'VALIDATION_FAILED', reason: 'Abnormally high parameters cancelled' });
         return;
       }
     }
 
     try {
+      dispatchSessionLifecycle({ type: 'VALIDATION_PASSED' });
       haptics.success();
       const elapsedSecs = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
       setFinishedDuration(elapsedSecs);
@@ -1012,11 +1042,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
       // Only after persistence completes do we clear active session and display finish summary
       clearActiveSession();
-      setIsFinishing(true);
-    } catch (err) {
+      dispatchSessionLifecycle({ type: 'COMMIT_SUCCEEDED', logId });
+    } catch (err: any) {
       console.error("Failed to persist session log:", err);
-    } finally {
-      setIsSubmitting(false);
+      dispatchSessionLifecycle({ type: 'COMMIT_FAILED', error: err?.message || String(err) });
     }
   };
 
@@ -1246,8 +1275,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
               ex={resolvedEx}
               workoutType={activeWorkout.type}
               ghostData={ghostData[exDefId]}
-              advice={aiAdvice[exDefId]}
-              isLoadingAdvice={loadingAdvice === exDefId}
+              advice={coachingMap[exDefId]?.advice}
+              isLoadingAdvice={coachingMap[exDefId]?.status === 'loading'}
               sets={sessionSets[exDefId] || []}
               getAiAdvice={getAiAdvice}
               updateSet={updateSet}
