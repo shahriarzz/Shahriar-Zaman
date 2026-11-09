@@ -1,14 +1,10 @@
 export type DatabaseState =
-  | { readonly phase: 'hydrating' }
   | { readonly phase: 'ready' }
   | { readonly phase: 'persisting'; readonly pendingWrites: number }
   | { readonly phase: 'recovering' }
   | { readonly phase: 'storage_error'; readonly error: string; readonly canRetry: boolean };
 
 export type DatabaseEvent =
-  | { readonly type: 'HYDRATION_STARTED' }
-  | { readonly type: 'HYDRATION_SUCCEEDED' }
-  | { readonly type: 'HYDRATION_FAILED'; readonly error: string }
   | { readonly type: 'WRITE_STARTED' }
   | { readonly type: 'WRITE_COMMITTED' }
   | { readonly type: 'WRITE_FAILED'; readonly error: string }
@@ -16,30 +12,14 @@ export type DatabaseEvent =
   | { readonly type: 'RECOVERY_SUCCEEDED' }
   | { readonly type: 'RESET' };
 
-export const initialDatabaseState: DatabaseState = { phase: 'hydrating' };
+export const initialDatabaseState: DatabaseState = { phase: 'ready' };
 
 /**
  * Pure transition function for the local storage database lifecycle.
- * Prevents silent persistence failures and verifies hydration integrity.
+ * Prevents silent persistence failures and verifies storage durability.
  */
 export function databaseTransition(state: DatabaseState, event: DatabaseEvent): DatabaseState {
   switch (event.type) {
-    case 'HYDRATION_STARTED': {
-      return { phase: 'hydrating' };
-    }
-
-    case 'HYDRATION_SUCCEEDED': {
-      return { phase: 'ready' };
-    }
-
-    case 'HYDRATION_FAILED': {
-      return {
-        phase: 'storage_error',
-        error: event.error,
-        canRetry: true
-      };
-    }
-
     case 'WRITE_STARTED': {
       if (state.phase === 'persisting') {
         return {
@@ -55,8 +35,8 @@ export function databaseTransition(state: DatabaseState, event: DatabaseEvent): 
 
     case 'WRITE_COMMITTED': {
       if (state.phase === 'persisting') {
-        const remaining = state.pendingWrites - 1;
-        if (remaining <= 0) {
+        const remaining = Math.max(0, state.pendingWrites - 1);
+        if (remaining === 0) {
           return { phase: 'ready' };
         }
         return {
@@ -64,7 +44,8 @@ export function databaseTransition(state: DatabaseState, event: DatabaseEvent): 
           pendingWrites: remaining
         };
       }
-      return { phase: 'ready' };
+      // Never let an unrelated or stale WRITE_COMMITTED clear a storage_error or overwrite recovery
+      return state;
     }
 
     case 'WRITE_FAILED': {

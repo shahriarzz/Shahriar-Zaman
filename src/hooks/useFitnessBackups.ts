@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, ExerciseDefinition, FitnessDatabase, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
 import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitnessSyncHelpers';
-import { saveExerciseDefinitionsBatch, saveWorkoutsBatch, saveLogsBatch, saveAppState } from '../services/fitnessFirestore';
+import { saveAppState } from '../services/fitnessFirestore';
 import { FitnessDatabaseSnapshot } from './useFitnessData';
+import {
+  backupTransition,
+  initialBackupPhase,
+  BackupPhase
+} from '../state/persistence/backupMachine';
 
 import { 
   saveBackupToDb, 
@@ -46,7 +51,7 @@ export function useFitnessBackups({
   applyFitnessDatabaseSnapshot
 }: UseFitnessBackupsProps) {
   const backupsCacheRef = useRef<AutoBackupEntry[]>([]);
-  const [isBackupsLoading, setIsBackupsLoading] = useState(true);
+  const [backupPhase, dispatchBackup] = useReducer(backupTransition, initialBackupPhase);
   const [backupsVersion, setBackupsVersion] = useState(0);
   const resetEpochRef = useRef(0);
 
@@ -57,24 +62,28 @@ export function useFitnessBackups({
 
     const initializeBackups = async () => {
       try {
-        setIsBackupsLoading(true);
+        dispatchBackup({ type: 'INIT_STARTED' });
         // 1. Asynchronously migrate legacy localStorage if present
         const migrated = await migrateLegacyLocalStorageBackups();
         if (!isCurrent || resetEpochRef.current !== currentEpoch) return;
 
         if (migrated.length > 0) {
           backupsCacheRef.current = migrated.slice(0, 8);
+          dispatchBackup({ type: 'INIT_SUCCEEDED', count: migrated.length });
         } else {
           // 2. Load from IndexedDB
           const items = await getAllBackupsFromDb();
           if (!isCurrent || resetEpochRef.current !== currentEpoch) return;
           backupsCacheRef.current = items.slice(0, 8);
+          dispatchBackup({ type: 'INIT_SUCCEEDED', count: items.length });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Error during backup hydration from IndexedDB:", err);
+        if (isCurrent && resetEpochRef.current === currentEpoch) {
+          dispatchBackup({ type: 'BACKUP_FAILED', error: err?.message || String(err) });
+        }
       } finally {
         if (isCurrent && resetEpochRef.current === currentEpoch) {
-          setIsBackupsLoading(false);
           setBackupsVersion(v => v + 1);
         }
       }
@@ -96,6 +105,7 @@ export function useFitnessBackups({
     defs?: ExerciseDefinition[]
   ): Promise<{ success: boolean; message?: string }> => {
     try {
+      dispatchBackup({ type: 'BACKUP_STARTED', desc });
       const entry: AutoBackupEntry = {
         timestamp: new Date().toISOString(),
         workouts: w,
@@ -120,11 +130,14 @@ export function useFitnessBackups({
         localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
       } catch {}
 
+      dispatchBackup({ type: 'BACKUP_SUCCEEDED', newCount: updated.length });
       setBackupsVersion(v => v + 1);
       return { success: true };
     } catch (e: any) {
       console.error("Failed to persist checkpoint auto backup:", e);
-      return { success: false, message: e?.message || String(e) };
+      const errorMsg = e?.message || String(e);
+      dispatchBackup({ type: 'BACKUP_FAILED', error: errorMsg });
+      return { success: false, message: errorMsg };
     }
   }, [exerciseDefsRef]);
 
@@ -132,23 +145,31 @@ export function useFitnessBackups({
     return backupsCacheRef.current;
   }, [backupsVersion]);
 
-  const clearAutoBackups = useCallback((): void => {
+  const clearAutoBackups = useCallback(async (): Promise<void> => {
     resetEpochRef.current += 1;
     backupsCacheRef.current = [];
+    dispatchBackup({ type: 'CLEAR_STARTED' });
     try {
       localStorage.removeItem('gl_auto_backups');
       localStorage.removeItem('gl_auto_backups_meta');
-      clearAllBackupsFromDb().catch(() => {});
-    } catch {}
+      await clearAllBackupsFromDb();
+      dispatchBackup({ type: 'CLEAR_SUCCEEDED' });
+    } catch (err: any) {
+      console.warn("Failed clearing backups from IndexedDB:", err);
+      dispatchBackup({ type: 'CLEAR_FAILED', error: err?.message || String(err) });
+    }
     setBackupsVersion(v => v + 1);
   }, []);
 
   const restoreAutoBackup = useCallback(async (timestamp: string): Promise<{ success: boolean; message: string }> => {
     try {
+      dispatchBackup({ type: 'RESTORE_STARTED', timestamp });
       const backups = getAutoBackups();
       const match = backups.find(b => b.timestamp === timestamp);
       if (!match) {
-        return { success: false, message: 'Could not find backup checkpoint matching timestamp' };
+        const notFoundMsg = 'Could not find backup checkpoint matching timestamp';
+        dispatchBackup({ type: 'RESTORE_FAILED', error: notFoundMsg });
+        return { success: false, message: notFoundMsg };
       }
 
       // Canonical validation & sanitization pipeline
@@ -161,9 +182,11 @@ export function useFitnessBackups({
       });
 
       if (!validation.success || !validation.data) {
+        const valMsg = validation.message || 'Failed to validate checkpoint structure.';
+        dispatchBackup({ type: 'RESTORE_FAILED', error: valMsg });
         return {
           success: false,
-          message: validation.message || 'Failed to validate checkpoint structure.'
+          message: valMsg
         };
       }
 
@@ -185,6 +208,7 @@ export function useFitnessBackups({
           await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
         } catch (cloudError: any) {
           console.error("Cloud synchronization failed during restore:", cloudError);
+          dispatchBackup({ type: 'RESTORE_SUCCEEDED' });
           return {
             success: false,
             message: `Restored locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. Local and cloud states currently differ.`
@@ -192,10 +216,13 @@ export function useFitnessBackups({
         }
       }
 
+      dispatchBackup({ type: 'RESTORE_SUCCEEDED' });
       return { success: true, message: `Successfully restored database checkpoint: "${match.desc}"` };
     } catch (e: any) {
       console.error("Failed to restore checkpoint", e);
-      return { success: false, message: `Failed to restore checkpoint: ${e.message || String(e)}` };
+      const errMsg = `Failed to restore checkpoint: ${e.message || String(e)}`;
+      dispatchBackup({ type: 'RESTORE_FAILED', error: errMsg });
+      return { success: false, message: errMsg };
     }
   }, [user, getAutoBackups, applyFitnessDatabaseSnapshot]);
 
@@ -232,25 +259,46 @@ export function useFitnessBackups({
 
   const importBackup = useCallback(async (backupJson: string): Promise<{ success: boolean; message: string }> => {
     try {
+      dispatchBackup({ type: 'IMPORT_STARTED' });
       let parsed: any;
       try {
         parsed = JSON.parse(backupJson);
       } catch {
-        return { success: false, message: 'Invalid JSON format. Could not parse file.' };
+        const parseErr = 'Invalid JSON format. Could not parse file.';
+        dispatchBackup({ type: 'IMPORT_FAILED', error: parseErr });
+        return { success: false, message: parseErr };
       }
 
       const validation = validateAndSanitizeFitnessData(parsed);
       if (!validation.success || !validation.data) {
+        const valErr = validation.message || 'Failed to validate backup structure.';
+        dispatchBackup({ type: 'IMPORT_FAILED', error: valErr });
         return {
           success: false,
-          message: validation.message || 'Failed to validate backup structure.'
+          message: valErr
         };
       }
 
       const { exerciseDefinitions: restoredDefs, workouts: restoredWorkouts, logs: restoredLogs, appState: restoredAppState } = validation.data;
 
-      // Await persistence of pre-import savepoint before applying new data
-      await pushAutoBackup(workoutsRef.current, logsRef.current, appStateRef.current, 'manual', 'Pre-Import Savepoint', exerciseDefsRef.current);
+      // Strict safety checkpoint: Await persistence of pre-import savepoint BEFORE touching application data
+      const preImportSave = await pushAutoBackup(
+        workoutsRef.current,
+        logsRef.current,
+        appStateRef.current,
+        'manual',
+        'Pre-Import Savepoint',
+        exerciseDefsRef.current
+      );
+
+      if (!preImportSave.success) {
+        const abortMsg = `Pre-import safety checkpoint failed: ${preImportSave.message || 'Storage write failed'}. Import aborted to prevent data loss.`;
+        dispatchBackup({ type: 'IMPORT_FAILED', error: abortMsg });
+        return {
+          success: false,
+          message: abortMsg
+        };
+      }
 
       clearDeletedIdsTracker();
 
@@ -268,6 +316,7 @@ export function useFitnessBackups({
           await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
         } catch (cloudError: any) {
           console.error("Cloud synchronization failed during import:", cloudError);
+          dispatchBackup({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
           return {
             success: false,
             message: `Imported backup locally, but cloud synchronization failed: ${cloudError.message || String(cloudError)}. Local and cloud states currently differ.`
@@ -275,12 +324,17 @@ export function useFitnessBackups({
         }
       }
 
+      dispatchBackup({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
       return { success: true, message: 'Backup imported successfully. Data restored.' };
     } catch (e: any) {
       console.error("Import backup error", e);
-      return { success: false, message: `Failed to import backup: ${e.message || String(e)}` };
+      const errMsg = `Failed to import backup: ${e.message || String(e)}`;
+      dispatchBackup({ type: 'IMPORT_FAILED', error: errMsg });
+      return { success: false, message: errMsg };
     }
   }, [user, pushAutoBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, applyFitnessDatabaseSnapshot]);
+
+  const isBackupsLoading = backupPhase.status === 'loading' || backupPhase.status === 'migrating';
 
   return useMemo(() => ({
     pushAutoBackup,
@@ -290,7 +344,8 @@ export function useFitnessBackups({
     createManualBackup,
     exportBackup,
     importBackup,
-    isBackupsLoading
+    isBackupsLoading,
+    backupPhase
   }), [
     pushAutoBackup,
     getAutoBackups,
@@ -299,6 +354,7 @@ export function useFitnessBackups({
     createManualBackup,
     exportBackup,
     importBackup,
-    isBackupsLoading
+    isBackupsLoading,
+    backupPhase
   ]);
 }

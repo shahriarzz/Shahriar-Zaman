@@ -77,6 +77,7 @@ export const AccountSection: React.FC = () => {
                     syncStatus === 'synced' && 'bg-emerald-500',
                     syncStatus === 'syncing' && 'bg-amber-500',
                     syncStatus === 'failed' && 'bg-red-500',
+                    syncStatus === 'offline' && 'bg-zinc-400',
                     syncStatus === 'idle' && 'bg-zinc-500'
                   )} />
                 )}
@@ -97,6 +98,12 @@ export const AccountSection: React.FC = () => {
                   {syncStatus === 'synced' && (
                     <span className={cn(TYPOGRAPHY.label, "text-emerald-400")}>
                       ✓ Cloud synchronization complete. Data secure.
+                    </span>
+                  )}
+                  {syncStatus === 'offline' && (
+                    <span className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-col gap-0.5")}>
+                      <span>⚡ Operating offline (local-first storage active).</span>
+                      <span className="text-zinc-500 normal-case tracking-normal">Changes queued and preserved locally.</span>
                     </span>
                   )}
                   {syncStatus === 'failed' && (

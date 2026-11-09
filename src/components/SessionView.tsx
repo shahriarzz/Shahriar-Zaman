@@ -839,10 +839,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       abortControllersRef.current.get(exDefId)?.abort();
     }
 
+    const requestId = `advice_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const controller = new AbortController();
     abortControllersRef.current.set(exDefId, controller);
 
-    dispatchCoaching({ type: 'REQUEST_STARTED', exerciseId: exDefId });
+    dispatchCoaching({ type: 'REQUEST_STARTED', exerciseId: exDefId, requestId });
     let history: any[] = [];
     try {
       // Historical lookup using canonical derived index (most recent 3 sessions)
@@ -868,7 +869,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       const targetApiUrl = buildApiUrl('/api/fitness/advice');
       if (!targetApiUrl) {
         const clientAdvice = generateClientCoachingFallback(ex.name, ex.reps || '', history as any);
-        dispatchCoaching({ type: 'REQUEST_FALLBACK', exerciseId: exDefId, advice: clientAdvice });
+        dispatchCoaching({ type: 'REQUEST_FALLBACK', exerciseId: exDefId, requestId, advice: clientAdvice });
         return;
       }
 
@@ -909,12 +910,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       dispatchCoaching({
         type: 'REQUEST_SUCCEEDED',
         exerciseId: exDefId,
+        requestId,
         advice: data.suggestion || "No advice provided. Stick to the program!"
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Ignored, request was aborted
-        dispatchCoaching({ type: 'REQUEST_CANCELLED', exerciseId: exDefId });
+        dispatchCoaching({ type: 'REQUEST_CANCELLED', exerciseId: exDefId, requestId });
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -936,6 +938,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       dispatchCoaching({
         type: 'REQUEST_FALLBACK',
         exerciseId: exDefId,
+        requestId,
         advice: humanMsg
       });
     } finally {

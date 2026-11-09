@@ -6,7 +6,8 @@ import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
 import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION, FOCUS, DURATION, CONTROL_HEIGHT } from '../styles/tokens';
 
-export type ActiveTab = 'dashboard' | 'session' | 'history' | 'analytics' | 'manage';
+import { ActiveTab } from '../types/navigation';
+export type { ActiveTab };
 
 const NavigationActiveIndicator: React.FC = () => {
   return (
@@ -176,6 +177,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
     switch (syncStatus) {
       case 'syncing': return 'bg-amber-500';
       case 'synced': return 'bg-emerald-500';
+      case 'offline': return 'bg-zinc-400';
       case 'failed': return 'bg-red-500';
       default: return 'bg-zinc-600';
     }
@@ -185,6 +187,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
     switch (syncStatus) {
       case 'syncing': return 'Syncing training data...';
       case 'synced': return 'Training data fully synced';
+      case 'offline': return 'Operating offline (local-first storage active)';
       case 'failed': return `Sync issue: ${syncError || 'Timeout'}`;
       default: return 'Local storage active';
     }

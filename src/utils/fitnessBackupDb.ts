@@ -170,6 +170,7 @@ export async function pruneBackupsInDb(keepTimestamps: string[]): Promise<void> 
           }
         });
       };
+      req.onerror = () => reject(req.error || new Error('Failed to read keys during prune'));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Prune transaction failed'));
       tx.onabort = () => reject(new Error('Prune transaction aborted'));

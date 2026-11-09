@@ -16,7 +16,7 @@ export interface FitnessContextType {
   user: User | null;
   loading: boolean;
   isInitialized?: boolean;
-  syncStatus: 'idle' | 'syncing' | 'synced' | 'failed';
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline';
   syncError: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;

@@ -34,12 +34,15 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
   
   // Map of requestId -> resolve function
   const resolversRef = useRef<Map<string, (val: boolean) => void>>(new Map());
+  const resolvedIdsRef = useRef<Set<string>>(new Set());
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   // Unmount safety: resolve all pending promises on unmount with false
   useEffect(() => {
     return () => {
       resolversRef.current.forEach(resolve => resolve(false));
       resolversRef.current.clear();
+      resolvedIdsRef.current.clear();
       dispatch({ type: 'RESET' });
     };
   }, []);
@@ -49,25 +52,35 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const handleClose = useCallback((value: boolean) => {
     if (!activeRequest) return;
+    if (resolvedIdsRef.current.has(activeRequest.id)) return;
+    resolvedIdsRef.current.add(activeRequest.id);
+
     const resolver = resolversRef.current.get(activeRequest.id);
     if (resolver) {
       resolver(value);
       resolversRef.current.delete(activeRequest.id);
     }
     dispatch({ type: 'RESOLVE', requestId: activeRequest.id });
+
+    // Restore focus to the element that triggered the confirmation
+    if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+      try {
+        previousActiveElementRef.current.focus();
+      } catch {}
+      previousActiveElementRef.current = null;
+    }
   }, [activeRequest]);
 
-  // Enter key support to confirm the active dialog safely
+  // Escape key support to safely cancel the active dialog
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Escape') {
         e.preventDefault();
-        handleClose(true);
+        handleClose(false);
       }
     };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
@@ -75,9 +88,12 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const abortButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  // Focus the default ABORT option on mount for accessibility
+  // Capture activeElement and focus default ABORT button on open for accessibility and keyboard safety
   useEffect(() => {
     if (isOpen) {
+      if (document.activeElement instanceof HTMLElement) {
+        previousActiveElementRef.current = document.activeElement;
+      }
       const timer = setTimeout(() => {
         abortButtonRef.current?.focus();
       }, 50);
@@ -129,7 +145,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
               }
             />
 
-            {/* Action Buttons */}
+            {/* Action Buttons: focused control activates on Enter via standard HTML button semantics */}
             <DialogFooter>
               <Button
                 ref={abortButtonRef}

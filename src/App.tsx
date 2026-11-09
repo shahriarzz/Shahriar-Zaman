@@ -101,22 +101,38 @@ function AppContent() {
   const clearActiveSessionRef = useRef(clearActiveSession);
   clearActiveSessionRef.current = clearActiveSession;
 
-  // Stable session exit/abandon flow using latest refs
+  const isLeavingRef = useRef(false);
+  const activeLeaveRequestIdRef = useRef<string | null>(null);
+
+  // Stable session exit/abandon flow using latest refs and unique request IDs
   const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {
     if (activeSessionRef.current) {
-      dispatchNav({ type: 'REQUEST_LEAVE_SESSION', destination });
-      const confirmExit = await confirmRef.current({
-        title: 'Abandon Active Session?',
-        message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
-        isDanger: true
-      });
-      if (confirmExit) {
-        clearActiveSessionRef.current();
-        dispatchNav({ type: 'CONFIRM_LEAVE_SESSION' });
-        return true;
+      if (isLeavingRef.current) {
+        // Reject or safely serialize concurrent exit attempts
+        return false;
       }
-      dispatchNav({ type: 'CANCEL_LEAVE_SESSION' });
-      return false;
+      isLeavingRef.current = true;
+      const requestId = `leave_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      activeLeaveRequestIdRef.current = requestId;
+      dispatchNav({ type: 'REQUEST_LEAVE_SESSION', requestId, destination });
+
+      try {
+        const confirmExit = await confirmRef.current({
+          title: 'Abandon Active Session?',
+          message: 'Your current training progress is in-flight. Exiting now will discard or clear this active protocol. Are you sure you want to abort?',
+          isDanger: true
+        });
+        if (confirmExit) {
+          clearActiveSessionRef.current();
+          dispatchNav({ type: 'CONFIRM_LEAVE_SESSION', requestId });
+          return true;
+        }
+        dispatchNav({ type: 'CANCEL_LEAVE_SESSION', requestId });
+        return false;
+      } finally {
+        isLeavingRef.current = false;
+        activeLeaveRequestIdRef.current = null;
+      }
     } else {
       dispatchNav({ type: 'NAVIGATE', to: destination });
       return true;
@@ -138,6 +154,7 @@ function AppContent() {
         const handle = await CapApp.addListener('backButton', async () => {
           const currentTab = activeTabRef.current;
           if (currentTab === 'session') {
+            if (isLeavingRef.current) return;
             await leaveSessionRef.current('dashboard');
           } else if (currentTab !== 'dashboard') {
             dispatchNav({ type: 'ANDROID_BACK' });
