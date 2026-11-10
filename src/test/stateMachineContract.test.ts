@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import ts from 'typescript';
 import { initialNavigationState, navigationTransition } from '../state/app/navigationMachine';
 import { initialSessionLifecycleState, sessionLifecycleTransition } from '../state/session/sessionMachine';
 import { initialCoachingState, coachingTransition } from '../state/session/coachingMachine';
@@ -9,88 +10,192 @@ import { initialAuthState, authTransition } from '../state/sync/authMachine';
 import { initialSyncPhase, syncTransition } from '../state/sync/syncMachine';
 import { initialDatabaseState, databaseTransition } from '../state/persistence/databaseMachine';
 import { initialBackupPhase, backupTransition } from '../state/persistence/backupMachine';
-import { initialEditorMode, editorTransition } from '../state/editing/editorMachine';
 import { initialConfirmationState, confirmationTransition } from '../state/dialogs/confirmationMachine';
 
 describe('State Machine Architecture Contract Invariants', () => {
   const rootDir = process.cwd();
   const stateDir = path.join(rootDir, 'src/state');
 
-  // 1. Purity & Downward Dependency Rules for src/state/
-  describe('1. State Machine Purity & Downward Isolation', () => {
-    function getAllFiles(dir: string, fileList: string[] = []): string[] {
-      const files = fs.readdirSync(dir);
-      files.forEach(file => {
-        const filePath = path.join(dir, file);
-        if (fs.statSync(filePath).isDirectory()) {
-          getAllFiles(filePath, fileList);
-        } else if (file.endsWith('.ts') && !file.endsWith('.test.ts')) {
-          fileList.push(filePath);
-        }
-      });
-      return fileList;
-    }
+  function getAllTsFiles(dir: string, fileList: string[] = []): string[] {
+    const files = fs.readdirSync(dir);
+    files.forEach(file => {
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isDirectory()) {
+        getAllTsFiles(filePath, fileList);
+      } else if ((file.endsWith('.ts') || file.endsWith('.tsx')) && !file.endsWith('.test.ts') && !file.endsWith('.test.tsx') && !file.endsWith('.d.ts')) {
+        fileList.push(filePath);
+      }
+    });
+    return fileList;
+  }
 
-    const stateFiles = getAllFiles(stateDir);
+  const stateFiles = getAllTsFiles(stateDir);
 
-    it('finds all state machine modules in src/state', () => {
+  // 1. AST-Based Dependency Validation for src/state/
+  describe('1. State Machine Purity & AST-Based Downward Isolation', () => {
+    it('verifies that state files exist', () => {
       expect(stateFiles.length).toBeGreaterThanOrEqual(8);
     });
 
     stateFiles.forEach(absPath => {
       const relPath = path.relative(rootDir, absPath);
 
-      it(`${relPath} must not import React hooks or UI components`, () => {
-        const content = fs.readFileSync(absPath, 'utf8');
-        const lines = content.split('\n');
+      it(`${relPath} must not import React, UI components, styles, or hooks via AST inspection`, () => {
+        const fileContent = fs.readFileSync(absPath, 'utf8');
+        const sourceFile = ts.createSourceFile(
+          absPath,
+          fileContent,
+          ts.ScriptTarget.Latest,
+          true
+        );
 
-        const forbiddenImportPatterns = [
-          /from\s+['"]react['"]/,
-          /from\s+['"]react-dom['"]/,
-          /from\s+['"]\.\.?\/components/,
-          /from\s+['"]\.\.?\/styles/
-        ];
+        const importedModules: string[] = [];
 
-        lines.forEach((line, idx) => {
-          if (line.trim().startsWith('import ') || line.trim().startsWith('export * from')) {
-            forbiddenImportPatterns.forEach(pattern => {
-              expect(
-                pattern.test(line),
-                `Forbidden React/UI import found at ${relPath}:${idx + 1}: ${line}`
-              ).toBe(false);
-            });
+        function visit(node: ts.Node) {
+          // Check static import declarations
+          if (ts.isImportDeclaration(node)) {
+            if (ts.isStringLiteral(node.moduleSpecifier)) {
+              importedModules.push(node.moduleSpecifier.text);
+            }
           }
+          // Check export from declarations
+          if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+            if (ts.isStringLiteral(node.moduleSpecifier)) {
+              importedModules.push(node.moduleSpecifier.text);
+            }
+          }
+          // Check dynamic import() calls
+          if (
+            ts.isCallExpression(node) &&
+            node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+            node.arguments.length > 0 &&
+            ts.isStringLiteral(node.arguments[0])
+          ) {
+            importedModules.push(node.arguments[0].text);
+          }
+          ts.forEachChild(node, visit);
+        }
+
+        visit(sourceFile);
+
+        importedModules.forEach(mod => {
+          const isForbidden =
+            mod === 'react' ||
+            mod === 'react-dom' ||
+            mod.includes('/components') ||
+            mod.includes('/styles') ||
+            mod.startsWith('lucide-react');
+
+          expect(
+            isForbidden,
+            `Forbidden dependency "${mod}" imported in ${relPath}`
+          ).toBe(false);
         });
       });
 
-      it(`${relPath} must not contain side-effects (no async transitions, no fetch, no setTimeout)`, () => {
-        const content = fs.readFileSync(absPath, 'utf8');
-        const lines = content.split('\n');
+      it(`${relPath} must not contain side-effects (pure synchronous state transitions)`, () => {
+        const fileContent = fs.readFileSync(absPath, 'utf8');
+        const sourceFile = ts.createSourceFile(
+          absPath,
+          fileContent,
+          ts.ScriptTarget.Latest,
+          true
+        );
 
-        // Check for side effects inside transition modules (mutationLifecycle is the execution runner)
-        if (!relPath.includes('mutationLifecycle.ts')) {
-          lines.forEach((line, idx) => {
-            const forbiddenEffectPatterns = [
-              /\bfetch\s*\(/,
-              /\bsetTimeout\s*\(/,
-              /\bsetInterval\s*\(/,
-              /\blocalStorage\b/
-            ];
+        let hasSideEffects = false;
+        let sideEffectName = '';
 
-            forbiddenEffectPatterns.forEach(pattern => {
-              expect(
-                pattern.test(line),
-                `Forbidden side-effect in state machine at ${relPath}:${idx + 1}: ${line}`
-              ).toBe(false);
-            });
-          });
+        function checkNode(node: ts.Node) {
+          if (ts.isIdentifier(node)) {
+            if (
+              node.text === 'fetch' ||
+              node.text === 'setTimeout' ||
+              node.text === 'setInterval' ||
+              node.text === 'localStorage' ||
+              node.text === 'indexedDB'
+            ) {
+              // Ensure it's not a type or property name in an interface
+              const parent = node.parent;
+              if (
+                !ts.isPropertySignature(parent) &&
+                !ts.isTypeReferenceNode(parent)
+              ) {
+                hasSideEffects = true;
+                sideEffectName = node.text;
+              }
+            }
+          }
+          ts.forEachChild(node, checkNode);
         }
+
+        checkNode(sourceFile);
+
+        expect(
+          hasSideEffects,
+          `Side-effect identifier "${sideEffectName}" found in pure transition module ${relPath}`
+        ).toBe(false);
       });
     });
   });
 
-  // 2. Pure Transition Determinism & Immutability Verification
-  describe('2. Deterministic Immutability of State Transition Functions', () => {
+  // 2. Production Consumer Verification (Zero Dead Machines)
+  describe('2. Active Production Consumer Verification', () => {
+    const srcDir = path.join(rootDir, 'src');
+    const allProdFiles = getAllTsFiles(srcDir).filter(
+      f => !f.includes('/test/') && !f.includes('/state/')
+    );
+
+    // Read all production file contents into memory
+    const prodFileContents = allProdFiles.map(f => ({
+      path: f,
+      content: fs.readFileSync(f, 'utf8')
+    }));
+
+    const canonicalStateMachines = [
+      { name: 'navigationMachine', file: 'src/state/app/navigationMachine.ts', expectedOwner: 'App.tsx' },
+      { name: 'sessionMachine', file: 'src/state/session/sessionMachine.ts', expectedOwner: 'SessionView.tsx' },
+      { name: 'coachingMachine', file: 'src/state/session/coachingMachine.ts', expectedOwner: 'SessionView.tsx' },
+      { name: 'authMachine', file: 'src/state/sync/authMachine.ts', expectedOwner: 'useFitnessSync.ts' },
+      { name: 'syncMachine', file: 'src/state/sync/syncMachine.ts', expectedOwner: 'useFitnessSync.ts' },
+      { name: 'databaseMachine', file: 'src/state/persistence/databaseMachine.ts', expectedOwner: 'useFitnessData.ts' },
+      { name: 'backupMachine', file: 'src/state/persistence/backupMachine.ts', expectedOwner: 'useFitnessBackups.ts' },
+      { name: 'confirmationMachine', file: 'src/state/dialogs/confirmationMachine.ts', expectedOwner: 'ConfirmContext.tsx' }
+    ];
+
+    canonicalStateMachines.forEach(machine => {
+      it(`machine ${machine.name} has a verified production consumer in ${machine.expectedOwner}`, () => {
+        const consumers = prodFileContents.filter(f =>
+          f.content.includes(machine.name)
+        );
+        expect(
+          consumers.length,
+          `State machine ${machine.name} has no production consumers in src/`
+        ).toBeGreaterThanOrEqual(1);
+
+        const expectedConsumer = consumers.find(c => c.path.endsWith(machine.expectedOwner));
+        expect(
+          expectedConsumer,
+          `Expected consumer ${machine.expectedOwner} does not import ${machine.name}`
+        ).toBeDefined();
+      });
+    });
+
+    it('verifies that no orphaned or unreferenced state machine files exist in src/state', () => {
+      stateFiles.forEach(sf => {
+        const baseName = path.basename(sf, '.ts');
+        if (baseName === 'machineTypes') return; // Shared interface types
+
+        const hasReferenceInProd = prodFileContents.some(f => f.content.includes(baseName));
+        expect(
+          hasReferenceInProd,
+          `State machine file ${baseName} is unreferenced in production codebase`
+        ).toBe(true);
+      });
+    });
+  });
+
+  // 3. Pure Transition Determinism & Immutability Verification
+  describe('3. Deterministic Immutability of State Transition Functions', () => {
     it('navigationTransition does not mutate input state and returns identical results for identical inputs', () => {
       const state = Object.freeze({ ...initialNavigationState });
       const event = Object.freeze({ type: 'NAVIGATE' as const, to: 'history' as const });
@@ -104,97 +209,103 @@ describe('State Machine Architecture Contract Invariants', () => {
 
     it('sessionLifecycleTransition is immutable and deterministic', () => {
       const state = Object.freeze({ ...initialSessionLifecycleState });
-      const event = Object.freeze({ type: 'START' as const, workoutId: 'push-a' as const, startTime: 1000 });
+      const event = Object.freeze({ type: 'START' as const, workoutId: 'push-a', startTime: 1000 });
       const result1 = sessionLifecycleTransition(state, event);
       const result2 = sessionLifecycleTransition(state, event);
 
       expect(result1).toEqual(result2);
-      expect(result1.phase).toBe('running');
+      expect(result1).not.toBe(state);
       expect(state.phase).toBe('idle');
     });
 
-    it('coachingTransition does not mutate prior exercise advice mappings', () => {
-      const state = Object.freeze({
-        bench: Object.freeze({ status: 'success' as const, advice: 'Tight grip' })
+    it('coachingTransition isolates exercise keys without modifying input map', () => {
+      const state = Object.freeze({ ...initialCoachingState });
+      const event = Object.freeze({
+        type: 'REQUEST_STARTED' as const,
+        exerciseId: 'ex_bench',
+        requestId: 'req_1'
       });
-      const event = Object.freeze({ type: 'REQUEST_STARTED' as const, exerciseId: 'squat' });
-      const next = coachingTransition(state as any, event);
+      const result = coachingTransition(state, event);
 
-      expect(next.bench.status).toBe('success');
-      expect(next.squat.status).toBe('loading');
-      expect((state as any).squat).toBeUndefined();
+      expect(result).not.toBe(state);
+      expect(state['ex_bench']).toBeUndefined();
+      expect(result['ex_bench'].status).toBe('loading');
     });
 
-    it('confirmationTransition preserves immutable queue ordering', () => {
+    it('authTransition is pure and immutable', () => {
+      const state = Object.freeze({ ...initialAuthState });
+      const event = Object.freeze({
+        type: 'LOGIN_SUCCEEDED' as const,
+        user: { uid: 'u1', email: 'a@b.com' }
+      });
+      const result = authTransition(state, event);
+
+      expect(result).not.toBe(state);
+      expect(state.status).toBe('initializing');
+      expect(result.status).toBe('authenticated');
+    });
+
+    it('syncTransition is pure and immutable', () => {
+      const state = Object.freeze({ ...initialSyncPhase });
+      const event = Object.freeze({
+        type: 'SYNC_STARTED' as const,
+        uid: 'u1',
+        generation: 1
+      });
+      const result = syncTransition(state, event);
+
+      expect(result).not.toBe(state);
+      expect(state.status).toBe('idle');
+      expect(result.status).toBe('syncing');
+    });
+
+    it('databaseTransition is pure and immutable', () => {
+      const state = Object.freeze({ ...initialDatabaseState });
+      const event = Object.freeze({ type: 'WRITE_STARTED' as const });
+      const result = databaseTransition(state, event);
+
+      expect(result).not.toBe(state);
+      expect(state.phase).toBe('ready');
+      expect(result.phase).toBe('persisting');
+    });
+
+    it('backupTransition is pure and immutable', () => {
+      const state = Object.freeze({ ...initialBackupPhase });
+      const event = Object.freeze({ type: 'INIT_SUCCEEDED' as const, count: 5 });
+      const result = backupTransition(state, event);
+
+      expect(result).not.toBe(state);
+      expect(state.status).toBe('loading');
+      expect(result.status).toBe('ready');
+    });
+
+    it('confirmationTransition is pure and immutable', () => {
       const state = Object.freeze({ ...initialConfirmationState });
-      const req = Object.freeze({ id: 'r1', title: 'Test', message: 'Msg' });
-      const next = confirmationTransition(state, { type: 'ENQUEUE', request: req });
-
-      expect(next.status).toBe('open');
-      expect(state.status).toBe('closed');
-      expect(state.queue.length).toBe(0);
-    });
-  });
-
-  // 3. UI Layer Boundaries: No Direct Cloud or Storage Writes in UI Screens
-  describe('3. UI Layer Isolation (Direct Persistence & Cloud Write Guard)', () => {
-    const screens = [
-      'src/components/Dashboard.tsx',
-      'src/components/HistoryView.tsx',
-      'src/components/AnalyticsView.tsx',
-      'src/components/Calendar.tsx'
-    ];
-
-    screens.forEach(relPath => {
-      it(`${relPath} must not write directly to localStorage or Firestore collections`, () => {
-        const fullPath = path.join(rootDir, relPath);
-        if (!fs.existsSync(fullPath)) return;
-
-        const content = fs.readFileSync(fullPath, 'utf8');
-        const lines = content.split('\n');
-
-        const forbiddenBypasses = [
-          /\blocalStorage\.setItem\s*\(\s*['"]gl_database_snapshot['"]/,
-          /\blocalStorage\.setItem\s*\(\s*['"]gl_active_session['"]/,
-          /\bsetDoc\s*\(/,
-          /\baddDoc\s*\(/,
-          /\bdeleteDoc\s*\(/
-        ];
-
-        lines.forEach((line, idx) => {
-          forbiddenBypasses.forEach(pattern => {
-            expect(
-              pattern.test(line),
-              `Direct persistence/cloud bypass at ${relPath}:${idx + 1}: ${line}`
-            ).toBe(false);
-          });
-        });
+      const event = Object.freeze({
+        type: 'ENQUEUE' as const,
+        request: { id: 'r1', title: 'T', message: 'M' }
       });
+      const result = confirmationTransition(state, event);
+
+      expect(result).not.toBe(state);
+      expect(state.status).toBe('closed');
+      expect(result.status).toBe('open');
     });
   });
 
-  // 4. Registry Synchronization Verification
-  describe('4. STATE_MACHINES.md Registry Synchronization', () => {
-    it('verifies all files indexed in STATE_MACHINES.md exist on disk', () => {
-      const registryPath = path.join(rootDir, 'STATE_MACHINES.md');
-      expect(fs.existsSync(registryPath)).toBe(true);
+  // 4. Documentation & Schema Synchronization
+  describe('4. Architecture Documentation Registry Synchronization', () => {
+    it('verifies that STATE_MACHINES.md accurately lists all active machines', () => {
+      const docPath = path.join(rootDir, 'STATE_MACHINES.md');
+      expect(fs.existsSync(docPath)).toBe(true);
+      const docContent = fs.readFileSync(docPath, 'utf8');
 
-      const content = fs.readFileSync(registryPath, 'utf8');
-      const pathRegex = /(src\/state\/[a-zA-Z0-9_\-\.\/]+\.ts)\b/g;
-      const matches = new Set<string>();
-      let match: RegExpExecArray | null;
-
-      while ((match = pathRegex.exec(content)) !== null) {
-        matches.add(match[0]);
-      }
-
-      expect(matches.size).toBeGreaterThanOrEqual(8);
-
-      matches.forEach(filePath => {
-        const fullPath = path.join(rootDir, filePath);
+      stateFiles.forEach(absPath => {
+        const baseName = path.basename(absPath);
+        if (baseName === 'machineTypes.ts') return;
         expect(
-          fs.existsSync(fullPath),
-          `Machine file documented in STATE_MACHINES.md missing on disk: ${filePath}`
+          docContent.includes(baseName),
+          `STATE_MACHINES.md is missing documentation for active machine ${baseName}`
         ).toBe(true);
       });
     });

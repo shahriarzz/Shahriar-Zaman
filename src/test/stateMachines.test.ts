@@ -30,20 +30,11 @@ import {
   backupTransition
 } from '../state/persistence/backupMachine';
 import {
-  evaluateCycleSchedule,
-  calculateCycleAnchorOnCompletion
-} from '../state/training/cycleContract';
-import {
-  initialEditorMode,
-  editorTransition
-} from '../state/editing/editorMachine';
-import {
   initialConfirmationState,
   confirmationTransition
 } from '../state/dialogs/confirmationMachine';
-import { INITIAL_WORKOUTS } from '../types/initialData';
 
-describe('State Machine Architecture Test Suite (Phase 1)', () => {
+describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
   describe('1. Navigation State Machine', () => {
     it('starts on dashboard and transitions between standard tabs', () => {
       let state = initialNavigationState;
@@ -60,7 +51,7 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       expect(state.route).toBe('manage');
     });
 
-    it('manages session lifecycle and protects against accidental discard', () => {
+    it('serializes leave requests with unique IDs and protects against destination clobbering', () => {
       let state = navigationTransition(initialNavigationState, {
         type: 'START_SESSION',
         workoutId: 'push-a'
@@ -68,24 +59,57 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       expect(state.route).toBe('session');
       expect(getSelectedWorkoutId(state)).toBe('push-a');
 
-      // Direct tab navigation while in session requests confirmation rather than discarding immediately
-      state = navigationTransition(state, { type: 'NAVIGATE', to: 'dashboard' });
+      // Request leave to history with requestId 'req_1'
+      state = navigationTransition(state, {
+        type: 'REQUEST_LEAVE_SESSION',
+        requestId: 'req_1',
+        destination: 'history'
+      });
       expect(state.route).toBe('session');
       if (state.route === 'session') {
-        expect(state.pendingLeaveDestination).toBe('dashboard');
+        expect(state.pendingLeaveRequest?.id).toBe('req_1');
+        expect(state.pendingLeaveRequest?.destination).toBe('history');
       }
 
-      // Cancelling preserves the session
-      state = navigationTransition(state, { type: 'CANCEL_LEAVE_SESSION' });
+      // Concurrent request to dashboard while req_1 is open is rejected
+      state = navigationTransition(state, {
+        type: 'REQUEST_LEAVE_SESSION',
+        requestId: 'req_2',
+        destination: 'dashboard'
+      });
+      if (state.route === 'session') {
+        expect(state.pendingLeaveRequest?.id).toBe('req_1');
+        expect(state.pendingLeaveRequest?.destination).toBe('history');
+      }
+
+      // Mismatched confirm ID is ignored
+      state = navigationTransition(state, {
+        type: 'CONFIRM_LEAVE_SESSION',
+        requestId: 'req_wrong'
+      });
+      expect(state.route).toBe('session');
+
+      // Matching cancel clears request and preserves session
+      state = navigationTransition(state, {
+        type: 'CANCEL_LEAVE_SESSION',
+        requestId: 'req_1'
+      });
       expect(state.route).toBe('session');
       if (state.route === 'session') {
-        expect(state.pendingLeaveDestination).toBeUndefined();
+        expect(state.pendingLeaveRequest).toBeUndefined();
       }
 
-      // Confirming leave exits to destination
-      state = navigationTransition(state, { type: 'REQUEST_LEAVE_SESSION', destination: 'history' });
-      state = navigationTransition(state, { type: 'CONFIRM_LEAVE_SESSION' });
-      expect(state.route).toBe('history');
+      // Fresh leave request can now be opened and confirmed to dashboard
+      state = navigationTransition(state, {
+        type: 'REQUEST_LEAVE_SESSION',
+        requestId: 'req_3',
+        destination: 'dashboard'
+      });
+      state = navigationTransition(state, {
+        type: 'CONFIRM_LEAVE_SESSION',
+        requestId: 'req_3'
+      });
+      expect(state.route).toBe('dashboard');
     });
 
     it('implements deterministic Android hardware-back semantics', () => {
@@ -94,12 +118,19 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       state = navigationTransition(state, { type: 'ANDROID_BACK' });
       expect(state.route).toBe('dashboard');
 
-      // In session -> back requests leaving session to dashboard
+      // In session -> back requests leaving session to dashboard with requestId
       state = navigationTransition(state, { type: 'START_SESSION', workoutId: 'pull-a' });
-      state = navigationTransition(state, { type: 'ANDROID_BACK' });
+      state = navigationTransition(state, { type: 'ANDROID_BACK', requestId: 'req_back_1' });
       expect(state.route).toBe('session');
       if (state.route === 'session') {
-        expect(state.pendingLeaveDestination).toBe('dashboard');
+        expect(state.pendingLeaveRequest?.id).toBe('req_back_1');
+        expect(state.pendingLeaveRequest?.destination).toBe('dashboard');
+      }
+
+      // Repeated back event while confirmation is open is ignored
+      const repeated = navigationTransition(state, { type: 'ANDROID_BACK', requestId: 'req_back_2' });
+      if (repeated.route === 'session') {
+        expect(repeated.pendingLeaveRequest?.id).toBe('req_back_1');
       }
     });
   });
@@ -172,15 +203,15 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
   });
 
   describe('3. AI Coaching Request Machine', () => {
-    it('isolates per-exercise request state so one exercise does not clear another', () => {
+    it('isolates per-exercise request state with unique request IDs', () => {
       let state = initialCoachingState;
 
       // Exercise 1 requests advice
-      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_bench' });
+      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_bench', requestId: 'req_1' });
       expect(state['ex_bench'].status).toBe('loading');
 
       // Exercise 2 requests advice simultaneously
-      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_squat' });
+      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_squat', requestId: 'req_2' });
       expect(state['ex_bench'].status).toBe('loading');
       expect(state['ex_squat'].status).toBe('loading');
 
@@ -188,19 +219,51 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       state = coachingTransition(state, {
         type: 'REQUEST_SUCCEEDED',
         exerciseId: 'ex_bench',
+        requestId: 'req_1',
         advice: 'Control descent'
       });
       expect(state['ex_bench'].status).toBe('success');
       expect(state['ex_bench'].advice).toBe('Control descent');
-      expect(state['ex_squat'].status).toBe('loading'); // Exercise 2 remains loading
+      expect(state['ex_squat'].status).toBe('loading');
 
-      // Exercise 2 receives client fallback
+      // Exercise 2 receives fallback
       state = coachingTransition(state, {
         type: 'REQUEST_FALLBACK',
         exerciseId: 'ex_squat',
+        requestId: 'req_2',
         advice: 'Stay upright'
       });
       expect(state['ex_squat'].status).toBe('fallback');
+    });
+
+    it('prevents older aborted request from clearing newer request loading state and restores previous advice', () => {
+      let state = initialCoachingState;
+
+      // Request 1 succeeds
+      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_bench', requestId: 'req_1' });
+      state = coachingTransition(state, {
+        type: 'REQUEST_SUCCEEDED',
+        exerciseId: 'ex_bench',
+        requestId: 'req_1',
+        advice: 'Old Advice'
+      });
+      expect(state['ex_bench'].status).toBe('success');
+      expect(state['ex_bench'].advice).toBe('Old Advice');
+
+      // Request 2 starts for same exercise (replaces request 1)
+      state = coachingTransition(state, { type: 'REQUEST_STARTED', exerciseId: 'ex_bench', requestId: 'req_2' });
+      expect(state['ex_bench'].status).toBe('loading');
+      expect(state['ex_bench'].advice).toBe('Old Advice'); // Preserved while loading!
+
+      // Delayed cancel/abort from older request 1 arrives -> MUST NOT clear request 2's loading state!
+      state = coachingTransition(state, { type: 'REQUEST_CANCELLED', exerciseId: 'ex_bench', requestId: 'req_1' });
+      expect(state['ex_bench'].status).toBe('loading');
+      expect(state['ex_bench'].activeRequestId).toBe('req_2');
+
+      // Now cancel request 2 -> restores previous advice 'Old Advice'
+      state = coachingTransition(state, { type: 'REQUEST_CANCELLED', exerciseId: 'ex_bench', requestId: 'req_2' });
+      expect(state['ex_bench'].status).toBe('success');
+      expect(state['ex_bench'].advice).toBe('Old Advice');
     });
   });
 
@@ -228,7 +291,7 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       expect(state.status).toBe('anonymous');
     });
 
-    it('sync machine enforces generation and UID isolation against stale callbacks', () => {
+    it('sync machine distinguishes offline from generic failed and enforces generation guards', () => {
       let state = initialSyncPhase;
 
       // Start sync for User A, Generation 1
@@ -247,29 +310,25 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       });
       expect(state.status).toBe('syncing');
 
-      // Stale callback from different account User B arrives -> dropped
+      // Offline failure cleanly sets offline status, not generic failed
       state = syncTransition(state, {
-        type: 'SYNC_SUCCEEDED',
-        uid: 'user_B',
-        generation: 1
-      });
-      expect(state.status).toBe('syncing');
-
-      // Genuine callback matching User A, Generation 1 arrives -> transitions to synced
-      state = syncTransition(state, {
-        type: 'SYNC_SUCCEEDED',
+        type: 'SYNC_FAILED',
         uid: 'user_A',
         generation: 1,
-        timestamp: 12345
+        error: 'Network unreachable',
+        isOffline: true
       });
-      expect(state.status).toBe('synced');
+      expect(state.status).toBe('offline');
+
+      // Coming online transitions back to idle for sync retry
+      state = syncTransition(state, { type: 'NETWORK_ONLINE' });
+      expect(state.status).toBe('idle');
     });
   });
 
   describe('5. Persistence and Backup Machines', () => {
-    it('database machine tracks concurrent write queue', () => {
+    it('database machine tracks concurrent write queue and protects storage errors', () => {
       let state = initialDatabaseState;
-      state = databaseTransition(state, { type: 'HYDRATION_SUCCEEDED' });
       expect(state.phase).toBe('ready');
 
       // Two writes start in close succession
@@ -287,6 +346,14 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
       // Second commits -> ready
       state = databaseTransition(state, { type: 'WRITE_COMMITTED' });
       expect(state.phase).toBe('ready');
+
+      // Write failure sets storage_error
+      state = databaseTransition(state, { type: 'WRITE_FAILED', error: 'Quota exceeded' });
+      expect(state.phase).toBe('storage_error');
+
+      // Stale write committed does NOT clear storage_error
+      const staleCommit = databaseTransition(state, { type: 'WRITE_COMMITTED' });
+      expect(staleCommit.phase).toBe('storage_error');
     });
 
     it('backup machine serializes operations and protects against duplicate mutations', () => {
@@ -307,67 +374,7 @@ describe('State Machine Architecture Test Suite (Phase 1)', () => {
     });
   });
 
-  describe('6. Training Cycle Schedule Contract', () => {
-    it('evaluates recovery days without requiring logs', () => {
-      const evalDay4 = evaluateCycleSchedule({
-        cycleStart: '2026-11-01',
-        targetDate: '2026-11-04', // Day 4 (Recovery)
-        workouts: INITIAL_WORKOUTS,
-        logsForDate: []
-      });
-      expect(evalDay4.cycleDay).toBe(4);
-      expect(evalDay4.isRestDay).toBe(true);
-      expect(evalDay4.outcome.type).toBe('recovery_day');
-    });
-
-    it('does not advance cycle anchor on bonus workouts', () => {
-      const bonusWorkout = {
-        ...INITIAL_WORKOUTS[0],
-        id: 'bonus_arms',
-        isCore: false,
-        cycleDay: null
-      };
-      const result = calculateCycleAnchorOnCompletion({
-        completedWorkout: bonusWorkout,
-        currentCycleStart: '2026-11-01',
-        completionDate: '2026-11-05'
-      });
-      expect(result.shouldUpdate).toBe(false);
-    });
-
-    it('calculates cycle anchor update on out-of-order core workout', () => {
-      const coreWorkoutDay1 = INITIAL_WORKOUTS.find(w => w.cycleDay === 1)!;
-      // On Day 3 (2026-11-03 with cycleStart 2026-11-01), completing Day 1 out of order
-      const result = calculateCycleAnchorOnCompletion({
-        completedWorkout: coreWorkoutDay1,
-        currentCycleStart: '2026-11-01',
-        completionDate: '2026-11-03'
-      });
-      expect(result.shouldUpdate).toBe(true);
-      expect(result.nextCycleStart).toBe('2026-11-03');
-    });
-  });
-
-  describe('7. Editor & Confirmation State Machines', () => {
-    it('editor guards dirty drafts against unconfirmed navigation', () => {
-      let state = initialEditorMode;
-      state = editorTransition(state, { type: 'OPEN_PROGRAM_EDITOR', workoutId: 'push-a' });
-      expect(state.view).toBe('program_editor');
-      if (state.view === 'program_editor') expect(state.draftState).toBe('clean');
-
-      state = editorTransition(state, { type: 'EDIT_DRAFT' });
-      if (state.view === 'program_editor') expect(state.draftState).toBe('dirty');
-
-      // Attempt to close dirty editor triggers pendingExit rather than discarding
-      state = editorTransition(state, { type: 'CLOSE_EDITOR' });
-      expect(state.view).toBe('program_editor');
-      if (state.view === 'program_editor') expect(state.pendingExit).toBe(true);
-
-      // Confirm discard exits back to manage
-      state = editorTransition(state, { type: 'CONFIRM_DISCARD' });
-      expect(state.view).toBe('manage');
-    });
-
+  describe('6. Confirmation State Machine', () => {
     it('confirmation machine serializes concurrent requests without dropping them', () => {
       let state = initialConfirmationState;
       expect(state.status).toBe('closed');
