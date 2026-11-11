@@ -92,8 +92,9 @@ export function useActiveSession() {
 
   const latestSessionRef = useRef<ActiveSession | null>(activeSession);
   latestSessionRef.current = activeSession;
-
+  const sessionRevisionRef = useRef<number>(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
 
   const flushActiveSession = useCallback(() => {
     if (debounceTimerRef.current) {
@@ -106,25 +107,33 @@ export function useActiveSession() {
       } else {
         localStorage.removeItem('gl_active_session');
       }
-    } catch (e) {
-      console.warn("Failed to flush gl_active_session to localStorage", e);
+      setPersistenceError(null);
+    } catch (e: any) {
+      const errMsg = e?.message || String(e);
+      console.warn("Failed to flush gl_active_session to localStorage", errMsg);
+      setPersistenceError(errMsg);
     }
   }, []);
 
-  const scheduleDebouncedSave = useCallback(() => {
+  const scheduleDebouncedSave = useCallback((expectedRevision: number) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
       debounceTimerRef.current = null;
+      // Stale revision protection: ignore if session has advanced or cleared
+      if (sessionRevisionRef.current !== expectedRevision) return;
       try {
         if (latestSessionRef.current) {
           localStorage.setItem('gl_active_session', JSON.stringify(latestSessionRef.current));
         } else {
           localStorage.removeItem('gl_active_session');
         }
-      } catch (e) {
-        console.warn("Failed to save debounced gl_active_session", e);
+        setPersistenceError(null);
+      } catch (e: any) {
+        const errMsg = e?.message || String(e);
+        console.warn("Failed to save debounced gl_active_session", errMsg);
+        setPersistenceError(errMsg);
       }
     }, 250);
   }, []);
@@ -160,22 +169,29 @@ export function useActiveSession() {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
+    sessionRevisionRef.current += 1;
     const session: ActiveSession = { workoutId, startTime, sessionSets: sets };
     latestSessionRef.current = session;
     setActiveSession(session);
     try {
       localStorage.setItem('gl_active_session', JSON.stringify(session));
-    } catch (e) {
-      console.warn("Failed to synchronously initialize gl_active_session", e);
+      setPersistenceError(null);
+    } catch (e: any) {
+      const errMsg = e?.message || String(e);
+      console.warn("Failed to synchronously initialize gl_active_session", errMsg);
+      setPersistenceError(errMsg);
     }
   }, []);
 
   const updateActiveSessionSets = useCallback((
-    updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>)
+    updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>),
+    flushImmediately = false
   ) => {
     const current = latestSessionRef.current;
     if (!current) return;
 
+    sessionRevisionRef.current += 1;
+    const currentRevision = sessionRevisionRef.current;
     const nextSets = typeof updater === 'function' ? updater(current.sessionSets) : updater;
     const nextSession: ActiveSession = {
       ...current,
@@ -184,19 +200,29 @@ export function useActiveSession() {
 
     latestSessionRef.current = nextSession;
     setActiveSession(nextSession);
-    scheduleDebouncedSave();
-  }, [scheduleDebouncedSave]);
+
+    if (flushImmediately) {
+      flushActiveSession();
+    } else {
+      scheduleDebouncedSave(currentRevision);
+    }
+  }, [scheduleDebouncedSave, flushActiveSession]);
 
   const clearActiveSession = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
+    sessionRevisionRef.current += 1;
     latestSessionRef.current = null;
     setActiveSession(null);
     try {
       localStorage.removeItem('gl_active_session');
-    } catch {}
+      setPersistenceError(null);
+    } catch (e: any) {
+      const errMsg = e?.message || String(e);
+      setPersistenceError(errMsg);
+    }
   }, []);
 
   const activeSessionMeta = useMemo<ActiveSessionMeta | null>(() => {
@@ -213,14 +239,16 @@ export function useActiveSession() {
     startActiveSession,
     updateActiveSessionSets,
     clearActiveSession,
-    flushActiveSession
+    flushActiveSession,
+    persistenceError
   }), [
     activeSession,
     activeSessionMeta,
     startActiveSession,
     updateActiveSessionSets,
     clearActiveSession,
-    flushActiveSession
+    flushActiveSession,
+    persistenceError
   ]);
 }
 

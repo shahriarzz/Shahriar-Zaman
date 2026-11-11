@@ -8,11 +8,10 @@ export type SyncPhase =
   | { readonly status: 'failed'; readonly uid?: string; readonly error: string };
 
 export type SyncEvent =
-  | { readonly type: 'SYNC_REQUESTED'; readonly uid: string }
   | { readonly type: 'SYNC_STARTED'; readonly uid: string; readonly generation: number; readonly isInitial?: boolean }
-  | { readonly type: 'SYNC_SUCCEEDED'; readonly uid: string; readonly generation: number; readonly timestamp?: number }
+  | { readonly type: 'SYNC_SUCCEEDED'; readonly uid: string; readonly generation: number; readonly timestamp: number }
   | { readonly type: 'SYNC_FAILED'; readonly uid: string; readonly generation: number; readonly error: string; readonly isOffline?: boolean }
-  | { readonly type: 'RETRY_SCHEDULED'; readonly uid: string; readonly attempt: number; readonly delayMs: number }
+  | { readonly type: 'RETRY_SCHEDULED'; readonly uid: string; readonly attempt: number; readonly nextRetryAt: number }
   | { readonly type: 'RETRY_CANCELLED' }
   | { readonly type: 'NETWORK_ONLINE' }
   | { readonly type: 'NETWORK_OFFLINE' }
@@ -24,7 +23,7 @@ export const initialSyncPhase: SyncPhase = { status: 'idle' };
 /**
  * Pure state machine transition function for Cloud Synchronization.
  * Enforces generation and UID guards, preventing stale in-flight sync completions
- * from mutating newer account state.
+ * from mutating newer account state. Zero environmental reads or side effects.
  */
 export function syncTransition(state: SyncPhase, event: SyncEvent): SyncPhase {
   switch (event.type) {
@@ -53,7 +52,7 @@ export function syncTransition(state: SyncPhase, event: SyncEvent): SyncPhase {
         return {
           status: 'synced',
           uid: event.uid,
-          lastSyncedAt: event.timestamp || Date.now()
+          lastSyncedAt: event.timestamp
         };
       }
       // If generation or UID does not match, drop stale completion
@@ -84,7 +83,7 @@ export function syncTransition(state: SyncPhase, event: SyncEvent): SyncPhase {
         status: 'retrying',
         uid: event.uid,
         attempt: event.attempt,
-        nextRetryAt: Date.now() + event.delayMs
+        nextRetryAt: event.nextRetryAt
       };
     }
 
@@ -115,4 +114,36 @@ export function syncTransition(state: SyncPhase, event: SyncEvent): SyncPhase {
     default:
       return state;
   }
+}
+
+/**
+ * Pure selector to derive the user-facing synchronization status token.
+ */
+export function selectSyncStatus(phase: SyncPhase): 'idle' | 'syncing' | 'synced' | 'failed' | 'offline' {
+  switch (phase.status) {
+    case 'idle':
+      return 'idle';
+    case 'initial_sync':
+    case 'syncing':
+    case 'retrying':
+      return 'syncing';
+    case 'synced':
+      return 'synced';
+    case 'offline':
+      return 'offline';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'idle';
+  }
+}
+
+/**
+ * Pure selector to derive the active user-facing synchronization error message.
+ */
+export function selectSyncError(phase: SyncPhase): string | null {
+  if (phase.status === 'failed') {
+    return phase.error;
+  }
+  return null;
 }

@@ -619,6 +619,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
   const initializedWorkoutIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
+  const finishInFlightRef = useRef<boolean>(false);
 
   // Synchronize activeWorkout when targetWorkoutId or workouts list changes
   useEffect(() => {
@@ -757,13 +758,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
     let shouldExpandNextId: string | null = null;
 
+    const isMarkingDone = field === 'done' && value === true;
     updateActiveSessionSetsRef.current(prev => {
       const currentSets = prev[exId] || [];
       if (setIndex < 0 || setIndex >= currentSets.length) return prev;
       const updatedExSets = currentSets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s);
       const nextSets = { ...prev, [exId]: updatedExSets };
 
-      if (field === 'done' && value === true && activeWorkoutRef.current) {
+      if (isMarkingDone && activeWorkoutRef.current) {
         const ex = activeWorkoutRef.current.exercises.find(e => e.exerciseDefinitionId === exId);
         if (ex) {
           const isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
@@ -779,7 +781,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
 
       return nextSets;
-    });
+    }, isMarkingDone);
 
     if (shouldExpandNextId) {
       setExpandedExId(shouldExpandNextId);
@@ -954,13 +956,18 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   };
 
   // STEP 3: Transactional session completion flow
-  // 1. Validate extreme parameters
-  // 2. Harden & sanitize SessionLog contract
-  // 3. Persist (await addLog and updateCycleStart)
-  // 4. Clear active in-flight session
-  // 5. Show completion summary
+  // 1. Acquire immediate finishInFlightRef concurrency lock
+  // 2. Validate extreme parameters
+  // 3. Harden & sanitize SessionLog contract
+  // 4. Persist (await addLog with confirmed local persistence before clearing draft)
+  // 5. Trigger haptic feedback ONLY after verified local durability
+  // 6. Update cycle progression if core workout
+  // 7. Clear active in-flight session and render completion summary
+  // 8. Release concurrency lock in finally across all exit branches
   const finishSession = async () => {
-    if (!activeWorkout || isSubmitting || isFinishing) return;
+    if (finishInFlightRef.current || !activeWorkout || isSubmitting || isFinishing) return;
+    finishInFlightRef.current = true;
+
     dispatchSessionLifecycle({
       type: 'REQUEST_FINISH',
       workoutId: activeWorkout.id,
@@ -992,13 +999,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       });
       if (!proceed) {
         dispatchSessionLifecycle({ type: 'VALIDATION_FAILED', reason: 'Abnormally high parameters cancelled' });
+        finishInFlightRef.current = false;
         return;
       }
     }
 
     try {
       dispatchSessionLifecycle({ type: 'VALIDATION_PASSED' });
-      haptics.success();
       const elapsedSecs = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
       setFinishedDuration(elapsedSecs);
       const calculatedDurationMinutes = Math.floor(elapsedSecs / 60);
@@ -1026,8 +1033,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       });
       setSessionPRs(detectedPRs);
 
-      // Await persistence (offline-first ensures local save occurs immediately)
-      await addLog(logId, sanitizedLog);
+      // Await persistence: explicit local durability boundary
+      const persistResult = await addLog(logId, sanitizedLog);
+      if (persistResult && (!persistResult.success || !persistResult.localPersisted)) {
+        throw new Error(persistResult.error || "Failed to persist workout locally.");
+      }
+
+      // Haptics fire only after confirmed durable local persistence
+      haptics.success();
 
       if (
         activeWorkout.isCore === true &&
@@ -1043,12 +1056,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
         }
       }
 
-      // Only after persistence completes do we clear active session and display finish summary
+      // Only after durable local persistence completes do we clear active session and display finish summary
       clearActiveSession();
       dispatchSessionLifecycle({ type: 'COMMIT_SUCCEEDED', logId });
     } catch (err: any) {
       console.error("Failed to persist session log:", err);
       dispatchSessionLifecycle({ type: 'COMMIT_FAILED', error: err?.message || String(err) });
+    } finally {
+      finishInFlightRef.current = false;
     }
   };
 

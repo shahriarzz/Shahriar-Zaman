@@ -6,6 +6,15 @@ import { saveLog, deleteLog as deleteLogFirestore, saveAppState, deleteLogsBatch
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { sanitizeSessionLog, BODY_WEIGHT_LIMITS } from '../utils/fitnessCalculations';
 
+import { FitnessDatabaseSnapshot } from './useFitnessData';
+
+export interface AddLogResult {
+  success: boolean;
+  localPersisted: boolean;
+  cloudPersisted: boolean;
+  error?: string;
+}
+
 interface UseFitnessLogsProps {
   user: User | null;
   logsRef: React.MutableRefObject<Record<string, SessionLog>>;
@@ -13,8 +22,9 @@ interface UseFitnessLogsProps {
   workoutsRef: React.MutableRefObject<Workout[]>;
   setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
   setAppState: (state: AppState | ((prev: AppState) => AppState)) => void;
+  commitFitnessSnapshot?: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
   pushAutoBackup: (w: Workout[], l: any, s: any, type: any, desc: string) => void;
-  setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
+  setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline') => void;
   setSyncError: (err: string | null) => void;
 }
 
@@ -25,43 +35,72 @@ export function useFitnessLogs({
   workoutsRef,
   setLogs,
   setAppState,
+  commitFitnessSnapshot,
   pushAutoBackup,
   setSyncStatus,
   setSyncError
 }: UseFitnessLogsProps) {
 
-  const addLog = useCallback(async (logId: string, logOriginal: SessionLog): Promise<void> => {
+  const addLog = useCallback(async (logId: string, logOriginal: SessionLog): Promise<AddLogResult> => {
     const now = Date.now();
     // Single canonical ingestion path: sanitize and validate according to data contract with canonical timestamp
     const log = sanitizeSessionLog({ ...logOriginal, id: logId, updatedAt: now });
-    try {
-      const nextLogs = { ...logsRef.current, [logId]: log };
-      // Assign ref synchronously alongside setLogs so ref and state represent the same logical write immediately
-      logsRef.current = nextLogs;
-      setLogs(nextLogs);
-      pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-session', `Logged routine: ${logId}`);
+    const nextLogs = { ...logsRef.current, [logId]: log };
 
-      if (user) {
-        await saveLog(user.uid, logId, log);
+    // 1. Explicit local durability boundary: persist locally BEFORE publishing or considering success
+    try {
+      if (commitFitnessSnapshot) {
+        commitFitnessSnapshot({ logs: nextLogs });
+      } else {
+        logsRef.current = nextLogs;
+        setLogs(nextLogs);
       }
-    } catch (error) {
-      console.error("Failed to append log", error);
-      if (user) {
+    } catch (localErr: any) {
+      console.error("Failed to commit log to local storage:", localErr);
+      const errMsg = localErr?.message || String(localErr);
+      return {
+        success: false,
+        localPersisted: false,
+        cloudPersisted: false,
+        error: errMsg
+      };
+    }
+
+    // 2. Queue local backup
+    pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-session', `Logged routine: ${logId}`);
+
+    // 3. Cloud synchronization (separate outcome from local commit)
+    let cloudPersisted = false;
+    if (user) {
+      try {
+        await saveLog(user.uid, logId, log);
+        cloudPersisted = true;
+      } catch (cloudErr: any) {
+        console.error("Cloud synchronization failed for log:", cloudErr);
         const path = `users/${user.uid}/logs/${logId}`;
-        handleFirestoreError(error, OperationType.WRITE, path);
+        handleFirestoreError(cloudErr, OperationType.WRITE, path);
         setSyncStatus('failed');
         setSyncError("Logged workout locally, but cloud sync failed.");
       }
     }
-  }, [user, logsRef, workoutsRef, appStateRef, setLogs, pushAutoBackup, setSyncStatus, setSyncError]);
+
+    return {
+      success: true,
+      localPersisted: true,
+      cloudPersisted
+    };
+  }, [user, logsRef, workoutsRef, appStateRef, setLogs, commitFitnessSnapshot, pushAutoBackup, setSyncStatus, setSyncError]);
 
   const deleteLog = useCallback(async (logId: string): Promise<void> => {
     try {
       const nextLogs = { ...logsRef.current };
       delete nextLogs[logId];
-      logsRef.current = nextLogs;
-      trackDeletedId('logs', logId);
-      setLogs(nextLogs);
+      if (commitFitnessSnapshot) {
+        commitFitnessSnapshot({ logs: nextLogs });
+      } else {
+        logsRef.current = nextLogs;
+        setLogs(nextLogs);
+      }
       pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-edit', `Deleted log: ${logId}`);
 
       if (user) {

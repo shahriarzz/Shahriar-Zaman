@@ -143,7 +143,7 @@ describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
       state = sessionLifecycleTransition(state, { type: 'START', workoutId: 'push-a', startTime: 1000 });
       expect(state.phase).toBe('running');
 
-      state = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH' });
+      state = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH', workoutId: 'push-a', startTime: 1000 });
       expect(state.phase).toBe('validating');
 
       state = sessionLifecycleTransition(state, { type: 'VALIDATION_PASSED' });
@@ -156,7 +156,7 @@ describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
       }
 
       // Invariant: cannot finish twice
-      const afterDuplicateFinish = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH' });
+      const afterDuplicateFinish = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH', workoutId: 'push-a', startTime: 1000 });
       expect(afterDuplicateFinish.phase).toBe('completed');
     });
 
@@ -166,7 +166,7 @@ describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
         workoutId: 'push-a',
         startTime: 1000
       });
-      state = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH' });
+      state = sessionLifecycleTransition(state, { type: 'REQUEST_FINISH', workoutId: 'push-a', startTime: 1000 });
       state = sessionLifecycleTransition(state, { type: 'VALIDATION_PASSED' });
       state = sessionLifecycleTransition(state, { type: 'COMMIT_FAILED', error: 'Disk write failed' });
 
@@ -177,27 +177,20 @@ describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
         expect(state.startTime).toBe(1000);
       }
 
-      // Editing set clears error back to running for recovery
-      state = sessionLifecycleTransition(state, { type: 'UPDATE_SET' });
+      // Restoring draft or restarting preserves recovery
+      state = sessionLifecycleTransition(state, { type: 'RESTORE_DRAFT', workoutId: 'push-a', startTime: 1000 });
       expect(state.phase).toBe('running');
     });
 
-    it('handles explicit abandonment workflow', () => {
+    it('handles explicit reset workflow', () => {
       let state = sessionLifecycleTransition(initialSessionLifecycleState, {
         type: 'START',
         workoutId: 'push-a',
         startTime: 1000
       });
-      state = sessionLifecycleTransition(state, { type: 'REQUEST_ABANDON' });
-      expect(state.phase).toBe('abandoning');
-
-      // Cancel returns to running
-      state = sessionLifecycleTransition(state, { type: 'CANCEL_ABANDON' });
       expect(state.phase).toBe('running');
 
-      // Confirm clears to idle
-      state = sessionLifecycleTransition(state, { type: 'REQUEST_ABANDON' });
-      state = sessionLifecycleTransition(state, { type: 'CONFIRM_ABANDON' });
+      state = sessionLifecycleTransition(state, { type: 'RESET' });
       expect(state.phase).toBe('idle');
     });
   });
@@ -306,11 +299,29 @@ describe('State Machine Architecture Test Suite (Canonical Machines)', () => {
       state = syncTransition(state, {
         type: 'SYNC_SUCCEEDED',
         uid: 'user_A',
-        generation: 0
+        generation: 0,
+        timestamp: 5000
       });
       expect(state.status).toBe('syncing');
 
+      // Valid callback transitions to synced
+      state = syncTransition(state, {
+        type: 'SYNC_SUCCEEDED',
+        uid: 'user_A',
+        generation: 1,
+        timestamp: 6000
+      });
+      expect(state.status).toBe('synced');
+      if (state.status === 'synced') {
+        expect(state.lastSyncedAt).toBe(6000);
+      }
+
       // Offline failure cleanly sets offline status, not generic failed
+      state = syncTransition(state, {
+        type: 'SYNC_STARTED',
+        uid: 'user_A',
+        generation: 1
+      });
       state = syncTransition(state, {
         type: 'SYNC_FAILED',
         uid: 'user_A',

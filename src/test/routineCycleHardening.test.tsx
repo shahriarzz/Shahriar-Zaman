@@ -907,7 +907,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       const today = dk();
       // As implemented in useFitnessLogs.ts: updateCycleStart updates local appState and catches cloud errors,
       // resolving cleanly so callers proceed with session completion offline-first.
-      const mockAddLog = vi.fn().mockResolvedValue(undefined);
+      const mockAddLog = vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudSynced: true });
       const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
         // Simulates local state update succeeding while cloud sync is queued/failed
         return Promise.resolve();

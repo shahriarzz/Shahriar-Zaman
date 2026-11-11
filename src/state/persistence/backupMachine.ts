@@ -2,11 +2,11 @@ export type BackupPhase =
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly checkpointCount: number }
   | { readonly status: 'migrating' }
-  | { readonly status: 'creating'; readonly desc: string }
-  | { readonly status: 'restoring'; readonly timestamp: string }
-  | { readonly status: 'importing' }
-  | { readonly status: 'clearing' }
-  | { readonly status: 'error'; readonly error: string; readonly previousStatus?: 'ready' | 'loading' };
+  | { readonly status: 'creating'; readonly desc: string; readonly previousCheckpointCount: number }
+  | { readonly status: 'restoring'; readonly timestamp: string; readonly previousCheckpointCount: number }
+  | { readonly status: 'importing'; readonly previousCheckpointCount: number }
+  | { readonly status: 'clearing'; readonly previousCheckpointCount: number }
+  | { readonly status: 'error'; readonly error: string; readonly previousStatus?: 'ready' | 'loading'; readonly previousCheckpointCount: number };
 
 export type BackupEvent =
   | { readonly type: 'INIT_STARTED' }
@@ -17,7 +17,7 @@ export type BackupEvent =
   | { readonly type: 'BACKUP_SUCCEEDED'; readonly newCount?: number }
   | { readonly type: 'BACKUP_FAILED'; readonly error: string }
   | { readonly type: 'RESTORE_STARTED'; readonly timestamp: string }
-  | { readonly type: 'RESTORE_SUCCEEDED' }
+  | { readonly type: 'RESTORE_SUCCEEDED'; readonly count?: number }
   | { readonly type: 'RESTORE_FAILED'; readonly error: string }
   | { readonly type: 'IMPORT_STARTED' }
   | { readonly type: 'IMPORT_SUCCEEDED'; readonly count: number }
@@ -54,78 +54,105 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
 
     case 'BACKUP_STARTED': {
       if (state.status !== 'ready') return state;
-      return { status: 'creating', desc: event.desc };
+      return { status: 'creating', desc: event.desc, previousCheckpointCount: state.checkpointCount };
     }
 
     case 'BACKUP_SUCCEEDED': {
       if (state.status !== 'creating') return state;
       return {
         status: 'ready',
-        checkpointCount: event.newCount !== undefined ? event.newCount : 1
+        checkpointCount: event.newCount !== undefined ? event.newCount : state.previousCheckpointCount + 1
       };
     }
 
     case 'BACKUP_FAILED': {
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready'
+        previousStatus: 'ready',
+        previousCheckpointCount: prevCount
       };
     }
 
     case 'RESTORE_STARTED': {
       if (state.status !== 'ready') return state;
-      return { status: 'restoring', timestamp: event.timestamp };
+      return { status: 'restoring', timestamp: event.timestamp, previousCheckpointCount: state.checkpointCount };
     }
 
     case 'RESTORE_SUCCEEDED': {
-      return { status: 'ready', checkpointCount: state.status === 'restoring' ? 1 : 0 };
+      if (state.status !== 'restoring') return state;
+      return {
+        status: 'ready',
+        checkpointCount: event.count !== undefined ? event.count : state.previousCheckpointCount
+      };
     }
 
     case 'RESTORE_FAILED': {
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready'
+        previousStatus: 'ready',
+        previousCheckpointCount: prevCount
       };
     }
 
     case 'IMPORT_STARTED': {
       if (state.status !== 'ready' && state.status !== 'loading') return state;
-      return { status: 'importing' };
+      const count = state.status === 'ready' ? state.checkpointCount : 0;
+      return { status: 'importing', previousCheckpointCount: count };
     }
 
     case 'IMPORT_SUCCEEDED': {
+      if (state.status !== 'importing') return state;
       return { status: 'ready', checkpointCount: event.count };
     }
 
     case 'IMPORT_FAILED': {
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready'
+        previousStatus: 'ready',
+        previousCheckpointCount: prevCount
       };
     }
 
     case 'CLEAR_STARTED': {
-      return { status: 'clearing' };
+      const count = state.status === 'ready' ? state.checkpointCount : 0;
+      return { status: 'clearing', previousCheckpointCount: count };
     }
 
     case 'CLEAR_SUCCEEDED': {
+      if (state.status !== 'clearing') return state;
       return { status: 'ready', checkpointCount: 0 };
     }
 
     case 'CLEAR_FAILED': {
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready'
+        previousStatus: 'ready',
+        previousCheckpointCount: prevCount
       };
     }
 
     case 'DISMISS_ERROR': {
       if (state.status === 'error') {
-        return { status: state.previousStatus || 'ready', checkpointCount: 0 };
+        return {
+          status: state.previousStatus || 'ready',
+          checkpointCount: state.previousCheckpointCount
+        };
       }
       return state;
     }

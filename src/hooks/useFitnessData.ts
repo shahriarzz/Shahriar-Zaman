@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useReducer } from 'react';
 import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
-import { clearAllBackupsFromDb } from '../utils/fitnessBackupDb';
 import { DatabaseState, databaseTransition } from '../state/persistence/databaseMachine';
 
 export interface FitnessDatabaseSnapshot {
@@ -152,6 +151,7 @@ export function useFitnessData() {
   }, []);
 
   // Isolate and reset local state to fresh defaults on logout or user switch
+  // IndexedDB backup clearing is separated to its authoritative manager/coordinator
   const resetToDefaultData = useCallback((): FitnessDatabaseSnapshot => {
     localStorage.removeItem('gl_database_snapshot');
     localStorage.removeItem('gl_snapshot_staging');
@@ -160,11 +160,6 @@ export function useFitnessData() {
     localStorage.removeItem('gl_logs');
     localStorage.removeItem('gl_state');
     localStorage.removeItem('gl_deleted_ids');
-    localStorage.removeItem('gl_auto_backups');
-    localStorage.removeItem('gl_auto_backups_meta');
-    localStorage.removeItem('gl_active_session');
-
-    clearAllBackupsFromDb().catch(() => {});
 
     const fresh = loadInitialFitnessData();
     const snapshot: FitnessDatabaseSnapshot = {
@@ -179,21 +174,68 @@ export function useFitnessData() {
 
   const [databaseLifecycleState, dispatchDb] = useReducer(databaseTransition, { phase: 'ready' });
 
-  // Unified single-point persistence to localStorage
+  // Explicit confirmation-confirmed local commit boundary for domain snapshots
+  const lastPersistedSerializedRef = useRef<string>('');
+  const lastPersistedRevisionRef = useRef<number>(0);
+
+  const commitFitnessSnapshot = useCallback((partialSnapshot: Partial<FitnessDatabaseSnapshot>): { success: boolean; snapshot: FitnessDatabaseSnapshot } => {
+    const nextSnapshot: FitnessDatabaseSnapshot = {
+      exerciseDefinitions: partialSnapshot.exerciseDefinitions ?? exerciseDefsRef.current,
+      workouts: partialSnapshot.workouts ?? workoutsRef.current,
+      logs: partialSnapshot.logs ?? logsRef.current,
+      appState: partialSnapshot.appState ?? appStateRef.current
+    };
+
+    dispatchDb({ type: 'WRITE_STARTED' });
+    try {
+      persistFitnessDatabase(nextSnapshot);
+      lastPersistedSerializedRef.current = JSON.stringify(nextSnapshot);
+      lastPersistedRevisionRef.current += 1;
+      dispatchDb({ type: 'WRITE_COMMITTED' });
+    } catch (err: any) {
+      dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });
+      throw err;
+    }
+
+    // Synchronously update refs to represent committed data immediately
+    exerciseDefsRef.current = nextSnapshot.exerciseDefinitions;
+    workoutsRef.current = nextSnapshot.workouts;
+    logsRef.current = nextSnapshot.logs;
+    appStateRef.current = nextSnapshot.appState;
+
+    // Publish committed state to React consumers
+    if (partialSnapshot.exerciseDefinitions) setExerciseDefinitionsState(nextSnapshot.exerciseDefinitions);
+    if (partialSnapshot.workouts) setWorkoutsState(nextSnapshot.workouts);
+    if (partialSnapshot.logs) setLogsState(nextSnapshot.logs);
+    if (partialSnapshot.appState) setAppStateState(nextSnapshot.appState);
+
+    return { success: true, snapshot: nextSnapshot };
+  }, []);
+
+  // Background persistence effect with deduplication to prevent racing with explicit commits
   const isFirstMountRef = useRef(true);
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
       return;
     }
+    const currentSnapshot: FitnessDatabaseSnapshot = {
+      exerciseDefinitions,
+      workouts,
+      logs,
+      appState
+    };
+    const currentSerialized = JSON.stringify(currentSnapshot);
+    // Skip redundant persistence if this exact snapshot payload was already committed explicitly
+    if (currentSerialized === lastPersistedSerializedRef.current) {
+      return;
+    }
+
     dispatchDb({ type: 'WRITE_STARTED' });
     try {
-      persistFitnessDatabase({
-        exerciseDefinitions,
-        workouts,
-        logs,
-        appState
-      });
+      persistFitnessDatabase(currentSnapshot);
+      lastPersistedSerializedRef.current = currentSerialized;
+      lastPersistedRevisionRef.current += 1;
       dispatchDb({ type: 'WRITE_COMMITTED' });
     } catch (err: any) {
       dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });
@@ -219,6 +261,7 @@ export function useFitnessData() {
 
     databaseLifecycleState,
     applyFitnessDatabaseSnapshot,
-    resetToDefaultData
+    resetToDefaultData,
+    commitFitnessSnapshot
   };
 }

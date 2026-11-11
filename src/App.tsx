@@ -102,7 +102,6 @@ function AppContent() {
   clearActiveSessionRef.current = clearActiveSession;
 
   const isLeavingRef = useRef(false);
-  const activeLeaveRequestIdRef = useRef<string | null>(null);
 
   // Stable session exit/abandon flow using latest refs and unique request IDs
   const leaveSession = useCallback(async (destination: ActiveTab): Promise<boolean> => {
@@ -113,7 +112,6 @@ function AppContent() {
       }
       isLeavingRef.current = true;
       const requestId = `leave_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      activeLeaveRequestIdRef.current = requestId;
       dispatchNav({ type: 'REQUEST_LEAVE_SESSION', requestId, destination });
 
       try {
@@ -131,7 +129,6 @@ function AppContent() {
         return false;
       } finally {
         isLeavingRef.current = false;
-        activeLeaveRequestIdRef.current = null;
       }
     } else {
       dispatchNav({ type: 'NAVIGATE', to: destination });

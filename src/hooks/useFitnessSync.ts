@@ -3,7 +3,7 @@ import { auth, signInWithGoogle, onAuthStateChanged, getRedirectResult, User } f
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import { authTransition, initialAuthState, AuthState } from '../state/sync/authMachine';
-import { syncTransition, initialSyncPhase, SyncPhase } from '../state/sync/syncMachine';
+import { syncTransition, initialSyncPhase, SyncPhase, selectSyncStatus, selectSyncError } from '../state/sync/syncMachine';
 import { 
   sanitizeExerciseDefinition, 
   sanitizeWorkout, 
@@ -65,15 +65,19 @@ export function useFitnessSync({
   const [authState, dispatchAuth] = useReducer(authTransition, initialAuthState);
   const [syncPhase, dispatchSync] = useReducer(syncTransition, initialSyncPhase);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [syncStatus, setInternalSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed' | 'offline'>('idle');
+
+  // Canonical derived state from state machines
+  const loading = authState.status === 'initializing';
+  const syncStatus = selectSyncStatus(syncPhase);
+  const syncError = selectSyncError(syncPhase);
+
   const externalSetSyncStatusRef = useRef(externalSetSyncStatus);
   externalSetSyncStatusRef.current = externalSetSyncStatus;
-  const setSyncStatus = useCallback((status: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline') => {
-    setInternalSyncStatus(status);
-    externalSetSyncStatusRef.current?.(status as any);
-  }, []);
-  const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Sync external status listener if provided
+  useEffect(() => {
+    externalSetSyncStatusRef.current?.(syncStatus);
+  }, [syncStatus]);
 
   const isSyncingRef = useRef(false);
   const queuedSyncRef = useRef<{ uid: string; generation: number } | null>(null);
@@ -87,7 +91,7 @@ export function useFitnessSync({
       console.warn("Auth redirect notice:", err?.message || err);
     });
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       const prevUid = previousUidRef.current;
       const currentUid = u ? u.uid : null;
       currentUidRef.current = currentUid;
@@ -112,7 +116,7 @@ export function useFitnessSync({
         clearDeletedIdsTracker(prevUid);
         clearDeletedIdsTracker();
         if (resetToDefaultData) {
-          resetToDefaultData();
+          await resetToDefaultData();
         }
       } else if (!prevUid && currentUid) {
         // First login: check if local state already has local/anonymous workouts/logs that shouldn't leak
@@ -120,16 +124,10 @@ export function useFitnessSync({
         clearDeletedIdsTracker();
       }
       previousUidRef.current = currentUid;
-
       setUser(u);
-      setLoading(false);
-      if (!u) {
-        setSyncStatus('idle');
-        setSyncError(null);
-      }
     });
     return unsubscribeAuth;
-  }, [resetToDefaultData, setSyncStatus]);
+  }, [resetToDefaultData]);
 
   const login = useCallback(async () => {
     dispatchAuth({ type: 'LOGIN_REQUESTED' });
@@ -152,20 +150,15 @@ export function useFitnessSync({
       queuedSyncRef.current = null;
       currentUidRef.current = null;
       dispatchSync({ type: 'RESET' });
-      setSyncStatus('idle');
-      setSyncError(null);
       const currentUid = auth.currentUser?.uid || previousUidRef.current;
       await auth.signOut();
       dispatchAuth({ type: 'LOGOUT_COMPLETED' });
       clearDeletedIdsTracker(currentUid);
       clearDeletedIdsTracker();
-      if (resetToDefaultData) {
-        resetToDefaultData();
-      }
     } catch (e) {
       console.error("Sign out error:", e);
     }
-  }, [resetToDefaultData, setSyncStatus]);
+  }, []);
 
   // Sync logic with guaranteed queued follow-up execution
   const syncDataBackground = useCallback(async (uid: string) => {
@@ -182,8 +175,6 @@ export function useFitnessSync({
     }
     isSyncingRef.current = true;
     dispatchSync({ type: 'SYNC_STARTED', uid, generation: currentGen, isInitial: false });
-    setSyncStatus('syncing');
-    setSyncError(null);
 
     const isStale = () => authGenerationRef.current !== currentGen || currentUidRef.current !== uid;
 
@@ -296,8 +287,7 @@ export function useFitnessSync({
       setLogs(mergedLogs);
 
       if (!isStale()) {
-        dispatchSync({ type: 'SYNC_SUCCEEDED', uid, generation: currentGen });
-        setSyncStatus('synced');
+        dispatchSync({ type: 'SYNC_SUCCEEDED', uid, generation: currentGen, timestamp: Date.now() });
       }
     } catch (err: any) {
       if (isStale()) {
@@ -312,11 +302,11 @@ export function useFitnessSync({
         type: 'SYNC_FAILED',
         uid,
         generation: currentGen,
-        error: err?.message || String(err),
+        error: isOffline
+          ? "Operating in offline mode (local-first)."
+          : (err?.message || "Cloud synchronization failed. Operating in offline mode."),
         isOffline
       });
-      setSyncStatus(isOffline ? 'offline' : 'failed');
-      setSyncError(isOffline ? "Operating in offline mode (local-first)." : "Cloud synchronization failed. Operating in offline mode.");
       throw err;
     } finally {
       if (authGenerationRef.current === currentGen) {
@@ -335,7 +325,7 @@ export function useFitnessSync({
         }
       }
     }
-  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState, setSyncStatus]);
+  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
 
   // Realtime Listeners
   useEffect(() => {
@@ -346,7 +336,7 @@ export function useFitnessSync({
 
     const isListenerValid = () => isMounted && currentUidRef.current === user.uid;
 
-    const executeWithRetry = async (retriesLeft = 3, delayMs = 2000) => {
+    const executeWithRetry = async (retriesLeft = 3, delayMs = 2000, attempt = 1) => {
       if (!isListenerValid()) return;
       try {
         await syncDataBackground(user.uid);
@@ -359,17 +349,33 @@ export function useFitnessSync({
 
         if (isOffline) {
           if (isListenerValid()) {
-            setSyncStatus('failed');
-            setSyncError("Working offline. Synchronization will resume when connection is restored.");
+            dispatchSync({
+              type: 'SYNC_FAILED',
+              uid: user.uid,
+              generation: authGenerationRef.current,
+              error: "Working offline. Synchronization will resume when connection is restored.",
+              isOffline: true
+            });
           }
           return;
         }
 
         if (retriesLeft > 1 && isMounted) {
-          retryTimeoutId = setTimeout(() => executeWithRetry(retriesLeft - 1, delayMs * 2), delayMs);
+          const nextRetryAt = Date.now() + delayMs;
+          dispatchSync({
+            type: 'RETRY_SCHEDULED',
+            uid: user.uid,
+            attempt,
+            nextRetryAt
+          });
+          retryTimeoutId = setTimeout(() => executeWithRetry(retriesLeft - 1, delayMs * 2, attempt + 1), delayMs);
         } else if (isListenerValid()) {
-          setSyncStatus('failed');
-          setSyncError("Cloud synchronization failed.");
+          dispatchSync({
+            type: 'SYNC_FAILED',
+            uid: user.uid,
+            generation: authGenerationRef.current,
+            error: "Cloud synchronization failed."
+          });
         }
       }
     };
@@ -547,9 +553,7 @@ export function useFitnessSync({
     user,
     loading,
     syncStatus,
-    setSyncStatus,
     syncError,
-    setSyncError,
     login,
     logout,
     retrySync,

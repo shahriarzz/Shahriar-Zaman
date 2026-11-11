@@ -34,7 +34,6 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
   
   // Map of requestId -> resolve function
   const resolversRef = useRef<Map<string, (val: boolean) => void>>(new Map());
-  const resolvedIdsRef = useRef<Set<string>>(new Set());
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   // Unmount safety: resolve all pending promises on unmount with false
@@ -42,7 +41,6 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       resolversRef.current.forEach(resolve => resolve(false));
       resolversRef.current.clear();
-      resolvedIdsRef.current.clear();
       dispatch({ type: 'RESET' });
     };
   }, []);
@@ -52,14 +50,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const handleClose = useCallback((value: boolean) => {
     if (!activeRequest) return;
-    if (resolvedIdsRef.current.has(activeRequest.id)) return;
-    resolvedIdsRef.current.add(activeRequest.id);
-
     const resolver = resolversRef.current.get(activeRequest.id);
-    if (resolver) {
-      resolver(value);
-      resolversRef.current.delete(activeRequest.id);
-    }
+    if (!resolver) return;
+    resolversRef.current.delete(activeRequest.id);
+    resolver(value);
     dispatch({ type: 'RESOLVE', requestId: activeRequest.id });
 
     // Restore focus to the element that triggered the confirmation

@@ -14,9 +14,13 @@ export interface ActiveSessionContextType {
   activeSession: ActiveSession | null;
   activeSessionMeta: ActiveSessionMeta | null;
   startActiveSession: (workoutId: string, sets: Record<string, SetLog[]>, startTime?: number) => void;
-  updateActiveSessionSets: (updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>)) => void;
+  updateActiveSessionSets: (
+    updater: Record<string, SetLog[]> | ((prev: Record<string, SetLog[]>) => Record<string, SetLog[]>),
+    flushImmediately?: boolean
+  ) => void;
   clearActiveSession: () => void;
   flushActiveSession: () => void;
+  persistenceError?: string | null;
 }
 
 export const ActiveSessionMetaContext = createContext<ActiveSessionMetaContextType | undefined>(undefined);
@@ -50,14 +54,16 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     startActiveSession: sessionManager.startActiveSession,
     updateActiveSessionSets: sessionManager.updateActiveSessionSets,
     clearActiveSession: sessionManager.clearActiveSession,
-    flushActiveSession: sessionManager.flushActiveSession
+    flushActiveSession: sessionManager.flushActiveSession,
+    persistenceError: sessionManager.persistenceError
   }), [
     sessionManager.activeSession,
     sessionManager.activeSessionMeta,
     sessionManager.startActiveSession,
     sessionManager.updateActiveSessionSets,
     sessionManager.clearActiveSession,
-    sessionManager.flushActiveSession
+    sessionManager.flushActiveSession,
+    sessionManager.persistenceError
   ]);
 
   return (

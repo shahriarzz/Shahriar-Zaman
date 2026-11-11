@@ -112,7 +112,8 @@ describe('State Machine Architecture Contract Invariants', () => {
               node.text === 'setTimeout' ||
               node.text === 'setInterval' ||
               node.text === 'localStorage' ||
-              node.text === 'indexedDB'
+              node.text === 'indexedDB' ||
+              node.text === 'sessionStorage'
             ) {
               // Ensure it's not a type or property name in an interface
               const parent = node.parent;
@@ -125,6 +126,23 @@ describe('State Machine Architecture Contract Invariants', () => {
               }
             }
           }
+
+          // Check for Date.now(), Math.random(), performance.now()
+          if (ts.isPropertyAccessExpression(node)) {
+            const expr = node.expression;
+            const name = node.name.text;
+            if (ts.isIdentifier(expr)) {
+              if (
+                (expr.text === 'Date' && name === 'now') ||
+                (expr.text === 'Math' && name === 'random') ||
+                (expr.text === 'performance' && name === 'now')
+              ) {
+                hasSideEffects = true;
+                sideEffectName = `${expr.text}.${name}`;
+              }
+            }
+          }
+
           ts.forEachChild(node, checkNode);
         }
 
@@ -132,7 +150,7 @@ describe('State Machine Architecture Contract Invariants', () => {
 
         expect(
           hasSideEffects,
-          `Side-effect identifier "${sideEffectName}" found in pure transition module ${relPath}`
+          `Side-effect or non-deterministic call "${sideEffectName}" found in pure transition module ${relPath}`
         ).toBe(false);
       });
     });

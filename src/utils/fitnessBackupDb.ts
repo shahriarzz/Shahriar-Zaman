@@ -30,22 +30,45 @@ export async function getBackupDb(): Promise<IDBDatabase | null> {
   dbPromise = new Promise((resolve) => {
     try {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onblocked = () => {
+        console.warn("IndexedDB open blocked by existing connection; resetting for retry");
+        dbPromise = null;
+        resolve(null);
+      };
+
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'timestamp' });
         }
       };
+
       request.onsuccess = (event) => {
-        dbInstance = (event.target as IDBOpenDBRequest).result;
+        const db = (event.target as IDBOpenDBRequest).result;
+        dbInstance = db;
+        db.onversionchange = () => {
+          db.close();
+          dbInstance = null;
+          dbPromise = null;
+        };
+        db.onclose = () => {
+          dbInstance = null;
+          dbPromise = null;
+        };
         resolve(dbInstance);
       };
+
       request.onerror = (e) => {
-        console.warn("Failed to open gainlog_vault IndexedDB; falling back:", e);
+        console.warn("Failed to open gainlog_vault IndexedDB; resetting for retry:", e);
+        dbInstance = null;
+        dbPromise = null;
         resolve(null);
       };
     } catch (err) {
-      console.warn("IndexedDB initialization threw error; falling back:", err);
+      console.warn("IndexedDB initialization threw error; resetting for retry:", err);
+      dbInstance = null;
+      dbPromise = null;
       resolve(null);
     }
   });
@@ -92,12 +115,10 @@ export async function saveBackupToDb(entry: AutoBackupEntry): Promise<void> {
 export async function getAllBackupsFromDb(): Promise<AutoBackupEntry[]> {
   const db = await backupDbSelf.getBackupDb();
   if (!db) {
-    return Array.from(memoryFallbackMap.values()).sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    return [];
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
@@ -110,14 +131,16 @@ export async function getAllBackupsFromDb(): Promise<AutoBackupEntry[]> {
         resolve(list.slice(0, 8));
       };
       req.onerror = () => {
-        resolve(Array.from(memoryFallbackMap.values()).sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        ).slice(0, 8));
+        reject(req.error || new Error('Failed to read backups from IndexedDB'));
       };
-    } catch {
-      resolve(Array.from(memoryFallbackMap.values()).sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      ).slice(0, 8));
+      tx.onerror = () => {
+        reject(tx.error || new Error('Transaction failed while reading backups from IndexedDB'));
+      };
+      tx.onabort = () => {
+        reject(new Error('Transaction aborted while reading backups from IndexedDB'));
+      };
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -148,14 +171,16 @@ export async function deleteBackupFromDb(timestamp: string): Promise<void> {
 
 export async function pruneBackupsInDb(keepTimestamps: string[]): Promise<void> {
   const keepSet = new Set(keepTimestamps);
-  for (const ts of Array.from(memoryFallbackMap.keys())) {
-    if (!keepSet.has(ts)) {
-      memoryFallbackMap.delete(ts);
-    }
-  }
 
   const db = await backupDbSelf.getBackupDb();
-  if (!db) return;
+  if (!db) {
+    for (const ts of Array.from(memoryFallbackMap.keys())) {
+      if (!keepSet.has(ts)) {
+        memoryFallbackMap.delete(ts);
+      }
+    }
+    return;
+  }
 
   return new Promise<void>((resolve, reject) => {
     try {
@@ -171,7 +196,14 @@ export async function pruneBackupsInDb(keepTimestamps: string[]): Promise<void> 
         });
       };
       req.onerror = () => reject(req.error || new Error('Failed to read keys during prune'));
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        for (const ts of Array.from(memoryFallbackMap.keys())) {
+          if (!keepSet.has(ts)) {
+            memoryFallbackMap.delete(ts);
+          }
+        }
+        resolve();
+      };
       tx.onerror = () => reject(tx.error || new Error('Prune transaction failed'));
       tx.onabort = () => reject(new Error('Prune transaction aborted'));
     } catch (err) {
