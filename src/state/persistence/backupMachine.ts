@@ -5,7 +5,7 @@ export type BackupPhase =
   | { readonly status: 'creating'; readonly desc: string; readonly previousCheckpointCount: number }
   | { readonly status: 'restoring'; readonly timestamp: string; readonly previousCheckpointCount: number }
   | { readonly status: 'importing'; readonly previousCheckpointCount: number }
-  | { readonly status: 'clearing'; readonly previousCheckpointCount: number }
+  | { readonly status: 'clearing'; readonly previousCheckpointCount: number; readonly originStatus?: 'ready' | 'loading' }
   | { readonly status: 'error'; readonly error: string; readonly previousStatus?: 'ready' | 'loading'; readonly previousCheckpointCount: number };
 
 export type BackupEvent =
@@ -23,11 +23,25 @@ export type BackupEvent =
   | { readonly type: 'IMPORT_SUCCEEDED'; readonly count: number }
   | { readonly type: 'IMPORT_FAILED'; readonly error: string }
   | { readonly type: 'CLEAR_STARTED' }
+  | { readonly type: 'FORCE_CLEAR_STARTED' }
   | { readonly type: 'CLEAR_SUCCEEDED' }
   | { readonly type: 'CLEAR_FAILED'; readonly error: string }
   | { readonly type: 'DISMISS_ERROR' };
 
 export const initialBackupPhase: BackupPhase = { status: 'loading' };
+
+function getCount(state: BackupPhase): number {
+  if ('checkpointCount' in state) return state.checkpointCount;
+  if ('previousCheckpointCount' in state) return state.previousCheckpointCount;
+  return 0;
+}
+
+function getOriginStatus(state: BackupPhase): 'ready' | 'loading' {
+  if (state.status === 'loading' || state.status === 'migrating') return 'loading';
+  if (state.status === 'clearing') return state.originStatus || 'ready';
+  if (state.status === 'error') return state.previousStatus || 'ready';
+  return 'ready';
+}
 
 /**
  * Pure state machine transition function for backups and recovery.
@@ -37,27 +51,28 @@ export const initialBackupPhase: BackupPhase = { status: 'loading' };
 export function backupTransition(state: BackupPhase, event: BackupEvent): BackupPhase {
   switch (event.type) {
     case 'INIT_STARTED': {
+      if (state.status !== 'loading' && state.status !== 'error') return state;
       return { status: 'loading' };
     }
 
     case 'INIT_SUCCEEDED': {
+      if (state.status !== 'loading' && state.status !== 'migrating') return state;
       return { status: 'ready', checkpointCount: event.count };
     }
 
     case 'MIGRATION_STARTED': {
+      if (state.status !== 'loading' && state.status !== 'error') return state;
       return { status: 'migrating' };
     }
 
     case 'MIGRATION_SUCCEEDED': {
+      if (state.status !== 'migrating' && state.status !== 'loading') return state;
       return { status: 'ready', checkpointCount: event.count };
     }
 
     case 'BACKUP_STARTED': {
-      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
-      return { status: 'creating', desc: event.desc, previousCheckpointCount: prevCount };
+      if (state.status !== 'ready' && state.status !== 'error') return state;
+      return { status: 'creating', desc: event.desc, previousCheckpointCount: getCount(state) };
     }
 
     case 'BACKUP_SUCCEEDED': {
@@ -69,23 +84,17 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'BACKUP_FAILED': {
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready',
-        previousCheckpointCount: prevCount
+        previousStatus: getOriginStatus(state),
+        previousCheckpointCount: getCount(state)
       };
     }
 
     case 'RESTORE_STARTED': {
-      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
-      return { status: 'restoring', timestamp: event.timestamp, previousCheckpointCount: prevCount };
+      if (state.status !== 'ready' && state.status !== 'error') return state;
+      return { status: 'restoring', timestamp: event.timestamp, previousCheckpointCount: getCount(state) };
     }
 
     case 'RESTORE_SUCCEEDED': {
@@ -97,21 +106,17 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'RESTORE_FAILED': {
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready',
-        previousCheckpointCount: prevCount
+        previousStatus: getOriginStatus(state),
+        previousCheckpointCount: getCount(state)
       };
     }
 
     case 'IMPORT_STARTED': {
-      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
-      const count = 'checkpointCount' in state ? state.checkpointCount : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
-      return { status: 'importing', previousCheckpointCount: count };
+      if (state.status !== 'ready' && state.status !== 'error') return state;
+      return { status: 'importing', previousCheckpointCount: getCount(state) };
     }
 
     case 'IMPORT_SUCCEEDED': {
@@ -120,20 +125,37 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'IMPORT_FAILED': {
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready',
-        previousCheckpointCount: prevCount
+        previousStatus: getOriginStatus(state),
+        previousCheckpointCount: getCount(state)
       };
     }
 
     case 'CLEAR_STARTED': {
-      const count = state.status === 'ready' ? state.checkpointCount : 0;
-      return { status: 'clearing', previousCheckpointCount: count };
+      if (state.status !== 'ready' && state.status !== 'error') return state;
+      return {
+        status: 'clearing',
+        previousCheckpointCount: getCount(state),
+        originStatus: getOriginStatus(state)
+      };
+    }
+
+    case 'FORCE_CLEAR_STARTED': {
+      if (
+        state.status !== 'loading' &&
+        state.status !== 'migrating' &&
+        state.status !== 'ready' &&
+        state.status !== 'error'
+      ) {
+        return state;
+      }
+      return {
+        status: 'clearing',
+        previousCheckpointCount: getCount(state),
+        originStatus: getOriginStatus(state)
+      };
     }
 
     case 'CLEAR_SUCCEEDED': {
@@ -142,21 +164,21 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'CLEAR_FAILED': {
-      const prevCount = 'checkpointCount' in state
-        ? state.checkpointCount
-        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return {
         status: 'error',
         error: event.error,
-        previousStatus: 'ready',
-        previousCheckpointCount: prevCount
+        previousStatus: getOriginStatus(state),
+        previousCheckpointCount: getCount(state)
       };
     }
 
     case 'DISMISS_ERROR': {
       if (state.status === 'error') {
+        if (state.previousStatus === 'loading') {
+          return { status: 'loading' };
+        }
         return {
-          status: state.previousStatus || 'ready',
+          status: 'ready',
           checkpointCount: state.previousCheckpointCount
         };
       }
@@ -180,11 +202,11 @@ export function isBackupOperationAdmissible(state: BackupPhase, op: BackupOperat
     case 'initialize':
       return state.status === 'loading' || state.status === 'error';
     case 'create':
-      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+      return state.status === 'ready' || state.status === 'error';
     case 'restore':
-      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+      return state.status === 'ready' || state.status === 'error';
     case 'import':
-      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+      return state.status === 'ready' || state.status === 'error';
     case 'clear':
       return state.status === 'ready' || state.status === 'error';
     default:

@@ -55,7 +55,7 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     removeExerciseFromWorkout: vi.fn(),
     updateWorkoutExerciseProgramming: vi.fn(),
     deleteWorkout: vi.fn(),
-    addLog: vi.fn().mockResolvedValue(undefined),
+    addLog: vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false }),
     deleteLog: vi.fn(),
     resetLogs: vi.fn(),
     updateCycleStart: vi.fn().mockResolvedValue(undefined),
@@ -65,12 +65,13 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     clearActiveSession: vi.fn(),
     logBodyWeight: vi.fn(),
     deleteBodyWeight: vi.fn(),
-    pushAutoBackup: vi.fn(),
+    pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
     getAutoBackups: vi.fn().mockReturnValue([]),
-    restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+    restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
     exportBackup: vi.fn().mockReturnValue('{}'),
-    importBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+    importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
+    retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
     ...overrides
   };
 }
@@ -1264,13 +1265,15 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         workoutsRef: workoutsRef as any,
         logsRef: logsRef as any,
         appStateRef: appStateRef as any,
-        applyFitnessDatabaseSnapshot: (snap) => {
-          appliedSnapshot = snap;
-        },
-        setExerciseDefinitions: vi.fn(),
-        setWorkouts: vi.fn(),
-        setLogs: vi.fn(),
-        setAppState: vi.fn()
+        commitFitnessSnapshot: (partial) => {
+          appliedSnapshot = {
+            exerciseDefinitions: partial.exerciseDefinitions ?? defsRef.current,
+            workouts: partial.workouts ?? workoutsRef.current,
+            logs: partial.logs ?? logsRef.current,
+            appState: partial.appState ?? appStateRef.current
+          };
+          return { success: true, snapshot: appliedSnapshot };
+        }
       });
       return null;
     }
@@ -1352,7 +1355,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
 
     // 8b. Quota failure during migration retains recoverable backups in localStorage
     localStorage.setItem('gl_auto_backups', JSON.stringify(legacyEntries));
-    vi.spyOn(backupDb, 'getBackupDb').mockResolvedValueOnce(null);
+    vi.spyOn(backupDb, 'openBackupDb').mockResolvedValueOnce({ success: false, reason: 'blocked', error: new Error('IDB open blocked') });
 
     const failedMigration = await backupDb.migrateLegacyLocalStorageBackups();
     expect(failedMigration).toHaveLength(0);
@@ -1369,11 +1372,15 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         workoutsRef: { current: INITIAL_WORKOUTS } as any,
         logsRef: { current: {} } as any,
         appStateRef: { current: { cycleStart: '2026-10-01' } } as any,
-        applyFitnessDatabaseSnapshot: vi.fn(),
-        setExerciseDefinitions: vi.fn(),
-        setWorkouts: vi.fn(),
-        setLogs: vi.fn(),
-        setAppState: vi.fn()
+        commitFitnessSnapshot: (partial) => ({
+          success: true,
+          snapshot: {
+            exerciseDefinitions: partial.exerciseDefinitions ?? [],
+            workouts: partial.workouts ?? [],
+            logs: partial.logs ?? {},
+            appState: partial.appState ?? { cycleStart: '2026-10-01' }
+          }
+        })
       });
       return null;
     }

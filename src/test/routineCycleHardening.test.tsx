@@ -58,7 +58,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       removeExerciseFromWorkout: vi.fn(),
       updateWorkoutExerciseProgramming: vi.fn(),
       deleteWorkout: vi.fn(),
-      addLog: vi.fn().mockResolvedValue(undefined),
+      addLog: vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false }),
       deleteLog: vi.fn(),
       resetLogs: vi.fn(),
       updateCycleStart: vi.fn().mockResolvedValue(undefined),
@@ -68,12 +68,13 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       clearActiveSession: vi.fn(),
       logBodyWeight: vi.fn(),
       deleteBodyWeight: vi.fn(),
-      pushAutoBackup: vi.fn(),
+      pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
       getAutoBackups: vi.fn().mockReturnValue([]),
-      restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+      restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
       createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
       exportBackup: vi.fn().mockReturnValue('{}'),
-      importBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+      importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
+      retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
       ...overrides
     };
   }
@@ -658,6 +659,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       const callOrder: string[] = [];
       const mockAddLog = vi.fn().mockImplementation(async () => {
         callOrder.push('addLog');
+        return { success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false };
       });
       const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
         callOrder.push('updateCycleStart');
@@ -726,6 +728,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       const callOrder: string[] = [];
       const mockAddLog = vi.fn().mockImplementation(async () => {
         callOrder.push('addLog');
+        return { success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false };
       });
       const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
         callOrder.push('updateCycleStart');
@@ -786,7 +789,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
     it('Scenario 3: Complete bonus workout: cycleStart is unchanged', async () => {
       const today = dk();
-      const mockAddLog = vi.fn().mockResolvedValue(undefined);
+      const mockAddLog = vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false });
       const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
       const mockClearActiveSession = vi.fn();
 

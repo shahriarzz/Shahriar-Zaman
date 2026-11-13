@@ -16,6 +16,29 @@ describe('State Machine Architecture Contract Invariants', () => {
   const rootDir = process.cwd();
   const stateDir = path.join(rootDir, 'src/state');
 
+  // Parse canonical tsconfig.json so path aliases (@/*) and module resolution match TypeScript
+  const tsconfigPath = path.join(rootDir, 'tsconfig.json');
+  const tsconfigRaw = fs.existsSync(tsconfigPath)
+    ? ts.readConfigFile(tsconfigPath, ts.sys.readFile)
+    : { config: {} };
+  const parsedTsConfig = ts.parseJsonConfigFileContent(tsconfigRaw.config || {}, ts.sys, rootDir);
+  const compilerOptions: ts.CompilerOptions = parsedTsConfig.options;
+
+  function resolveImportToAbsPath(specifier: string, containingFile: string): string | null {
+    const resolved = ts.resolveModuleName(specifier, containingFile, compilerOptions, ts.sys);
+    if (resolved.resolvedModule?.resolvedFileName) {
+      return path.resolve(resolved.resolvedModule.resolvedFileName);
+    }
+    if (specifier.startsWith('.')) {
+      const candidate = path.resolve(path.dirname(containingFile), specifier);
+      for (const ext of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
+        if (fs.existsSync(candidate + ext)) return path.resolve(candidate + ext);
+      }
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
   function getAllTsFiles(dir: string, fileList: string[] = []): string[] {
     const files = fs.readdirSync(dir);
     files.forEach(file => {
@@ -31,16 +54,36 @@ describe('State Machine Architecture Contract Invariants', () => {
 
   const stateFiles = getAllTsFiles(stateDir);
 
-  // 1. AST-Based Dependency Validation for src/state/
+  // 1. AST-Based Dependency Validation & Strict Purity for src/state/
   describe('1. State Machine Purity & AST-Based Downward Isolation', () => {
     it('verifies that state files exist', () => {
       expect(stateFiles.length).toBeGreaterThanOrEqual(8);
     });
 
+    const FORBIDDEN_RUNTIME_GLOBALS = new Set([
+      'fetch',
+      'setTimeout',
+      'setInterval',
+      'setImmediate',
+      'requestAnimationFrame',
+      'localStorage',
+      'indexedDB',
+      'sessionStorage',
+      'window',
+      'document',
+      'navigator',
+      'globalThis',
+      'XMLHttpRequest',
+      'WebSocket',
+      'addEventListener',
+      'dispatchEvent',
+      'CustomEvent'
+    ]);
+
     stateFiles.forEach(absPath => {
       const relPath = path.relative(rootDir, absPath);
 
-      it(`${relPath} must not import React, UI components, styles, or hooks via AST inspection`, () => {
+      it(`${relPath} must not import React, UI components, styles, hooks, or use dynamic import()`, () => {
         const fileContent = fs.readFileSync(absPath, 'utf8');
         const sourceFile = ts.createSourceFile(
           absPath,
@@ -50,50 +93,48 @@ describe('State Machine Architecture Contract Invariants', () => {
         );
 
         const importedModules: string[] = [];
+        let hasDynamicImport = false;
 
         function visit(node: ts.Node) {
-          // Check static import declarations
-          if (ts.isImportDeclaration(node)) {
-            if (ts.isStringLiteral(node.moduleSpecifier)) {
-              importedModules.push(node.moduleSpecifier.text);
-            }
+          if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+            importedModules.push(node.moduleSpecifier.text);
           }
-          // Check export from declarations
-          if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
-            if (ts.isStringLiteral(node.moduleSpecifier)) {
-              importedModules.push(node.moduleSpecifier.text);
-            }
+          if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+            importedModules.push(node.moduleSpecifier.text);
           }
-          // Check dynamic import() calls
-          if (
-            ts.isCallExpression(node) &&
-            node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-            node.arguments.length > 0 &&
-            ts.isStringLiteral(node.arguments[0])
-          ) {
-            importedModules.push(node.arguments[0].text);
+          if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+            hasDynamicImport = true;
+            if (node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
+              importedModules.push(node.arguments[0].text);
+            }
           }
           ts.forEachChild(node, visit);
         }
 
         visit(sourceFile);
 
+        expect(hasDynamicImport, `Dynamic import() found in pure state module ${relPath}`).toBe(false);
+
         importedModules.forEach(mod => {
+          const resolvedAbs = resolveImportToAbsPath(mod, absPath);
+          const resolvedRel = resolvedAbs ? path.relative(rootDir, resolvedAbs).replace(/\\/g, '/') : mod;
           const isForbidden =
             mod === 'react' ||
             mod === 'react-dom' ||
-            mod.includes('/components') ||
-            mod.includes('/styles') ||
-            mod.startsWith('lucide-react');
+            mod.startsWith('lucide-react') ||
+            resolvedRel.includes('src/components/') ||
+            resolvedRel.includes('src/hooks/') ||
+            resolvedRel.includes('src/context/') ||
+            resolvedRel.includes('src/styles/');
 
           expect(
             isForbidden,
-            `Forbidden dependency "${mod}" imported in ${relPath}`
+            `Forbidden dependency "${mod}" (resolved: ${resolvedRel}) imported in ${relPath}`
           ).toBe(false);
         });
       });
 
-      it(`${relPath} must not contain side-effects (pure synchronous state transitions)`, () => {
+      it(`${relPath} must not contain environmental reads, globals, timers, randomness, or non-deterministic time`, () => {
         const fileContent = fs.readFileSync(absPath, 'utf8');
         const sourceFile = ts.createSourceFile(
           absPath,
@@ -102,44 +143,55 @@ describe('State Machine Architecture Contract Invariants', () => {
           true
         );
 
-        let hasSideEffects = false;
-        let sideEffectName = '';
+        let violation = '';
+
+        function isTypeOnlyPosition(node: ts.Node): boolean {
+          let curr: ts.Node | undefined = node.parent;
+          while (curr) {
+            if (
+              ts.isTypeNode(curr) ||
+              ts.isInterfaceDeclaration(curr) ||
+              ts.isTypeAliasDeclaration(curr) ||
+              ts.isPropertySignature(curr)
+            ) {
+              return true;
+            }
+            curr = curr.parent;
+          }
+          return false;
+        }
 
         function checkNode(node: ts.Node) {
-          if (ts.isIdentifier(node)) {
-            if (
-              node.text === 'fetch' ||
-              node.text === 'setTimeout' ||
-              node.text === 'setInterval' ||
-              node.text === 'localStorage' ||
-              node.text === 'indexedDB' ||
-              node.text === 'sessionStorage'
-            ) {
-              // Ensure it's not a type or property name in an interface
-              const parent = node.parent;
-              if (
-                !ts.isPropertySignature(parent) &&
-                !ts.isTypeReferenceNode(parent)
-              ) {
-                hasSideEffects = true;
-                sideEffectName = node.text;
-              }
+          if (violation) return;
+
+          if (ts.isIdentifier(node) && FORBIDDEN_RUNTIME_GLOBALS.has(node.text)) {
+            const parent = node.parent;
+            const isPropertyNameAccess = ts.isPropertyAccessExpression(parent) && parent.name === node;
+            const isPropertyAssignmentName = ts.isPropertyAssignment(parent) && parent.name === node;
+            if (!isTypeOnlyPosition(node) && !isPropertyNameAccess && !isPropertyAssignmentName) {
+              violation = node.text;
+              return;
             }
           }
 
-          // Check for Date.now(), Math.random(), performance.now()
-          if (ts.isPropertyAccessExpression(node)) {
-            const expr = node.expression;
-            const name = node.name.text;
-            if (ts.isIdentifier(expr)) {
-              if (
-                (expr.text === 'Date' && name === 'now') ||
-                (expr.text === 'Math' && name === 'random') ||
-                (expr.text === 'performance' && name === 'now')
-              ) {
-                hasSideEffects = true;
-                sideEffectName = `${expr.text}.${name}`;
-              }
+          // Reject `new Date(...)`
+          if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Date') {
+            violation = 'new Date()';
+            return;
+          }
+
+          // Reject Date.now(), Math.random(), performance.now(), crypto.randomUUID(), crypto.getRandomValues()
+          if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+            const obj = node.expression.text;
+            const prop = node.name.text;
+            if (
+              (obj === 'Date' && prop === 'now') ||
+              (obj === 'Math' && prop === 'random') ||
+              (obj === 'performance' && prop === 'now') ||
+              (obj === 'crypto' && (prop === 'randomUUID' || prop === 'getRandomValues'))
+            ) {
+              violation = `${obj}.${prop}()`;
+              return;
             }
           }
 
@@ -149,91 +201,139 @@ describe('State Machine Architecture Contract Invariants', () => {
         checkNode(sourceFile);
 
         expect(
-          hasSideEffects,
-          `Side-effect or non-deterministic call "${sideEffectName}" found in pure transition module ${relPath}`
-        ).toBe(false);
+          violation,
+          `Side-effect or non-deterministic call "${violation}" found in pure transition module ${relPath}`
+        ).toBe('');
       });
     });
   });
 
-  // 2. Production Consumer Verification (Zero Dead Machines)
+  // 2. Production Consumer Verification (Resolved Module Paths + Active Usage)
   describe('2. Active Production Consumer Verification', () => {
     const srcDir = path.join(rootDir, 'src');
     const allProdFiles = getAllTsFiles(srcDir).filter(
       f => !f.includes('/test/') && !f.includes('/state/')
     );
 
-    // Helper: Parse TS file to AST and extract import declarations and imported symbols
-    function getFileImports(filePath: string): { moduleSpecifier: string; importedSymbols: string[] }[] {
+    interface ExtractedImport {
+      moduleSpecifier: string;
+      resolvedAbsPath: string | null;
+      importedSymbols: { importedName: string; localName: string }[];
+    }
+
+    function parseConsumerAst(filePath: string): {
+      imports: ExtractedImport[];
+      isSymbolInvokedOrPassedToReducer: (localSymbol: string) => boolean;
+    } {
       const content = fs.readFileSync(filePath, 'utf8');
       const sf = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-      const imports: { moduleSpecifier: string; importedSymbols: string[] }[] = [];
+      const imports: ExtractedImport[] = [];
+      const calledIdentifiers = new Set<string>();
+      const reducerPassedIdentifiers = new Set<string>();
 
       function visit(node: ts.Node) {
-        if (ts.isImportDeclaration(node)) {
-          if (ts.isStringLiteral(node.moduleSpecifier)) {
-            const mod = node.moduleSpecifier.text;
-            const symbols: string[] = [];
-            if (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
-              node.importClause.namedBindings.elements.forEach(el => {
-                symbols.push(el.name.text);
-              });
+        if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+          const mod = node.moduleSpecifier.text;
+          const symbols: { importedName: string; localName: string }[] = [];
+          if (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
+            node.importClause.namedBindings.elements.forEach(el => {
+              const importedName = el.propertyName ? el.propertyName.text : el.name.text;
+              const localName = el.name.text;
+              symbols.push({ importedName, localName });
+            });
+          }
+          imports.push({
+            moduleSpecifier: mod,
+            resolvedAbsPath: resolveImportToAbsPath(mod, filePath),
+            importedSymbols: symbols
+          });
+        }
+
+        if (ts.isCallExpression(node)) {
+          if (ts.isIdentifier(node.expression)) {
+            const callee = node.expression.text;
+            calledIdentifiers.add(callee);
+            if (callee === 'useReducer' && node.arguments.length > 0 && ts.isIdentifier(node.arguments[0])) {
+              reducerPassedIdentifiers.add(node.arguments[0].text);
             }
-            imports.push({ moduleSpecifier: mod, importedSymbols: symbols });
+          } else if (ts.isPropertyAccessExpression(node.expression)) {
+            if (node.expression.name.text === 'useReducer' && node.arguments.length > 0 && ts.isIdentifier(node.arguments[0])) {
+              reducerPassedIdentifiers.add(node.arguments[0].text);
+            }
           }
         }
+
         ts.forEachChild(node, visit);
       }
 
       visit(sf);
-      return imports;
+
+      return {
+        imports,
+        isSymbolInvokedOrPassedToReducer: (localSymbol: string) =>
+          calledIdentifiers.has(localSymbol) || reducerPassedIdentifiers.has(localSymbol)
+      };
     }
 
     const canonicalStateMachines = [
-      { name: 'navigationMachine', file: 'src/state/app/navigationMachine.ts', expectedOwner: 'App.tsx', transitionFn: 'navigationTransition' },
-      { name: 'sessionMachine', file: 'src/state/session/sessionMachine.ts', expectedOwner: 'SessionView.tsx', transitionFn: 'sessionLifecycleTransition' },
-      { name: 'coachingMachine', file: 'src/state/session/coachingMachine.ts', expectedOwner: 'SessionView.tsx', transitionFn: 'coachingTransition' },
-      { name: 'authMachine', file: 'src/state/sync/authMachine.ts', expectedOwner: 'useFitnessSync.ts', transitionFn: 'authTransition' },
-      { name: 'syncMachine', file: 'src/state/sync/syncMachine.ts', expectedOwner: 'useFitnessSync.ts', transitionFn: 'syncTransition' },
-      { name: 'databaseMachine', file: 'src/state/persistence/databaseMachine.ts', expectedOwner: 'useFitnessData.ts', transitionFn: 'databaseTransition' },
-      { name: 'backupMachine', file: 'src/state/persistence/backupMachine.ts', expectedOwner: 'useFitnessBackups.ts', transitionFn: 'backupTransition' },
-      { name: 'confirmationMachine', file: 'src/state/dialogs/confirmationMachine.ts', expectedOwner: 'ConfirmContext.tsx', transitionFn: 'confirmationTransition' }
+      { name: 'navigationMachine', file: 'src/state/app/navigationMachine.ts', expectedOwner: 'src/App.tsx', transitionFn: 'navigationTransition' },
+      { name: 'sessionMachine', file: 'src/state/session/sessionMachine.ts', expectedOwner: 'src/components/SessionView.tsx', transitionFn: 'sessionLifecycleTransition' },
+      { name: 'coachingMachine', file: 'src/state/session/coachingMachine.ts', expectedOwner: 'src/components/SessionView.tsx', transitionFn: 'coachingTransition' },
+      { name: 'authMachine', file: 'src/state/sync/authMachine.ts', expectedOwner: 'src/hooks/useFitnessSync.ts', transitionFn: 'authTransition' },
+      { name: 'syncMachine', file: 'src/state/sync/syncMachine.ts', expectedOwner: 'src/hooks/useFitnessSync.ts', transitionFn: 'syncTransition' },
+      { name: 'databaseMachine', file: 'src/state/persistence/databaseMachine.ts', expectedOwner: 'src/hooks/useFitnessData.ts', transitionFn: 'databaseTransition' },
+      { name: 'backupMachine', file: 'src/state/persistence/backupMachine.ts', expectedOwner: 'src/hooks/useFitnessBackups.ts', transitionFn: 'backupTransition' },
+      { name: 'confirmationMachine', file: 'src/state/dialogs/confirmationMachine.ts', expectedOwner: 'src/context/ConfirmContext.tsx', transitionFn: 'confirmationTransition' }
     ];
 
     canonicalStateMachines.forEach(machine => {
-      it(`machine ${machine.name} has a verified production consumer in ${machine.expectedOwner} via AST symbol inspection`, () => {
-        const ownerFile = allProdFiles.find(f => f.endsWith(machine.expectedOwner));
-        expect(ownerFile, `Expected consumer file ${machine.expectedOwner} not found in src/`).toBeDefined();
+      it(`machine ${machine.name} has an active consumer in ${machine.expectedOwner} passing ${machine.transitionFn} to useReducer or calling it`, () => {
+        const expectedOwnerAbs = path.resolve(rootDir, machine.expectedOwner);
+        const machineAbs = path.resolve(rootDir, machine.file);
 
-        const fileImports = getFileImports(ownerFile!);
-        const relevantImport = fileImports.find(imp =>
-          imp.moduleSpecifier.includes(machine.name)
-        );
+        expect(fs.existsSync(expectedOwnerAbs), `Expected consumer file ${machine.expectedOwner} not found`).toBe(true);
+        const parsed = parseConsumerAst(expectedOwnerAbs);
 
+        const relevantImport = parsed.imports.find(imp => imp.resolvedAbsPath === machineAbs);
         expect(
           relevantImport,
-          `AST inspection: ${machine.expectedOwner} does not import module ${machine.name}`
+          `AST inspection: ${machine.expectedOwner} does not resolve to ${machine.file}`
         ).toBeDefined();
 
-        // Verify the transition function symbol itself is imported
+        const symbolBinding = relevantImport!.importedSymbols.find(
+          s => s.importedName === machine.transitionFn
+        );
         expect(
-          relevantImport?.importedSymbols,
-          `AST inspection: ${machine.expectedOwner} does not import transition function ${machine.transitionFn} from ${machine.name}`
-        ).toContain(machine.transitionFn);
+          symbolBinding,
+          `AST inspection: ${machine.expectedOwner} does not import ${machine.transitionFn} from ${machine.file}`
+        ).toBeDefined();
+
+        expect(
+          parsed.isSymbolInvokedOrPassedToReducer(symbolBinding!.localName),
+          `AST inspection: ${machine.expectedOwner} imports ${machine.transitionFn} but never calls it or passes it to useReducer`
+        ).toBe(true);
       });
     });
 
-    it('verifies that no orphaned or unreferenced state machine files exist in src/state via AST import mapping', () => {
-      const allImportedModules = allProdFiles.flatMap(f => getFileImports(f).map(i => i.moduleSpecifier));
+    it('verifies via resolved module paths that no orphaned state machine files exist in src/state', () => {
+      const resolvedProdImports = new Set<string>();
+      allProdFiles.forEach(prodFile => {
+        const { imports } = parseConsumerAst(prodFile);
+        imports.forEach(imp => {
+          if (imp.resolvedAbsPath) {
+            resolvedProdImports.add(imp.resolvedAbsPath);
+          }
+        });
+      });
 
       stateFiles.forEach(sf => {
         const baseName = path.basename(sf, '.ts');
-        if (baseName === 'machineTypes') return; // Shared interface types
+        if (baseName === 'machineTypes') return;
 
-        const isImportedInProd = allImportedModules.some(mod => mod.includes(baseName));
+        const absStateFile = path.resolve(sf);
         expect(
-          isImportedInProd,
-          `AST verification: State machine module ${baseName} has no AST import references in production codebase`
+          resolvedProdImports.has(absStateFile),
+          `AST verification: State machine file ${path.relative(rootDir, absStateFile)} has no resolved production imports`
         ).toBe(true);
       });
     });

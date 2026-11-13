@@ -9,13 +9,7 @@ import { FitnessDerivedProvider } from '../context/FitnessDerivedContext';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { ActiveSessionProvider, useActiveSessionMeta } from '../context/ActiveSessionContext';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
-import {
-  ExerciseDefinition,
-  Workout,
-  SessionLog,
-  SetLog,
-  CURRENT_SCHEMA_VERSION
-} from '../types/fitness';
+import { SetLog } from '../types/fitness';
 import {
   buildFitnessIndex,
   selectLifetimeStats,
@@ -28,139 +22,18 @@ import {
   selectMuscleBalanceForRange,
   selectMuscleRecovery
 } from '../utils/fitnessDerivedSelectors';
-import {
-  createExerciseDefinitionMap,
-  resolveExercise
-} from '../utils/exerciseResolver';
-import {
-  calculateE1RM,
-  sanitizeSessionLog
-} from '../utils/fitnessCalculations';
+import { resolveExercise } from '../utils/exerciseResolver';
+import { generateSyntheticDataset } from '../benchmarks/syntheticDataset';
 
-// Helper to generate N synthetic session logs across multiple exercise definitions
-function generateSyntheticDataset(logCount: number): {
-  defs: ExerciseDefinition[];
-  defsMap: Map<string, ExerciseDefinition>;
-  workouts: Workout[];
-  workoutsMap: Map<string, Workout>;
-  coreWorkoutMap: Map<number, Workout>;
-  logs: Record<string, SessionLog>;
-} {
-  const exercises = [
-    { id: 'bench', name: 'Barbell Bench Press', target: 'Chest', equipment: 'Barbell' },
-    { id: 'squat', name: 'Barbell Back Squat', target: 'Quads', equipment: 'Barbell' },
-    { id: 'deadlift', name: 'Conventional Deadlift', target: 'Back', equipment: 'Barbell' },
-    { id: 'ohp', name: 'Overhead Press', target: 'Shoulders', equipment: 'Barbell' },
-    { id: 'row', name: 'Barbell Row', target: 'Back', equipment: 'Barbell' },
-    { id: 'curl', name: 'Dumbbell Bicep Curl', target: 'Biceps', equipment: 'Dumbbells' },
-    { id: 'skullcrusher', name: 'Skull Crusher', target: 'Triceps', equipment: 'Barbell' },
-    { id: 'lunge', name: 'Walking Lunge', target: 'Quads', equipment: 'Dumbbells' }
-  ];
-
-  const defsMap = createExerciseDefinitionMap(exercises);
-
-  const workouts: Workout[] = [
-    {
-      id: 'w_push',
-      name: 'Push Day',
-      badge: 'PUSH',
-      type: 'push',
-      isCore: true,
-      cycleDay: 1,
-      exercises: [
-        { exerciseDefinitionId: 'bench', sets: 4, reps: '8-10' },
-        { exerciseDefinitionId: 'ohp', sets: 3, reps: '8-10' },
-        { exerciseDefinitionId: 'skullcrusher', sets: 3, reps: '12-15' }
-      ]
-    },
-    {
-      id: 'w_pull',
-      name: 'Pull Day',
-      badge: 'PULL',
-      type: 'pull',
-      isCore: true,
-      cycleDay: 2,
-      exercises: [
-        { exerciseDefinitionId: 'deadlift', sets: 3, reps: '5' },
-        { exerciseDefinitionId: 'row', sets: 4, reps: '8-10' },
-        { exerciseDefinitionId: 'curl', sets: 3, reps: '12' }
-      ]
-    },
-    {
-      id: 'w_legs',
-      name: 'Leg Day',
-      badge: 'LEGS',
-      type: 'lower',
-      isCore: true,
-      cycleDay: 3,
-      exercises: [
-        { exerciseDefinitionId: 'squat', sets: 5, reps: '5' },
-        { exerciseDefinitionId: 'lunge', sets: 3, reps: '10' }
-      ]
-    }
-  ];
-
-  const workoutsMap = new Map<string, Workout>();
-  const coreWorkoutMap = new Map<number, Workout>();
-  workouts.forEach(w => {
-    workoutsMap.set(w.id, w);
-    if (w.isCore && w.cycleDay) coreWorkoutMap.set(w.cycleDay, w);
-  });
-
-  const logs: Record<string, SessionLog> = {};
-  const baseTimestamp = new Date('2010-01-01T10:00:00Z').getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  for (let i = 0; i < logCount; i++) {
-    const sessionTime = new Date(baseTimestamp + i * dayMs);
-    const dateStr = sessionTime.toISOString().split('T')[0];
-    const logId = `log_bench_${i}`;
-    const workout = workouts[i % workouts.length];
-
-    const sets: Record<string, SetLog[]> = {};
-    workout.exercises.forEach(ex => {
-      const setList: SetLog[] = [];
-      const count = ex.sets || 3;
-      for (let s = 1; s <= count; s++) {
-        const weight = 60 + (i % 50) * 1.5 + s * 2.5;
-        const reps = 5 + (s % 6);
-        setList.push({
-          id: `set_${ex.exerciseDefinitionId}_${i}_${s}`,
-          weight: String(weight),
-          reps: String(reps),
-          done: true
-        });
-      }
-      sets[ex.exerciseDefinitionId] = setList;
-    });
-
-    logs[logId] = {
-      id: logId,
-      workoutId: workout.id,
-      date: dateStr,
-      complete: true,
-      durationMinutes: 45 + (i % 30),
-      sets
-    };
-  }
-
-  return { defs: exercises, defsMap, workouts, workoutsMap, coreWorkoutMap, logs };
-}
-
-describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
+describe('8.1 Canonical Selector Correctness & Index Scaling Invariants', () => {
   const benchmarkTiers = [100, 1000, 5000];
 
   benchmarkTiers.forEach(count => {
-    describe(`Benchmark Tier: ${count} Historical Session Logs`, () => {
+    describe(`Tier: ${count} Historical Session Logs`, () => {
       const fixture = generateSyntheticDataset(count);
 
-      it(`measures buildFitnessIndex() with ${count} logs`, () => {
-        const t0 = performance.now();
-        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
-
-        console.log(`[PERF BENCHMARK] buildFitnessIndex (${count} logs): ${durationMs.toFixed(2)} ms`);
+      it(`builds canonical index cleanly across ${count} logs using dataset.lastDate`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap, fixture.lastDate);
 
         expect(index).toBeDefined();
         expect(index.sortedLogsDescending).toHaveLength(count);
@@ -171,48 +44,34 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         expect(index.muscleStimulusByDate).toBeDefined();
         expect(index.muscleAttributionCoverageByDate).toBeDefined();
         expect(index.lifetimeLastTrainedDateByMuscle).toBeDefined();
-
-        // Regression guard: index build must stay within tightened performance budget
-        const budgetMs = count === 5000 ? 1000 : count === 1000 ? 350 : 150;
-        expect(durationMs).toBeLessThan(budgetMs);
       });
 
-      it(`measures Muscle Intelligence selectors execution with ${count} logs`, () => {
-        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
+      it(`executes Muscle Intelligence selectors accurately with non-empty windows across ${count} logs`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap, fixture.lastDate);
 
-        const t0 = performance.now();
-        const balance30d = selectMuscleBalanceForRange(index, '2024-12-01', '2025-01-01');
-        const balanceAll = selectMuscleBalanceForRange(index, '2010-01-01', '2025-01-01');
-        const recovery = selectMuscleRecovery(index, '2025-01-01');
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
-
-        console.log(`[PERF BENCHMARK] Muscle Intelligence Selectors (${count} logs): ${durationMs.toFixed(2)} ms`);
+        const balance30d = selectMuscleBalanceForRange(index, fixture.recentRangeStart, fixture.recentRangeEnd);
+        const balance90d = selectMuscleBalanceForRange(index, fixture.range90Start, fixture.recentRangeEnd);
+        const balanceAll = selectMuscleBalanceForRange(index, fixture.firstDate, fixture.lastDate);
+        const recovery = selectMuscleRecovery(index, fixture.lastDate);
 
         expect(balance30d.groups).toHaveLength(6);
         expect(balance30d.allGroups).toHaveLength(15);
+        expect(balance30d.totalAttributedWSE).toBeGreaterThan(0);
+        expect(balance90d.totalAttributedWSE).toBeGreaterThan(0);
         expect(balanceAll.allGroups).toHaveLength(15);
+        expect(balanceAll.totalAttributedWSE).toBeGreaterThan(0);
         expect(recovery.items).toHaveLength(15);
-
-        // Pure selector pass budget: ensures no O(N^2) regressions
-        const budgetMs = count === 5000 ? 60 : count === 1000 ? 30 : 20;
-        expect(durationMs).toBeLessThan(budgetMs);
       });
 
-      it(`measures canonical selectors execution with ${count} logs`, () => {
-        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
+      it(`executes canonical selectors accurately with ${count} logs`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap, fixture.lastDate);
 
-        const t0 = performance.now();
         const lifetime = selectLifetimeStats(index);
         const weightPRs = selectWeightPRs(index);
         const e1rmPRs = selectE1RMPRs(index);
         const muscleDist = selectMuscleDistribution(index);
         const freq = selectExerciseFrequency(index);
         const bench1RM = selectExercise1RMProgression(index, 'bench');
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
-
-        console.log(`[PERF BENCHMARK] Canonical Selectors (${count} logs): ${durationMs.toFixed(2)} ms`);
 
         expect(lifetime.totalSessions).toBe(count);
         expect(weightPRs.length).toBeGreaterThan(0);
@@ -222,40 +81,45 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         expect(bench1RM.length).toBeGreaterThan(0);
       });
 
-      it(`measures Analytics derived data aggregation with ${count} logs`, () => {
-        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
+      it(`executes Analytics range aggregations (30d, 90d, all) with non-empty sessions across ${count} logs`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap, fixture.lastDate);
 
-        const t0 = performance.now();
         const analytics30d = selectTimeRangeAnalytics(
           index,
           fixture.workoutsMap,
           fixture.coreWorkoutMap,
           '30d',
-          '2025-01-01',
-          'bench'
+          fixture.firstDate,
+          'bench',
+          fixture.lastDate
+        );
+        const analytics90d = selectTimeRangeAnalytics(
+          index,
+          fixture.workoutsMap,
+          fixture.coreWorkoutMap,
+          '90d',
+          fixture.firstDate,
+          'bench',
+          fixture.lastDate
         );
         const analyticsAll = selectTimeRangeAnalytics(
           index,
           fixture.workoutsMap,
           fixture.coreWorkoutMap,
           'all',
-          '2025-01-01',
-          'bench'
+          fixture.firstDate,
+          'bench',
+          fixture.lastDate
         );
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
 
-        console.log(`[PERF BENCHMARK] Analytics selectTimeRangeAnalytics (${count} logs): ${durationMs.toFixed(2)} ms`);
-
-        expect(analytics30d).toBeDefined();
-        expect(analyticsAll).toBeDefined();
+        expect(analytics30d.rangeLogsCount).toBeGreaterThan(0);
+        expect(analytics90d.rangeLogsCount).toBeGreaterThan(0);
+        expect(analyticsAll.rangeLogsCount).toBe(count);
       });
 
-      it(`measures History exercise resolution & lookups with ${count} logs`, () => {
-        const index = buildFitnessIndex(fixture.logs, fixture.defsMap);
+      it(`resolves History exercises consistently with ${count} logs`, () => {
+        const index = buildFitnessIndex(fixture.logs, fixture.defsMap, fixture.lastDate);
 
-        const t0 = performance.now();
-        // Resolve exercises across all available definitions and synthetic keys
         fixture.defs.forEach(d => {
           const resolved = resolveExercise(d.id, fixture.defsMap);
           const meta = index.exerciseMetaById.get(d.id);
@@ -264,14 +128,9 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
           expect(meta?.name).toBe(d.name);
           expect(entry).toBeDefined();
         });
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
-
-        console.log(`[PERF BENCHMARK] History Exercise Resolution (${count} logs): ${durationMs.toFixed(2)} ms`);
       });
 
-      it(`measures plain-object active-set mutation microbenchmark (baseline)`, () => {
-        // Simulates rapid typing of weight and reps into transient activeSession
+      it(`preserves plain-object active-set mutation contract (${count} logs context)`, () => {
         const activeSets: Record<string, SetLog[]> = {
           bench: [
             { id: 's1', weight: '100', reps: '8', done: true },
@@ -279,22 +138,18 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
           ]
         };
 
-        const t0 = performance.now();
         for (let i = 0; i < 50; i++) {
           activeSets.bench[1].weight = `${102.5 + i * 0.5}`;
           activeSets.bench[1].reps = `${6 + (i % 3)}`;
         }
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
 
-        console.log(`[PERF BENCHMARK] SessionView Transient Set Mutations (50 edits, ${count} logs): ${durationMs.toFixed(3)} ms`);
-        expect(activeSets.bench[1].weight).toBeDefined();
+        expect(activeSets.bench[1].weight).toBe('127');
       });
     });
   });
 
-  describe('8.2 Real SessionView UI Interaction & Persistence Benchmark', () => {
-    it('measures real SessionView set editing responsiveness, React.memo card isolation, and debounced persistence', async () => {
+  describe('8.2 Real SessionView UI Interaction & Render Isolation', () => {
+    it('verifies SessionView React.memo card isolation and debounced persistence on rapid edits', async () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
       const root = createRoot(container);
@@ -321,7 +176,7 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         workouts: INITIAL_WORKOUTS,
         logs: {},
         appState: { cycleStart: '2026-10-01' },
-        addLog: vi.fn().mockResolvedValue(undefined),
+        addLog: vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false }),
         updateCycleStart: vi.fn().mockResolvedValue(undefined),
       };
 
@@ -345,7 +200,6 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
         );
       });
 
-      // Baseline commits after initial mount
       const baselineE1Commits = cardCommits['e1'] || 0;
       const baselineE2Commits = cardCommits['e2'] || 0;
       const baselineShellCommits = shellCommits;
@@ -353,49 +207,36 @@ describe('8.1 Real Performance Baselines & Benchmark Suite', () => {
       expect(baselineE1Commits).toBeGreaterThan(0);
       expect(baselineE2Commits).toBeGreaterThan(0);
 
-      // Find the weight input for the first set of Exercise e1
       const weightInputs = container.querySelectorAll('input');
       const firstWeightInput = weightInputs[0] as HTMLInputElement;
       expect(firstWeightInput).toBeTruthy();
 
-      // Spy on localStorage.setItem to measure write frequency during rapid typing
       const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
       setItemSpy.mockClear();
 
       const runs = 10;
-      const latencies: number[] = [];
       const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
       for (let i = 0; i < runs; i++) {
         const newValue = `${100 + i * 2.5}`;
-        const t0 = performance.now();
         await act(async () => {
           nativeSetter?.call(firstWeightInput, newValue);
           firstWeightInput.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        const t1 = performance.now();
-        latencies.push(t1 - t0);
       }
 
-      latencies.sort((a, b) => a - b);
-      const medianLatencyMs = latencies[Math.floor(runs / 2)];
-      console.log(`[PERF BENCHMARK] Real SessionView Set Input Median Latency (${runs} runs): ${medianLatencyMs.toFixed(2)} ms`);
-
-      // 1. Acceptance Criterion: Edited card committed updates to reflect typed values
+      // 1. Edited card committed updates to reflect typed values
       expect(cardCommits['e1']).toBeGreaterThan(baselineE1Commits);
 
-      // 2. Acceptance Criterion: Unaffected card committed ZERO extra renders (React.memo bailout)
+      // 2. Unaffected card committed ZERO extra renders (React.memo bailout)
       expect(cardCommits['e2']).toBe(baselineE2Commits);
 
-      // 3. Acceptance Criterion: Application shell committed ZERO extra renders
+      // 3. Application shell committed ZERO extra renders
       expect(shellCommits).toBe(baselineShellCommits);
 
-      // 4. Acceptance Criterion: Synchronous persistence is debounced (NOT called on every keystroke)
+      // 4. Synchronous persistence is debounced (NOT called on every keystroke)
       const activeSessionWrites = setItemSpy.mock.calls.filter(c => c[0] === 'gl_active_session').length;
       expect(activeSessionWrites).toBeLessThan(runs);
-
-      // 5. Verification threshold: Input-to-commit median latency is responsive
-      expect(medianLatencyMs).toBeLessThan(250);
 
       setItemSpy.mockRestore();
       await act(async () => {

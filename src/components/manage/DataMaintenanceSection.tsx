@@ -50,6 +50,11 @@ export const DataMaintenanceSection: React.FC = () => {
     getAutoBackups,
     restoreAutoBackup,
     createManualBackup,
+    retryPendingCloudSync,
+    hasPendingCloudSync,
+    pendingCloudSyncError,
+    databaseLifecycleState,
+    retryStorageCommit,
     isBackupsLoading
   } = useFitness();
   const { confirm } = useConfirm();
@@ -308,6 +313,62 @@ export const DataMaintenanceSection: React.FC = () => {
             </span>
           </div>
         </Card>
+
+        {hasPendingCloudSync && (
+          <Banner
+            variant="warning"
+            size="compact"
+            title="Cloud restore reconciliation pending"
+            description={pendingCloudSyncError || "Your backup was restored locally, but cloud sync has not completed yet."}
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={loadingAction === 'retry_cloud_sync'}
+                onClick={async () => {
+                  setLoadingAction('retry_cloud_sync');
+                  try {
+                    const res = await retryPendingCloudSync();
+                    setBannerMessage({
+                      type: res.success ? 'success' : 'destructive',
+                      text: res.message
+                    });
+                  } finally {
+                    setLoadingAction(null);
+                  }
+                }}
+              >
+                Retry Cloud Sync
+              </Button>
+            }
+          />
+        )}
+
+        {databaseLifecycleState?.phase === 'storage_error' && (
+          <Banner
+            variant="destructive"
+            size="compact"
+            title="Local storage write failed"
+            description={databaseLifecycleState.error}
+            action={
+              retryStorageCommit ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const res = retryStorageCommit();
+                    setBannerMessage({
+                      type: res.success ? 'success' : 'destructive',
+                      text: res.success ? 'Local storage commit recovered.' : (res.error || 'Retry failed.')
+                    });
+                  }}
+                >
+                  Retry Save
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
 
         {/* Restore / Operation Message Banner */}
         <AnimatePresence>

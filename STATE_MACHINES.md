@@ -73,19 +73,23 @@ Every machine in this registry has a verified, active production consumer. No un
 ### 4. Auth & Sync Machines (`src/state/sync/authMachine.ts`, `src/state/sync/syncMachine.ts`)
 - **Owner**: `src/hooks/useFitnessSync.ts` via `useReducer(authTransition, ...)` and `useReducer(syncTransition, ...)`.
 - **Invariants**:
-  - Generation and UID isolation: in-flight sync callbacks strictly check matching `uid` and `generation`. Stale completions from prior accounts or older sync generations are discarded.
-  - Account switching or logout triggers an atomic `resetToDefaultData()` and wipes UID-scoped tombstones (`gl_deleted_ids_${uid}`).
-  - Differentiates `initial_sync`, `syncing`, `synced`, `offline`, `retrying`, and `failed`.
+  - Generation, sequence-token, and UID isolation: in-flight auth reset callbacks capture a monotonic `authEventSeqRef` token and ignore superseded callbacks after awaiting isolation cleanup; in-flight sync callbacks verify matching `uid`, `authGenerationRef`, and `!resetFencedRef.current`.
+  - Account reset fencing: if `resetToDefaultData()` (including `clearAutoBackupsForAccountReset()`) fails during an account switch/logout, `resetFencedRef.current` stays `true`, `user` remains fenced (`null`), and `accountResetStatus` becomes `'failed'` with a retryable `retryAccountReset()` path rather than silently publishing a mixed `currentUidRef`/`user` state.
+  - UID-partitioned tombstone retention: account switching and `logout()` do NOT delete `gl_deleted_ids_${uid}`. Only anonymous tombstones (`gl_deleted_ids_anon`) are cleared when entering an authenticated account from anonymous mode. Re-signing into an account flushes its retained UID tombstones before normal cloud merge, excluding records present in any `PendingCloudReconciliation` snapshot via `filterTombstonesExcludingSnapshot()` plus IDs purged in Step 0 of the same sync pass.
+  - Differentiates `initial_sync`, `syncing`, `synced`, `offline`, `retrying`, and `failed`. Domain cloud write hooks report failures via `setSyncStatus` / `setSyncError`.
   - Offline network detection pauses retry backoff and cleanly transitions to `offline` status without reporting false generic failures.
 
 ### 5. Local Database & Backup Machines (`src/state/persistence/`)
-- **Owners**: `useFitnessData.ts` and `useFitnessBackups.ts`.
+- **Owners**: `useFitnessData.ts` (`databaseMachine.ts`) and `useFitnessBackups.ts` + `fitnessBackupDb.ts` (`backupMachine.ts`).
 - **Invariants**:
-  - `persistFitnessDatabase` performs two-phase staging (`gl_snapshot_staging` → `gl_database_snapshot` → readback verification). It throws on failure and never dispatches false-positive `WRITE_COMMITTED`.
+  - `persistFitnessDatabase` performs two-phase staging (`gl_snapshot_staging` → `gl_database_snapshot` → readback verification). It throws on failure and never dispatches false-positive `WRITE_COMMITTED`. Recoverable write failures transition `databaseState` to `storage_error` and are retryable via `retryStorageCommit()`.
   - Unrelated or stale write completions never clear an active `storage_error`.
-  - `importBackup` strictly awaits pre-import checkpoint creation: if the checkpoint fails, the import aborts immediately before modifying application data or clearing tombstones.
-  - Backups enforce an 8-checkpoint limit and durable IndexedDB `tx.oncomplete` resolution.
-  - Account boundaries cleanly wipe backup caches to prevent cross-account checkpoint leaks.
+  - `openBackupDb()` maintains a single-flight `inFlightOpenPromise`, closes late `onsuccess` connections after `onblocked`, and clears cached state on `onclose`/`onversionchange`/error.
+  - `initializationPromiseRef` + `hasHydratedRef` enforce an explicit hydration barrier before backup pruning, import checkpoints, or restore reads (`isBackupOperationAdmissible` blocks `create`/`restore`/`import`/`clear` during `loading`).
+  - `backupPhaseRef` mirrors `backupTransition` synchronously; `runSerializedBackupOp` evaluates `isBackupOperationAdmissible` inside the queue immediately before execution without relying on React rerenders. Every start transition (including `CLEAR_STARTED` and `FORCE_CLEAR_STARTED`) is guarded in `backupTransition`.
+  - `clearAutoBackups()` (UI path) returns explicit failure when inadmissible and preserves `backupsCacheRef` + `gl_auto_backups_meta` if IndexedDB clear fails. `clearAutoBackupsForAccountReset()` (account-boundary path) coalesces via `activeForceClearPromiseRef`, advances `resetEpochRef`, awaits active mutations/migrations, wipes IndexedDB before clearing cache, and rejects/returns failure if durable clearing fails.
+  - `importBackup` and `restoreAutoBackup` strictly await pre-operation checkpoint creation before modifying application data; if cloud reconciliation fails afterward, `PendingCloudReconciliation` is saved in IndexedDB (`pending_cloud_sync` store, `DB_VERSION = 2`), UID tombstones are retained until `retryPendingCloudSync()` succeeds, and `filterTombstonesExcludingSnapshot()` shields restored records from premature deletion.
+  - Backups enforce an 8-checkpoint limit and durable IndexedDB `tx.oncomplete` resolution; `migrateLegacyLocalStorageBackups()` preserves existing DB records on timestamp collisions and keeps `gl_auto_backups` intact if a transaction aborts.
 
 ### 6. Confirmation Machine (`src/state/dialogs/confirmationMachine.ts`)
 - **Owner**: `src/context/ConfirmContext.tsx` via `useReducer(confirmationTransition, initialConfirmationState)`.

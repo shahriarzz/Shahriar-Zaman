@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cloud, User as UserIcon, LogOut, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Cloud, User as UserIcon, LogOut, LogIn, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useFitness } from '../../context/FitnessContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { haptics } from '../../utils/haptics';
@@ -8,6 +8,7 @@ import {
   Card,
   Button,
   Badge,
+  Banner,
   Stack,
   TYPOGRAPHY,
   GAP,
@@ -18,7 +19,16 @@ import {
 import { cn } from '../../lib/utils';
 
 export const AccountSection: React.FC = () => {
-  const { user, login, logout, syncStatus, syncError } = useFitness();
+  const {
+    user,
+    login,
+    logout,
+    syncStatus,
+    syncError,
+    accountResetStatus,
+    accountResetError,
+    retryAccountReset
+  } = useFitness();
   const { confirm } = useConfirm();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -65,6 +75,35 @@ export const AccountSection: React.FC = () => {
       padding="section"
     >
       <Stack spacing="md">
+        {accountResetStatus === 'failed' && (
+          <Banner
+            variant="destructive"
+            size="compact"
+            icon={<AlertCircle />}
+            title="Account isolation reset incomplete"
+            description={accountResetError || "Previous account local checkpoints could not be cleared cleanly. New account access is paused until reset completes."}
+            action={
+              retryAccountReset ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={loadingAction === 'retry_reset'}
+                  icon={<RefreshCw size={13} />}
+                  onClick={async () => {
+                    setLoadingAction('retry_reset');
+                    try {
+                      await retryAccountReset();
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                >
+                  Retry Reset
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
         <Card variant="standard" padding="standard" className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2">

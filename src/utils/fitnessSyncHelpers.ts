@@ -81,11 +81,36 @@ export function clearDeletedIdsTracker(uid?: string | null): void {
     if (uid) {
       localStorage.removeItem(getTombstoneStorageKey(uid));
     } else {
-      // Clear anonymous and fallback keys, or all tombstone keys if explicit wildcard
+      // Clear anonymous and fallback keys
       localStorage.removeItem('gl_deleted_ids_anon');
       localStorage.removeItem('gl_deleted_ids');
     }
   } catch {}
+}
+
+/**
+ * Excludes IDs present in a pending restored/imported snapshot from active deletion
+ * tombstones so stale tombstones cannot delete restored records while cloud
+ * reconciliation is still pending.
+ */
+export function filterTombstonesExcludingSnapshot(
+  tracker: DeletedIdsTracker,
+  snapshot?: {
+    exerciseDefinitions?: ExerciseDefinition[];
+    workouts?: Workout[];
+    logs?: Record<string, SessionLog>;
+  } | null
+): DeletedIdsTracker {
+  if (!snapshot) return tracker;
+  const restoredDefIds = new Set((snapshot.exerciseDefinitions || []).map(d => d.id));
+  const restoredWorkoutIds = new Set((snapshot.workouts || []).map(w => w.id));
+  const restoredLogIds = new Set(Object.keys(snapshot.logs || {}));
+
+  return {
+    defs: tracker.defs.filter(id => !restoredDefIds.has(id)),
+    workouts: tracker.workouts.filter(id => !restoredWorkoutIds.has(id)),
+    logs: tracker.logs.filter(id => !restoredLogIds.has(id))
+  };
 }
 
 export const syncCloudDataWithRestored = async (

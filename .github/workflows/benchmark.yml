@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment or note for this benchmark run'
+        description: 'Environment label or hardware note recorded in benchmark output'
         required: false
         default: 'manual-dispatch'
 
@@ -20,19 +20,34 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Run Vitest Performance Benchmarks
-        run: npm run bench:performance | tee benchmark-results.txt
-        continue-on-error: true
+        env:
+          BENCHMARK_ENV: ${{ github.event.inputs.environment || 'manual-dispatch' }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Benchmark Environment: ${BENCHMARK_ENV}"
+            echo "Node Version: $(node -v)"
+            echo "Runner OS: ${RUNNER_OS:-linux}"
+            echo "Timestamp UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "----------------------------------------"
+          } > benchmark-results.txt
+          npm run bench:performance | tee -a benchmark-results.txt
+          if [ ! -s benchmark-results.txt ]; then
+            echo "benchmark-results.txt is empty" >&2
+            exit 1
+          fi
 
       - name: Upload Benchmark Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: benchmark-results.txt
-          if-no-files-found: warn
+          if-no-files-found: error

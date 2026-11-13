@@ -1,13 +1,26 @@
-import { AutoBackupEntry } from '../hooks/useFitnessBackups';
+import type { AutoBackupEntry } from '../hooks/useFitnessBackups';
+import type { FitnessDatabaseSnapshot } from '../hooks/useFitnessData';
 export type { AutoBackupEntry };
 import * as backupDbSelf from './fitnessBackupDb';
 
 const DB_NAME = 'gainlog_vault';
 const STORE_NAME = 'auto_backups';
-const DB_VERSION = 1;
+const PENDING_SYNC_STORE = 'pending_cloud_sync';
+const DB_VERSION = 2;
+
+export interface PendingCloudReconciliation {
+  uid: string;
+  kind: 'restore' | 'import';
+  snapshot: FitnessDatabaseSnapshot;
+  sourceTimestamp: string;
+  sourceId: string;
+  createdAt: number;
+  status: 'pending' | 'retrying' | 'failed';
+  lastError?: string;
+}
 
 let dbInstance: IDBDatabase | null = null;
-let dbPromise: Promise<IDBDatabase | null> | null = null;
+let inFlightOpenPromise: Promise<BackupDbOpenResult> | null = null;
 
 // In-memory fallback cache for fast synchronous reads when IndexedDB is populated
 const memoryFallbackMap = new Map<string, AutoBackupEntry>();
@@ -17,8 +30,13 @@ export function isIndexedDBAvailable(): boolean {
 }
 
 export function resetBackupDbForTesting(): void {
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch {}
+  }
   dbInstance = null;
-  dbPromise = null;
+  inFlightOpenPromise = null;
   memoryFallbackMap.clear();
 }
 
@@ -31,21 +49,33 @@ export type BackupDbOpenResult = {
 
 export async function openBackupDb(): Promise<BackupDbOpenResult> {
   if (!isIndexedDBAvailable()) {
+    dbInstance = null;
+    inFlightOpenPromise = null;
     return { success: false, reason: 'unavailable', error: new Error('IndexedDB unavailable in runtime') };
   }
   if (dbInstance) {
     return { success: true, db: dbInstance };
   }
+  if (inFlightOpenPromise) {
+    return inFlightOpenPromise;
+  }
 
-  return new Promise<BackupDbOpenResult>((resolve) => {
+  inFlightOpenPromise = new Promise<BackupDbOpenResult>((resolve) => {
+    let settled = false;
+    const settle = (result: BackupDbOpenResult) => {
+      if (settled) return;
+      settled = true;
+      inFlightOpenPromise = null;
+      resolve(result);
+    };
+
     try {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onblocked = () => {
         console.warn("IndexedDB open blocked by existing connection; resetting for retry");
         dbInstance = null;
-        dbPromise = null;
-        resolve({ success: false, reason: 'blocked', error: new Error('IndexedDB open blocked by existing connection') });
+        settle({ success: false, reason: 'blocked', error: new Error('IndexedDB open blocked by existing connection') });
       };
 
       request.onupgradeneeded = (event) => {
@@ -53,53 +83,53 @@ export async function openBackupDb(): Promise<BackupDbOpenResult> {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'timestamp' });
         }
+        if (!db.objectStoreNames.contains(PENDING_SYNC_STORE)) {
+          db.createObjectStore(PENDING_SYNC_STORE, { keyPath: 'uid' });
+        }
       };
 
       request.onsuccess = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+        if (settled) {
+          // A blocked open attempt already settled; close the orphaned late connection cleanly.
+          try {
+            db.close();
+          } catch {}
+          return;
+        }
         dbInstance = db;
         db.onversionchange = () => {
-          db.close();
-          dbInstance = null;
-          dbPromise = null;
+          try {
+            db.close();
+          } catch {}
+          if (dbInstance === db) {
+            dbInstance = null;
+          }
+          inFlightOpenPromise = null;
         };
         db.onclose = () => {
-          dbInstance = null;
-          dbPromise = null;
+          if (dbInstance === db) {
+            dbInstance = null;
+          }
+          inFlightOpenPromise = null;
         };
-        resolve({ success: true, db });
+        settle({ success: true, db });
       };
 
       request.onerror = (e) => {
         console.warn("Failed to open gainlog_vault IndexedDB; resetting for retry:", e);
         dbInstance = null;
-        dbPromise = null;
         const err = request.error || new Error('Failed to open gainlog_vault IndexedDB');
-        resolve({ success: false, reason: 'failed', error: err });
+        settle({ success: false, reason: 'failed', error: err });
       };
     } catch (err) {
       console.warn("IndexedDB initialization threw error; resetting for retry:", err);
       dbInstance = null;
-      dbPromise = null;
-      resolve({ success: false, reason: 'failed', error: err instanceof Error ? err : new Error(String(err)) });
+      settle({ success: false, reason: 'failed', error: err instanceof Error ? err : new Error(String(err)) });
     }
   });
-}
 
-export async function getBackupDb(): Promise<IDBDatabase | null> {
-  if (!isIndexedDBAvailable()) return null;
-  if (dbInstance) return dbInstance;
-  if (dbPromise) return dbPromise;
-
-  dbPromise = openBackupDb().then(res => {
-    if (res.success && res.db) {
-      return res.db;
-    }
-    dbPromise = null;
-    return null;
-  });
-
-  return dbPromise;
+  return inFlightOpenPromise;
 }
 
 /**
@@ -108,7 +138,7 @@ export async function getBackupDb(): Promise<IDBDatabase | null> {
  * Rejects on request error, transaction error, transaction abort, or transaction creation failure.
  */
 export async function saveBackupToDb(entry: AutoBackupEntry): Promise<void> {
-  const openRes = await openBackupDb();
+  const openRes = await backupDbSelf.openBackupDb();
   if (!openRes.success || !openRes.db) {
     const error = openRes.error;
     const reason = openRes.reason;
@@ -142,7 +172,7 @@ export async function saveBackupToDb(entry: AutoBackupEntry): Promise<void> {
 }
 
 export async function getAllBackupsFromDb(): Promise<AutoBackupEntry[]> {
-  const openRes = await openBackupDb();
+  const openRes = await backupDbSelf.openBackupDb();
   if (!openRes.success || !openRes.db) {
     const error = openRes.error;
     const reason = openRes.reason;
@@ -165,7 +195,6 @@ export async function getAllBackupsFromDb(): Promise<AutoBackupEntry[]> {
       };
       tx.oncomplete = () => {
         resultData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        // Mirror to cache map
         resultData.forEach(item => memoryFallbackMap.set(item.timestamp, item));
         resolve(resultData.slice(0, 8));
       };
@@ -182,7 +211,7 @@ export async function getAllBackupsFromDb(): Promise<AutoBackupEntry[]> {
 }
 
 export async function deleteBackupFromDb(timestamp: string): Promise<void> {
-  const openRes = await openBackupDb();
+  const openRes = await backupDbSelf.openBackupDb();
   if (!openRes.success || !openRes.db) {
     const error = openRes.error;
     const reason = openRes.reason;
@@ -194,7 +223,8 @@ export async function deleteBackupFromDb(timestamp: string): Promise<void> {
     try {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.delete(timestamp);
+      const req = store.delete(timestamp);
+      req.onerror = () => reject(req.error || new Error('Request error deleting backup'));
       tx.oncomplete = () => {
         memoryFallbackMap.delete(timestamp);
         resolve();
@@ -210,7 +240,7 @@ export async function deleteBackupFromDb(timestamp: string): Promise<void> {
 export async function pruneBackupsInDb(keepTimestamps: string[]): Promise<void> {
   const keepSet = new Set(keepTimestamps);
 
-  const openRes = await openBackupDb();
+  const openRes = await backupDbSelf.openBackupDb();
   if (!openRes.success || !openRes.db) {
     const error = openRes.error;
     const reason = openRes.reason;
@@ -249,25 +279,120 @@ export async function pruneBackupsInDb(keepTimestamps: string[]): Promise<void> 
 }
 
 export async function clearAllBackupsFromDb(): Promise<void> {
-  const openRes = await openBackupDb();
+  const openRes = await backupDbSelf.openBackupDb();
   if (!openRes.success || !openRes.db) {
     const error = openRes.error;
     const reason = openRes.reason;
     throw error || new Error(`IndexedDB unavailable to clear backups (${reason || 'unknown'})`);
   }
   const db = openRes.db;
+  const hasPendingStore = typeof db.objectStoreNames?.contains === 'function' && db.objectStoreNames.contains(PENDING_SYNC_STORE);
+  const storeNames: string | string[] = hasPendingStore ? [STORE_NAME, PENDING_SYNC_STORE] : STORE_NAME;
 
   return new Promise<void>((resolve, reject) => {
     try {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      store.clear();
+      const tx = db.transaction(storeNames, 'readwrite');
+      const backupStore = tx.objectStore(STORE_NAME);
+      const req = backupStore.clear();
+      req.onerror = () => reject(req.error || new Error('Failed to clear backups store'));
+      if (hasPendingStore) {
+        const pendingStore = tx.objectStore(PENDING_SYNC_STORE);
+        const pReq = pendingStore.clear();
+        pReq.onerror = () => reject(pReq.error || new Error('Failed to clear pending cloud sync store'));
+      }
       tx.oncomplete = () => {
         memoryFallbackMap.clear();
         resolve();
       };
       tx.onerror = () => reject(tx.error || new Error('Failed to clear backups'));
       tx.onabort = () => reject(new Error('Clear transaction aborted'));
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+export async function savePendingCloudReconciliationToDb(record: PendingCloudReconciliation): Promise<void> {
+  const openRes = await backupDbSelf.openBackupDb();
+  if (!openRes.success || !openRes.db) {
+    const error = openRes.error;
+    const reason = openRes.reason;
+    throw error || new Error(`IndexedDB unavailable to save pending cloud reconciliation (${reason || 'unknown'})`);
+  }
+  const db = openRes.db;
+  if (typeof db.objectStoreNames?.contains === 'function' && !db.objectStoreNames.contains(PENDING_SYNC_STORE)) {
+    throw new Error('Pending cloud sync store is missing in IndexedDB');
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const tx = db.transaction(PENDING_SYNC_STORE, 'readwrite');
+      const store = tx.objectStore(PENDING_SYNC_STORE);
+      const req = store.put(record);
+      req.onerror = () => reject(req.error || new Error('Request error saving pending cloud reconciliation'));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('Transaction failed saving pending cloud reconciliation'));
+      tx.onabort = () => reject(new Error('Transaction aborted saving pending cloud reconciliation'));
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+export async function getPendingCloudReconciliationFromDb(uid: string): Promise<PendingCloudReconciliation | null> {
+  if (!uid) return null;
+  const openRes = await backupDbSelf.openBackupDb();
+  if (!openRes.success || !openRes.db) {
+    const error = openRes.error;
+    const reason = openRes.reason;
+    throw error || new Error(`IndexedDB unavailable to read pending cloud reconciliation (${reason || 'unknown'})`);
+  }
+  const db = openRes.db;
+  if (typeof db.objectStoreNames?.contains === 'function' && !db.objectStoreNames.contains(PENDING_SYNC_STORE)) {
+    return null;
+  }
+
+  return new Promise<PendingCloudReconciliation | null>((resolve, reject) => {
+    try {
+      const tx = db.transaction(PENDING_SYNC_STORE, 'readonly');
+      const store = tx.objectStore(PENDING_SYNC_STORE);
+      const req = store.get(uid);
+      let result: PendingCloudReconciliation | null = null;
+      req.onsuccess = () => {
+        result = (req.result as PendingCloudReconciliation | undefined) ?? null;
+      };
+      req.onerror = () => reject(req.error || new Error('Request error reading pending cloud reconciliation'));
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error || new Error('Transaction failed reading pending cloud reconciliation'));
+      tx.onabort = () => reject(new Error('Transaction aborted reading pending cloud reconciliation'));
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+export async function clearPendingCloudReconciliationFromDb(uid: string): Promise<void> {
+  if (!uid) return;
+  const openRes = await backupDbSelf.openBackupDb();
+  if (!openRes.success || !openRes.db) {
+    const error = openRes.error;
+    const reason = openRes.reason;
+    throw error || new Error(`IndexedDB unavailable to clear pending cloud reconciliation (${reason || 'unknown'})`);
+  }
+  const db = openRes.db;
+  if (typeof db.objectStoreNames?.contains === 'function' && !db.objectStoreNames.contains(PENDING_SYNC_STORE)) {
+    return;
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const tx = db.transaction(PENDING_SYNC_STORE, 'readwrite');
+      const store = tx.objectStore(PENDING_SYNC_STORE);
+      const req = store.delete(uid);
+      req.onerror = () => reject(req.error || new Error('Request error clearing pending cloud reconciliation'));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('Transaction failed clearing pending cloud reconciliation'));
+      tx.onabort = () => reject(new Error('Transaction aborted clearing pending cloud reconciliation'));
     } catch (err) {
       reject(err instanceof Error ? err : new Error(String(err)));
     }
@@ -292,11 +417,12 @@ export async function migrateLegacyLocalStorageBackups(): Promise<AutoBackupEntr
     }
     if (!Array.isArray(parsed) || parsed.length === 0) return [];
 
-    const db = await backupDbSelf.getBackupDb();
-    if (!db) {
+    const openRes = await backupDbSelf.openBackupDb();
+    if (!openRes.success || !openRes.db) {
       // If IndexedDB is unavailable, retain the original localStorage backup
       return [];
     }
+    const db = openRes.db;
 
     const legacyEntries = [...parsed]
       .filter((entry: AutoBackupEntry) => entry && entry.timestamp);
@@ -319,7 +445,7 @@ export async function migrateLegacyLocalStorageBackups(): Promise<AutoBackupEntr
           for (const item of existingList) {
             if (item && item.timestamp) map.set(item.timestamp, item);
           }
-          // Legacy records merged (newer record wins if duplicate timestamp)
+          // Legacy records merged without overwriting newer/existing IndexedDB entries for duplicate timestamps
           for (const item of legacyEntries) {
             if (!map.has(item.timestamp)) {
               map.set(item.timestamp, item);
@@ -330,9 +456,12 @@ export async function migrateLegacyLocalStorageBackups(): Promise<AutoBackupEntr
           mergedRetained = allMerged.slice(0, 8);
           const keepSet = new Set(mergedRetained.map(m => m.timestamp));
 
-          // Put retained legacy entries into store
+          // Write only retained entries belonging in top 8 (preserve existing DB values on key conflict)
+          const existingTimestamps = new Set(existingList.map(i => i.timestamp));
           for (const entry of mergedRetained) {
-            store.put(entry);
+            if (!existingTimestamps.has(entry.timestamp)) {
+              store.put(entry);
+            }
           }
           // Delete any older entries beyond the 8 limit
           for (const item of existingList) {

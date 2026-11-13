@@ -1034,8 +1034,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
       // Await persistence: explicit local durability boundary
       const persistResult = await addLog(logId, sanitizedLog);
-      if (persistResult && (!persistResult.success || !persistResult.localPersisted)) {
-        throw new Error(persistResult.error || "Failed to persist workout locally.");
+      if (!persistResult || persistResult.success !== true || persistResult.localPersisted !== true) {
+        throw new Error(persistResult?.error || "Failed to persist workout locally.");
       }
 
       // Haptics fire only after confirmed durable local persistence

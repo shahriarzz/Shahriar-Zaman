@@ -45,7 +45,7 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     removeExerciseFromWorkout: vi.fn(),
     updateWorkoutExerciseProgramming: vi.fn(),
     deleteWorkout: vi.fn(),
-    addLog: vi.fn().mockResolvedValue(undefined),
+    addLog: vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false }),
     deleteLog: vi.fn(),
     resetLogs: vi.fn(),
     updateCycleStart: vi.fn().mockResolvedValue(undefined),
@@ -55,12 +55,13 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     clearActiveSession: vi.fn(),
     logBodyWeight: vi.fn(),
     deleteBodyWeight: vi.fn(),
-    pushAutoBackup: vi.fn(),
+    pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
     getAutoBackups: vi.fn().mockReturnValue([]),
-    restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+    restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
     exportBackup: vi.fn().mockReturnValue('{}'),
-    importBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+    importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
+    retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
     ...overrides
   };
 }

@@ -1,71 +1,69 @@
 import React, { useCallback, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { Workout, WorkoutExercise } from '../types/fitness';
+import { Workout, WorkoutExercise, SessionLog, AppState } from '../types/fitness';
 import { extractExerciseDefinitionsFromWorkouts } from '../utils/fitnessMigration';
 import { trackDeletedId, removeDeletedId } from '../utils/fitnessSyncHelpers';
 import { saveWorkout, saveWorkoutsBatch, deleteWorkout as deleteWorkoutFirestore } from '../services/fitnessFirestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
+import { FitnessDatabaseSnapshot } from './useFitnessData';
+import { PushAutoBackup } from './useFitnessBackups';
 
 interface UseFitnessWorkoutsProps {
   user: User | null;
   workoutsRef: React.MutableRefObject<Workout[]>;
-  setWorkoutsState: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => void;
-  pushAutoBackup: (w: Workout[], l: any, s: any, type: any, desc: string) => void;
-  setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
+  logsRef: React.MutableRefObject<Record<string, SessionLog>>;
+  appStateRef: React.MutableRefObject<AppState>;
+  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  pushAutoBackup: PushAutoBackup;
+  setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline') => void;
   setSyncError: (err: string | null) => void;
-  logsRef: React.MutableRefObject<any>;
-  appStateRef: React.MutableRefObject<any>;
 }
 
 export function useFitnessWorkouts({
   user,
   workoutsRef,
-  setWorkoutsState,
+  logsRef,
+  appStateRef,
+  commitFitnessSnapshot,
   pushAutoBackup,
   setSyncStatus,
-  setSyncError,
-  logsRef,
-  appStateRef
+  setSyncError
 }: UseFitnessWorkoutsProps) {
 
   const setWorkouts = useCallback(async (w: Workout[] | ((prev: Workout[]) => Workout[])): Promise<void> => {
-    try {
-      const now = Date.now();
-      const currentWorkouts = workoutsRef.current;
-      const rawNext = typeof w === 'function' ? w(currentWorkouts) : w;
-      const { workouts: migrated } = extractExerciseDefinitionsFromWorkouts(rawNext);
-      const workoutsWithTimestamp = migrated.map(item => ({
-        ...item,
-        updatedAt: now
-      }));
+    const now = Date.now();
+    const currentWorkouts = workoutsRef.current;
+    const rawNext = typeof w === 'function' ? w(currentWorkouts) : w;
+    const { workouts: migrated } = extractExerciseDefinitionsFromWorkouts(rawNext);
+    const workoutsWithTimestamp = migrated.map(item => ({
+      ...item,
+      updatedAt: now
+    }));
 
-      workoutsRef.current = workoutsWithTimestamp;
-      setWorkoutsState(workoutsWithTimestamp);
-      pushAutoBackup(workoutsWithTimestamp, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
+    commitFitnessSnapshot({ workouts: workoutsWithTimestamp });
+    void pushAutoBackup(workoutsWithTimestamp, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
 
-      if (user) {
+    if (user) {
+      try {
         await saveWorkoutsBatch(user.uid, workoutsWithTimestamp);
-      }
-    } catch (error) {
-      console.error("Failed to update workouts", error);
-      if (user) {
+      } catch (error) {
+        console.error("Failed to sync updated workouts to cloud", error);
         handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts`);
         setSyncStatus('failed');
         setSyncError("Saved workouts locally, but cloud sync failed.");
       }
     }
-  }, [user, workoutsRef, setWorkoutsState, pushAutoBackup, setSyncStatus, setSyncError, logsRef, appStateRef]);
+  }, [user, workoutsRef, commitFitnessSnapshot, pushAutoBackup, setSyncStatus, setSyncError, logsRef, appStateRef]);
 
   const assignExerciseToWorkout = useCallback(async (
-    workoutId: string, 
-    exerciseDefId: string, 
+    workoutId: string,
+    exerciseDefId: string,
     programming?: Partial<Omit<WorkoutExercise, 'exerciseDefinitionId'>>
   ): Promise<void> => {
     const currentWorkouts = workoutsRef.current;
     const targetW = currentWorkouts.find(w => w.id === workoutId);
     if (!targetW) return;
 
-    // Prevent duplicate assignment
     const exists = (targetW.exercises || []).some(
       e => e.exerciseDefinitionId === exerciseDefId
     );
@@ -92,8 +90,7 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    workoutsRef.current = nextWorkouts;
-    setWorkoutsState(nextWorkouts);
+    commitFitnessSnapshot({ workouts: nextWorkouts });
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -108,7 +105,7 @@ export function useFitnessWorkouts({
         }
       }
     }
-  }, [user, workoutsRef, setWorkoutsState, setSyncStatus, setSyncError]);
+  }, [user, workoutsRef, commitFitnessSnapshot, setSyncStatus, setSyncError]);
 
   const removeExerciseFromWorkout = useCallback(async (workoutId: string, exerciseDefId: string): Promise<void> => {
     const now = Date.now();
@@ -124,8 +121,7 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    workoutsRef.current = nextWorkouts;
-    setWorkoutsState(nextWorkouts);
+    commitFitnessSnapshot({ workouts: nextWorkouts });
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -140,11 +136,11 @@ export function useFitnessWorkouts({
         }
       }
     }
-  }, [user, workoutsRef, setWorkoutsState, setSyncStatus, setSyncError]);
+  }, [user, workoutsRef, commitFitnessSnapshot, setSyncStatus, setSyncError]);
 
   const updateWorkoutExerciseProgramming = useCallback(async (
-    workoutId: string, 
-    exerciseDefId: string, 
+    workoutId: string,
+    exerciseDefId: string,
     programming: Partial<WorkoutExercise>
   ): Promise<void> => {
     const now = Date.now();
@@ -169,8 +165,7 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    workoutsRef.current = nextWorkouts;
-    setWorkoutsState(nextWorkouts);
+    commitFitnessSnapshot({ workouts: nextWorkouts });
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -185,21 +180,19 @@ export function useFitnessWorkouts({
         }
       }
     }
-  }, [user, workoutsRef, setWorkoutsState, setSyncStatus, setSyncError]);
+  }, [user, workoutsRef, commitFitnessSnapshot, setSyncStatus, setSyncError]);
 
   const deleteWorkout = useCallback(async (workoutId: string): Promise<void> => {
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.filter(w => w.id !== workoutId);
 
-    trackDeletedId('workouts', workoutId);
-
-    workoutsRef.current = nextWorkouts;
-    setWorkoutsState(nextWorkouts);
+    commitFitnessSnapshot({ workouts: nextWorkouts });
+    trackDeletedId('workouts', workoutId, user?.uid);
 
     if (user) {
       try {
         await deleteWorkoutFirestore(user.uid, workoutId);
-        removeDeletedId('workouts', workoutId);
+        removeDeletedId('workouts', workoutId, user.uid);
       } catch (e) {
         console.error("Failed to delete workout from cloud", e);
         handleFirestoreError(e, OperationType.DELETE, `users/${user.uid}/workouts/${workoutId}`);
@@ -207,7 +200,7 @@ export function useFitnessWorkouts({
         setSyncError("Deleted workout locally, but cloud sync failed.");
       }
     }
-  }, [user, workoutsRef, setWorkoutsState, setSyncStatus, setSyncError]);
+  }, [user, workoutsRef, commitFitnessSnapshot, setSyncStatus, setSyncError]);
 
   return useMemo(() => ({
     setWorkouts,

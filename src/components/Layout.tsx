@@ -5,6 +5,7 @@ import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';
 import { useFitness } from '../context/FitnessContext';
 import { TYPOGRAPHY, BORDER, INTERACTIVE, SURFACE, RADIUS, NAV, GAP, SHADOW, TRANSITION, FOCUS, DURATION, CONTROL_HEIGHT } from '../styles/tokens';
+import { Banner, Button } from './ui';
 
 import { ActiveTab } from '../types/navigation';
 export type { ActiveTab };
@@ -114,7 +115,16 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewarm, children }) => {
-  const { user, syncStatus, syncError } = useFitness();
+  const {
+    user,
+    syncStatus,
+    syncError,
+    accountResetStatus,
+    accountResetError,
+    retryAccountReset,
+    databaseLifecycleState,
+    retryStorageCommit
+  } = useFitness();
   const [showTooltip, setShowTooltip] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
@@ -326,6 +336,40 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
       </nav>
 
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-5xl mx-auto px-4 md:px-6">
+        {accountResetStatus === 'failed' && (
+          <div className="pt-4">
+            <Banner
+              variant="destructive"
+              size="compact"
+              title="Account switch paused — backup cleanup failed"
+              description={accountResetError || "Retry account isolation reset before syncing the new account."}
+              action={
+                retryAccountReset ? (
+                  <Button variant="secondary" size="sm" onClick={() => void retryAccountReset()}>
+                    Retry Reset
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        )}
+        {databaseLifecycleState?.phase === 'storage_error' && (
+          <div className="pt-4">
+            <Banner
+              variant="destructive"
+              size="compact"
+              title="Local storage commit error"
+              description={databaseLifecycleState.error}
+              action={
+                retryStorageCommit ? (
+                  <Button variant="secondary" size="sm" onClick={() => retryStorageCommit()}>
+                    Retry Save
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        )}
         {children}
       </main>
 

@@ -137,6 +137,9 @@ export function useFitnessData() {
     });
   }, []);
 
+  const [databaseLifecycleState, dispatchDb] = useReducer(databaseTransition, { phase: 'ready' });
+  const lastPersistedSerializedRef = useRef<string>('');
+
   // Atomic snapshot setter to apply full state without intermediate inconsistent states
   const applyFitnessDatabaseSnapshot = useCallback((snapshot: FitnessDatabaseSnapshot) => {
     exerciseDefsRef.current = snapshot.exerciseDefinitions;
@@ -150,8 +153,8 @@ export function useFitnessData() {
     setAppStateState(snapshot.appState);
   }, []);
 
-  // Isolate and reset local state to fresh defaults on logout or user switch
-  // IndexedDB backup clearing is separated to its authoritative manager/coordinator
+  // Isolate and reset local state to fresh defaults on logout or user switch.
+  // Preserves UID-partitioned deletion tombstones; IndexedDB backup clearing is handled by backup manager.
   const resetToDefaultData = useCallback((): FitnessDatabaseSnapshot => {
     localStorage.removeItem('gl_database_snapshot');
     localStorage.removeItem('gl_snapshot_staging');
@@ -160,6 +163,7 @@ export function useFitnessData() {
     localStorage.removeItem('gl_logs');
     localStorage.removeItem('gl_state');
     localStorage.removeItem('gl_deleted_ids');
+    localStorage.removeItem('gl_deleted_ids_anon');
 
     const fresh = loadInitialFitnessData();
     const snapshot: FitnessDatabaseSnapshot = {
@@ -168,14 +172,10 @@ export function useFitnessData() {
       logs: fresh.logs,
       appState: fresh.appState
     };
+    dispatchDb({ type: 'RESET' });
     applyFitnessDatabaseSnapshot(snapshot);
     return snapshot;
   }, [applyFitnessDatabaseSnapshot]);
-
-  const [databaseLifecycleState, dispatchDb] = useReducer(databaseTransition, { phase: 'ready' });
-
-  // Explicit confirmation-confirmed local commit boundary for domain snapshots
-  const lastPersistedSerializedRef = useRef<string>('');
 
   const commitFitnessSnapshot = useCallback((partialSnapshot: Partial<FitnessDatabaseSnapshot>): { success: boolean; snapshot: FitnessDatabaseSnapshot } => {
     const nextSnapshot: FitnessDatabaseSnapshot = {
@@ -202,12 +202,33 @@ export function useFitnessData() {
     appStateRef.current = nextSnapshot.appState;
 
     // Publish committed state to React consumers
-    if (partialSnapshot.exerciseDefinitions) setExerciseDefinitionsState(nextSnapshot.exerciseDefinitions);
-    if (partialSnapshot.workouts) setWorkoutsState(nextSnapshot.workouts);
-    if (partialSnapshot.logs) setLogsState(nextSnapshot.logs);
-    if (partialSnapshot.appState) setAppStateState(nextSnapshot.appState);
+    if (partialSnapshot.exerciseDefinitions !== undefined) setExerciseDefinitionsState(nextSnapshot.exerciseDefinitions);
+    if (partialSnapshot.workouts !== undefined) setWorkoutsState(nextSnapshot.workouts);
+    if (partialSnapshot.logs !== undefined) setLogsState(nextSnapshot.logs);
+    if (partialSnapshot.appState !== undefined) setAppStateState(nextSnapshot.appState);
 
     return { success: true, snapshot: nextSnapshot };
+  }, []);
+
+  const retryStorageCommit = useCallback((): { success: boolean; error?: string } => {
+    const currentSnapshot: FitnessDatabaseSnapshot = {
+      exerciseDefinitions: exerciseDefsRef.current,
+      workouts: workoutsRef.current,
+      logs: logsRef.current,
+      appState: appStateRef.current
+    };
+
+    dispatchDb({ type: 'RECOVERY_STARTED' });
+    try {
+      persistFitnessDatabase(currentSnapshot);
+      lastPersistedSerializedRef.current = JSON.stringify(currentSnapshot);
+      dispatchDb({ type: 'RECOVERY_SUCCEEDED' });
+      return { success: true };
+    } catch (err: any) {
+      const errorMsg = err?.message || String(err);
+      dispatchDb({ type: 'WRITE_FAILED', error: errorMsg });
+      return { success: false, error: errorMsg };
+    }
   }, []);
 
   // Background persistence effect with deduplication to prevent racing with explicit commits
@@ -259,6 +280,7 @@ export function useFitnessData() {
     databaseLifecycleState,
     applyFitnessDatabaseSnapshot,
     resetToDefaultData,
-    commitFitnessSnapshot
+    commitFitnessSnapshot,
+    retryStorageCommit
   };
 }

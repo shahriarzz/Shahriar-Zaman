@@ -1,15 +1,21 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, SetLog, ExerciseDefinition, WorkoutExercise } from '../types/fitness';
-import { useFitnessData } from '../hooks/useFitnessData';
-import { useFitnessSync } from '../hooks/useFitnessSync';
+import { useFitnessData, FitnessDatabaseSnapshot } from '../hooks/useFitnessData';
+import { useFitnessSync, AccountResetStatus } from '../hooks/useFitnessSync';
 import { useFitnessExercises } from '../hooks/useFitnessExercises';
 import { useFitnessWorkouts } from '../hooks/useFitnessWorkouts';
 import { useFitnessLogs, AddLogResult } from '../hooks/useFitnessLogs';
-import { useActiveSession, ActiveSession } from '../hooks/useActiveSession';
-import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
+import { ActiveSession } from '../hooks/useActiveSession';
+import {
+  useFitnessBackups,
+  AutoBackupEntry,
+  AutoBackupResult,
+  PushAutoBackup,
+  RestoreOperationResult
+} from '../hooks/useFitnessBackups';
 import { clearDeletedIdsTracker } from '../utils/fitnessSyncHelpers';
-import { FitnessDatabaseSnapshot } from '../hooks/useFitnessData';
+import { DatabaseState } from '../state/persistence/databaseMachine';
 import { FitnessDerivedProvider } from './FitnessDerivedContext';
 import { ActiveSessionProvider, useActiveSessionMeta, registerFitnessContextForFallback } from './ActiveSessionContext';
 
@@ -23,12 +29,17 @@ export interface FitnessContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retrySync: () => void;
+  accountResetStatus?: AccountResetStatus;
+  accountResetError?: string | null;
+  retryAccountReset?: () => Promise<{ success: boolean; error?: string }>;
 
   // Domain State
   exerciseDefinitions: ExerciseDefinition[];
   workouts: Workout[];
   logs: Record<string, SessionLog>;
   appState: AppState;
+  databaseLifecycleState?: DatabaseState;
+  retryStorageCommit?: () => { success: boolean; error?: string };
 
   // Exercise Definitions Actions
   addExerciseDefinition: (def: Omit<ExerciseDefinition, 'id'> & { id?: string }) => Promise<ExerciseDefinition>;
@@ -64,14 +75,17 @@ export interface FitnessContextType {
   deleteBodyWeight: (date: string) => Promise<void>;
 
   // Backup & Restore Actions
-  pushAutoBackup: (w: Workout[], l: Record<string, SessionLog>, s: AppState, changeType: 'auto-session' | 'auto-edit' | 'manual', desc: string, defs?: ExerciseDefinition[]) => Promise<{ success: boolean; message?: string }>;
+  pushAutoBackup: PushAutoBackup;
   getAutoBackups: () => AutoBackupEntry[];
-  restoreAutoBackup: (timestamp: string) => Promise<{ success: boolean; message: string }>;
+  clearAutoBackups?: () => Promise<AutoBackupResult>;
+  restoreAutoBackup: (timestamp: string) => Promise<RestoreOperationResult>;
   createManualBackup: () => Promise<{ success: boolean; message: string }>;
   exportBackup: () => string;
-  importBackup: (backupJson: string) => Promise<{ success: boolean; message: string }>;
-  retryPendingCloudSync?: () => Promise<{ success: boolean; message: string; restoreStatus: 'fully_synced' | 'cloud_sync_pending' | 'restore_failed' }>;
+  importBackup: (backupJson: string) => Promise<RestoreOperationResult>;
+  retryPendingCloudSync: () => Promise<RestoreOperationResult>;
   isBackupsLoading?: boolean;
+  hasPendingCloudSync?: boolean;
+  pendingCloudSyncError?: string | null;
 }
 
 export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
@@ -81,25 +95,28 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
   const { clearActiveSession } = useActiveSessionMeta();
   // 1. Core local state store
   const data = useFitnessData();
-  const clearAutoBackupsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const clearAutoBackupsForResetRef = useRef<() => Promise<AutoBackupResult>>(() =>
+    Promise.resolve({ success: false, message: 'Backup manager unavailable during reset.' })
+  );
   const activeResetPromiseRef = useRef<Promise<void> | null>(null);
 
   // Authoritative account-boundary reset coordinator:
-  // Asynchronously executes and awaits all required cleanup in a single coordinated pass.
-  // Uses a shared in-flight promise so concurrent callers await the exact same reset operation.
-  const resetAccountCoordinator = React.useCallback((prevUid?: string | null): Promise<void> => {
+  // Executes forced backup clearing (not UI-gated clear), resets local domain snapshot,
+  // clears in-flight draft, and clears ONLY anonymous tombstones (UID tombstones remain
+  // partitioned by UID so offline deletions survive logout and flush on re-login).
+  const resetAccountCoordinator = React.useCallback((): Promise<void> => {
     if (activeResetPromiseRef.current) {
       return activeResetPromiseRef.current;
     }
 
     const resetPromise = (async () => {
       try {
-        data.resetToDefaultData();
-        await clearAutoBackupsRef.current();
-        clearActiveSession();
-        if (prevUid) {
-          clearDeletedIdsTracker(prevUid);
+        const clearRes = await clearAutoBackupsForResetRef.current();
+        if (!clearRes || !clearRes.success) {
+          throw new Error(clearRes?.message || 'Failed to clear previous account backups cleanly.');
         }
+        data.resetToDefaultData();
+        clearActiveSession();
         clearDeletedIdsTracker();
       } catch (err) {
         console.error("Account boundary reset coordinator error:", err);
@@ -123,6 +140,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     setWorkouts: data.setWorkouts,
     setLogs: data.setLogs,
     setAppState: data.setAppState,
+    commitFitnessSnapshot: data.commitFitnessSnapshot,
     resetToDefaultData: resetAccountCoordinator
   });
 
@@ -133,38 +151,32 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     workoutsRef: data.workoutsRef,
     logsRef: data.logsRef,
     appStateRef: data.appStateRef,
-    applyFitnessDatabaseSnapshot: data.applyFitnessDatabaseSnapshot,
-    commitFitnessSnapshot: data.commitFitnessSnapshot,
-    setExerciseDefinitions: data.setExerciseDefinitions,
-    setWorkouts: data.setWorkouts,
-    setLogs: data.setLogs,
-    setAppState: data.setAppState
+    commitFitnessSnapshot: data.commitFitnessSnapshot
   });
-  clearAutoBackupsRef.current = backups.clearAutoBackups;
+  clearAutoBackupsForResetRef.current = backups.clearAutoBackupsForAccountReset;
 
   // 4. Domain hooks
   const exercises = useFitnessExercises({
     user: sync.user,
     exerciseDefsRef: data.exerciseDefsRef,
     workoutsRef: data.workoutsRef,
-    setExerciseDefinitions: data.setExerciseDefinitions,
-    setWorkouts: data.setWorkouts,
+    logsRef: data.logsRef,
+    appStateRef: data.appStateRef,
+    commitFitnessSnapshot: data.commitFitnessSnapshot,
     pushAutoBackup: backups.pushAutoBackup,
     setSyncStatus: sync.setSyncStatus,
-    setSyncError: sync.setSyncError,
-    logsRef: data.logsRef,
-    appStateRef: data.appStateRef
+    setSyncError: sync.setSyncError
   });
 
   const workouts = useFitnessWorkouts({
     user: sync.user,
     workoutsRef: data.workoutsRef,
-    setWorkoutsState: data.setWorkouts,
+    logsRef: data.logsRef,
+    appStateRef: data.appStateRef,
+    commitFitnessSnapshot: data.commitFitnessSnapshot,
     pushAutoBackup: backups.pushAutoBackup,
     setSyncStatus: sync.setSyncStatus,
-    setSyncError: sync.setSyncError,
-    logsRef: data.logsRef,
-    appStateRef: data.appStateRef
+    setSyncError: sync.setSyncError
   });
 
   const logs = useFitnessLogs({
@@ -172,8 +184,6 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     logsRef: data.logsRef,
     appStateRef: data.appStateRef,
     workoutsRef: data.workoutsRef,
-    setLogs: data.setLogs,
-    setAppState: data.setAppState,
     commitFitnessSnapshot: data.commitFitnessSnapshot,
     pushAutoBackup: backups.pushAutoBackup,
     setSyncStatus: sync.setSyncStatus,
@@ -188,11 +198,16 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     login: sync.login,
     logout: sync.logout,
     retrySync: sync.retrySync,
+    accountResetStatus: sync.accountResetStatus,
+    accountResetError: sync.accountResetError,
+    retryAccountReset: sync.retryAccountReset,
 
     exerciseDefinitions: data.exerciseDefinitions,
     workouts: data.workouts,
     logs: data.logs,
     appState: data.appState,
+    databaseLifecycleState: data.databaseLifecycleState,
+    retryStorageCommit: data.retryStorageCommit,
 
     addExerciseDefinition: exercises.addExerciseDefinition,
     updateExerciseDefinition: exercises.updateExerciseDefinition,
@@ -215,12 +230,15 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     commitFitnessSnapshot: data.commitFitnessSnapshot,
     pushAutoBackup: backups.pushAutoBackup,
     getAutoBackups: backups.getAutoBackups,
+    clearAutoBackups: backups.clearAutoBackups,
     restoreAutoBackup: backups.restoreAutoBackup,
     createManualBackup: backups.createManualBackup,
     exportBackup: backups.exportBackup,
     importBackup: backups.importBackup,
     retryPendingCloudSync: backups.retryPendingCloudSync,
-    isBackupsLoading: backups.isBackupsLoading
+    isBackupsLoading: backups.isBackupsLoading,
+    hasPendingCloudSync: backups.hasPendingCloudSync,
+    pendingCloudSyncError: backups.pendingCloudSyncError
   }), [
     sync.user,
     sync.loading,
@@ -229,10 +247,15 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     sync.login,
     sync.logout,
     sync.retrySync,
+    sync.accountResetStatus,
+    sync.accountResetError,
+    sync.retryAccountReset,
     data.exerciseDefinitions,
     data.workouts,
     data.logs,
     data.appState,
+    data.databaseLifecycleState,
+    data.retryStorageCommit,
     data.commitFitnessSnapshot,
     exercises.addExerciseDefinition,
     exercises.updateExerciseDefinition,
@@ -250,12 +273,15 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     logs.deleteBodyWeight,
     backups.pushAutoBackup,
     backups.getAutoBackups,
+    backups.clearAutoBackups,
     backups.restoreAutoBackup,
     backups.createManualBackup,
     backups.exportBackup,
     backups.importBackup,
     backups.retryPendingCloudSync,
-    backups.isBackupsLoading
+    backups.isBackupsLoading,
+    backups.hasPendingCloudSync,
+    backups.pendingCloudSyncError
   ]);
 
   return (

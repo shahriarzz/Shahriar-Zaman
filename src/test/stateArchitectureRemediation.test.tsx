@@ -302,7 +302,7 @@ describe('State Architecture, Reliability & UX Audit Remediation Test Suite', ()
       // Mock saveBackupToDb to simulate failure during pre-import savepoint
       vi.spyOn(backupDb, 'saveBackupToDb').mockRejectedValue(new Error('IndexedDB disk quota exhausted'));
 
-      const mockApplySnapshot = vi.fn();
+      const mockCommitSnapshot = vi.fn();
       let hookResult: any;
 
       const TestHarness = () => {
@@ -312,11 +312,7 @@ describe('State Architecture, Reliability & UX Audit Remediation Test Suite', ()
           workoutsRef: { current: [] },
           logsRef: { current: {} },
           appStateRef: { current: { cycleStart: '2026-11-01' } },
-          applyFitnessDatabaseSnapshot: mockApplySnapshot,
-          setExerciseDefinitions: vi.fn(),
-          setWorkouts: vi.fn(),
-          setLogs: vi.fn(),
-          setAppState: vi.fn()
+          commitFitnessSnapshot: mockCommitSnapshot
         });
         return null;
       };
@@ -341,8 +337,8 @@ describe('State Architecture, Reliability & UX Audit Remediation Test Suite', ()
       // INVARIANT: Pre-import checkpoint failure MUST abort the import
       expect(importOutcome.success).toBe(false);
       expect(importOutcome.message).toContain('Pre-import safety checkpoint failed');
-      // Snapshot was NOT applied!
-      expect(mockApplySnapshot).not.toHaveBeenCalled();
+      // Snapshot was NOT committed!
+      expect(mockCommitSnapshot).not.toHaveBeenCalled();
     });
   });
 });
