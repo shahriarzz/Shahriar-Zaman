@@ -956,55 +956,54 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   };
 
   // STEP 3: Transactional session completion flow
-  // 1. Acquire immediate finishInFlightRef concurrency lock
-  // 2. Validate extreme parameters
+  // 1. Acquire immediate finishInFlightRef concurrency lock synchronously before any await
+  // 2. Validate extreme parameters inside try
   // 3. Harden & sanitize SessionLog contract
   // 4. Persist (await addLog with confirmed local persistence before clearing draft)
   // 5. Trigger haptic feedback ONLY after verified local durability
   // 6. Update cycle progression if core workout
   // 7. Clear active in-flight session and render completion summary
-  // 8. Release concurrency lock in finally across all exit branches
+  // 8. Release concurrency lock in exactly one finally block across all exit branches
   const finishSession = async () => {
     if (finishInFlightRef.current || !activeWorkout || isSubmitting || isFinishing) return;
     finishInFlightRef.current = true;
 
-    dispatchSessionLifecycle({
-      type: 'REQUEST_FINISH',
-      workoutId: activeWorkout.id,
-      startTime: startTime || Date.now()
-    });
-
-    // Safety checks for extreme or illogical inputs to secure tracking data
-    const extremeSets: { exName: string; weight: number; reps: number }[] = [];
-    Object.entries(sessionSets).forEach(([exDefId, sets]) => {
-      const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exDefId);
-      const exName = ex ? resolveWorkoutExercise(ex, exerciseDefinitions).name : 'Exercise';
-      (sets as SetLog[]).forEach((s: SetLog) => {
-        if (s.done) {
-          const w = parseStrictWeight(s.weight, 0.0001, 5000) || 0;
-          const r = parseStrictReps(s.reps, 1, 1000) || 0;
-          if (w > 500 || r > 100) {
-            extremeSets.push({ exName, weight: w, reps: r });
-          }
-        }
-      });
-    });
-
-    if (extremeSets.length > 0) {
-      const warningLines = extremeSets.map(e => `• ${e.exName}: ${e.weight}kg × ${e.reps} reps`).join('\n');
-      const proceed = await confirm({
-        title: 'Illogical Protocol Warning',
-        message: `Abnormally high parameters detected:\n${warningLines}\n\nMost training routines don't exceed 500kg or 100 reps per set. Proceed only if these are genuine, intentional values and NOT typos.`,
-        isDanger: true
-      });
-      if (!proceed) {
-        dispatchSessionLifecycle({ type: 'VALIDATION_FAILED', reason: 'Abnormally high parameters cancelled' });
-        finishInFlightRef.current = false;
-        return;
-      }
-    }
-
     try {
+      dispatchSessionLifecycle({
+        type: 'REQUEST_FINISH',
+        workoutId: activeWorkout.id,
+        startTime: startTime || Date.now()
+      });
+
+      // Safety checks for extreme or illogical inputs to secure tracking data
+      const extremeSets: { exName: string; weight: number; reps: number }[] = [];
+      Object.entries(sessionSets).forEach(([exDefId, sets]) => {
+        const ex = activeWorkout.exercises.find(e => e.exerciseDefinitionId === exDefId);
+        const exName = ex ? resolveWorkoutExercise(ex, exerciseDefinitions).name : 'Exercise';
+        (sets as SetLog[]).forEach((s: SetLog) => {
+          if (s.done) {
+            const w = parseStrictWeight(s.weight, 0.0001, 5000) || 0;
+            const r = parseStrictReps(s.reps, 1, 1000) || 0;
+            if (w > 500 || r > 100) {
+              extremeSets.push({ exName, weight: w, reps: r });
+            }
+          }
+        });
+      });
+
+      if (extremeSets.length > 0) {
+        const warningLines = extremeSets.map(e => `• ${e.exName}: ${e.weight}kg × ${e.reps} reps`).join('\n');
+        const proceed = await confirm({
+          title: 'Illogical Protocol Warning',
+          message: `Abnormally high parameters detected:\n${warningLines}\n\nMost training routines don't exceed 500kg or 100 reps per set. Proceed only if these are genuine, intentional values and NOT typos.`,
+          isDanger: true
+        });
+        if (!proceed) {
+          dispatchSessionLifecycle({ type: 'VALIDATION_FAILED', reason: 'Abnormally high parameters cancelled' });
+          return;
+        }
+      }
+
       dispatchSessionLifecycle({ type: 'VALIDATION_PASSED' });
       const elapsedSecs = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
       setFinishedDuration(elapsedSecs);

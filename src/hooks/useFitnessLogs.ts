@@ -12,6 +12,7 @@ export interface AddLogResult {
   success: boolean;
   localPersisted: boolean;
   cloudPersisted: boolean;
+  cloudAttempted: boolean;
   error?: string;
 }
 
@@ -62,6 +63,7 @@ export function useFitnessLogs({
         success: false,
         localPersisted: false,
         cloudPersisted: false,
+        cloudAttempted: !!user,
         error: errMsg
       };
     }
@@ -71,6 +73,7 @@ export function useFitnessLogs({
 
     // 3. Cloud synchronization (separate outcome from local commit)
     let cloudPersisted = false;
+    const cloudAttempted = !!user;
     if (user) {
       try {
         await saveLog(user.uid, logId, log);
@@ -87,7 +90,8 @@ export function useFitnessLogs({
     return {
       success: true,
       localPersisted: true,
-      cloudPersisted
+      cloudPersisted,
+      cloudAttempted
     };
   }, [user, logsRef, workoutsRef, appStateRef, setLogs, commitFitnessSnapshot, pushAutoBackup, setSyncStatus, setSyncError]);
 

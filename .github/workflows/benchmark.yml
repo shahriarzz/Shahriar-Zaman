@@ -1,0 +1,38 @@
+name: Performance Benchmark Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment or note for this benchmark run'
+        required: false
+        default: 'manual-dispatch'
+
+jobs:
+  benchmark:
+    name: Native Vitest Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Vitest Performance Benchmarks
+        run: npm run bench:performance | tee benchmark-results.txt
+        continue-on-error: true
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.txt
+          if-no-files-found: warn

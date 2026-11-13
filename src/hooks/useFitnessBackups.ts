@@ -8,7 +8,8 @@ import { FitnessDatabaseSnapshot, persistFitnessDatabase } from './useFitnessDat
 import {
   backupTransition,
   initialBackupPhase,
-  BackupPhase
+  BackupPhase,
+  isBackupOperationAdmissible
 } from '../state/persistence/backupMachine';
 
 import { 
@@ -124,16 +125,26 @@ export function useFitnessBackups({
     };
   }, []);
 
+  // Track pending cloud reconciliation for restore/import
+  const pendingCloudRestoreRef = useRef<{
+    uid: string;
+    snapshot: FitnessDatabaseSnapshot;
+    timestamp: string;
+  } | null>(null);
+
   const performSaveBackup = useCallback(async (
     w: Workout[], 
     l: Record<string, SessionLog>, 
     s: AppState, 
     changeType: 'auto-session' | 'auto-edit' | 'manual', 
     desc: string,
-    defs?: ExerciseDefinition[]
+    defs?: ExerciseDefinition[],
+    isInternalCheckpoint: boolean = false
   ): Promise<{ success: boolean; message?: string }> => {
     try {
-      dispatchBackup({ type: 'BACKUP_STARTED', desc });
+      if (!isInternalCheckpoint) {
+        dispatchBackup({ type: 'BACKUP_STARTED', desc });
+      }
       const entry: AutoBackupEntry = {
         timestamp: new Date().toISOString(),
         workouts: w,
@@ -160,13 +171,17 @@ export function useFitnessBackups({
         localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
       } catch {}
 
-      dispatchBackup({ type: 'BACKUP_SUCCEEDED', newCount: updated.length });
+      if (!isInternalCheckpoint) {
+        dispatchBackup({ type: 'BACKUP_SUCCEEDED', newCount: updated.length });
+      }
       setBackupsVersion(v => v + 1);
       return { success: true };
     } catch (e: any) {
       console.error("Failed to persist checkpoint auto backup:", e);
       const errorMsg = e?.message || String(e);
-      dispatchBackup({ type: 'BACKUP_FAILED', error: errorMsg });
+      if (!isInternalCheckpoint) {
+        dispatchBackup({ type: 'BACKUP_FAILED', error: errorMsg });
+      }
       return { success: false, message: errorMsg };
     }
   }, [exerciseDefsRef]);
@@ -179,14 +194,20 @@ export function useFitnessBackups({
     desc: string,
     defs?: ExerciseDefinition[]
   ): Promise<{ success: boolean; message?: string }> => {
+    if (!isBackupOperationAdmissible(backupPhase, 'create')) {
+      return Promise.resolve({ success: false, message: 'Backup creation is not allowed in current state.' });
+    }
     return runSerializedBackupOp(() => performSaveBackup(w, l, s, changeType, desc, defs));
-  }, [performSaveBackup, runSerializedBackupOp]);
+  }, [performSaveBackup, runSerializedBackupOp, backupPhase]);
 
   const getAutoBackups = useCallback((): AutoBackupEntry[] => {
     return backupsCacheRef.current;
   }, [backupsVersion]);
 
   const clearAutoBackups = useCallback((): Promise<void> => {
+    if (!isBackupOperationAdmissible(backupPhase, 'clear')) {
+      return Promise.resolve();
+    }
     return runSerializedBackupOp(async () => {
       resetEpochRef.current += 1;
       backupsCacheRef.current = [];
@@ -204,9 +225,16 @@ export function useFitnessBackups({
         setBackupsVersion(v => v + 1);
       }
     });
-  }, [runSerializedBackupOp]);
+  }, [runSerializedBackupOp, backupPhase]);
 
   const restoreAutoBackup = useCallback((timestamp: string): Promise<{ success: boolean; message: string; restoreStatus?: 'restored_locally' | 'cloud_sync_pending' | 'fully_synced' | 'restore_failed' }> => {
+    if (!isBackupOperationAdmissible(backupPhase, 'restore')) {
+      return Promise.resolve({
+        success: false,
+        message: 'Restore operation is not allowed in current state.',
+        restoreStatus: 'restore_failed'
+      });
+    }
     return runSerializedBackupOp(async () => {
       try {
         dispatchBackup({ type: 'RESTORE_STARTED', timestamp });
@@ -238,13 +266,15 @@ export function useFitnessBackups({
         }
 
         // 1. Create and verify durable pre-restore recovery checkpoint BEFORE modifying existing data
+        // Must use low-level savepoint so it does NOT dispatch BACKUP_STARTED / BACKUP_SUCCEEDED
         const preRestoreSave = await performSaveBackup(
           workoutsRef.current,
           logsRef.current,
           appStateRef.current,
           'manual',
           'Pre-Restore Savepoint',
-          exerciseDefsRef.current
+          exerciseDefsRef.current,
+          true
         );
 
         if (!preRestoreSave.success) {
@@ -287,8 +317,14 @@ export function useFitnessBackups({
           try {
             await saveAppState(user.uid, restoredAppState, true);
             await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
+            pendingCloudRestoreRef.current = null;
           } catch (cloudError: any) {
             console.error("Cloud synchronization failed during restore:", cloudError);
+            pendingCloudRestoreRef.current = {
+              uid: user.uid,
+              snapshot: restoredSnapshot,
+              timestamp
+            };
             // Do NOT dispatch RESTORE_SUCCEEDED when cloud sync is incomplete
             dispatchBackup({ type: 'RESTORE_FAILED', error: `Cloud sync failed: ${cloudError?.message || String(cloudError)}` });
             return {
@@ -312,7 +348,7 @@ export function useFitnessBackups({
         return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
       }
     });
-  }, [user, getAutoBackups, pushAutoBackup, workoutsRef, logsRef, appStateRef, exerciseDefsRef, commitFitnessSnapshot, applyFitnessDatabaseSnapshot, runSerializedBackupOp]);
+  }, [user, getAutoBackups, performSaveBackup, workoutsRef, logsRef, appStateRef, exerciseDefsRef, commitFitnessSnapshot, applyFitnessDatabaseSnapshot, runSerializedBackupOp, backupPhase]);
 
   const createManualBackup = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
@@ -346,6 +382,13 @@ export function useFitnessBackups({
   }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef]);
 
   const importBackup = useCallback((backupJson: string): Promise<{ success: boolean; message: string; restoreStatus?: 'restored_locally' | 'cloud_sync_pending' | 'fully_synced' | 'restore_failed' }> => {
+    if (!isBackupOperationAdmissible(backupPhase, 'import')) {
+      return Promise.resolve({
+        success: false,
+        message: 'Import operation is not allowed in current state.',
+        restoreStatus: 'restore_failed'
+      });
+    }
     return runSerializedBackupOp(async () => {
       try {
         dispatchBackup({ type: 'IMPORT_STARTED' });
@@ -378,7 +421,8 @@ export function useFitnessBackups({
           appStateRef.current,
           'manual',
           'Pre-Import Savepoint',
-          exerciseDefsRef.current
+          exerciseDefsRef.current,
+          true
         );
 
         if (!preImportSave.success) {
@@ -420,8 +464,14 @@ export function useFitnessBackups({
           try {
             await saveAppState(user.uid, restoredAppState, true);
             await syncCloudDataWithRestored(user.uid, restoredDefs, restoredWorkouts, restoredLogs);
+            pendingCloudRestoreRef.current = null;
           } catch (cloudError: any) {
             console.error("Cloud synchronization failed during import:", cloudError);
+            pendingCloudRestoreRef.current = {
+              uid: user.uid,
+              snapshot: restoredSnapshot,
+              timestamp: new Date().toISOString()
+            };
             // Do NOT dispatch IMPORT_SUCCEEDED when cloud sync is incomplete
             dispatchBackup({ type: 'IMPORT_FAILED', error: `Cloud sync failed: ${cloudError?.message || String(cloudError)}` });
             return {
@@ -445,7 +495,45 @@ export function useFitnessBackups({
         return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
       }
     });
-  }, [user, pushAutoBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, applyFitnessDatabaseSnapshot, runSerializedBackupOp]);
+  }, [user, performSaveBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, applyFitnessDatabaseSnapshot, runSerializedBackupOp, backupPhase]);
+
+  // Real retry and reconciliation path for cloud-pending restore/import
+  const retryPendingCloudSync = useCallback(async (): Promise<{ success: boolean; message: string; restoreStatus: 'fully_synced' | 'cloud_sync_pending' | 'restore_failed' }> => {
+    const pending = pendingCloudRestoreRef.current;
+    if (!pending) {
+      return { success: true, message: 'No pending cloud restore reconciliation required.', restoreStatus: 'fully_synced' };
+    }
+    if (!user || user.uid !== pending.uid) {
+      return {
+        success: false,
+        message: 'Cannot reconcile cloud restore: active user does not match original account.',
+        restoreStatus: 'cloud_sync_pending'
+      };
+    }
+
+    try {
+      dispatchBackup({ type: 'RESTORE_STARTED', timestamp: pending.timestamp });
+      await saveAppState(user.uid, pending.snapshot.appState, true);
+      await syncCloudDataWithRestored(
+        user.uid,
+        pending.snapshot.exerciseDefinitions,
+        pending.snapshot.workouts,
+        pending.snapshot.logs
+      );
+      pendingCloudRestoreRef.current = null;
+      dispatchBackup({ type: 'RESTORE_SUCCEEDED', count: backupsCacheRef.current.length });
+      return { success: true, message: 'Cloud reconciliation completed successfully.', restoreStatus: 'fully_synced' };
+    } catch (err: any) {
+      console.error("Retry cloud sync failed:", err);
+      const errMsg = `Retry failed: ${err?.message || String(err)}`;
+      dispatchBackup({ type: 'RESTORE_FAILED', error: errMsg });
+      return {
+        success: false,
+        message: errMsg,
+        restoreStatus: 'cloud_sync_pending'
+      };
+    }
+  }, [user]);
 
   const isBackupsLoading = backupPhase.status === 'loading' || backupPhase.status === 'migrating';
 
@@ -457,6 +545,7 @@ export function useFitnessBackups({
     createManualBackup,
     exportBackup,
     importBackup,
+    retryPendingCloudSync,
     isBackupsLoading,
     backupPhase
   }), [
@@ -467,6 +556,7 @@ export function useFitnessBackups({
     createManualBackup,
     exportBackup,
     importBackup,
+    retryPendingCloudSync,
     isBackupsLoading,
     backupPhase
   ]);

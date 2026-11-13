@@ -176,7 +176,6 @@ export function useFitnessData() {
 
   // Explicit confirmation-confirmed local commit boundary for domain snapshots
   const lastPersistedSerializedRef = useRef<string>('');
-  const lastPersistedRevisionRef = useRef<number>(0);
 
   const commitFitnessSnapshot = useCallback((partialSnapshot: Partial<FitnessDatabaseSnapshot>): { success: boolean; snapshot: FitnessDatabaseSnapshot } => {
     const nextSnapshot: FitnessDatabaseSnapshot = {
@@ -190,7 +189,6 @@ export function useFitnessData() {
     try {
       persistFitnessDatabase(nextSnapshot);
       lastPersistedSerializedRef.current = JSON.stringify(nextSnapshot);
-      lastPersistedRevisionRef.current += 1;
       dispatchDb({ type: 'WRITE_COMMITTED' });
     } catch (err: any) {
       dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });
@@ -235,7 +233,6 @@ export function useFitnessData() {
     try {
       persistFitnessDatabase(currentSnapshot);
       lastPersistedSerializedRef.current = currentSerialized;
-      lastPersistedRevisionRef.current += 1;
       dispatchDb({ type: 'WRITE_COMMITTED' });
     } catch (err: any) {
       dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });

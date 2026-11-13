@@ -1,6 +1,0 @@
-{
-  "summary": "Muscle Balance & Recovery Analytics implementation plan and architectural specification restored:\n- 15 canonical anatomical groups and 3-tier WSE attribution\n- Deterministic 14-day exponential residual decay formula\n- Single-pass buildFitnessIndex integration\n- Zero-pill UI layout and view-all transparency rules",
-  "updatedAt": "2026-11-05T17:23:37.462977279Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

@@ -46,7 +46,7 @@ interface UseFitnessSyncProps {
   setWorkouts: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => void;
   setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
   setAppState: (state: AppState | ((prev: AppState) => AppState)) => void;
-  resetToDefaultData?: () => void;
+  resetToDefaultData?: (prevUid?: string) => void | Promise<void>;
   setSyncStatus?: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
 }
 
@@ -113,10 +113,8 @@ export function useFitnessSync({
       // When switching accounts or logging out from an existing account, isolate data by resetting local state
       // This strictly prevents Account A's workout data or tombstones from being merged or uploaded into Account B
       if (prevUid && prevUid !== currentUid) {
-        clearDeletedIdsTracker(prevUid);
-        clearDeletedIdsTracker();
         if (resetToDefaultData) {
-          await resetToDefaultData();
+          await resetToDefaultData(prevUid);
         }
       } else if (!prevUid && currentUid) {
         // First login: check if local state already has local/anonymous workouts/logs that shouldn't leak
@@ -150,11 +148,8 @@ export function useFitnessSync({
       queuedSyncRef.current = null;
       currentUidRef.current = null;
       dispatchSync({ type: 'RESET' });
-      const currentUid = auth.currentUser?.uid || previousUidRef.current;
       await auth.signOut();
       dispatchAuth({ type: 'LOGOUT_COMPLETED' });
-      clearDeletedIdsTracker(currentUid);
-      clearDeletedIdsTracker();
     } catch (e) {
       console.error("Sign out error:", e);
     }

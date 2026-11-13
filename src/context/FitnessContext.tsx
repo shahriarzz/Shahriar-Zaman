@@ -64,12 +64,13 @@ export interface FitnessContextType {
   deleteBodyWeight: (date: string) => Promise<void>;
 
   // Backup & Restore Actions
-  pushAutoBackup: (w: Workout[], l: Record<string, SessionLog>, s: AppState, changeType: 'auto-session' | 'auto-edit' | 'manual', desc: string, defs?: ExerciseDefinition[]) => Promise<{ success: boolean; message?: string }> | void;
+  pushAutoBackup: (w: Workout[], l: Record<string, SessionLog>, s: AppState, changeType: 'auto-session' | 'auto-edit' | 'manual', desc: string, defs?: ExerciseDefinition[]) => Promise<{ success: boolean; message?: string }>;
   getAutoBackups: () => AutoBackupEntry[];
   restoreAutoBackup: (timestamp: string) => Promise<{ success: boolean; message: string }>;
   createManualBackup: () => Promise<{ success: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (backupJson: string) => Promise<{ success: boolean; message: string }>;
+  retryPendingCloudSync?: () => Promise<{ success: boolean; message: string; restoreStatus: 'fully_synced' | 'cloud_sync_pending' | 'restore_failed' }>;
   isBackupsLoading?: boolean;
 }
 
@@ -81,27 +82,35 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
   // 1. Core local state store
   const data = useFitnessData();
   const clearAutoBackupsRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const isResettingAccountRef = useRef(false);
+  const activeResetPromiseRef = useRef<Promise<void> | null>(null);
 
   // Authoritative account-boundary reset coordinator:
-  // Asynchronously executes and awaits all required cleanup in a single coordinated pass
-  const resetAccountCoordinator = React.useCallback(async (prevUid?: string | null) => {
-    if (isResettingAccountRef.current) return;
-    isResettingAccountRef.current = true;
-    try {
-      data.resetToDefaultData();
-      await clearAutoBackupsRef.current();
-      clearActiveSession();
-      if (prevUid) {
-        clearDeletedIdsTracker(prevUid);
-      }
-      clearDeletedIdsTracker();
-    } catch (err) {
-      console.error("Account boundary reset coordinator error:", err);
-      throw err;
-    } finally {
-      isResettingAccountRef.current = false;
+  // Asynchronously executes and awaits all required cleanup in a single coordinated pass.
+  // Uses a shared in-flight promise so concurrent callers await the exact same reset operation.
+  const resetAccountCoordinator = React.useCallback((prevUid?: string | null): Promise<void> => {
+    if (activeResetPromiseRef.current) {
+      return activeResetPromiseRef.current;
     }
+
+    const resetPromise = (async () => {
+      try {
+        data.resetToDefaultData();
+        await clearAutoBackupsRef.current();
+        clearActiveSession();
+        if (prevUid) {
+          clearDeletedIdsTracker(prevUid);
+        }
+        clearDeletedIdsTracker();
+      } catch (err) {
+        console.error("Account boundary reset coordinator error:", err);
+        throw err;
+      } finally {
+        activeResetPromiseRef.current = null;
+      }
+    })();
+
+    activeResetPromiseRef.current = resetPromise;
+    return resetPromise;
   }, [data.resetToDefaultData, clearActiveSession]);
 
   // 2. Realtime Firebase sync & Auth
@@ -210,6 +219,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     createManualBackup: backups.createManualBackup,
     exportBackup: backups.exportBackup,
     importBackup: backups.importBackup,
+    retryPendingCloudSync: backups.retryPendingCloudSync,
     isBackupsLoading: backups.isBackupsLoading
   }), [
     sync.user,
@@ -244,6 +254,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     backups.createManualBackup,
     backups.exportBackup,
     backups.importBackup,
+    backups.retryPendingCloudSync,
     backups.isBackupsLoading
   ]);
 

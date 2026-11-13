@@ -53,8 +53,11 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'BACKUP_STARTED': {
-      if (state.status !== 'ready') return state;
-      return { status: 'creating', desc: event.desc, previousCheckpointCount: state.checkpointCount };
+      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
+      return { status: 'creating', desc: event.desc, previousCheckpointCount: prevCount };
     }
 
     case 'BACKUP_SUCCEEDED': {
@@ -78,8 +81,11 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'RESTORE_STARTED': {
-      if (state.status !== 'ready') return state;
-      return { status: 'restoring', timestamp: event.timestamp, previousCheckpointCount: state.checkpointCount };
+      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
+      const prevCount = 'checkpointCount' in state
+        ? state.checkpointCount
+        : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
+      return { status: 'restoring', timestamp: event.timestamp, previousCheckpointCount: prevCount };
     }
 
     case 'RESTORE_SUCCEEDED': {
@@ -103,8 +109,8 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
     }
 
     case 'IMPORT_STARTED': {
-      if (state.status !== 'ready' && state.status !== 'loading') return state;
-      const count = state.status === 'ready' ? state.checkpointCount : 0;
+      if (state.status !== 'ready' && state.status !== 'loading' && state.status !== 'error') return state;
+      const count = 'checkpointCount' in state ? state.checkpointCount : ('previousCheckpointCount' in state ? state.previousCheckpointCount : 0);
       return { status: 'importing', previousCheckpointCount: count };
     }
 
@@ -159,5 +165,29 @@ export function backupTransition(state: BackupPhase, event: BackupEvent): Backup
 
     default:
       return state;
+  }
+}
+
+export type BackupOperationKind = 'create' | 'restore' | 'import' | 'clear' | 'initialize';
+
+/**
+ * Pure state machine admission guard.
+ * Determines synchronously whether an operation is legally allowed to execute side effects
+ * given the current synchronous machine phase.
+ */
+export function isBackupOperationAdmissible(state: BackupPhase, op: BackupOperationKind): boolean {
+  switch (op) {
+    case 'initialize':
+      return state.status === 'loading' || state.status === 'error';
+    case 'create':
+      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+    case 'restore':
+      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+    case 'import':
+      return state.status === 'ready' || state.status === 'loading' || state.status === 'error';
+    case 'clear':
+      return state.status === 'ready' || state.status === 'error';
+    default:
+      return false;
   }
 }

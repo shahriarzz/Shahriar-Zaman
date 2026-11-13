@@ -14,6 +14,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "bench:performance": "vitest bench src/benchmarks/fitnessPerformance.bench.ts",
     "ci": "npm run lint && npm run test && npm run build",
     "cap:sync": "cap sync android",
     "android:debug": "npm run clean && npm run build:web && npx cap sync android && cd android && chmod +x ./gradlew && ./gradlew assembleDebug",

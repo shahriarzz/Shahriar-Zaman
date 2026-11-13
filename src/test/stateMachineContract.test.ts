@@ -163,50 +163,77 @@ describe('State Machine Architecture Contract Invariants', () => {
       f => !f.includes('/test/') && !f.includes('/state/')
     );
 
-    // Read all production file contents into memory
-    const prodFileContents = allProdFiles.map(f => ({
-      path: f,
-      content: fs.readFileSync(f, 'utf8')
-    }));
+    // Helper: Parse TS file to AST and extract import declarations and imported symbols
+    function getFileImports(filePath: string): { moduleSpecifier: string; importedSymbols: string[] }[] {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const sf = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+      const imports: { moduleSpecifier: string; importedSymbols: string[] }[] = [];
+
+      function visit(node: ts.Node) {
+        if (ts.isImportDeclaration(node)) {
+          if (ts.isStringLiteral(node.moduleSpecifier)) {
+            const mod = node.moduleSpecifier.text;
+            const symbols: string[] = [];
+            if (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
+              node.importClause.namedBindings.elements.forEach(el => {
+                symbols.push(el.name.text);
+              });
+            }
+            imports.push({ moduleSpecifier: mod, importedSymbols: symbols });
+          }
+        }
+        ts.forEachChild(node, visit);
+      }
+
+      visit(sf);
+      return imports;
+    }
 
     const canonicalStateMachines = [
-      { name: 'navigationMachine', file: 'src/state/app/navigationMachine.ts', expectedOwner: 'App.tsx' },
-      { name: 'sessionMachine', file: 'src/state/session/sessionMachine.ts', expectedOwner: 'SessionView.tsx' },
-      { name: 'coachingMachine', file: 'src/state/session/coachingMachine.ts', expectedOwner: 'SessionView.tsx' },
-      { name: 'authMachine', file: 'src/state/sync/authMachine.ts', expectedOwner: 'useFitnessSync.ts' },
-      { name: 'syncMachine', file: 'src/state/sync/syncMachine.ts', expectedOwner: 'useFitnessSync.ts' },
-      { name: 'databaseMachine', file: 'src/state/persistence/databaseMachine.ts', expectedOwner: 'useFitnessData.ts' },
-      { name: 'backupMachine', file: 'src/state/persistence/backupMachine.ts', expectedOwner: 'useFitnessBackups.ts' },
-      { name: 'confirmationMachine', file: 'src/state/dialogs/confirmationMachine.ts', expectedOwner: 'ConfirmContext.tsx' }
+      { name: 'navigationMachine', file: 'src/state/app/navigationMachine.ts', expectedOwner: 'App.tsx', transitionFn: 'navigationTransition' },
+      { name: 'sessionMachine', file: 'src/state/session/sessionMachine.ts', expectedOwner: 'SessionView.tsx', transitionFn: 'sessionLifecycleTransition' },
+      { name: 'coachingMachine', file: 'src/state/session/coachingMachine.ts', expectedOwner: 'SessionView.tsx', transitionFn: 'coachingTransition' },
+      { name: 'authMachine', file: 'src/state/sync/authMachine.ts', expectedOwner: 'useFitnessSync.ts', transitionFn: 'authTransition' },
+      { name: 'syncMachine', file: 'src/state/sync/syncMachine.ts', expectedOwner: 'useFitnessSync.ts', transitionFn: 'syncTransition' },
+      { name: 'databaseMachine', file: 'src/state/persistence/databaseMachine.ts', expectedOwner: 'useFitnessData.ts', transitionFn: 'databaseTransition' },
+      { name: 'backupMachine', file: 'src/state/persistence/backupMachine.ts', expectedOwner: 'useFitnessBackups.ts', transitionFn: 'backupTransition' },
+      { name: 'confirmationMachine', file: 'src/state/dialogs/confirmationMachine.ts', expectedOwner: 'ConfirmContext.tsx', transitionFn: 'confirmationTransition' }
     ];
 
     canonicalStateMachines.forEach(machine => {
-      it(`machine ${machine.name} has a verified production consumer in ${machine.expectedOwner}`, () => {
-        const consumers = prodFileContents.filter(f =>
-          f.content.includes(machine.name)
-        );
-        expect(
-          consumers.length,
-          `State machine ${machine.name} has no production consumers in src/`
-        ).toBeGreaterThanOrEqual(1);
+      it(`machine ${machine.name} has a verified production consumer in ${machine.expectedOwner} via AST symbol inspection`, () => {
+        const ownerFile = allProdFiles.find(f => f.endsWith(machine.expectedOwner));
+        expect(ownerFile, `Expected consumer file ${machine.expectedOwner} not found in src/`).toBeDefined();
 
-        const expectedConsumer = consumers.find(c => c.path.endsWith(machine.expectedOwner));
+        const fileImports = getFileImports(ownerFile!);
+        const relevantImport = fileImports.find(imp =>
+          imp.moduleSpecifier.includes(machine.name)
+        );
+
         expect(
-          expectedConsumer,
-          `Expected consumer ${machine.expectedOwner} does not import ${machine.name}`
+          relevantImport,
+          `AST inspection: ${machine.expectedOwner} does not import module ${machine.name}`
         ).toBeDefined();
+
+        // Verify the transition function symbol itself is imported
+        expect(
+          relevantImport?.importedSymbols,
+          `AST inspection: ${machine.expectedOwner} does not import transition function ${machine.transitionFn} from ${machine.name}`
+        ).toContain(machine.transitionFn);
       });
     });
 
-    it('verifies that no orphaned or unreferenced state machine files exist in src/state', () => {
+    it('verifies that no orphaned or unreferenced state machine files exist in src/state via AST import mapping', () => {
+      const allImportedModules = allProdFiles.flatMap(f => getFileImports(f).map(i => i.moduleSpecifier));
+
       stateFiles.forEach(sf => {
         const baseName = path.basename(sf, '.ts');
         if (baseName === 'machineTypes') return; // Shared interface types
 
-        const hasReferenceInProd = prodFileContents.some(f => f.content.includes(baseName));
+        const isImportedInProd = allImportedModules.some(mod => mod.includes(baseName));
         expect(
-          hasReferenceInProd,
-          `State machine file ${baseName} is unreferenced in production codebase`
+          isImportedInProd,
+          `AST verification: State machine module ${baseName} has no AST import references in production codebase`
         ).toBe(true);
       });
     });
