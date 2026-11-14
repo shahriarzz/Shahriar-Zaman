@@ -4,7 +4,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandle
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import { authTransition, initialAuthState } from '../state/sync/authMachine';
 import { syncTransition, initialSyncPhase, selectSyncStatus, selectSyncError } from '../state/sync/syncMachine';
-import { FitnessDatabaseSnapshot } from './useFitnessData';
+import { FitnessDatabaseSnapshot, CommitFitnessSnapshotOptions } from './useFitnessData';
 import {
   sanitizeExerciseDefinition,
   sanitizeWorkout,
@@ -50,7 +50,10 @@ interface UseFitnessSyncProps {
   workoutsRef: React.MutableRefObject<Workout[]>;
   logsRef: React.MutableRefObject<Record<string, SessionLog>>;
   appStateRef: React.MutableRefObject<AppState>;
-  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  commitFitnessSnapshot: (
+    partialSnapshot: Partial<FitnessDatabaseSnapshot>,
+    options?: CommitFitnessSnapshotOptions
+  ) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
   resetToDefaultData?: (prevUid?: string) => void | Promise<void>;
   setSyncStatus?: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
 }
@@ -457,12 +460,20 @@ export function useFitnessSync({
       if (isStale()) return;
 
       // Commit all synced state through canonical local persistence boundary
-      commitFitnessSnapshot({
-        appState: mergedState,
-        exerciseDefinitions: mergedDefs,
-        workouts: mergedWorkouts,
-        logs: mergedLogs
-      });
+      const commitResult = commitFitnessSnapshot(
+        {
+          appState: mergedState,
+          exerciseDefinitions: mergedDefs,
+          workouts: mergedWorkouts,
+          logs: mergedLogs
+        },
+        pendingReconciliation ? { preserveResetOrigin: true } : undefined
+      );
+      if (!commitResult || commitResult.success !== true) {
+        const commitErrMsg = 'Local snapshot commit returned unsuccessful result during background sync.';
+        setDomainSyncOverride({ status: 'failed', error: commitErrMsg });
+        throw new Error(commitErrMsg);
+      }
 
       if (!isStale()) {
         dispatchSync({ type: 'SYNC_SUCCEEDED', uid, generation: currentGen, timestamp: Date.now() });
@@ -601,9 +612,16 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitFitnessSnapshot({ exerciseDefinitions: current });
+            const commitResult = commitFitnessSnapshot({ exerciseDefinitions: current });
+            if (!commitResult || commitResult.success !== true) {
+              console.error("Realtime exercise definitions commit returned unsuccessful result.");
+              setDomainSyncStatus('failed');
+              setDomainSyncError("Cloud exercise update received, but local storage commit failed.");
+            }
           } catch (err) {
             console.error("Failed persisting realtime exercise definitions:", err);
+            setDomainSyncStatus('failed');
+            setDomainSyncError("Cloud exercise update received, but local storage commit failed.");
           }
         }
       },
@@ -656,9 +674,16 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitFitnessSnapshot({ workouts: current });
+            const commitResult = commitFitnessSnapshot({ workouts: current });
+            if (!commitResult || commitResult.success !== true) {
+              console.error("Realtime workouts commit returned unsuccessful result.");
+              setDomainSyncStatus('failed');
+              setDomainSyncError("Cloud workout update received, but local storage commit failed.");
+            }
           } catch (err) {
             console.error("Failed persisting realtime workouts:", err);
+            setDomainSyncStatus('failed');
+            setDomainSyncError("Cloud workout update received, but local storage commit failed.");
           }
         }
       },
@@ -705,9 +730,16 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitFitnessSnapshot({ logs: current });
+            const commitResult = commitFitnessSnapshot({ logs: current });
+            if (!commitResult || commitResult.success !== true) {
+              console.error("Realtime logs commit returned unsuccessful result.");
+              setDomainSyncStatus('failed');
+              setDomainSyncError("Cloud log update received, but local storage commit failed.");
+            }
           } catch (err) {
             console.error("Failed persisting realtime logs:", err);
+            setDomainSyncStatus('failed');
+            setDomainSyncError("Cloud log update received, but local storage commit failed.");
           }
         }
       },
@@ -726,9 +758,16 @@ export function useFitnessSync({
           const { merged } = mergeAppState(localState, cloudState);
           if (JSON.stringify(localState) !== JSON.stringify(merged)) {
             try {
-              commitFitnessSnapshot({ appState: merged });
+              const commitResult = commitFitnessSnapshot({ appState: merged });
+              if (!commitResult || commitResult.success !== true) {
+                console.error("Realtime appState commit returned unsuccessful result.");
+                setDomainSyncStatus('failed');
+                setDomainSyncError("Cloud profile update received, but local storage commit failed.");
+              }
             } catch (err) {
               console.error("Failed persisting realtime appState:", err);
+              setDomainSyncStatus('failed');
+              setDomainSyncError("Cloud profile update received, but local storage commit failed.");
             }
           }
         }
@@ -751,7 +790,7 @@ export function useFitnessSync({
       if (unsubState) unsubState();
       if (retryTimeoutId) clearTimeout(retryTimeoutId);
     };
-  }, [user, syncDataBackground, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot]);
+  }, [user, syncDataBackground, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, setDomainSyncStatus, setDomainSyncError]);
 
   const retrySync = useCallback(() => {
     if (user && !resetFencedRef.current) {

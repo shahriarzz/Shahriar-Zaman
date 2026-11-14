@@ -23,8 +23,8 @@ export interface ActiveSessionContextType {
   persistenceError?: string | null;
 }
 
-export const ActiveSessionMetaContext = createContext<ActiveSessionMetaContextType | undefined>(undefined);
-export const ActiveSessionContext = createContext<ActiveSessionContextType | undefined>(undefined);
+const ActiveSessionMetaContext = createContext<ActiveSessionMetaContextType | undefined>(undefined);
+const ActiveSessionContext = createContext<ActiveSessionContextType | undefined>(undefined);
 
 // Registration for test mocks that provide FitnessContext directly without ActiveSessionProvider
 let fallbackFitnessContextRef: React.Context<any> | null = null;

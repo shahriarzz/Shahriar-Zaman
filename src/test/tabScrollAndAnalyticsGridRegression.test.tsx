@@ -7,10 +7,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Layout, ActiveTab } from '../components/Layout';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
+import { FitnessDerivedProvider } from '../context/FitnessDerivedContext';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import * as useAnalyticsDataModule from '../hooks/useAnalyticsData';
 import * as useFitnessDerivedDataModule from '../hooks/useFitnessDerivedData';
+import { useCalendarGrid } from '../hooks/useCalendarGrid';
 
 function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): FitnessContextType {
   return {
@@ -521,6 +523,92 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       expect(card.textContent).toContain('1');
       expect(card.textContent).toContain('session');
       expect(card.textContent).not.toContain('sessions');
+    });
+  });
+
+  describe('4. useCalendarGrid Simplification & Analytics Heatmap Preservation', () => {
+    it('returns strictly monthStart, days, logsByDateMap, and dayDetailMap without dead fields while Analytics computes heatmap intensities', () => {
+      const idx = buildFitnessIndex({
+        log_1: {
+          id: 'log_1',
+          workoutId: 'push-a',
+          date: '2026-10-15',
+          complete: true,
+          durationMinutes: 45,
+          sets: {
+            'ex-bench': [{ id: 's1', weight: '100', reps: '5', done: true }]
+          }
+        }
+      });
+      const workoutMap = new Map(INITIAL_WORKOUTS.map(w => [w.id, w]));
+
+      let gridResult: any;
+      const GridProbe: React.FC = () => {
+        gridResult = useCalendarGrid({
+          monthDate: new Date('2026-10-15T12:00:00Z'),
+          index: idx,
+          workoutMap,
+          weekStartsOn: 0
+        });
+        return null;
+      };
+
+      act(() => {
+        root.render(<GridProbe />);
+      });
+
+      expect(Object.keys(gridResult).sort()).toEqual(['dayDetailMap', 'days', 'logsByDateMap', 'monthStart']);
+      expect(gridResult.monthEnd).toBeUndefined();
+      expect(gridResult.startDate).toBeUndefined();
+      expect(gridResult.endDate).toBeUndefined();
+      expect(gridResult.logVolMap).toBeUndefined();
+      expect(gridResult.maxDayVol).toBeUndefined();
+      expect(gridResult.isCurrentMonth).toBeUndefined();
+      expect(gridResult.isToday).toBeUndefined();
+      expect(gridResult.isFuture).toBeUndefined();
+      expect(gridResult.logsByDateMap.get('2026-10-15')?.id).toBe('log_1');
+      expect(gridResult.dayDetailMap['2026-10-15']?.volume).toBe(500);
+
+      // Analytics useAnalyticsData composes logVolMap and maxDayVol for Monthly Intensity Heatmap
+      const mockFitness = createMockFitnessContext({
+        logs: {
+          log_1: {
+            id: 'log_1',
+            workoutId: 'push-a',
+            date: '2026-10-15',
+            complete: true,
+            durationMinutes: 45,
+            sets: {
+              'ex-bench': [{ id: 's1', weight: '100', reps: '5', done: true }]
+            }
+          }
+        }
+      });
+
+      let analyticsRes: any;
+      const AnalyticsProbe: React.FC = () => {
+        analyticsRes = useAnalyticsDataModule.useAnalyticsData({
+          timeRange: '30d',
+          muscleMetric: 'volume',
+          selected1RMExerciseId: null,
+          currentHeatmapMonth: new Date('2026-10-15T12:00:00Z')
+        });
+        return null;
+      };
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <FitnessDerivedProvider>
+              <AnalyticsProbe />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(analyticsRes.heatmapData.logVolMap['2026-10-15']).toBe(500);
+      expect(analyticsRes.heatmapData.maxDayVol).toBe(500);
+      expect(analyticsRes.heatmapData.days.length).toBeGreaterThanOrEqual(28);
     });
   });
 });

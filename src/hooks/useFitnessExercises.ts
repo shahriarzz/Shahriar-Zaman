@@ -60,7 +60,10 @@ export function useFitnessExercises({
       nextDefs = [...currentDefs, newDef];
     }
 
-    commitFitnessSnapshot({ exerciseDefinitions: nextDefs });
+    const commitRes = commitFitnessSnapshot({ exerciseDefinitions: nextDefs });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when adding exercise definition.");
+    }
 
     if (user) {
       try {
@@ -82,7 +85,10 @@ export function useFitnessExercises({
     const currentDefs = exerciseDefsRef.current;
     const nextDefs = currentDefs.map(d => d.id === def.id ? updatedDef : d);
 
-    commitFitnessSnapshot({ exerciseDefinitions: nextDefs });
+    const commitRes = commitFitnessSnapshot({ exerciseDefinitions: nextDefs });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when updating exercise definition.");
+    }
 
     if (user) {
       try {
@@ -106,10 +112,13 @@ export function useFitnessExercises({
       exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== id)
     }));
 
-    commitFitnessSnapshot({
+    const commitRes = commitFitnessSnapshot({
       exerciseDefinitions: nextDefs,
       workouts: nextWorkouts
     });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when deleting exercise definition.");
+    }
 
     trackDeletedId('defs', id, user?.uid);
     void pushAutoBackup(nextWorkouts, logsRef.current, appStateRef.current, 'auto-edit', `Deleted exercise definition: ${id}`, nextDefs);

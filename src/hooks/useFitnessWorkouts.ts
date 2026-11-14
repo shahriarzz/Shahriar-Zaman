@@ -40,7 +40,10 @@ export function useFitnessWorkouts({
       updatedAt: now
     }));
 
-    commitFitnessSnapshot({ workouts: workoutsWithTimestamp });
+    const commitRes = commitFitnessSnapshot({ workouts: workoutsWithTimestamp });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when saving workouts.");
+    }
     void pushAutoBackup(workoutsWithTimestamp, logsRef.current, appStateRef.current, 'auto-edit', 'Modified Routine Architecture');
 
     if (user) {
@@ -90,7 +93,10 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    commitFitnessSnapshot({ workouts: nextWorkouts });
+    const commitRes = commitFitnessSnapshot({ workouts: nextWorkouts });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when assigning exercise.");
+    }
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -121,7 +127,10 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    commitFitnessSnapshot({ workouts: nextWorkouts });
+    const commitRes = commitFitnessSnapshot({ workouts: nextWorkouts });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when removing exercise.");
+    }
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -165,7 +174,10 @@ export function useFitnessWorkouts({
       return w;
     });
 
-    commitFitnessSnapshot({ workouts: nextWorkouts });
+    const commitRes = commitFitnessSnapshot({ workouts: nextWorkouts });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when updating exercise programming.");
+    }
 
     if (user) {
       const updatedW = nextWorkouts.find(w => w.id === workoutId);
@@ -186,7 +198,10 @@ export function useFitnessWorkouts({
     const currentWorkouts = workoutsRef.current;
     const nextWorkouts = currentWorkouts.filter(w => w.id !== workoutId);
 
-    commitFitnessSnapshot({ workouts: nextWorkouts });
+    const commitRes = commitFitnessSnapshot({ workouts: nextWorkouts });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when deleting workout.");
+    }
     trackDeletedId('workouts', workoutId, user?.uid);
 
     if (user) {

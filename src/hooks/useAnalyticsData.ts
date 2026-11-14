@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { format, isSameMonth } from 'date-fns';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { WorkoutType } from '../types/fitness';
@@ -63,13 +64,32 @@ export function useAnalyticsData({
     active1RMTrend
   }), [baseAggregated, active1RMTrend]);
 
-  // 2. Heatmap calendar data consuming canonical index
-  const heatmapData = useCalendarGrid({
+  // 2. Heatmap calendar data consuming canonical index (computes monthly heatmap intensity locally)
+  const heatmapGrid = useCalendarGrid({
     monthDate: currentHeatmapMonth,
     index,
     workoutMap,
     weekStartsOn: 1
   });
+
+  const heatmapData = useMemo(() => {
+    const logVolMap: Record<string, number> = index.volumeByDate || {};
+    let maxDayVol = 1;
+    heatmapGrid.days.forEach(day => {
+      if (isSameMonth(day, heatmapGrid.monthStart)) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const dayVol = logVolMap[dateStr] || 0;
+        if (dayVol > maxDayVol) {
+          maxDayVol = dayVol;
+        }
+      }
+    });
+    return {
+      ...heatmapGrid,
+      logVolMap,
+      maxDayVol
+    };
+  }, [heatmapGrid, index.volumeByDate]);
 
   // 3. Muscle chart data formatted for Recharts
   const muscleChartData = useMemo(() => {

@@ -4,12 +4,7 @@ import {
   endOfMonth,
   startOfWeek,
   endOfWeek,
-  eachDayOfInterval,
-  isSameMonth,
-  isSameDay,
-  isAfter,
-  startOfDay,
-  format
+  eachDayOfInterval
 } from 'date-fns';
 import { SessionLog, Workout } from '../types/fitness';
 import { FitnessIndex } from '../utils/fitnessDerivedSelectors';
@@ -33,17 +28,9 @@ export interface UseCalendarGridOptions {
 
 export interface UseCalendarGridResult {
   monthStart: Date;
-  monthEnd: Date;
-  startDate: Date;
-  endDate: Date;
   days: Date[];
   logsByDateMap: Map<string, SessionLog>;
-  logVolMap: Record<string, number>;
   dayDetailMap: Record<string, DayDetail>;
-  maxDayVol: number;
-  isCurrentMonth: (date: Date) => boolean;
-  isToday: (date: Date) => boolean;
-  isFuture: (date: Date) => boolean;
 }
 
 export function useCalendarGrid({
@@ -53,7 +40,7 @@ export function useCalendarGrid({
   weekStartsOn = 0
 }: UseCalendarGridOptions): UseCalendarGridResult {
   // 1. Compute calendar grid interval and days
-  const { monthStart, monthEnd, startDate, endDate, days } = useMemo(() => {
+  const { monthStart, days } = useMemo(() => {
     const mStart = startOfMonth(monthDate);
     const mEnd = endOfMonth(mStart);
     const sDate = startOfWeek(mStart, { weekStartsOn });
@@ -61,15 +48,12 @@ export function useCalendarGrid({
     const dList = eachDayOfInterval({ start: sDate, end: eDate });
     return {
       monthStart: mStart,
-      monthEnd: mEnd,
-      startDate: sDate,
-      endDate: eDate,
       days: dList
     };
   }, [monthDate, weekStartsOn]);
 
-  // 2. Map logs by date and extract per-day volume & detail directly from the canonical index
-  const { logsByDateMap, logVolMap, dayDetailMap, maxDayVol } = useMemo(() => {
+  // 2. Map logs by date and extract per-day detail directly from the canonical index
+  const { logsByDateMap, dayDetailMap } = useMemo(() => {
     const dateMap = new Map<string, SessionLog>();
     const volMap: Record<string, number> = index.volumeByDate || {};
     const detailMap: Record<string, DayDetail> = {};
@@ -113,42 +97,16 @@ export function useCalendarGrid({
       };
     });
 
-    // Compute max single-day volume within this month for normalized heatmap intensity
-    let maxVol = 1;
-    days.forEach(day => {
-      if (isSameMonth(day, monthStart)) {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayVol = volMap[dateStr] || 0;
-        if (dayVol > maxVol) {
-          maxVol = dayVol;
-        }
-      }
-    });
-
     return {
       logsByDateMap: dateMap,
-      logVolMap: volMap,
-      dayDetailMap: detailMap,
-      maxDayVol: maxVol
+      dayDetailMap: detailMap
     };
-  }, [index, workoutMap, days, monthStart]);
-
-  const isCurrentMonth = useMemo(() => (d: Date) => isSameMonth(d, monthStart), [monthStart]);
-  const isToday = useMemo(() => (d: Date) => isSameDay(d, new Date()), []);
-  const isFuture = useMemo(() => (d: Date) => isAfter(startOfDay(d), startOfDay(new Date())), []);
+  }, [index, workoutMap]);
 
   return {
     monthStart,
-    monthEnd,
-    startDate,
-    endDate,
     days,
     logsByDateMap,
-    logVolMap,
-    dayDetailMap,
-    maxDayVol,
-    isCurrentMonth,
-    isToday,
-    isFuture
+    dayDetailMap
   };
 }

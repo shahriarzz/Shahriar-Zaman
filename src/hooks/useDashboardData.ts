@@ -15,8 +15,6 @@ import {
   PREvent
 } from '../utils/trainingIntelligence';
 
-export { BODY_WEIGHT_LIMITS };
-
 export interface DashboardStats {
   totalWeight: number;
 }

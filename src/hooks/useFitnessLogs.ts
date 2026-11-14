@@ -99,7 +99,10 @@ export function useFitnessLogs({
     const nextLogs = { ...logsRef.current };
     delete nextLogs[logId];
 
-    commitFitnessSnapshot({ logs: nextLogs });
+    const commitRes = commitFitnessSnapshot({ logs: nextLogs });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when deleting log.");
+    }
     trackDeletedId('logs', logId, user?.uid);
     void pushAutoBackup(workoutsRef.current, nextLogs, appStateRef.current, 'auto-edit', `Deleted log: ${logId}`);
 
@@ -122,7 +125,10 @@ export function useFitnessLogs({
     const currentLogIds = Object.keys(currentLogsSnapshot);
     void pushAutoBackup(workoutsRef.current, currentLogsSnapshot, appStateRef.current, 'manual', 'Pre-Purge Auto Backup');
 
-    commitFitnessSnapshot({ logs: {} });
+    const commitRes = commitFitnessSnapshot({ logs: {} });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when resetting logs.");
+    }
     currentLogIds.forEach(id => trackDeletedId('logs', id, user?.uid));
 
     if (user) {
@@ -142,7 +148,10 @@ export function useFitnessLogs({
     const now = Date.now();
     const nextState = { ...appStateRef.current, cycleStart: date, updatedAt: now };
 
-    commitFitnessSnapshot({ appState: nextState });
+    const commitRes = commitFitnessSnapshot({ appState: nextState });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when updating cycle start.");
+    }
 
     if (user) {
       try {
@@ -170,7 +179,10 @@ export function useFitnessLogs({
       updatedAt: now
     };
 
-    commitFitnessSnapshot({ appState: nextState });
+    const commitRes = commitFitnessSnapshot({ appState: nextState });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when logging body weight.");
+    }
 
     if (user) {
       try {
@@ -191,7 +203,10 @@ export function useFitnessLogs({
     delete nextLog[date];
     const nextState = { ...currentAppState, weightLog: nextLog, updatedAt: now };
 
-    commitFitnessSnapshot({ appState: nextState });
+    const commitRes = commitFitnessSnapshot({ appState: nextState });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when deleting body weight.");
+    }
 
     if (user) {
       try {

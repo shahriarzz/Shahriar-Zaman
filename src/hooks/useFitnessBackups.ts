@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, ExerciseDefinition, FitnessDatabase, CURRENT_SCHEMA_VERSION } from '../types/fitness';
-import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
+import { validateAndSanitizeFitnessData, readCanonicalSnapshotEnvelope } from '../utils/fitnessMigration';
 import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitnessSyncHelpers';
 import { saveAppState } from '../services/fitnessFirestore';
-import { FitnessDatabaseSnapshot } from './useFitnessData';
+import { FitnessDatabaseSnapshot, CommitFitnessSnapshotOptions } from './useFitnessData';
 import {
   backupTransition,
   initialBackupPhase,
@@ -22,6 +22,7 @@ import {
   savePendingCloudReconciliationToDb,
   getPendingCloudReconciliationFromDb,
   clearPendingCloudReconciliationFromDb,
+  computeSnapshotFingerprint,
   PendingCloudReconciliation
 } from '../utils/fitnessBackupDb';
 
@@ -65,7 +66,10 @@ interface UseFitnessBackupsProps {
   workoutsRef: React.MutableRefObject<Workout[]>;
   logsRef: React.MutableRefObject<Record<string, SessionLog>>;
   appStateRef: React.MutableRefObject<AppState>;
-  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  commitFitnessSnapshot: (
+    partialSnapshot: Partial<FitnessDatabaseSnapshot>,
+    options?: CommitFitnessSnapshotOptions
+  ) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
 }
 
 export function useFitnessBackups({
@@ -478,11 +482,31 @@ export function useFitnessBackups({
       }
     };
     const actionLabel = kind === 'import' ? 'Imported backup locally' : 'Restored locally';
+    const operationId = `reconcile-${kind}-${opUid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-    // 1. Create pending reconciliation record with status: 'pending'
+    const canonicalBaselineEnv = readCanonicalSnapshotEnvelope();
+    const baselineSnapshot: FitnessDatabaseSnapshot =
+      canonicalBaselineEnv.status === 'ok'
+        ? {
+            exerciseDefinitions: canonicalBaselineEnv.snapshot.exerciseDefinitions,
+            workouts: canonicalBaselineEnv.snapshot.workouts,
+            logs: canonicalBaselineEnv.snapshot.logs,
+            appState: canonicalBaselineEnv.snapshot.appState
+          }
+        : {
+            exerciseDefinitions: exerciseDefsRef.current,
+            workouts: workoutsRef.current,
+            logs: logsRef.current,
+            appState: appStateRef.current
+          };
+    const baselineFingerprint = computeSnapshotFingerprint(baselineSnapshot);
+
+    // 1. Create pending reconciliation record with status: 'pending' and durable identity/baseline
     const pendingRecord: PendingCloudReconciliation = {
       uid: opUid,
       kind,
+      operationId,
+      baselineFingerprint,
       snapshot: restoredSnapshot,
       sourceTimestamp,
       sourceId,
@@ -502,7 +526,13 @@ export function useFitnessBackups({
 
     // 3. Commit restored snapshot locally (keeping pre-operation checkpoint in IndexedDB)
     try {
-      commitFitnessSnapshot(restoredSnapshot);
+      const commitRes = commitFitnessSnapshot(restoredSnapshot, {
+        reconciliationOperationId: operationId,
+        resetOrigin: false
+      });
+      if (!commitRes || commitRes.success !== true) {
+        throw new Error('Local snapshot commit returned unsuccessful result.');
+      }
     } catch (localCommitErr: any) {
       const commitMsg = localCommitErr?.message || String(localCommitErr);
       let cleanupNote = '';
@@ -650,7 +680,7 @@ export function useFitnessBackups({
       restoreStatus: 'fully_synced',
       message: successMessage
     };
-  }, [commitFitnessSnapshot, transitionBackupPhase]);
+  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, transitionBackupPhase]);
 
   const restoreAutoBackup = useCallback((timestamp: string): Promise<RestoreOperationResult> => {
     const opEpoch = resetEpochRef.current;
@@ -762,7 +792,10 @@ export function useFitnessBackups({
 
         // Unauthenticated restore: commit locally and clear anonymous tombstones only
         try {
-          commitFitnessSnapshot(restoredSnapshot);
+          const commitRes = commitFitnessSnapshot(restoredSnapshot);
+          if (!commitRes || commitRes.success !== true) {
+            throw new Error('Local snapshot commit returned unsuccessful result.');
+          }
         } catch (localCommitErr: any) {
           const errMsg = `Failed to commit restored data locally: ${localCommitErr?.message || String(localCommitErr)}`;
           transitionBackupPhase({ type: 'RESTORE_FAILED', error: errMsg });
@@ -917,7 +950,10 @@ export function useFitnessBackups({
         }
 
         try {
-          commitFitnessSnapshot(restoredSnapshot);
+          const commitRes = commitFitnessSnapshot(restoredSnapshot);
+          if (!commitRes || commitRes.success !== true) {
+            throw new Error('Local snapshot commit returned unsuccessful result.');
+          }
         } catch (localCommitErr: any) {
           const errMsg = `Failed to commit imported data locally: ${localCommitErr?.message || String(localCommitErr)}`;
           transitionBackupPhase({ type: 'IMPORT_FAILED', error: errMsg });
@@ -1035,6 +1071,145 @@ export function useFitnessBackups({
           transitionBackupPhase({ type: 'RESTORE_FAILED', error: errText });
         }
       };
+
+      // Idempotent local-recovery step before starting cloud writes
+      const canonicalEnv = readCanonicalSnapshotEnvelope();
+      const pendingOpId = pending.operationId;
+      let needsLocalCommit = false;
+
+      if (canonicalEnv.status === 'corrupt') {
+        const corruptMsg = 'Cannot recover pending cloud restore: local canonical snapshot is corrupted. Resolve local snapshot corruption before retrying.';
+        const conflictRecord: PendingCloudReconciliation = {
+          ...pending,
+          status: 'failed',
+          lastError: corruptMsg
+        };
+        try {
+          await savePendingCloudReconciliationToDb(conflictRecord);
+          pendingCloudRestoreRef.current = conflictRecord;
+          setPendingCloudSync(conflictRecord);
+        } catch {
+          pendingCloudRestoreRef.current = pending;
+          setPendingCloudSync({ ...pending, lastError: corruptMsg });
+        }
+        failRetryPhase(corruptMsg);
+        return {
+          success: false,
+          message: corruptMsg,
+          restoreStatus: 'cloud_sync_pending'
+        };
+      }
+
+      if (pendingOpId) {
+        if (canonicalEnv.status === 'ok') {
+          if (canonicalEnv.lastReconciliationOperationId === pendingOpId) {
+            needsLocalCommit = false;
+          } else {
+            const currentFingerprint = computeSnapshotFingerprint({
+              exerciseDefinitions: canonicalEnv.snapshot.exerciseDefinitions,
+              workouts: canonicalEnv.snapshot.workouts,
+              logs: canonicalEnv.snapshot.logs,
+              appState: canonicalEnv.snapshot.appState
+            });
+            const matchesBaseline = Boolean(pending.baselineFingerprint) && currentFingerprint === pending.baselineFingerprint;
+            if (canonicalEnv.resetOrigin || matchesBaseline) {
+              needsLocalCommit = true;
+            } else {
+              const conflictMsg = 'Local data changed after restore/import started. Newer local changes were preserved; resolve conflict before retrying cloud reconciliation.';
+              const conflictRecord: PendingCloudReconciliation = {
+                ...pending,
+                status: 'failed',
+                lastError: conflictMsg
+              };
+              try {
+                await savePendingCloudReconciliationToDb(conflictRecord);
+                pendingCloudRestoreRef.current = conflictRecord;
+                setPendingCloudSync(conflictRecord);
+              } catch {
+                pendingCloudRestoreRef.current = pending;
+                setPendingCloudSync({ ...pending, lastError: conflictMsg });
+              }
+              failRetryPhase(conflictMsg);
+              return {
+                success: false,
+                message: conflictMsg,
+                restoreStatus: 'cloud_sync_pending'
+              };
+            }
+          }
+        } else {
+          // Canonical envelope missing (e.g. unit test with mocked commitFitnessSnapshot or clean storage)
+          const inMemFingerprint = computeSnapshotFingerprint({
+            exerciseDefinitions: exerciseDefsRef.current,
+            workouts: workoutsRef.current,
+            logs: logsRef.current,
+            appState: appStateRef.current
+          });
+          const pendingFingerprint = computeSnapshotFingerprint(pending.snapshot);
+          if (inMemFingerprint === pendingFingerprint) {
+            needsLocalCommit = false;
+          } else if (!pending.baselineFingerprint || inMemFingerprint === pending.baselineFingerprint) {
+            needsLocalCommit = true;
+          } else {
+            const conflictMsg = 'Local data changed after restore/import started. Newer local changes were preserved; resolve conflict before retrying cloud reconciliation.';
+            const conflictRecord: PendingCloudReconciliation = {
+              ...pending,
+              status: 'failed',
+              lastError: conflictMsg
+            };
+            try {
+              await savePendingCloudReconciliationToDb(conflictRecord);
+              pendingCloudRestoreRef.current = conflictRecord;
+              setPendingCloudSync(conflictRecord);
+            } catch {
+              pendingCloudRestoreRef.current = pending;
+              setPendingCloudSync({ ...pending, lastError: conflictMsg });
+            }
+            failRetryPhase(conflictMsg);
+            return {
+              success: false,
+              message: conflictMsg,
+              restoreStatus: 'cloud_sync_pending'
+            };
+          }
+        }
+      } else if (canonicalEnv.status === 'ok' && canonicalEnv.resetOrigin) {
+        // Legacy pending record without operationId after an account switch reset (A -> B -> A)
+        needsLocalCommit = true;
+      }
+
+      if (needsLocalCommit) {
+        try {
+          const commitRes = commitFitnessSnapshot(pending.snapshot, {
+            reconciliationOperationId: pendingOpId ?? `reconcile-${pending.kind}-${activeUid}-${pending.createdAt}`,
+            resetOrigin: false
+          });
+          if (!commitRes || commitRes.success !== true) {
+            throw new Error('Local snapshot commit returned unsuccessful result.');
+          }
+        } catch (localRecoveryErr: any) {
+          const localErrMsg = `Failed to recover restored data locally: ${localRecoveryErr?.message || String(localRecoveryErr)}`;
+          const failedRecord: PendingCloudReconciliation = {
+            ...pending,
+            status: 'failed',
+            lastError: localErrMsg
+          };
+          try {
+            await savePendingCloudReconciliationToDb(failedRecord);
+            pendingCloudRestoreRef.current = failedRecord;
+            setPendingCloudSync(failedRecord);
+          } catch {
+            pendingCloudRestoreRef.current = pending;
+            setPendingCloudSync({ ...pending, lastError: localErrMsg });
+          }
+          failRetryPhase(localErrMsg);
+          return {
+            success: false,
+            message: localErrMsg,
+            restoreStatus: 'cloud_sync_pending'
+          };
+        }
+      }
 
       const durableBaseline = dbPending ?? pendingCloudRestoreRef.current;
       const retryingRecord: PendingCloudReconciliation = { ...pending, status: 'retrying' };
@@ -1161,7 +1336,7 @@ export function useFitnessBackups({
         restoreStatus: 'fully_synced'
       };
     });
-  }, [user, runSerializedBackupOp, transitionBackupPhase]);
+  }, [user, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, runSerializedBackupOp, transitionBackupPhase]);
 
   const isBackupsLoading = backupPhase.status === 'loading' || backupPhase.status === 'migrating';
 

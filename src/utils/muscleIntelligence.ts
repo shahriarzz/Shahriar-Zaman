@@ -662,7 +662,7 @@ export interface MuscleRecoveryResult {
  * Strictly validates a YYYY-MM-DD date string for format and calendar validity.
  * Rejects invalid types with TypeError and invalid format/calendar dates with RangeError.
  */
-export function validateDateString(dateInput: string, paramName: string): { parsed: Date; formatted: string } {
+function validateDateString(dateInput: string, paramName: string): { parsed: Date; formatted: string } {
   if (typeof dateInput !== 'string') {
     throw new TypeError(`${paramName} must be a string in YYYY-MM-DD format`);
   }

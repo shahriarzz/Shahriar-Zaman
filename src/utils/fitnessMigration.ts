@@ -360,6 +360,44 @@ export function validateSnapshotStructure(candidate: unknown): ValidatedSnapshot
   };
 }
 
+export type CanonicalSnapshotEnvelope =
+  | { status: 'missing' }
+  | { status: 'corrupt' }
+  | {
+      status: 'ok';
+      snapshot: ValidatedSnapshotData;
+      lastReconciliationOperationId: string | null;
+      resetOrigin: boolean;
+    };
+
+/**
+ * Reads and validates the canonical local snapshot envelope (`gl_database_snapshot`)
+ * including its durable reconciliation metadata (`lastReconciliationOperationId`, `resetOrigin`).
+ */
+export function readCanonicalSnapshotEnvelope(): CanonicalSnapshotEnvelope {
+  const snapshotKey = localStorage.getItem('gl_database_snapshot');
+  if (snapshotKey === null) {
+    return { status: 'missing' };
+  }
+  try {
+    const parsedSnapshot = JSON.parse(snapshotKey);
+    const validated = validateSnapshotStructure(parsedSnapshot);
+    if (!validated) {
+      return { status: 'corrupt' };
+    }
+    const rawOpId = (parsedSnapshot as Record<string, unknown>).lastReconciliationOperationId;
+    const rawResetOrigin = (parsedSnapshot as Record<string, unknown>).resetOrigin;
+    return {
+      status: 'ok',
+      snapshot: validated,
+      lastReconciliationOperationId: typeof rawOpId === 'string' && rawOpId.length > 0 ? rawOpId : null,
+      resetOrigin: rawResetOrigin === true
+    };
+  } catch {
+    return { status: 'corrupt' };
+  }
+}
+
 export function loadInitialFitnessData(): {
   defs: ExerciseDefinition[];
   workouts: Workout[];
@@ -386,7 +424,9 @@ export function loadInitialFitnessData(): {
         // If the stored anchor was invalid or missing, persist the repaired state once through persistence boundary
         if (!isValidCalendarDate(validated.appState?.cycleStart)) {
           try {
-            const versionedPayload = {
+            const rawOpId = (parsedSnapshot as Record<string, unknown>).lastReconciliationOperationId;
+            const rawResetOrigin = (parsedSnapshot as Record<string, unknown>).resetOrigin;
+            const versionedPayload: Record<string, unknown> = {
               schemaVersion: CURRENT_SCHEMA_VERSION,
               timestamp: Date.now(),
               data: {
@@ -396,6 +436,12 @@ export function loadInitialFitnessData(): {
                 appState: migrated.appState
               }
             };
+            if (typeof rawOpId === 'string' || rawOpId === null) {
+              versionedPayload.lastReconciliationOperationId = rawOpId;
+            }
+            if (typeof rawResetOrigin === 'boolean') {
+              versionedPayload.resetOrigin = rawResetOrigin;
+            }
             localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
             localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
           } catch {
@@ -446,7 +492,9 @@ export function loadInitialFitnessData(): {
 
         if (!isValidCalendarDate(validatedStaging.appState?.cycleStart)) {
           try {
-            const versionedPayload = {
+            const rawOpId = (parsedStaging as Record<string, unknown>).lastReconciliationOperationId;
+            const rawResetOrigin = (parsedStaging as Record<string, unknown>).resetOrigin;
+            const versionedPayload: Record<string, unknown> = {
               schemaVersion: CURRENT_SCHEMA_VERSION,
               timestamp: Date.now(),
               data: {
@@ -456,6 +504,12 @@ export function loadInitialFitnessData(): {
                 appState: migrated.appState
               }
             };
+            if (typeof rawOpId === 'string' || rawOpId === null) {
+              versionedPayload.lastReconciliationOperationId = rawOpId;
+            }
+            if (typeof rawResetOrigin === 'boolean') {
+              versionedPayload.resetOrigin = rawResetOrigin;
+            }
             localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
             localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
           } catch {

@@ -29,10 +29,8 @@ import { calculateAdherence, calculateTrainingStreak } from './trainingIntellige
 import {
   MuscleGroup,
   ALL_MUSCLE_GROUPS,
-  MUSCLE_GROUP_LABELS,
   MuscleInvolvementRole,
   MuscleInvolvement,
-  ROLE_WEIGHTS,
   getRoleWeight,
   AttributionSource,
   ExerciseMuscleProfile,
@@ -62,16 +60,9 @@ export type {
 };
 
 export {
-  ALL_MUSCLE_GROUPS,
-  MUSCLE_GROUP_LABELS,
-  ROLE_WEIGHTS,
-  getRoleWeight,
-  resolveExerciseMuscleProfile,
   selectMuscleBalanceForRange,
   selectMuscleRecovery
 };
-
-export { CYCLE_LENGTH };
 
 /**
  * Canonical Weight PR Representation.
@@ -237,7 +228,7 @@ export interface FitnessIndex {
  * Strictly counts unbroken consecutive calendar dates on which at least one completed session occurred.
  * This measures daily training frequency regardless of split or rest schedule.
  */
-export function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
+function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
   const completedLogs = logs.filter(isCompletedSession);
   const datesSet = new Set(completedLogs.map(l => l?.date).filter(Boolean));
   if (datesSet.size === 0) return 0;
@@ -269,7 +260,6 @@ export function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate:
   return streak;
 }
 
-export const computeCurrentStreak = computeCalendarTrainingStreak;
 export const computeConsecutiveDaysStreak = computeCalendarTrainingStreak;
 
 /**
@@ -782,13 +772,6 @@ export function buildFitnessIndex(
 // -------------------------------------------------------------
 // PURE SELECTORS (Fast, non-allocating reads over pre-computed FitnessIndex)
 // -------------------------------------------------------------
-
-export function selectExerciseIndex(
-  index: FitnessIndex,
-  exerciseDefinitionId: string
-): ExerciseIndexEntry | null {
-  return index.exerciseIndex.get(exerciseDefinitionId) || null;
-}
 
 export function selectSortedLogs(
   index: FitnessIndex

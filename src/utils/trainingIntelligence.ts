@@ -158,7 +158,7 @@ export interface CalculateStreakOptions {
  * - future scheduled workout -> cannot break current streak
  * - current-day workout not yet completed -> does not prematurely break streak
  */
-export function calculateScheduledProtocolStreak({
+function calculateScheduledProtocolStreak({
   index,
   coreWorkoutByCycleDayMap,
   cycleStart,
@@ -472,7 +472,7 @@ export function selectVolumeForRange(
  * Exercise-level progression calculation comparing two date ranges.
  * Uses best valid Epley e1RM in each range.
  */
-export function calculateExerciseStrengthTrend(
+function calculateExerciseStrengthTrend(
   exerciseEntry: ExerciseIndexEntry,
   currentRange: DateRange,
   comparisonRange: DateRange

@@ -1,7 +1,7 @@
 import { ExerciseDefinition, Workout, WorkoutExercise, Exercise } from '../types/fitness';
 import { generateId } from './generateId';
 
-export const STANDARD_MUSCLE_CATEGORIES = [
+const STANDARD_MUSCLE_CATEGORIES = [
   'Chest',
   'Shoulders',
   'Back',
@@ -161,7 +161,7 @@ const COMPOUND_KEYWORDS = [
   'rdl'
 ];
 
-export function getCompoundScore(name: string): number {
+function getCompoundScore(name: string): number {
   if (!name) return 0;
   const lower = name.toLowerCase();
   for (let i = 0; i < COMPOUND_KEYWORDS.length; i++) {

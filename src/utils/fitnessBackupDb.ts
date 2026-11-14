@@ -10,6 +10,8 @@ const DB_VERSION = 2;
 export interface PendingCloudReconciliation {
   uid: string;
   kind: 'restore' | 'import';
+  operationId?: string;
+  baselineFingerprint?: string;
   snapshot: FitnessDatabaseSnapshot;
   sourceTimestamp: string;
   sourceId: string;
@@ -18,10 +20,84 @@ export interface PendingCloudReconciliation {
   lastError?: string;
 }
 
+function writeCanonicalJson(value: unknown, out: string[]): void {
+  if (value === null || value === undefined) {
+    out.push('null');
+    return;
+  }
+  const type = typeof value;
+  if (type === 'boolean' || type === 'string') {
+    out.push(JSON.stringify(value));
+    return;
+  }
+  if (type === 'number') {
+    out.push(Number.isFinite(value as number) ? JSON.stringify(Object.is(value, -0) ? 0 : value) : 'null');
+    return;
+  }
+  if (Array.isArray(value)) {
+    out.push('[');
+    for (let i = 0; i < value.length; i++) {
+      if (i > 0) out.push(',');
+      writeCanonicalJson(value[i], out);
+    }
+    out.push(']');
+    return;
+  }
+  if (type === 'object') {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).sort();
+    out.push('{');
+    let wroteFirst = false;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const propVal = record[k];
+      if (propVal === undefined || typeof propVal === 'function' || typeof propVal === 'symbol') {
+        continue;
+      }
+      if (wroteFirst) out.push(',');
+      wroteFirst = true;
+      out.push(JSON.stringify(k));
+      out.push(':');
+      writeCanonicalJson(propVal, out);
+    }
+    out.push('}');
+    return;
+  }
+  out.push('null');
+}
+
+/**
+ * Computes a deterministic, key-order-independent fingerprint for a canonical fitness snapshot.
+ * Identical across pre-serialization in-memory objects and parsed JSON from localStorage.
+ */
+export function computeSnapshotFingerprint(snapshot: FitnessDatabaseSnapshot): string {
+  const parts: string[] = [];
+  writeCanonicalJson(
+    {
+      exerciseDefinitions: snapshot.exerciseDefinitions,
+      workouts: snapshot.workouts,
+      logs: snapshot.logs,
+      appState: snapshot.appState
+    },
+    parts
+  );
+  const canonical = parts.join('');
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b1;
+  for (let i = 0; i < canonical.length; i++) {
+    const code = canonical.charCodeAt(i);
+    h1 ^= code;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= (code + (i & 0xff));
+    h2 = Math.imul(h2, 0x85ebca6b);
+  }
+  return `fnv1a64:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}:${canonical.length}`;
+}
+
 let dbInstance: IDBDatabase | null = null;
 let inFlightOpenPromise: Promise<BackupDbOpenResult> | null = null;
 
-export function isIndexedDBAvailable(): boolean {
+function isIndexedDBAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
 }
 

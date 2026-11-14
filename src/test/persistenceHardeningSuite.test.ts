@@ -17,13 +17,17 @@ import {
   getPendingCloudReconciliationFromDb,
   clearPendingCloudReconciliationFromDb,
   resetBackupDbForTesting,
+  computeSnapshotFingerprint,
   PendingCloudReconciliation
 } from '../utils/fitnessBackupDb';
 import { isBackupOperationAdmissible, backupTransition } from '../state/persistence/backupMachine';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
-import { useFitnessData } from '../hooks/useFitnessData';
+import { useFitnessData, persistFitnessDatabase } from '../hooks/useFitnessData';
 import { useFitnessLogs } from '../hooks/useFitnessLogs';
+import { useFitnessWorkouts } from '../hooks/useFitnessWorkouts';
+import { useFitnessExercises } from '../hooks/useFitnessExercises';
 import { useFitnessSync } from '../hooks/useFitnessSync';
+import { readCanonicalSnapshotEnvelope } from '../utils/fitnessMigration';
 import { FitnessProvider, FitnessContext, FitnessContextType, useFitness } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
@@ -2044,6 +2048,577 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
 
       expect(container.textContent).toContain('Account switch paused — backup cleanup failed');
       expect(container.textContent).not.toContain('Account isolation reset incomplete');
+    });
+  });
+
+  describe('Final Closure Patch P0 — Real-Persistence Local Recovery, Conflict Detection & Commit Contract Enforcement', () => {
+    it('crash after pending record persistence BEFORE local commit recovers real gl_database_snapshot on retry, including when commit+cleanup both fail', async () => {
+      const uid = 'u-real-crash-before-commit';
+      const baselineAppState: AppState = { cycleStart: '2026-04-01', updatedAt: 100 };
+      const baselineLogs: Record<string, SessionLog> = {
+        log_base_1: { id: 'log_base_1', workoutId: 'w1', date: '2026-04-01', complete: true, durationMinutes: 30, sets: {} }
+      };
+      persistFitnessDatabase({
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        workouts: dummyWorkouts,
+        logs: baselineLogs,
+        appState: baselineAppState
+      });
+
+      const checkpointToRestore = createCheckpoint(1700001000000, 'Target Checkpoint');
+      checkpointToRestore.logs = {
+        log_restored_real: { id: 'log_restored_real', workoutId: 'w1', date: '2026-04-05', complete: true, durationMinutes: 60, sets: {} }
+      };
+      checkpointToRestore.appState = { cycleStart: '2026-04-05', updatedAt: 500 };
+      idb.autoBackupsStore.set(checkpointToRestore.timestamp, checkpointToRestore);
+
+      let dataHook: any;
+      let backupsHook: any;
+      const Harness = () => {
+        dataHook = useFitnessData();
+        backupsHook = useFitnessBackups({
+          user: { uid } as any,
+          exerciseDefsRef: dataHook.exerciseDefsRef,
+          workoutsRef: dataHook.workoutsRef,
+          logsRef: dataHook.logsRef,
+          appStateRef: dataHook.appStateRef,
+          commitFitnessSnapshot: dataHook.commitFitnessSnapshot
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 20));
+
+      // Simulate local commit throwing QuotaExceededError AND IDB cleanup also failing after write-ahead pending record persisted
+      const origSetItem = Storage.prototype.setItem;
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+        if (k === 'gl_snapshot_staging' || k === 'gl_database_snapshot') {
+          throw new Error('QuotaExceededError during local commit');
+        }
+        return origSetItem.call(this, k, v);
+      });
+      idb.setFailNextDelete(new Error('IDB cleanup blocked during rollback'));
+      const saveAppStateSpy = vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      const syncRestoredSpy = vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+
+      let failRes: any;
+      await act(async () => {
+        failRes = await backupsHook.restoreAutoBackup(checkpointToRestore.timestamp);
+      });
+      setItemSpy.mockRestore();
+
+      expect(failRes.success).toBe(false);
+      expect(failRes.restoreStatus).toBe('restore_failed');
+      // Cloud writes never ran
+      expect(saveAppStateSpy).not.toHaveBeenCalled();
+      expect(syncRestoredSpy).not.toHaveBeenCalled();
+      // Pending record remains in IDB with operationId and baselineFingerprint while gl_database_snapshot still has baseline
+      const storedPending = idb.pendingCloudStore.get(uid);
+      expect(storedPending).toBeDefined();
+      expect(storedPending.operationId).toBeTruthy();
+      expect(storedPending.baselineFingerprint).toBeTruthy();
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.logs.log_base_1).toBeDefined();
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.logs.log_restored_real).toBeUndefined();
+
+      // Simulate full reload / restart
+      await act(async () => {
+        root!.unmount();
+      });
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 20));
+      expect(backupsHook.hasPendingCloudSync).toBe(true);
+
+      // Retry recovers local gl_database_snapshot (and marker) before uploading to cloud
+      let retryRes: any;
+      await act(async () => {
+        retryRes = await backupsHook.retryPendingCloudSync();
+      });
+      expect(retryRes.success).toBe(true);
+      expect(retryRes.restoreStatus).toBe('fully_synced');
+      expect(saveAppStateSpy).toHaveBeenCalledTimes(1);
+      expect(syncRestoredSpy).toHaveBeenCalledTimes(1);
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+
+      const repairedEnvelope = readCanonicalSnapshotEnvelope();
+      expect(repairedEnvelope.status).toBe('ok');
+      if (repairedEnvelope.status === 'ok') {
+        expect(repairedEnvelope.snapshot.logs.log_restored_real).toBeDefined();
+        expect(repairedEnvelope.lastReconciliationOperationId).toBe(storedPending.operationId);
+      }
+      expect(dataHook.logs.log_restored_real).toBeDefined();
+    });
+
+    it('crash AFTER successful local commit preserves operation marker across reloads and ordinary local commits, avoiding overwrite on retry', async () => {
+      const uid = 'u-real-crash-after-commit';
+      persistFitnessDatabase({
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        workouts: dummyWorkouts,
+        logs: {},
+        appState: { cycleStart: '2026-04-01', updatedAt: 100 }
+      });
+
+      const restoredCp = createCheckpoint(1700001100000, 'Restored Then Edited');
+      restoredCp.logs = {
+        log_restored_post: { id: 'log_restored_post', workoutId: 'w1', date: '2026-04-06', complete: true, durationMinutes: 40, sets: {} }
+      };
+      idb.autoBackupsStore.set(restoredCp.timestamp, restoredCp);
+
+      vi.spyOn(firestoreService, 'saveAppState').mockRejectedValueOnce(new Error('Offline during cloud write'));
+      vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+
+      let dataHook: any;
+      let backupsHook: any;
+      const Harness = () => {
+        dataHook = useFitnessData();
+        backupsHook = useFitnessBackups({
+          user: { uid } as any,
+          exerciseDefsRef: dataHook.exerciseDefsRef,
+          workoutsRef: dataHook.workoutsRef,
+          logsRef: dataHook.logsRef,
+          appStateRef: dataHook.appStateRef,
+          commitFitnessSnapshot: dataHook.commitFitnessSnapshot
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 20));
+
+      let restoreRes: any;
+      await act(async () => {
+        restoreRes = await backupsHook.restoreAutoBackup(restoredCp.timestamp);
+      });
+      expect(restoreRes.success).toBe(false);
+      expect(restoreRes.restoreStatus).toBe('cloud_sync_pending');
+
+      const pendingOpId = idb.pendingCloudStore.get(uid)?.operationId;
+      expect(pendingOpId).toBeTruthy();
+
+      // Remount (simulate restart), then user performs an ordinary local edit after local restore succeeded
+      await act(async () => {
+        root!.unmount();
+      });
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 20));
+
+      const subsequentLogs: Record<string, SessionLog> = {
+        ...dataHook.logsRef.current,
+        log_after_restore_edit: { id: 'log_after_restore_edit', workoutId: 'w1', date: '2026-04-07', complete: true, durationMinutes: 25, sets: {} }
+      };
+      act(() => {
+        dataHook.commitFitnessSnapshot({ logs: subsequentLogs });
+      });
+
+      const envAfterEdit = readCanonicalSnapshotEnvelope();
+      expect(envAfterEdit.status).toBe('ok');
+      if (envAfterEdit.status === 'ok') {
+        expect(envAfterEdit.lastReconciliationOperationId).toBe(pendingOpId);
+        expect(envAfterEdit.snapshot.logs.log_after_restore_edit).toBeDefined();
+      }
+
+      // Retry must NOT overwrite the post-restore ordinary local edit
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      let retryRes: any;
+      await act(async () => {
+        retryRes = await backupsHook.retryPendingCloudSync();
+      });
+      expect(retryRes.success).toBe(true);
+      expect(retryRes.restoreStatus).toBe('fully_synced');
+      expect(dataHook.logs.log_after_restore_edit).toBeDefined();
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.logs.log_after_restore_edit).toBeDefined();
+    });
+
+    it('Account A -> B -> A: retryPendingCloudSync restores Account A pending snapshot locally after account-switch resets, while newer local edit triggers safe conflict preservation', async () => {
+      const uidA = 'uid-real-recovery-A';
+      const uidB = 'uid-real-recovery-B';
+
+      const snapshotA: any = {
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        workouts: dummyWorkouts,
+        logs: {
+          log_A_pending_recover: { id: 'log_A_pending_recover', workoutId: 'w1', date: '2026-04-08', complete: true, durationMinutes: 55, sets: {} }
+        },
+        appState: { cycleStart: '2026-04-08', updatedAt: 800 }
+      };
+
+      await savePendingCloudReconciliationToDb({
+        uid: uidA,
+        kind: 'restore',
+        operationId: 'op-switch-A-1',
+        baselineFingerprint: computeSnapshotFingerprint({
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: INITIAL_WORKOUTS,
+          logs: {},
+          appState: { cycleStart: '2026-04-01' }
+        }),
+        snapshot: snapshotA,
+        sourceTimestamp: '2026-04-08T10:00:00.000Z',
+        sourceId: '2026-04-08T10:00:00.000Z',
+        createdAt: 8000,
+        status: 'pending'
+      });
+      trackDeletedId('logs', 'log_tombstone_A', uidA);
+
+      let authCallback: any = null;
+      vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, cb: any) => {
+        authCallback = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+      vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveExerciseDefinitionsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveWorkoutsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveLogsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeWorkouts').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeLogs').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeAppState').mockReturnValue(vi.fn());
+      vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+
+      let ctx!: FitnessContextType;
+      const Consumer = () => {
+        ctx = useFitness();
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(FitnessProvider, null, React.createElement(Consumer)));
+      });
+
+      // Sign in A -> B -> A so A lands on freshly reset local state with pending record waiting
+      await act(async () => {
+        await authCallback({ uid: uidA, email: 'a@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+      await act(async () => {
+        await authCallback({ uid: uidB, email: 'b@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+      await act(async () => {
+        await authCallback({ uid: uidA, email: 'a@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(ctx.user?.uid).toBe(uidA);
+      expect(ctx.logs.log_A_pending_recover).toBeUndefined();
+
+      // Retry recovers Account A's pending snapshot locally because resetOrigin was preserved
+      let recoverRes: any;
+      await act(async () => {
+        recoverRes = await ctx.retryPendingCloudSync();
+      });
+      expect(recoverRes.success).toBe(true);
+      expect(recoverRes.restoreStatus).toBe('fully_synced');
+      expect(ctx.logs.log_A_pending_recover).toBeDefined();
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.logs.log_A_pending_recover).toBeDefined();
+
+      // Part 2: Newer local edit conflict before retry preserves newer edit, pending record, and UID tombstones
+      await savePendingCloudReconciliationToDb({
+        uid: uidA,
+        kind: 'restore',
+        operationId: 'op-conflict-A-2',
+        baselineFingerprint: computeSnapshotFingerprint({
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: INITIAL_WORKOUTS,
+          logs: {},
+          appState: { cycleStart: '2026-04-01' }
+        }),
+        snapshot: snapshotA,
+        sourceTimestamp: '2026-04-09T10:00:00.000Z',
+        sourceId: '2026-04-09T10:00:00.000Z',
+        createdAt: 9000,
+        status: 'pending'
+      });
+      trackDeletedId('logs', 'log_conflict_tomb', uidA);
+
+      await act(async () => {
+        await ctx.addLog('log_newer_user_edit', {
+          id: 'log_newer_user_edit',
+          workoutId: INITIAL_WORKOUTS[0].id,
+          date: '2026-04-09',
+          complete: true,
+          durationMinutes: 42,
+          sets: {}
+        });
+      });
+
+      const saveStateSpy = vi.spyOn(firestoreService, 'saveAppState').mockClear();
+      let conflictRes: any;
+      await act(async () => {
+        conflictRes = await ctx.retryPendingCloudSync();
+      });
+      expect(conflictRes.success).toBe(false);
+      expect(conflictRes.restoreStatus).toBe('cloud_sync_pending');
+      expect(conflictRes.message).toMatch(/conflict|newer local changes/i);
+      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(ctx.logs.log_newer_user_edit).toBeDefined();
+      expect(idb.pendingCloudStore.has(uidA)).toBe(true);
+      expect(getDeletedIdsTracker(uidA).logs).toContain('log_conflict_tomb');
+    });
+
+    it('enforces commitFitnessSnapshot { success: false } contract without throws across restore, import, retry, background sync, realtime listeners, and domain mutations', async () => {
+      const uid = 'u-commit-contract';
+      const c1 = createCheckpoint(1700001200000, 'Commit Contract Checkpoint');
+      idb.autoBackupsStore.set(c1.timestamp, c1);
+      trackDeletedId('logs', 'tomb_contract_1', uid);
+
+      const exerciseDefsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+      const workoutsRef = { current: dummyWorkouts };
+      const logsRef = { current: dummyLogs };
+      const appStateRef = { current: dummyAppState };
+      const commitReturnFalse = vi.fn((partial: any) => ({
+        success: false,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      }));
+
+      const saveStateSpy = vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      const syncRestoredSpy = vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+      const deleteLogCloudSpy = vi.spyOn(firestoreService, 'deleteLog').mockResolvedValue(undefined);
+      const deleteWorkoutCloudSpy = vi.spyOn(firestoreService, 'deleteWorkout').mockResolvedValue(undefined);
+      const deleteDefCloudSpy = vi.spyOn(firestoreService, 'deleteExerciseDefinitionWithWorkouts').mockResolvedValue(undefined);
+
+      let backupsAuth: any;
+      let backupsUnauth: any;
+      let logsHook: any;
+      let workoutsHook: any;
+      let exercisesHook: any;
+      const setSyncStatusSpy = vi.fn();
+      const setSyncErrorSpy = vi.fn();
+
+      const HooksHarness = ({ userObj }: { userObj: any }) => {
+        const b = useFitnessBackups({
+          user: userObj,
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitReturnFalse
+        });
+        if (userObj) {
+          backupsAuth = b;
+        } else {
+          backupsUnauth = b;
+        }
+        logsHook = useFitnessLogs({
+          user: userObj,
+          logsRef,
+          appStateRef,
+          workoutsRef,
+          commitFitnessSnapshot: commitReturnFalse,
+          pushAutoBackup: b.pushAutoBackup,
+          setSyncStatus: setSyncStatusSpy,
+          setSyncError: setSyncErrorSpy
+        });
+        workoutsHook = useFitnessWorkouts({
+          user: userObj,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitReturnFalse,
+          pushAutoBackup: b.pushAutoBackup,
+          setSyncStatus: setSyncStatusSpy,
+          setSyncError: setSyncErrorSpy
+        });
+        exercisesHook = useFitnessExercises({
+          user: userObj,
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitReturnFalse,
+          pushAutoBackup: b.pushAutoBackup,
+          setSyncStatus: setSyncStatusSpy,
+          setSyncError: setSyncErrorSpy
+        });
+        return null;
+      };
+
+      // 1. Authenticated restore & import fail cleanly when commit returns { success: false }
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(HooksHarness, { userObj: { uid } }));
+      });
+      await new Promise(r => setTimeout(r, 20));
+
+      let restoreAuthFail: any;
+      await act(async () => {
+        restoreAuthFail = await backupsAuth.restoreAutoBackup(c1.timestamp);
+      });
+      expect(restoreAuthFail.success).toBe(false);
+      expect(restoreAuthFail.restoreStatus).toBe('restore_failed');
+      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(syncRestoredSpy).not.toHaveBeenCalled();
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+
+      const importJson = JSON.stringify({ schemaVersion: 2, workouts: dummyWorkouts, logs: dummyLogs, appState: dummyAppState });
+      let importAuthFail: any;
+      await act(async () => {
+        importAuthFail = await backupsAuth.importBackup(importJson);
+      });
+      expect(importAuthFail.success).toBe(false);
+      expect(importAuthFail.restoreStatus).toBe('restore_failed');
+      expect(saveStateSpy).not.toHaveBeenCalled();
+
+      // 2. retryPendingCloudSync fails cleanly when local recovery commit returns { success: false }
+      await savePendingCloudReconciliationToDb({
+        uid,
+        kind: 'restore',
+        operationId: 'op-commit-false-retry',
+        baselineFingerprint: computeSnapshotFingerprint({
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: dummyLogs,
+          appState: dummyAppState
+        }),
+        snapshot: {
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: { log_diff: { id: 'log_diff', workoutId: 'w1', date: '2026-04-09', complete: true, durationMinutes: 30, sets: {} } },
+          appState: dummyAppState
+        },
+        sourceTimestamp: c1.timestamp,
+        sourceId: c1.timestamp,
+        createdAt: 9500,
+        status: 'pending'
+      });
+      let retryFailRes: any;
+      await act(async () => {
+        retryFailRes = await backupsAuth.retryPendingCloudSync();
+      });
+      expect(retryFailRes.success).toBe(false);
+      expect(retryFailRes.restoreStatus).toBe('cloud_sync_pending');
+      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(idb.pendingCloudStore.has(uid)).toBe(true);
+      expect(getDeletedIdsTracker(uid).logs).toContain('tomb_contract_1');
+      await clearPendingCloudReconciliationFromDb(uid);
+
+      // 3. Domain mutation hooks abort before tombstones or cloud writes when commit returns { success: false }
+      await expect(logsHook.deleteLog('log_1')).rejects.toThrow(/did not report success/i);
+      await expect(workoutsHook.deleteWorkout('w1')).rejects.toThrow(/did not report success/i);
+      await expect(exercisesHook.deleteExerciseDefinition('bench')).rejects.toThrow(/did not report success/i);
+      expect(deleteLogCloudSpy).not.toHaveBeenCalled();
+      expect(deleteWorkoutCloudSpy).not.toHaveBeenCalled();
+      expect(deleteDefCloudSpy).not.toHaveBeenCalled();
+
+      // 4. Unauthenticated restore & import also reject { success: false }
+      await act(async () => {
+        root!.render(React.createElement(HooksHarness, { userObj: null }));
+      });
+      await new Promise(r => setTimeout(r, 20));
+      let restoreUnauthFail: any;
+      let importUnauthFail: any;
+      await act(async () => {
+        restoreUnauthFail = await backupsUnauth.restoreAutoBackup(c1.timestamp);
+        importUnauthFail = await backupsUnauth.importBackup(importJson);
+      });
+      expect(restoreUnauthFail).toMatchObject({ success: false, restoreStatus: 'restore_failed' });
+      expect(importUnauthFail).toMatchObject({ success: false, restoreStatus: 'restore_failed' });
+
+      // 5. useFitnessSync background merge & realtime listeners surface failure when commit returns { success: false }
+      let authCb: any;
+      let defsListener: any;
+      let workoutsListener: any;
+      let logsListener: any;
+      let stateListener: any;
+
+      vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, cb: any) => {
+        authCb = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+      vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveExerciseDefinitionsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveWorkoutsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveLogsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockImplementation((_uid, cb) => {
+        defsListener = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'subscribeWorkouts').mockImplementation((_uid, cb) => {
+        workoutsListener = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'subscribeLogs').mockImplementation((_uid, cb) => {
+        logsListener = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'subscribeAppState').mockImplementation((_uid, cb) => {
+        stateListener = cb;
+        return vi.fn();
+      });
+
+      let syncHook: any;
+      const SyncContractHarness = () => {
+        syncHook = useFitnessSync({
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitReturnFalse
+        });
+        return null;
+      };
+
+      await act(async () => {
+        root!.render(React.createElement(SyncContractHarness));
+      });
+      await act(async () => {
+        await authCb({ uid, email: 'contract@test.com' });
+        await new Promise(r => setTimeout(r, 30));
+      });
+
+      expect(syncHook.syncStatus).toBe('failed');
+      expect(syncHook.syncStatus).not.toBe('synced');
+
+      // Realtime listeners: clear status override cleanly then verify each listener marks failed when commit returns false
+      act(() => {
+        syncHook.setSyncStatus('synced');
+        defsListener([{ type: 'added', doc: { id: 'rt-def', data: () => ({ name: 'RT Def', target: 'Chest', updatedAt: 999999 }), metadata: { hasPendingWrites: false } } }]);
+      });
+      expect(syncHook.syncStatus).toBe('failed');
+
+      act(() => {
+        syncHook.setSyncStatus('synced');
+        workoutsListener([{ type: 'added', doc: { id: 'rt-wo', data: () => ({ name: 'RT Workout', badge: 'RT', type: 'push', exercises: [], updatedAt: 999999 }), metadata: { hasPendingWrites: false } } }]);
+      });
+      expect(syncHook.syncStatus).toBe('failed');
+
+      act(() => {
+        syncHook.setSyncStatus('synced');
+        logsListener([{ type: 'added', doc: { id: 'rt-log', data: () => ({ workoutId: 'w1', date: '2026-04-10', complete: true, durationMinutes: 20, sets: {}, updatedAt: 999999 }), metadata: { hasPendingWrites: false } } }]);
+      });
+      expect(syncHook.syncStatus).toBe('failed');
+
+      act(() => {
+        syncHook.setSyncStatus('synced');
+        stateListener({ cycleStart: '2026-04-12', updatedAt: 9999999 }, false);
+      });
+      expect(syncHook.syncStatus).toBe('failed');
     });
   });
 });

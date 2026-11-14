@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useReducer } from 'react';
 import { Workout, SessionLog, AppState, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
-import { loadInitialFitnessData } from '../utils/fitnessMigration';
+import { loadInitialFitnessData, readCanonicalSnapshotEnvelope } from '../utils/fitnessMigration';
 import { databaseTransition } from '../state/persistence/databaseMachine';
 
 export interface FitnessDatabaseSnapshot {
@@ -14,6 +14,19 @@ export interface VersionedFitnessSnapshot {
   schemaVersion: number;
   timestamp: number;
   data: FitnessDatabaseSnapshot;
+  lastReconciliationOperationId?: string | null;
+  resetOrigin?: boolean;
+}
+
+export interface PersistFitnessDatabaseOptions {
+  lastReconciliationOperationId?: string | null;
+  resetOrigin?: boolean;
+}
+
+export interface CommitFitnessSnapshotOptions {
+  reconciliationOperationId?: string | null;
+  resetOrigin?: boolean;
+  preserveResetOrigin?: boolean;
 }
 
 /**
@@ -34,12 +47,21 @@ export interface VersionedFitnessSnapshot {
  * are maintained as a best-effort mirror for backward compatibility with v1.x loaders,
  * external backup scripts, and offline recovery if snapshot corruption occurs.
  */
-export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): { success: boolean; error?: string } {
+export function persistFitnessDatabase(
+  snapshot: FitnessDatabaseSnapshot,
+  options?: PersistFitnessDatabaseOptions
+): { success: boolean; error?: string } {
   const versionedPayload: VersionedFitnessSnapshot = {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     timestamp: Date.now(),
     data: snapshot
   };
+  if (options && 'lastReconciliationOperationId' in options) {
+    versionedPayload.lastReconciliationOperationId = options.lastReconciliationOperationId ?? null;
+  }
+  if (options && options.resetOrigin !== undefined) {
+    versionedPayload.resetOrigin = options.resetOrigin;
+  }
 
   const serialized = JSON.stringify(versionedPayload);
 
@@ -91,7 +113,16 @@ export function persistFitnessDatabase(snapshot: FitnessDatabaseSnapshot): { suc
 }
 
 export function useFitnessData() {
-  const [initialData] = useState(() => loadInitialFitnessData());
+  const [initialBoot] = useState(() => {
+    const data = loadInitialFitnessData();
+    const env = readCanonicalSnapshotEnvelope();
+    return {
+      data,
+      lastReconciliationOperationId: env.status === 'ok' ? env.lastReconciliationOperationId : null,
+      resetOrigin: env.status === 'ok' ? env.resetOrigin : false
+    };
+  });
+  const initialData = initialBoot.data;
 
   const [exerciseDefinitions, setExerciseDefinitionsState] = useState<ExerciseDefinition[]>(initialData.defs);
   const [workouts, setWorkoutsState] = useState<Workout[]>(initialData.workouts);
@@ -139,6 +170,8 @@ export function useFitnessData() {
 
   const [databaseLifecycleState, dispatchDb] = useReducer(databaseTransition, { phase: 'ready' });
   const lastCommittedSnapshotRef = useRef<FitnessDatabaseSnapshot | null>(null);
+  const lastReconciliationOperationIdRef = useRef<string | null>(initialBoot.lastReconciliationOperationId);
+  const resetOriginRef = useRef<boolean>(initialBoot.resetOrigin);
 
   // Atomic snapshot setter to apply full state without intermediate inconsistent states
   const applyFitnessDatabaseSnapshot = useCallback((snapshot: FitnessDatabaseSnapshot) => {
@@ -164,6 +197,8 @@ export function useFitnessData() {
     localStorage.removeItem('gl_state');
 
     lastCommittedSnapshotRef.current = null;
+    lastReconciliationOperationIdRef.current = null;
+    resetOriginRef.current = true;
     const fresh = loadInitialFitnessData();
     const snapshot: FitnessDatabaseSnapshot = {
       exerciseDefinitions: fresh.defs,
@@ -171,12 +206,24 @@ export function useFitnessData() {
       logs: fresh.logs,
       appState: fresh.appState
     };
+    try {
+      persistFitnessDatabase(snapshot, {
+        lastReconciliationOperationId: null,
+        resetOrigin: true
+      });
+      lastCommittedSnapshotRef.current = snapshot;
+    } catch {
+      // Best-effort marker write; loadInitialFitnessData already seeded defaults
+    }
     dispatchDb({ type: 'RESET' });
     applyFitnessDatabaseSnapshot(snapshot);
     return snapshot;
   }, [applyFitnessDatabaseSnapshot]);
 
-  const commitFitnessSnapshot = useCallback((partialSnapshot: Partial<FitnessDatabaseSnapshot>): { success: boolean; snapshot: FitnessDatabaseSnapshot } => {
+  const commitFitnessSnapshot = useCallback((
+    partialSnapshot: Partial<FitnessDatabaseSnapshot>,
+    options?: CommitFitnessSnapshotOptions
+  ): { success: boolean; snapshot: FitnessDatabaseSnapshot } => {
     const nextSnapshot: FitnessDatabaseSnapshot = {
       exerciseDefinitions: partialSnapshot.exerciseDefinitions ?? exerciseDefsRef.current,
       workouts: partialSnapshot.workouts ?? workoutsRef.current,
@@ -184,10 +231,26 @@ export function useFitnessData() {
       appState: partialSnapshot.appState ?? appStateRef.current
     };
 
+    const nextReconciliationOpId =
+      options && 'reconciliationOperationId' in options
+        ? (options.reconciliationOperationId ?? null)
+        : lastReconciliationOperationIdRef.current;
+    const nextResetOrigin =
+      options?.resetOrigin !== undefined
+        ? options.resetOrigin
+        : options?.preserveResetOrigin
+          ? resetOriginRef.current
+          : false;
+
     dispatchDb({ type: 'WRITE_STARTED' });
     try {
-      persistFitnessDatabase(nextSnapshot);
+      persistFitnessDatabase(nextSnapshot, {
+        lastReconciliationOperationId: nextReconciliationOpId,
+        resetOrigin: nextResetOrigin
+      });
       lastCommittedSnapshotRef.current = nextSnapshot;
+      lastReconciliationOperationIdRef.current = nextReconciliationOpId;
+      resetOriginRef.current = nextResetOrigin;
       dispatchDb({ type: 'WRITE_COMMITTED' });
     } catch (err: any) {
       dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });
@@ -219,7 +282,10 @@ export function useFitnessData() {
 
     dispatchDb({ type: 'RECOVERY_STARTED' });
     try {
-      persistFitnessDatabase(currentSnapshot);
+      persistFitnessDatabase(currentSnapshot, {
+        lastReconciliationOperationId: lastReconciliationOperationIdRef.current,
+        resetOrigin: resetOriginRef.current
+      });
       lastCommittedSnapshotRef.current = currentSnapshot;
       dispatchDb({ type: 'RECOVERY_SUCCEEDED' });
       return { success: true };
@@ -257,8 +323,12 @@ export function useFitnessData() {
 
     dispatchDb({ type: 'WRITE_STARTED' });
     try {
-      persistFitnessDatabase(currentSnapshot);
+      persistFitnessDatabase(currentSnapshot, {
+        lastReconciliationOperationId: lastReconciliationOperationIdRef.current,
+        resetOrigin: false
+      });
       lastCommittedSnapshotRef.current = currentSnapshot;
+      resetOriginRef.current = false;
       dispatchDb({ type: 'WRITE_COMMITTED' });
     } catch (err: any) {
       dispatchDb({ type: 'WRITE_FAILED', error: err?.message || String(err) });

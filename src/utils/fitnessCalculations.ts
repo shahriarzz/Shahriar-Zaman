@@ -327,9 +327,6 @@ export function isCompletedSession(log: Partial<SessionLog> | null | undefined):
   return log?.complete === true;
 }
 
-/** Alias for isCompletedSession */
-export const isCompletedLog = isCompletedSession;
-
 /**
  * Canonical sorting rule for historical SessionLogs:
  * Primary: Date descending (newest date first)

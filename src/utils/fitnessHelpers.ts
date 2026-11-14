@@ -2,13 +2,9 @@ import { WorkoutType } from '../types/fitness';
 
 // Re-export canonical calculations and resolver functions
 export {
-  CYCLE_LENGTH,
-  BODY_WEIGHT_LIMITS,
   dk,
-  formatDateStr,
   formatCompactWeight,
-  getAdjustedCycleStart,
-  getCycleDay
+  getAdjustedCycleStart
 } from './fitnessCalculations';
 
 export {
@@ -28,17 +24,6 @@ export const WORKOUT_COLORS: Record<WorkoutType, string> = {
   upper: '#fb923c',
   lower: '#84cc16',
   custom: '#a78bfa'
-};
-
-export const WORKOUT_LABELS: Record<WorkoutType, string> = {
-  push: 'Push',
-  pull: 'Pull',
-  hybrid: 'Hybrid',
-  rest: 'Rest',
-  date: 'Date Night',
-  upper: 'Upper Body',
-  lower: 'Lower Body',
-  custom: 'Custom'
 };
 
 export function getWorkoutBadgeStyle(type: WorkoutType | string) {

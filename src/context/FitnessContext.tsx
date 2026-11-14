@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Workout, SessionLog, AppState, SetLog, ExerciseDefinition, WorkoutExercise } from '../types/fitness';
-import { useFitnessData, FitnessDatabaseSnapshot } from '../hooks/useFitnessData';
+import { useFitnessData, FitnessDatabaseSnapshot, CommitFitnessSnapshotOptions } from '../hooks/useFitnessData';
 import { useFitnessSync, AccountResetStatus } from '../hooks/useFitnessSync';
 import { useFitnessExercises } from '../hooks/useFitnessExercises';
 import { useFitnessWorkouts } from '../hooks/useFitnessWorkouts';
@@ -61,7 +61,10 @@ export interface FitnessContextType {
   deleteLog: (logId: string) => Promise<void>;
   resetLogs: () => Promise<void>;
   updateCycleStart: (date: string) => Promise<void>;
-  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  commitFitnessSnapshot: (
+    partialSnapshot: Partial<FitnessDatabaseSnapshot>,
+    options?: CommitFitnessSnapshotOptions
+  ) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
 
   // Active Session Actions (Optional on FitnessContextType for mock compatibility; canonical home is ActiveSessionContext)
   activeSession?: ActiveSession | null;

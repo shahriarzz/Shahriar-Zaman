@@ -9,7 +9,7 @@ export interface DialogContextValue {
   unregisterTitle: (id: string) => void;
 }
 
-export const DialogContext = React.createContext<DialogContextValue>({
+const DialogContext = React.createContext<DialogContextValue>({
   titleId: '',
   registerTitle: () => {},
   unregisterTitle: () => {},
