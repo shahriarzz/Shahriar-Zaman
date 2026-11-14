@@ -3,17 +3,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   ExerciseDefinition,
   Workout,
-  SessionLog,
-  SetLog,
-  AppState,
-  WeightLogEntry,
-  CURRENT_SCHEMA_VERSION
+  SessionLog
 } from '../types/fitness';
 import {
   calculateE1RM,
-  dk,
-  sanitizeSessionLog,
-  getCompletedSets
+  sanitizeSessionLog
 } from '../utils/fitnessCalculations';
 import {
   buildFitnessIndex,

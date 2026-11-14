@@ -5,16 +5,11 @@ import {
   calculateSetsVolume,
   calculateE1RM,
   getCompletedSets,
-  getCycleDay,
-  getSortedWeightEntries,
-  getWeightSparklineData,
   sanitizeSetLog,
-  sanitizeSessionLog,
-  getSortedLogsDescending
+  sanitizeSessionLog
 } from '../utils/fitnessCalculations';
 import {
   buildFitnessIndex,
-  selectSortedLogs,
   selectLifetimeStats,
   selectExerciseWeightPR,
   selectExerciseE1RMPR,
@@ -35,10 +30,7 @@ import {
 import {
   createExerciseDefinitionMap,
   resolveExercise,
-  resolveWorkoutExercise,
-  mapTargetToCategory,
-  getPriorityExercises,
-  getCompoundScore
+  resolveWorkoutExercise
 } from '../utils/exerciseResolver';
 import { SessionLog, ExerciseDefinition, Workout } from '../types/fitness';
 import { canonicalizeWorkoutExercise } from '../utils/fitnessMigration';
@@ -722,7 +714,7 @@ describe('Canonical Fitness Calculation & Index Pipeline', () => {
       const logs: SessionLog[] = [
         { id: 'l1', workoutId: 'w1', date: '2026-08-10', complete: true, durationMinutes: 45, sets: {} }
       ];
-      const index = buildFitnessIndex(logs);
+      buildFitnessIndex(logs);
 
       // Anchored to 2026-08-01, on 2026-08-02 the cycle day is 2
       const nextDay = selectNextCycleDay('2026-08-01', '2026-08-02');

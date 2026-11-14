@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Workout, ExerciseDefinition, SessionLog, SetLog } from '../types/fitness';
-import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
+import { resolveWorkoutExercise, dk } from '../utils/fitnessHelpers';
 import { normalizeActiveSession } from '../hooks/useActiveSession';
 
 describe('SessionView Exercise Identity & State-Key Regression Suite', () => {

@@ -6,8 +6,7 @@ import {
   SessionLog,
   AppState,
   FitnessDatabase,
-  CURRENT_SCHEMA_VERSION,
-  WeightLogEntry
+  CURRENT_SCHEMA_VERSION
 } from '../types/fitness';
 import { validateAndSanitizeFitnessData } from '../utils/fitnessMigration';
 import { buildFitnessIndex, selectLifetimeStats, selectWeightPRs, selectE1RMPRs, selectSortedLogs } from '../utils/fitnessDerivedSelectors';

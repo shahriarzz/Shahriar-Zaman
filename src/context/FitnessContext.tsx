@@ -23,23 +23,22 @@ export interface FitnessContextType {
   // Auth & Sync state
   user: User | null;
   loading: boolean;
-  isInitialized?: boolean;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline';
   syncError: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retrySync: () => void;
-  accountResetStatus?: AccountResetStatus;
-  accountResetError?: string | null;
-  retryAccountReset?: () => Promise<{ success: boolean; error?: string }>;
+  accountResetStatus: AccountResetStatus;
+  accountResetError: string | null;
+  retryAccountReset: () => Promise<{ success: boolean; error?: string }>;
 
   // Domain State
   exerciseDefinitions: ExerciseDefinition[];
   workouts: Workout[];
   logs: Record<string, SessionLog>;
   appState: AppState;
-  databaseLifecycleState?: DatabaseState;
-  retryStorageCommit?: () => { success: boolean; error?: string };
+  databaseLifecycleState: DatabaseState;
+  retryStorageCommit: () => { success: boolean; error?: string };
 
   // Exercise Definitions Actions
   addExerciseDefinition: (def: Omit<ExerciseDefinition, 'id'> & { id?: string }) => Promise<ExerciseDefinition>;
@@ -62,7 +61,7 @@ export interface FitnessContextType {
   deleteLog: (logId: string) => Promise<void>;
   resetLogs: () => Promise<void>;
   updateCycleStart: (date: string) => Promise<void>;
-  commitFitnessSnapshot?: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
 
   // Active Session Actions (Optional on FitnessContextType for mock compatibility; canonical home is ActiveSessionContext)
   activeSession?: ActiveSession | null;
@@ -77,15 +76,15 @@ export interface FitnessContextType {
   // Backup & Restore Actions
   pushAutoBackup: PushAutoBackup;
   getAutoBackups: () => AutoBackupEntry[];
-  clearAutoBackups?: () => Promise<AutoBackupResult>;
+  clearAutoBackups: () => Promise<AutoBackupResult>;
   restoreAutoBackup: (timestamp: string) => Promise<RestoreOperationResult>;
   createManualBackup: () => Promise<{ success: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (backupJson: string) => Promise<RestoreOperationResult>;
   retryPendingCloudSync: () => Promise<RestoreOperationResult>;
-  isBackupsLoading?: boolean;
-  hasPendingCloudSync?: boolean;
-  pendingCloudSyncError?: string | null;
+  isBackupsLoading: boolean;
+  hasPendingCloudSync: boolean;
+  pendingCloudSyncError: string | null;
 }
 
 export const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
@@ -136,10 +135,6 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     workoutsRef: data.workoutsRef,
     logsRef: data.logsRef,
     appStateRef: data.appStateRef,
-    setExerciseDefinitions: data.setExerciseDefinitions,
-    setWorkouts: data.setWorkouts,
-    setLogs: data.setLogs,
-    setAppState: data.setAppState,
     commitFitnessSnapshot: data.commitFitnessSnapshot,
     resetToDefaultData: resetAccountCoordinator
   });

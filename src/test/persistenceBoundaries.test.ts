@@ -4,37 +4,28 @@ import {
   ExerciseDefinition,
   Workout,
   SessionLog,
-  SetLog,
-  AppState,
-  CURRENT_SCHEMA_VERSION,
-  WeightLogEntry
+  CURRENT_SCHEMA_VERSION
 } from '../types/fitness';
 import {
   calculateE1RM,
   dk,
-  sanitizeSessionLog,
-  normalizeWeightEntry
+  sanitizeSessionLog
 } from '../utils/fitnessCalculations';
 import {
   buildFitnessIndex,
   selectSortedLogs,
   selectLifetimeStats,
   selectWeightPRs,
-  selectE1RMPRs,
-  selectWeightSummary
+  selectE1RMPRs
 } from '../utils/fitnessDerivedSelectors';
 import {
-  createExerciseDefinitionMap,
-  resolveExercise
+  createExerciseDefinitionMap
 } from '../utils/exerciseResolver';
 import {
   trackDeletedId,
   getDeletedIdsTracker,
   clearDeletedIdsTracker,
-  mergeDefinitions,
-  mergeWorkouts,
-  mergeLogs,
-  mergeAppState
+  mergeLogs
 } from '../utils/fitnessSyncHelpers';
 import { loadInitialFitnessData } from '../utils/fitnessMigration';
 import { ActiveSession } from '../hooks/useActiveSession';
@@ -108,7 +99,6 @@ describe('Persistence Boundaries Test Suite (Transitions & Failure Recovery)', (
 
   // 2. Transition: Browser/App reload during active session (in-progress crash recovery)
   it('2. Transition: In-progress active session recovers seamlessly after browser reload', () => {
-    const today = dk();
     const inProgressSession: ActiveSession = {
       workoutId: sampleWorkout.id,
       startTime: Date.now() - 20 * 60 * 1000,

@@ -8,7 +8,8 @@ import {
   openBackupDb,
   saveBackupToDb,
   getAllBackupsFromDb,
-  clearAllBackupsFromDb,
+  clearBackupCheckpointsFromDb,
+  clearAllPendingCloudReconciliationsFromDb,
   migrateLegacyLocalStorageBackups,
   pruneBackupsInDb,
   deleteBackupFromDb,
@@ -20,13 +21,16 @@ import {
 } from '../utils/fitnessBackupDb';
 import { isBackupOperationAdmissible, backupTransition } from '../state/persistence/backupMachine';
 import { useFitnessBackups, AutoBackupEntry } from '../hooks/useFitnessBackups';
+import { useFitnessData } from '../hooks/useFitnessData';
 import { useFitnessLogs } from '../hooks/useFitnessLogs';
 import { useFitnessSync } from '../hooks/useFitnessSync';
 import { FitnessProvider, FitnessContext, FitnessContextType, useFitness } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
 import { SessionView } from '../components/SessionView';
-import { Workout, SessionLog, AppState, ExerciseDefinition } from '../types/fitness';
+import { Layout } from '../components/Layout';
+import { AccountSection } from '../components/manage/AccountSection';
+import { Workout, SessionLog, AppState } from '../types/fitness';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import {
@@ -35,6 +39,7 @@ import {
   filterTombstonesExcludingSnapshot
 } from '../utils/fitnessSyncHelpers';
 import * as backupDb from '../utils/fitnessBackupDb';
+import * as syncHelpers from '../utils/fitnessSyncHelpers';
 import * as firestoreService from '../services/fitnessFirestore';
 
 vi.mock('../utils/haptics', () => ({
@@ -61,6 +66,10 @@ interface MockIdbControls {
   setBlockNextOpen: (triggerLateSuccess?: boolean) => void;
   setFailNextOpen: (err: Error) => void;
   setFailNextPut: (err: Error | null) => void;
+  setFailNextGet: (err: Error | null) => void;
+  setFailNextGetAll: (err: Error | null) => void;
+  setFailNextGetAllKeys: (err: Error | null) => void;
+  setFailNextDelete: (err: Error | null) => void;
   setFailNextClear: (err: Error | null) => void;
   setAbortNextTx: (abort: boolean) => void;
 }
@@ -81,6 +90,10 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
   let triggerLateSuccessOnBlock = false;
   let failNextOpen: Error | null = null;
   let failNextPut: Error | null = null;
+  let failNextGet: Error | null = null;
+  let failNextGetAll: Error | null = null;
+  let failNextGetAllKeys: Error | null = null;
+  let failNextDelete: Error | null = null;
   let failNextClear: Error | null = null;
   let abortNextTx = false;
 
@@ -172,6 +185,16 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
                 const val = staged.get(String(key));
                 const req: any = { onsuccess: null, onerror: null, result: val };
                 queueMicrotask(() => {
+                  if (failNextGet) {
+                    const err = failNextGet;
+                    failNextGet = null;
+                    req.error = err;
+                    tx.error = err;
+                    finalized = true;
+                    if (req.onerror) req.onerror({ target: req });
+                    if (tx.onerror) tx.onerror({ target: tx });
+                    return;
+                  }
                   if (req.onsuccess) req.onsuccess({ target: req });
                   pendingRequests--;
                   finalizeIfDone();
@@ -183,6 +206,16 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
                 const list = Array.from(staged.values());
                 const req: any = { onsuccess: null, onerror: null, result: list };
                 queueMicrotask(() => {
+                  if (failNextGetAll) {
+                    const err = failNextGetAll;
+                    failNextGetAll = null;
+                    req.error = err;
+                    tx.error = err;
+                    finalized = true;
+                    if (req.onerror) req.onerror({ target: req });
+                    if (tx.onerror) tx.onerror({ target: tx });
+                    return;
+                  }
                   if (req.onsuccess) req.onsuccess({ target: req });
                   pendingRequests--;
                   finalizeIfDone();
@@ -194,6 +227,16 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
                 const keys = Array.from(staged.keys());
                 const req: any = { onsuccess: null, onerror: null, result: keys };
                 queueMicrotask(() => {
+                  if (failNextGetAllKeys) {
+                    const err = failNextGetAllKeys;
+                    failNextGetAllKeys = null;
+                    req.error = err;
+                    tx.error = err;
+                    finalized = true;
+                    if (req.onerror) req.onerror({ target: req });
+                    if (tx.onerror) tx.onerror({ target: tx });
+                    return;
+                  }
                   if (req.onsuccess) req.onsuccess({ target: req });
                   pendingRequests--;
                   finalizeIfDone();
@@ -203,9 +246,19 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
               delete: (key: string) => {
                 writeOpCount++;
                 pendingRequests++;
-                staged.delete(String(key));
                 const req: any = { onsuccess: null, onerror: null };
                 queueMicrotask(() => {
+                  if (failNextDelete) {
+                    const err = failNextDelete;
+                    failNextDelete = null;
+                    req.error = err;
+                    tx.error = err;
+                    finalized = true;
+                    if (req.onerror) req.onerror({ target: req });
+                    if (tx.onerror) tx.onerror({ target: tx });
+                    return;
+                  }
+                  staged.delete(String(key));
                   if (req.onsuccess) req.onsuccess({ target: req });
                   pendingRequests--;
                   finalizeIfDone();
@@ -303,6 +356,18 @@ function createTransactionAwareMockIndexedDB(): MockIdbControls {
     setFailNextPut: (err: Error | null) => {
       failNextPut = err;
     },
+    setFailNextGet: (err: Error | null) => {
+      failNextGet = err;
+    },
+    setFailNextGetAll: (err: Error | null) => {
+      failNextGetAll = err;
+    },
+    setFailNextGetAllKeys: (err: Error | null) => {
+      failNextGetAllKeys = err;
+    },
+    setFailNextDelete: (err: Error | null) => {
+      failNextDelete = err;
+    },
     setFailNextClear: (err: Error | null) => {
       failNextClear = err;
     },
@@ -366,7 +431,8 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
       resetBackupDbForTesting();
 
       await expect(getAllBackupsFromDb()).rejects.toThrow(/IndexedDB unavailable/i);
-      await expect(clearAllBackupsFromDb()).rejects.toThrow(/IndexedDB unavailable/i);
+      await expect(clearBackupCheckpointsFromDb()).rejects.toThrow(/IndexedDB unavailable/i);
+      await expect(clearAllPendingCloudReconciliationsFromDb()).rejects.toThrow(/IndexedDB unavailable/i);
       await expect(saveBackupToDb(createCheckpoint(Date.now()))).rejects.toThrow(/IndexedDB unavailable/i);
       await expect(pruneBackupsInDb(['123'])).rejects.toThrow(/IndexedDB unavailable/i);
       await expect(deleteBackupFromDb('123')).rejects.toThrow(/IndexedDB unavailable/i);
@@ -950,6 +1016,22 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
       const logsRef = { current: dummyLogs };
       const appStateRef = { current: dummyAppState };
 
+      const commitSnapshotMock = (partial: any) => {
+        if (partial.exerciseDefinitions !== undefined) setDefsMock(partial.exerciseDefinitions);
+        if (partial.workouts !== undefined) setWorkoutsMock(partial.workouts);
+        if (partial.logs !== undefined) setLogsMock(partial.logs);
+        if (partial.appState !== undefined) setAppStateMock(partial.appState);
+        return {
+          success: true,
+          snapshot: {
+            exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+            workouts: partial.workouts ?? workoutsRef.current,
+            logs: partial.logs ?? logsRef.current,
+            appState: partial.appState ?? appStateRef.current
+          }
+        };
+      };
+
       let syncResult: any;
       const SyncHarness = () => {
         syncResult = useFitnessSync({
@@ -957,10 +1039,7 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
           workoutsRef,
           logsRef,
           appStateRef,
-          setExerciseDefinitions: setDefsMock,
-          setWorkouts: setWorkoutsMock,
-          setLogs: setLogsMock,
-          setAppState: setAppStateMock,
+          commitFitnessSnapshot: commitSnapshotMock,
           resetToDefaultData: resetFn
         });
         return null;
@@ -1130,16 +1209,20 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
       const mockContext: FitnessContextType = {
         user: null,
         loading: false,
-        isInitialized: true,
         syncStatus: 'idle',
         syncError: null,
         login: vi.fn(),
         logout: vi.fn(),
         retrySync: vi.fn(),
+        accountResetStatus: 'idle',
+        accountResetError: null,
+        retryAccountReset: vi.fn().mockResolvedValue({ success: true }),
         exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
         workouts: INITIAL_WORKOUTS,
         logs: {},
         appState: { cycleStart: '2026-04-01' },
+        databaseLifecycleState: { phase: 'ready' },
+        retryStorageCommit: vi.fn().mockReturnValue({ success: true }),
         addExerciseDefinition: vi.fn(),
         updateExerciseDefinition: vi.fn(),
         deleteExerciseDefinition: vi.fn(),
@@ -1152,16 +1235,29 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
         deleteLog: vi.fn(),
         resetLogs: vi.fn(),
         updateCycleStart: vi.fn(),
+        commitFitnessSnapshot: vi.fn((partial) => ({
+          success: true,
+          snapshot: {
+            exerciseDefinitions: partial.exerciseDefinitions ?? INITIAL_EXERCISE_DEFINITIONS,
+            workouts: partial.workouts ?? INITIAL_WORKOUTS,
+            logs: partial.logs ?? {},
+            appState: partial.appState ?? { cycleStart: '2026-04-01' }
+          }
+        })),
         clearActiveSession: clearActiveSessionSpy,
         logBodyWeight: vi.fn(),
         deleteBodyWeight: vi.fn(),
         pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
         getAutoBackups: vi.fn().mockReturnValue([]),
+        clearAutoBackups: vi.fn().mockResolvedValue({ success: true }),
         restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
         createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
         exportBackup: vi.fn().mockReturnValue('{}'),
         importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
-        retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' })
+        retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
+        isBackupsLoading: false,
+        hasPendingCloudSync: false,
+        pendingCloudSyncError: null
       };
 
       const derivedIndex = buildFitnessIndex([], new Map(INITIAL_EXERCISE_DEFINITIONS.map(d => [d.id, d])), '2026-04-01');
@@ -1203,6 +1299,751 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
       expect(undefinedAddLog).toHaveBeenCalledTimes(1);
       expect(clearActiveSessionSpy).not.toHaveBeenCalled();
       expect(container.textContent).not.toContain('Session Cleared');
+    });
+  });
+
+  describe('Closure Pass P0 — Crash-Safe Write-Ahead Pending Reconciliation, Read/Write Error Discipline & UID Isolation', () => {
+    it('Item 14 & 15 — rejects on IndexedDB request errors (get/getAll/getAllKeys/delete/put/clear) and transaction aborts', async () => {
+      const c1 = createCheckpoint(1700000500000, 'IDB Error Test');
+      await saveBackupToDb(c1);
+      const pending: PendingCloudReconciliation = {
+        uid: 'u-idb-err',
+        kind: 'restore',
+        snapshot: {
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: dummyLogs,
+          appState: dummyAppState
+        },
+        sourceTimestamp: c1.timestamp,
+        sourceId: c1.timestamp,
+        createdAt: 1000,
+        status: 'pending'
+      };
+      await savePendingCloudReconciliationToDb(pending);
+
+      idb.setFailNextGetAll(new Error('getAll request error'));
+      await expect(getAllBackupsFromDb()).rejects.toThrow('getAll request error');
+
+      idb.setFailNextGet(new Error('get request error'));
+      await expect(getPendingCloudReconciliationFromDb('u-idb-err')).rejects.toThrow('get request error');
+
+      idb.setFailNextGetAllKeys(new Error('getAllKeys request error'));
+      await expect(pruneBackupsInDb([c1.timestamp])).rejects.toThrow('getAllKeys request error');
+
+      idb.setFailNextDelete(new Error('delete request error'));
+      await expect(deleteBackupFromDb(c1.timestamp)).rejects.toThrow('delete request error');
+      expect(idb.autoBackupsStore.has(c1.timestamp)).toBe(true);
+
+      idb.setFailNextDelete(new Error('pending delete request error'));
+      await expect(clearPendingCloudReconciliationFromDb('u-idb-err')).rejects.toThrow('pending delete request error');
+      expect(idb.pendingCloudStore.has('u-idb-err')).toBe(true);
+
+      idb.setFailNextPut(new Error('put request error'));
+      await expect(saveBackupToDb(createCheckpoint(1700000501000, 'Should Not Persist'))).rejects.toThrow('put request error');
+
+      idb.setAbortNextTx(true);
+      await expect(deleteBackupFromDb(c1.timestamp)).rejects.toThrow(/aborted/i);
+      expect(idb.autoBackupsStore.has(c1.timestamp)).toBe(true);
+    });
+
+    it('Item 1 — persists pending record BEFORE cloud writes across restore & import, recovers after interruption at every cloud stage, and handles pre-write DB failures', async () => {
+      const uid = 'u-crash-safe';
+      const c1 = createCheckpoint(1700000600000, 'Crash Recovery Checkpoint');
+      c1.logs = {
+        log_restored_crash: { id: 'log_restored_crash', workoutId: 'w1', date: '2026-04-02', complete: true, durationMinutes: 50, sets: {} }
+      };
+      idb.autoBackupsStore.set(c1.timestamp, c1);
+
+      const exerciseDefsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+      const workoutsRef = { current: dummyWorkouts };
+      const logsRef = { current: dummyLogs };
+      const appStateRef = { current: dummyAppState };
+      const commitFn = vi.fn((partial: any) => ({
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      }));
+
+      let hookResult: any;
+      const Harness = () => {
+        hookResult = useFitnessBackups({
+          user: { uid } as any,
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitFn
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+
+      // Case A: Interruption immediately after local commit (during saveAppState cloud write)
+      let pendingAtCloudStart: PendingCloudReconciliation | undefined;
+      let releaseSaveAppState!: () => void;
+      vi.spyOn(firestoreService, 'saveAppState').mockImplementationOnce(async () => {
+        // Pending record MUST already be durable in IndexedDB with status: 'pending' BEFORE cloud writes execute!
+        pendingAtCloudStart = idb.pendingCloudStore.get(uid);
+        await new Promise<void>(res => { releaseSaveAppState = res; });
+        throw new Error('App terminated during saveAppState');
+      });
+      const syncCloudSpy = vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+
+      const interruptedRestore = hookResult.restoreAutoBackup(c1.timestamp);
+      await new Promise(r => setTimeout(r, 15));
+      expect(pendingAtCloudStart).toBeDefined();
+      expect(pendingAtCloudStart?.status).toBe('pending');
+      expect(pendingAtCloudStart?.uid).toBe(uid);
+
+      // Simulate app restart/unmount while saveAppState is still mid-flight
+      await act(async () => {
+        root!.unmount();
+        releaseSaveAppState();
+        await interruptedRestore;
+      });
+
+      // On restart/remount, the 'pending' record is loaded and retryable (not overwritten or lost!)
+      expect(idb.pendingCloudStore.get(uid)?.status).toBe('pending');
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+      expect(hookResult.pendingCloudSync?.status).toBe('pending');
+
+      // Case B: Interruption during syncCloudDataWithRestored (orphan cleanup / upload stage) on importBackup
+      const importJson = JSON.stringify({
+        schemaVersion: 2,
+        workouts: dummyWorkouts,
+        logs: c1.logs,
+        appState: dummyAppState
+      });
+      // First clear previous pending record via successful retry
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      let retryOk: any;
+      await act(async () => {
+        retryOk = await hookResult.retryPendingCloudSync();
+      });
+      expect(retryOk.success).toBe(true);
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+
+      let pendingDuringSyncCloud: PendingCloudReconciliation | undefined;
+      let releaseSyncCloud!: () => void;
+      syncCloudSpy.mockImplementationOnce(async () => {
+        pendingDuringSyncCloud = idb.pendingCloudStore.get(uid);
+        await new Promise<void>(res => { releaseSyncCloud = res; });
+        throw new Error('App terminated during syncCloudDataWithRestored');
+      });
+
+      const interruptedImport = hookResult.importBackup(importJson);
+      await new Promise(r => setTimeout(r, 20));
+      expect(pendingDuringSyncCloud?.status).toBe('pending');
+      expect(pendingDuringSyncCloud?.kind).toBe('import');
+
+      await act(async () => {
+        root!.unmount();
+        releaseSyncCloud();
+        await interruptedImport;
+      });
+      expect(idb.pendingCloudStore.get(uid)?.status).toBe('pending');
+
+      // Remount and verify import reconciliation succeeds via retryPendingCloudSync()
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+      await act(async () => {
+        retryOk = await hookResult.retryPendingCloudSync();
+      });
+      expect(retryOk.restoreStatus).toBe('fully_synced');
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+
+      // Case C: Pending record IDB write failure BEFORE cloud writes -> no cloud writes, local committed, distinct message, retry recovers
+      const saveStateSpy = vi.spyOn(firestoreService, 'saveAppState').mockClear();
+      syncCloudSpy.mockClear();
+      // 1st put = pre-restore checkpoint succeeds; 2nd put = pending cloud record fails
+      vi.spyOn(backupDb, 'savePendingCloudReconciliationToDb').mockRejectedValueOnce(new Error('IDB pending store full'));
+
+      let writeFailRes: any;
+      await act(async () => {
+        writeFailRes = await hookResult.restoreAutoBackup(c1.timestamp);
+      });
+      expect(writeFailRes.success).toBe(false);
+      expect(writeFailRes.restoreStatus).toBe('restore_failed');
+      expect(writeFailRes.message).toMatch(/durable cloud recovery metadata could not be saved/i);
+      expect(saveStateSpy).not.toHaveBeenCalled();
+      expect(syncCloudSpy).not.toHaveBeenCalled();
+      expect(commitFn).toHaveBeenCalled();
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+
+      // Recovery retry works once IDB is writable again
+      let recoveredRes: any;
+      await act(async () => {
+        recoveredRes = await hookResult.retryPendingCloudSync();
+      });
+      expect(recoveredRes.success).toBe(true);
+      expect(recoveredRes.restoreStatus).toBe('fully_synced');
+      expect(saveStateSpy).toHaveBeenCalled();
+      expect(syncCloudSpy).toHaveBeenCalled();
+
+      // Case D: Local commit failure after write-ahead pending record succeeded -> cleans up pending record, preserves pre-op checkpoint
+      commitFn.mockImplementationOnce(() => {
+        throw new Error('localStorage QuotaExceededError');
+      });
+      const countBeforeLocalFail = idb.autoBackupsStore.size;
+      let localCommitFailRes: any;
+      await act(async () => {
+        localCommitFailRes = await hookResult.restoreAutoBackup(c1.timestamp);
+      });
+      expect(localCommitFailRes.success).toBe(false);
+      expect(localCommitFailRes.restoreStatus).toBe('restore_failed');
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+      expect(idb.autoBackupsStore.size).toBeGreaterThanOrEqual(countBeforeLocalFail);
+    });
+
+    it('Item 2 — retryPendingCloudSync never interprets failed DB read as empty queue and handles empty/foreign UID reads cleanly', async () => {
+      const uid = 'u-retry-read';
+      trackDeletedId('logs', 'log_keep_tomb', uid);
+
+      const exerciseDefsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+      const workoutsRef = { current: dummyWorkouts };
+      const logsRef = { current: dummyLogs };
+      const appStateRef = { current: dummyAppState };
+      const commitFn = vi.fn((partial: any) => ({
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      }));
+
+      let hookResult: any;
+      const Harness = () => {
+        hookResult = useFitnessBackups({
+          user: { uid } as any,
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitFn
+        });
+        return null;
+      };
+
+      // 1. Read failure with NO cached record
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+
+      idb.setFailNextGet(new Error('IndexedDB read blocked (no cache)'));
+      let res1: any;
+      await act(async () => {
+        res1 = await hookResult.retryPendingCloudSync();
+      });
+      expect(res1.success).toBe(false);
+      expect(res1.restoreStatus).toBe('cloud_sync_pending');
+      expect(res1.message).toContain('IndexedDB read blocked');
+      expect(res1.message).not.toContain('No pending cloud restore reconciliation required');
+      expect(getDeletedIdsTracker(uid).logs).toContain('log_keep_tomb');
+
+      // 2. Read failure WITH cached record -> preserves cached record & tombstones
+      const pending: PendingCloudReconciliation = {
+        uid,
+        kind: 'restore',
+        snapshot: {
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: dummyLogs,
+          appState: dummyAppState
+        },
+        sourceTimestamp: '2026-04-02T10:00:00.000Z',
+        sourceId: '2026-04-02T10:00:00.000Z',
+        createdAt: 1000,
+        status: 'failed',
+        lastError: 'Previous cloud failure'
+      };
+      idb.pendingCloudStore.set(uid, pending);
+
+      await act(async () => {
+        root!.unmount();
+      });
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+
+      idb.setFailNextGet(new Error('IndexedDB transient IO read failure'));
+      let res2: any;
+      await act(async () => {
+        res2 = await hookResult.retryPendingCloudSync();
+      });
+      expect(res2.success).toBe(false);
+      expect(res2.restoreStatus).toBe('cloud_sync_pending');
+      expect(res2.message).toContain('IndexedDB transient IO read failure');
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+      expect(hookResult.pendingCloudSyncError).toBe('Previous cloud failure');
+      expect(getDeletedIdsTracker(uid).logs).toContain('log_keep_tomb');
+
+      // 3. Successful read returning a pending record for ANOTHER UID -> rejects without clearing
+      vi.spyOn(backupDb, 'getPendingCloudReconciliationFromDb').mockResolvedValueOnce({
+        ...pending,
+        uid: 'other-uid-999'
+      });
+      let resForeign: any;
+      await act(async () => {
+        resForeign = await hookResult.retryPendingCloudSync();
+      });
+      expect(resForeign.success).toBe(false);
+      expect(resForeign.restoreStatus).toBe('cloud_sync_pending');
+      expect(resForeign.message).toMatch(/different account/i);
+      expect(getDeletedIdsTracker(uid).logs).toContain('log_keep_tomb');
+
+      // 4. Successful read returning NO record -> ONLY case returning "No pending cloud restore reconciliation required."
+      idb.pendingCloudStore.delete(uid);
+      let resEmpty: any;
+      await act(async () => {
+        resEmpty = await hookResult.retryPendingCloudSync();
+      });
+      expect(resEmpty).toEqual({
+        success: true,
+        message: 'No pending cloud restore reconciliation required.',
+        restoreStatus: 'fully_synced'
+      });
+    });
+
+    it('Item 3 — syncDataBackground aborts before calling any cloud delete when pending reconciliation read fails without valid same-UID cache, then protects restored record on recovery', async () => {
+      const uid = 'u-tomb-guard';
+      const restoredLogId = 'log_restored_tombstoned';
+      trackDeletedId('logs', restoredLogId, uid);
+      trackDeletedId('workouts', 'wo_restored_tombstoned', uid);
+      trackDeletedId('defs', 'def_restored_tombstoned', uid);
+
+      await savePendingCloudReconciliationToDb({
+        uid,
+        kind: 'restore',
+        snapshot: {
+          exerciseDefinitions: [{ id: 'def_restored_tombstoned', name: 'Bench', target: 'Chest', tags: ['compound'] }],
+          workouts: [{ id: 'wo_restored_tombstoned', name: 'Push', badge: 'PUSH', type: 'push', exercises: [] }],
+          logs: {
+            [restoredLogId]: { id: restoredLogId, workoutId: 'wo_restored_tombstoned', date: '2026-04-03', complete: true, durationMinutes: 45, sets: {} }
+          },
+          appState: dummyAppState
+        },
+        sourceTimestamp: '2026-04-03T10:00:00.000Z',
+        sourceId: '2026-04-03T10:00:00.000Z',
+        createdAt: 2000,
+        status: 'pending'
+      });
+
+      let authCallback: any = null;
+      vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, cb: any) => {
+        authCallback = cb;
+        return vi.fn();
+      });
+
+      const delDefSpy = vi.spyOn(firestoreService, 'deleteExerciseDefinition').mockResolvedValue(undefined);
+      const delWoSpy = vi.spyOn(firestoreService, 'deleteWorkout').mockResolvedValue(undefined);
+      const delLogSpy = vi.spyOn(firestoreService, 'deleteLog').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+      vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveExerciseDefinitionsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveWorkoutsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveLogsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeWorkouts').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeLogs').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeAppState').mockReturnValue(vi.fn());
+
+      // Fail ALL pending-reconciliation IDB reads on initial sign-in so cache is null AND Step 0 read fails
+      const getPendingSpy = vi.spyOn(backupDb, 'getPendingCloudReconciliationFromDb').mockRejectedValue(
+        new Error('IDB pending read failure during sync')
+      );
+
+      const exerciseDefsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+      const workoutsRef = { current: dummyWorkouts };
+      const logsRef = { current: dummyLogs };
+      const appStateRef = { current: dummyAppState };
+      const commitSnapshot = vi.fn((partial: any) => ({
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      }));
+
+      let syncHook: any;
+      const SyncHarness = () => {
+        syncHook = useFitnessSync({
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitSnapshot
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(SyncHarness));
+      });
+
+      await act(async () => {
+        await authCallback({ uid, email: 'guard@test.com' });
+        await new Promise(r => setTimeout(r, 25));
+      });
+
+      // CRITICAL: ZERO cloud deletion functions may execute when pending state is unknown!
+      expect(delDefSpy).not.toHaveBeenCalled();
+      expect(delWoSpy).not.toHaveBeenCalled();
+      expect(delLogSpy).not.toHaveBeenCalled();
+      expect(syncHook.syncStatus).toBe('failed');
+      expect(syncHook.syncError).toContain('Aborted background sync before tombstone purge');
+
+      // Restore IndexedDB access and trigger retry -> pending snapshot protects tombstoned IDs
+      getPendingSpy.mockRestore();
+      await act(async () => {
+        syncHook.retrySync();
+        await new Promise(r => setTimeout(r, 25));
+      });
+
+      expect(delDefSpy).not.toHaveBeenCalled();
+      expect(delWoSpy).not.toHaveBeenCalled();
+      expect(delLogSpy).not.toHaveBeenCalled();
+      expect(syncHook.syncStatus).toBe('synced');
+    });
+
+    it('Item 4 & 6 — preserves pending state and tombstones if clearPendingCloudReconciliationFromDb fails, reports status update storage errors separately, and recovers on later retry', async () => {
+      const uid = 'u-clear-fail';
+      trackDeletedId('logs', 'log_keep_until_clear', uid);
+      const pending: PendingCloudReconciliation = {
+        uid,
+        kind: 'restore',
+        snapshot: {
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: dummyLogs,
+          appState: dummyAppState
+        },
+        sourceTimestamp: '2026-04-04T10:00:00.000Z',
+        sourceId: '2026-04-04T10:00:00.000Z',
+        createdAt: 3000,
+        status: 'pending'
+      };
+      await savePendingCloudReconciliationToDb(pending);
+
+      const exerciseDefsRef = { current: INITIAL_EXERCISE_DEFINITIONS };
+      const workoutsRef = { current: dummyWorkouts };
+      const logsRef = { current: dummyLogs };
+      const appStateRef = { current: dummyAppState };
+      const commitFn = vi.fn((partial: any) => ({
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? exerciseDefsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      }));
+
+      let hookResult: any;
+      const Harness = () => {
+        hookResult = useFitnessBackups({
+          user: { uid } as any,
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitFn
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+      await new Promise(r => setTimeout(r, 15));
+
+      // Cloud writes fail AND updating status to 'failed' fails -> preserves last durable record and reports BOTH errors separately
+      vi.spyOn(firestoreService, 'saveAppState').mockRejectedValueOnce(new Error('Cloud write 503'));
+      vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+      const savePendingSpy = vi.spyOn(backupDb, 'savePendingCloudReconciliationToDb');
+      savePendingSpy.mockResolvedValueOnce(undefined); // 'retrying' write ok
+      savePendingSpy.mockRejectedValueOnce(new Error('IDB quota during error save')); // 'failed' write fails
+
+      let failBothRes: any;
+      await act(async () => {
+        failBothRes = await hookResult.retryPendingCloudSync();
+      });
+      expect(failBothRes.success).toBe(false);
+      expect(failBothRes.restoreStatus).toBe('cloud_sync_pending');
+      expect(failBothRes.message).toContain('Cloud write 503');
+      expect(failBothRes.message).toContain('IDB quota during error save');
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+      expect(idb.pendingCloudStore.has(uid)).toBe(true);
+      expect(getDeletedIdsTracker(uid).logs).toContain('log_keep_until_clear');
+
+      // Now cloud writes succeed, but clearPendingCloudReconciliationFromDb throws -> MUST NOT report fully_synced or clear tombstones
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      idb.setFailNextDelete(new Error('Pending delete blocked'));
+
+      let deleteFailRes: any;
+      await act(async () => {
+        deleteFailRes = await hookResult.retryPendingCloudSync();
+      });
+      expect(deleteFailRes.success).toBe(false);
+      expect(deleteFailRes.restoreStatus).toBe('cloud_sync_pending');
+      expect(deleteFailRes.message).toContain('Pending delete blocked');
+      expect(hookResult.hasPendingCloudSync).toBe(true);
+      expect(idb.pendingCloudStore.has(uid)).toBe(true);
+      expect(getDeletedIdsTracker(uid).logs).toContain('log_keep_until_clear');
+
+      // Subsequent retry succeeds cleanly once storage delete recovers
+      let finalRes: any;
+      await act(async () => {
+        finalRes = await hookResult.retryPendingCloudSync();
+      });
+      expect(finalRes.success).toBe(true);
+      expect(finalRes.restoreStatus).toBe('fully_synced');
+      expect(hookResult.hasPendingCloudSync).toBe(false);
+      expect(idb.pendingCloudStore.has(uid)).toBe(false);
+      expect(getDeletedIdsTracker(uid).logs).toEqual([]);
+    });
+
+    it('Item 5 — preserves Account A pending cloud reconciliation across A -> B -> A account switches', async () => {
+      const uidA = 'uid-switch-A';
+      const uidB = 'uid-switch-B';
+      await saveBackupToDb(createCheckpoint(1700000700000, 'Account A Checkpoint'));
+      await savePendingCloudReconciliationToDb({
+        uid: uidA,
+        kind: 'restore',
+        snapshot: {
+          exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+          workouts: dummyWorkouts,
+          logs: dummyLogs,
+          appState: dummyAppState
+        },
+        sourceTimestamp: '2026-04-05T10:00:00.000Z',
+        sourceId: '2026-04-05T10:00:00.000Z',
+        createdAt: 4000,
+        status: 'pending'
+      });
+
+      let authCallback: any = null;
+      vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, cb: any) => {
+        authCallback = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+      vi.spyOn(firestoreService, 'getAppState').mockResolvedValue(null);
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveExerciseDefinitionsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveWorkoutsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveLogsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeWorkouts').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeLogs').mockReturnValue(vi.fn());
+      vi.spyOn(firestoreService, 'subscribeAppState').mockReturnValue(vi.fn());
+      vi.spyOn(syncHelpers, 'syncCloudDataWithRestored').mockResolvedValue(undefined);
+
+      let ctx!: FitnessContextType;
+      const Consumer = () => {
+        ctx = useFitness();
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(FitnessProvider, null, React.createElement(Consumer)));
+      });
+
+      // Sign in A -> sees pending cloud sync
+      await act(async () => {
+        await authCallback({ uid: uidA, email: 'a@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(ctx.hasPendingCloudSync).toBe(true);
+
+      // Switch A -> B: checkpoint store cleared, B sees false, A's IDB pending record survives
+      await act(async () => {
+        await authCallback({ uid: uidB, email: 'b@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(ctx.user?.uid).toBe(uidB);
+      expect(ctx.hasPendingCloudSync).toBe(false);
+      expect(idb.autoBackupsStore.size).toBe(0);
+      expect(idb.pendingCloudStore.has(uidA)).toBe(true);
+
+      // Switch B -> A: A re-hydrates pending record and reconciles cleanly
+      await act(async () => {
+        await authCallback({ uid: uidA, email: 'a@test.com' });
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(ctx.user?.uid).toBe(uidA);
+      expect(ctx.hasPendingCloudSync).toBe(true);
+      let reconcileRes: any;
+      await act(async () => {
+        reconcileRes = await ctx.retryPendingCloudSync();
+      });
+      expect(reconcileRes.success).toBe(true);
+      expect(ctx.hasPendingCloudSync).toBe(false);
+      expect(idb.pendingCloudStore.has(uidA)).toBe(false);
+    });
+  });
+
+  describe('Closure Pass P1 — Single Tombstone Owner, Snapshot Dedupe & Single Global Reset Banner', () => {
+    it('Item 11 & 13 — useFitnessData leaves gl_deleted_ids_anon to FitnessContext and avoids redundant JSON.stringify on commitFitnessSnapshot', async () => {
+      trackDeletedId('logs', 'anon_tomb_1');
+
+      const stringifySpy = vi.spyOn(JSON, 'stringify');
+      let dataHook: any;
+      const Harness = () => {
+        dataHook = useFitnessData();
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(Harness));
+      });
+
+      // resetToDefaultData in useFitnessData must NOT remove gl_deleted_ids_anon (owned by resetAccountCoordinator)
+      act(() => {
+        dataHook.resetToDefaultData();
+      });
+      expect(localStorage.getItem('gl_deleted_ids_anon')).not.toBeNull();
+
+      // commitFitnessSnapshot persists once and subsequent effect with same refs skips redundant serialization
+      stringifySpy.mockClear();
+      const nextAppState: AppState = { cycleStart: '2026-06-01', updatedAt: 555 };
+      await act(async () => {
+        dataHook.commitFitnessSnapshot({ appState: nextAppState });
+      });
+      const callsRightAfterCommit = stringifySpy.mock.calls.length;
+      // 1 payload + 3 mirror keys = 4 calls total (NOT double-serialized in useEffect!)
+      expect(callsRightAfterCommit).toBe(4);
+
+      // Unrelated state setter update triggers single persistence pass cleanly
+      stringifySpy.mockClear();
+      await act(async () => {
+        dataHook.setAppState({ cycleStart: '2026-06-02', updatedAt: 556 });
+      });
+      expect(stringifySpy.mock.calls.length).toBe(4);
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.appState.cycleStart).toBe('2026-06-02');
+
+      // Rapid consecutive commits persist latest snapshot cleanly
+      await act(async () => {
+        dataHook.commitFitnessSnapshot({ appState: { cycleStart: '2026-06-03', updatedAt: 557 } });
+        dataHook.commitFitnessSnapshot({ appState: { cycleStart: '2026-06-04', updatedAt: 558 } });
+      });
+      expect(JSON.parse(localStorage.getItem('gl_database_snapshot')!).data.appState.cycleStart).toBe('2026-06-04');
+
+      // Failed commit transitions databaseLifecycleState to storage_error
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      await act(async () => {
+        expect(() => dataHook.commitFitnessSnapshot({ appState: { cycleStart: '2026-06-05' } })).toThrow('QuotaExceededError');
+      });
+      expect(dataHook.databaseLifecycleState.phase).toBe('storage_error');
+      setItemSpy.mockRestore();
+    });
+
+    it('Item 12 — AccountSection does not render duplicate account-reset banner while Layout renders the global reset banner', async () => {
+      const mockCtx: FitnessContextType = {
+        user: null,
+        loading: false,
+        syncStatus: 'idle',
+        syncError: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        retrySync: vi.fn(),
+        accountResetStatus: 'failed',
+        accountResetError: 'Backup wipe blocked',
+        retryAccountReset: vi.fn().mockResolvedValue({ success: true }),
+        exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+        workouts: INITIAL_WORKOUTS,
+        logs: {},
+        appState: { cycleStart: '2026-04-01' },
+        databaseLifecycleState: { phase: 'ready' },
+        retryStorageCommit: vi.fn().mockReturnValue({ success: true }),
+        addExerciseDefinition: vi.fn(),
+        updateExerciseDefinition: vi.fn(),
+        deleteExerciseDefinition: vi.fn(),
+        setWorkouts: vi.fn(),
+        assignExerciseToWorkout: vi.fn(),
+        removeExerciseFromWorkout: vi.fn(),
+        updateWorkoutExerciseProgramming: vi.fn(),
+        deleteWorkout: vi.fn(),
+        addLog: vi.fn(),
+        deleteLog: vi.fn(),
+        resetLogs: vi.fn(),
+        updateCycleStart: vi.fn(),
+        commitFitnessSnapshot: vi.fn(),
+        clearActiveSession: vi.fn(),
+        logBodyWeight: vi.fn(),
+        deleteBodyWeight: vi.fn(),
+        pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
+        getAutoBackups: vi.fn().mockReturnValue([]),
+        clearAutoBackups: vi.fn().mockResolvedValue({ success: true }),
+        restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
+        createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
+        exportBackup: vi.fn().mockReturnValue('{}'),
+        importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
+        retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
+        isBackupsLoading: false,
+        hasPendingCloudSync: false,
+        pendingCloudSyncError: null
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(
+            FitnessContext.Provider,
+            { value: mockCtx },
+            React.createElement(
+              ConfirmContext.Provider,
+              { value: { confirm: vi.fn().mockResolvedValue(true) } },
+              React.createElement(
+                Layout,
+                { activeTab: 'manage', onTabChange: vi.fn() },
+                React.createElement(AccountSection)
+              )
+            )
+          )
+        );
+      });
+
+      expect(container.textContent).toContain('Account switch paused — backup cleanup failed');
+      expect(container.textContent).not.toContain('Account isolation reset incomplete');
     });
   });
 });

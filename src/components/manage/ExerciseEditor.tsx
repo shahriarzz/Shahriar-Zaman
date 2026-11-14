@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Save, Sparkles, Tag, Layers, Dumbbell, Info, Clock, Hash, RotateCw } from 'lucide-react';
+import { ChevronLeft, Save, Layers } from 'lucide-react';
 import { Exercise, Workout } from '../../types/fitness';
 import {
   Card,
@@ -11,7 +11,6 @@ import {
   Grid,
   SegmentedControl,
   TYPOGRAPHY,
-  GAP,
   BORDER,
   SURFACE,
   RADIUS,
@@ -39,7 +38,6 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
   const [equipment, setEquipment] = useState(exercise.equipment || '');
   const [instructions, setInstructions] = useState(exercise.instructions || '');
   const [tags, setTags] = useState<string[]>(exercise.tags || []);
-  const [tagInput, setTagInput] = useState('');
 
   // 2. Workout Programming State (specific to this workout assignment)
   const [sets, setSets] = useState<number>(exercise.sets || 3);
@@ -54,15 +52,6 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
   const toggleTag = (t: string) => {
     haptics.selection();
     setTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-  };
-
-  const handleAddCustomTag = () => {
-    const trimmed = tagInput.trim().toLowerCase();
-    if (trimmed && !tags.includes(trimmed)) {
-      haptics.light();
-      setTags(prev => [...prev, trimmed]);
-      setTagInput('');
-    }
   };
 
   const handleSave = () => {

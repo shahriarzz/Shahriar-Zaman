@@ -474,7 +474,6 @@ export function loadInitialFitnessData(): {
   const workoutsKey = localStorage.getItem('gl_workouts');
   const logsKey = localStorage.getItem('gl_logs');
   const stateKey = localStorage.getItem('gl_state');
-  const versionKey = localStorage.getItem('gl_schema_version');
 
   // Check if first-time launch (none of the core keys exist in localStorage)
   const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null && snapshotKey === null && stagingKey === null;

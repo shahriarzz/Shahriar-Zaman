@@ -9,24 +9,20 @@ import {
   selectExerciseHistory,
   selectExercise1RMProgression,
   selectMuscleDistribution,
-  selectExerciseFrequency,
-  selectWeightSummary
+  selectExerciseFrequency
 } from '../utils/fitnessDerivedSelectors';
 import {
   calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
   sanitizeSessionLog,
-  sanitizeSetLog,
   dk
 } from '../utils/fitnessCalculations';
 import {
   createExerciseDefinitionMap,
-  resolveExercise,
-  mapTargetToCategory
+  resolveExercise
 } from '../utils/exerciseResolver';
 import {
-  validateAndSanitizeFitnessData,
   extractExerciseDefinitionsFromWorkouts
 } from '../utils/fitnessMigration';
 import {

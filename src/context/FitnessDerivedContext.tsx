@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useCallback, useEffect } from 'react';
+import React, { createContext, useMemo, useCallback, useEffect } from 'react';
 import { format, subDays } from 'date-fns';
 import { useFitness } from './FitnessContext';
 import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';

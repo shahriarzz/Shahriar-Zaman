@@ -1,12 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { format } from 'date-fns';
 import { ChevronDown, ChevronUp, Activity, Layers, Info } from 'lucide-react';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import {
   selectMuscleBalanceForRange,
   selectMuscleRecovery,
-  MuscleGroupBalance,
-  MuscleRecoveryItem
+  MuscleGroupBalance
 } from '../utils/muscleIntelligence';
 import { haptics } from '../utils/haptics';
 import { cn } from '../lib/utils';

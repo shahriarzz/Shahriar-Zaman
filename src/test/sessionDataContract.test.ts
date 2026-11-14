@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Workout, ExerciseDefinition, SessionLog, SetLog, AppState } from '../types/fitness';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Workout, ExerciseDefinition, SessionLog, SetLog } from '../types/fitness';
 import {
   sanitizeSetLog,
   sanitizeSessionLog,
@@ -10,11 +10,9 @@ import {
   calculateE1RM
 } from '../utils/fitnessCalculations';
 import {
-  buildFitnessIndex,
-  selectExerciseHistory
+  buildFitnessIndex
 } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
-import { resolveWorkoutExercise, dk, getAdjustedCycleStart } from '../utils/fitnessHelpers';
 
 describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
   const mockDefs: ExerciseDefinition[] = [
@@ -35,19 +33,6 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
     exercises: [
       { exerciseDefinitionId: 'def_bench', sets: 3, reps: '8-10' },
       { exerciseDefinitionId: 'def_incline', sets: 3, reps: '10-12' }
-    ]
-  };
-
-  const mockWorkoutPushB: Workout = {
-    id: 'w_push_b',
-    name: 'Push Protocol B',
-    badge: 'PUSH B',
-    type: 'push',
-    isCore: true,
-    cycleDay: 4,
-    exercises: [
-      { exerciseDefinitionId: 'def_bench', sets: 4, reps: '5-5' },
-      { exerciseDefinitionId: 'def_triceps', sets: 3, reps: '12-15' }
     ]
   };
 
@@ -195,21 +180,7 @@ describe('GainLog Session Data Contract & Analytics Invariants Suite', () => {
         ]
       };
 
-      // Simulated background snapshot from Firebase updates workouts or logs
-      const updatedLogsFromFirebase: Record<string, SessionLog> = {
-        new_cloud_log: {
-          id: 'new_cloud_log',
-          date: '2026-08-12',
-          workoutId: mockWorkoutPushA.id,
-          complete: true,
-          durationMinutes: 60,
-          sets: {
-            def_bench: [{ id: 'cloud_s1', weight: '100', reps: '5', done: true }]
-          }
-        }
-      };
-
-      // Guard evaluation
+      // Guard evaluation (even when background Firebase logs update)
       const shouldReinitialize = !isInitialized || activeWorkoutId !== mockWorkoutPushA.id;
       expect(shouldReinitialize).toBe(false);
 

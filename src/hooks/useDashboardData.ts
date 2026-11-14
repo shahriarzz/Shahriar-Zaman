@@ -113,9 +113,7 @@ export function parseStrictBodyWeight(raw: string): { value: number | null; erro
 
 export function useDashboardData(): DashboardData {
   const {
-    logs,
     workouts,
-    appState,
     updateCycleStart,
     logBodyWeight,
     deleteBodyWeight,

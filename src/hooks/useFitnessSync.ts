@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } 
 import { auth, signInWithGoogle, onAuthStateChanged, getRedirectResult, User } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
-import { authTransition, initialAuthState, AuthState } from '../state/sync/authMachine';
-import { syncTransition, initialSyncPhase, SyncPhase, selectSyncStatus, selectSyncError } from '../state/sync/syncMachine';
+import { authTransition, initialAuthState } from '../state/sync/authMachine';
+import { syncTransition, initialSyncPhase, selectSyncStatus, selectSyncError } from '../state/sync/syncMachine';
 import { FitnessDatabaseSnapshot } from './useFitnessData';
 import {
   sanitizeExerciseDefinition,
@@ -50,11 +50,7 @@ interface UseFitnessSyncProps {
   workoutsRef: React.MutableRefObject<Workout[]>;
   logsRef: React.MutableRefObject<Record<string, SessionLog>>;
   appStateRef: React.MutableRefObject<AppState>;
-  setExerciseDefinitions: (defs: ExerciseDefinition[] | ((prev: ExerciseDefinition[]) => ExerciseDefinition[])) => void;
-  setWorkouts: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => void;
-  setLogs: (logs: Record<string, SessionLog> | ((prev: Record<string, SessionLog>) => Record<string, SessionLog>)) => void;
-  setAppState: (state: AppState | ((prev: AppState) => AppState)) => void;
-  commitFitnessSnapshot?: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
+  commitFitnessSnapshot: (partialSnapshot: Partial<FitnessDatabaseSnapshot>) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
   resetToDefaultData?: (prevUid?: string) => void | Promise<void>;
   setSyncStatus?: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
 }
@@ -64,10 +60,6 @@ export function useFitnessSync({
   workoutsRef,
   logsRef,
   appStateRef,
-  setExerciseDefinitions,
-  setWorkouts,
-  setLogs,
-  setAppState,
   commitFitnessSnapshot,
   resetToDefaultData,
   setSyncStatus: externalSetSyncStatus
@@ -117,18 +109,7 @@ export function useFitnessSync({
   const authEventSeqRef = useRef(0);
   const resetFencedRef = useRef(false);
   const pendingAuthUserRef = useRef<User | null>(null);
-  const pendingReconciliationRef = useRef<PendingCloudReconciliation | null>(null);
-
-  const commitOrSet = useCallback((partial: Partial<FitnessDatabaseSnapshot>) => {
-    if (commitFitnessSnapshot) {
-      commitFitnessSnapshot(partial);
-    } else {
-      if (partial.exerciseDefinitions !== undefined) setExerciseDefinitions(partial.exerciseDefinitions);
-      if (partial.workouts !== undefined) setWorkouts(partial.workouts);
-      if (partial.logs !== undefined) setLogs(partial.logs);
-      if (partial.appState !== undefined) setAppState(partial.appState);
-    }
-  }, [commitFitnessSnapshot, setExerciseDefinitions, setWorkouts, setLogs, setAppState]);
+  const pendingReconciliationRef = useRef<{ uid: string; generation: number; record: PendingCloudReconciliation } | null>(null);
 
   const resetToDefaultDataRef = useRef(resetToDefaultData);
   resetToDefaultDataRef.current = resetToDefaultData;
@@ -142,7 +123,8 @@ export function useFitnessSync({
     committedUidRef.current = nextUid;
     currentUidRef.current = nextUid;
     resetFencedRef.current = false;
-    pendingAuthUserRef.current = null;
+    pendingReconciliationRef.current = null;
+    authGenerationRef.current += 1;
     setAccountResetStatus('idle');
     setAccountResetError(null);
     if (u) {
@@ -223,6 +205,7 @@ export function useFitnessSync({
     const prevCommittedUid = committedUidRef.current;
 
     currentUidRef.current = null;
+    pendingReconciliationRef.current = null;
     setAccountResetStatus('resetting');
     setAccountResetError(null);
 
@@ -268,6 +251,7 @@ export function useFitnessSync({
       authGenerationRef.current += 1;
       isSyncingRef.current = false;
       queuedSyncRef.current = null;
+      pendingReconciliationRef.current = null;
       currentUidRef.current = null;
       setDomainSyncOverride(null);
       dispatchSync({ type: 'RESET' });
@@ -278,7 +262,7 @@ export function useFitnessSync({
     }
   }, []);
 
-  // Keep cached pending reconciliation ref synced for active user
+  // Keep cached pending reconciliation ref synced for active user & generation
   useEffect(() => {
     const uid = user?.uid ?? null;
     if (!uid) {
@@ -286,11 +270,15 @@ export function useFitnessSync({
       return;
     }
     let active = true;
+    const effectGen = authGenerationRef.current;
     getPendingCloudReconciliationFromDb(uid)
       .then((rec) => {
-        if (active && currentUidRef.current === uid) {
-          pendingReconciliationRef.current = rec;
+        if (!active || currentUidRef.current !== uid || authGenerationRef.current !== effectGen || resetFencedRef.current) {
+          return;
         }
+        pendingReconciliationRef.current = rec && rec.uid === uid
+          ? { uid, generation: effectGen, record: rec }
+          : null;
       })
       .catch(() => {});
     return () => {
@@ -316,16 +304,26 @@ export function useFitnessSync({
     const isStale = () => authGenerationRef.current !== currentGen || currentUidRef.current !== uid || resetFencedRef.current;
 
     try {
-      // Load any pending cloud restore/import reconciliation for this UID so old tombstones
-      // do not delete records belonging to the pending restored snapshot.
+      // Load any pending cloud restore/import reconciliation for this UID before running Step 0 tombstones.
+      // Never interpret an IndexedDB read failure as "no pending reconciliation" unless a valid same-UID/epoch cache exists.
       let pendingReconciliation: PendingCloudReconciliation | null = null;
       try {
-        pendingReconciliation = await getPendingCloudReconciliationFromDb(uid);
-      } catch {
-        pendingReconciliation = pendingReconciliationRef.current;
+        const readRecord = await getPendingCloudReconciliationFromDb(uid);
+        pendingReconciliation = readRecord && readRecord.uid === uid ? readRecord : null;
+      } catch (pendingReadErr: any) {
+        const cached = pendingReconciliationRef.current;
+        if (cached && cached.uid === uid && cached.generation === currentGen && !resetFencedRef.current) {
+          pendingReconciliation = cached.record;
+        } else {
+          const abortMsg = `Aborted background sync before tombstone purge: pending cloud reconciliation read failed (${pendingReadErr?.message || String(pendingReadErr)})`;
+          setDomainSyncOverride({ status: 'failed', error: abortMsg });
+          throw new Error(abortMsg);
+        }
       }
       if (isStale()) return;
-      pendingReconciliationRef.current = pendingReconciliation;
+      pendingReconciliationRef.current = pendingReconciliation
+        ? { uid, generation: currentGen, record: pendingReconciliation }
+        : null;
 
       // 0. Purge offline deleted items for this UID (excluding pending restored snapshot items)
       const rawDeletedTracker = getDeletedIdsTracker(uid);
@@ -388,12 +386,15 @@ export function useFitnessSync({
 
       // Re-read pending reconciliation & tombstones, excluding records in pending snapshot
       try {
-        pendingReconciliation = await getPendingCloudReconciliationFromDb(uid);
+        const refreshed = await getPendingCloudReconciliationFromDb(uid);
+        pendingReconciliation = refreshed && refreshed.uid === uid ? refreshed : null;
       } catch {
-        // retain prior pendingReconciliation
+        // Retain prior pendingReconciliation already established in Step 0 for this UID/generation
       }
       if (isStale()) return;
-      pendingReconciliationRef.current = pendingReconciliation;
+      pendingReconciliationRef.current = pendingReconciliation
+        ? { uid, generation: currentGen, record: pendingReconciliation }
+        : null;
 
       const baseActiveTracker = filterTombstonesExcludingSnapshot(
         getDeletedIdsTracker(uid),
@@ -456,7 +457,7 @@ export function useFitnessSync({
       if (isStale()) return;
 
       // Commit all synced state through canonical local persistence boundary
-      commitOrSet({
+      commitFitnessSnapshot({
         appState: mergedState,
         exerciseDefinitions: mergedDefs,
         workouts: mergedWorkouts,
@@ -500,7 +501,7 @@ export function useFitnessSync({
         }
       }
     }
-  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitOrSet]);
+  }, [exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot]);
 
   // Realtime Listeners
   useEffect(() => {
@@ -563,9 +564,10 @@ export function useFitnessSync({
         if (!isListenerValid()) return;
         let hasChanges = false;
         const current = [...exerciseDefsRef.current];
+        const cachedPending = pendingReconciliationRef.current;
         const tombstones = filterTombstonesExcludingSnapshot(
           getDeletedIdsTracker(user.uid),
-          pendingReconciliationRef.current?.snapshot
+          cachedPending?.uid === user.uid ? cachedPending.record.snapshot : undefined
         ).defs;
         changes.forEach(change => {
           const id = change.doc.id;
@@ -599,7 +601,7 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitOrSet({ exerciseDefinitions: current });
+            commitFitnessSnapshot({ exerciseDefinitions: current });
           } catch (err) {
             console.error("Failed persisting realtime exercise definitions:", err);
           }
@@ -617,9 +619,10 @@ export function useFitnessSync({
         if (!isListenerValid()) return;
         let hasChanges = false;
         const current = [...workoutsRef.current];
+        const cachedPending = pendingReconciliationRef.current;
         const tombstones = filterTombstonesExcludingSnapshot(
           getDeletedIdsTracker(user.uid),
-          pendingReconciliationRef.current?.snapshot
+          cachedPending?.uid === user.uid ? cachedPending.record.snapshot : undefined
         ).workouts;
         changes.forEach(change => {
           const id = change.doc.id;
@@ -653,7 +656,7 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitOrSet({ workouts: current });
+            commitFitnessSnapshot({ workouts: current });
           } catch (err) {
             console.error("Failed persisting realtime workouts:", err);
           }
@@ -671,9 +674,10 @@ export function useFitnessSync({
         if (!isListenerValid()) return;
         let hasChanges = false;
         const current = { ...logsRef.current };
+        const cachedPending = pendingReconciliationRef.current;
         const tombstones = filterTombstonesExcludingSnapshot(
           getDeletedIdsTracker(user.uid),
-          pendingReconciliationRef.current?.snapshot
+          cachedPending?.uid === user.uid ? cachedPending.record.snapshot : undefined
         ).logs;
         changes.forEach(change => {
           const id = change.doc.id;
@@ -701,7 +705,7 @@ export function useFitnessSync({
         });
         if (hasChanges) {
           try {
-            commitOrSet({ logs: current });
+            commitFitnessSnapshot({ logs: current });
           } catch (err) {
             console.error("Failed persisting realtime logs:", err);
           }
@@ -722,7 +726,7 @@ export function useFitnessSync({
           const { merged } = mergeAppState(localState, cloudState);
           if (JSON.stringify(localState) !== JSON.stringify(merged)) {
             try {
-              commitOrSet({ appState: merged });
+              commitFitnessSnapshot({ appState: merged });
             } catch (err) {
               console.error("Failed persisting realtime appState:", err);
             }
@@ -747,7 +751,7 @@ export function useFitnessSync({
       if (unsubState) unsubState();
       if (retryTimeoutId) clearTimeout(retryTimeoutId);
     };
-  }, [user, syncDataBackground, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitOrSet]);
+  }, [user, syncDataBackground, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot]);
 
   const retrySync = useCallback(() => {
     if (user && !resetFencedRef.current) {

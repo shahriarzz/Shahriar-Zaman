@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ExerciseDefinition, Workout, SessionLog, SetLog, AppState } from '../types/fitness';
+import { ExerciseDefinition, Workout, SessionLog } from '../types/fitness';
 import {
-  calculateSetVolume,
   calculateSetsVolume,
   calculateE1RM,
   getCompletedSets,
   dk,
-  sanitizeSetLog,
   sanitizeSessionLog
 } from '../utils/fitnessCalculations';
 import {
@@ -144,7 +142,6 @@ describe('End-to-End Session Data-Flow Regression Test Suite', () => {
 
     const expectedSessionVolume = 2890;
     const expectedCompletedSets = 5;
-    const expectedBenchBestE1RM = calculateE1RM(102.5, 8); // 129.8
 
     // A. Direct Session Calculation Check
     const rawSessionVolume = calculateSetsVolume(Object.values(reconstructedLogs[sessionId].sets).flat());

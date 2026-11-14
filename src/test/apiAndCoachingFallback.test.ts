@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getApiBaseUrl, buildApiUrl } from '../utils/apiConfig';
+import { buildApiUrl } from '../utils/apiConfig';
 import { generateClientCoachingFallback } from '../utils/aiAdviceFallback';
 
 describe('API Configuration & Offline Coaching Fallback', () => {

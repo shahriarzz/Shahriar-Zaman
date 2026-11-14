@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-import React, { act, useState } from 'react';
+import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Dashboard } from '../components/Dashboard';
@@ -12,7 +12,6 @@ import { Workout } from '../types/fitness';
 import { ActiveSession } from '../hooks/useActiveSession';
 import { parseStrictBodyWeight } from '../hooks/useDashboardData';
 import { BODY_WEIGHT_LIMITS } from '../utils/fitnessCalculations';
-import { SEMANTIC_COLORS } from '../styles/tokens';
 import { FitnessContext } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';

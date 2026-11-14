@@ -10,7 +10,6 @@ import {
   CHART_THEME,
   RADIUS,
   SPACING,
-  BORDER,
   SURFACE,
   SHADOW,
   CONTROL_HEIGHT,
@@ -32,7 +31,6 @@ import { Dialog, DialogHeader } from '../components/ui/Dialog';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
-import { Input } from '../components/ui/Input';
 import { Layout } from '../components/Layout';
 import { Calendar } from '../components/Calendar';
 import { SessionView } from '../components/SessionView';

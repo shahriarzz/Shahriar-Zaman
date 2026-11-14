@@ -492,7 +492,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
           {/* Sparkline */}
           {weightSummary.sparklineData && (() => {
-            const { sorted, min, max, observedMin, observedMax, range, w } = weightSummary.sparklineData;
+            const { sorted, min, observedMin, observedMax, range, w } = weightSummary.sparklineData;
             const safeRange = range > 0 ? range : 1;
             const firstDate = sorted[0][0];
             const lastDate = sorted[sorted.length - 1][0];

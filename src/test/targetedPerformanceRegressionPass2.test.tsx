@@ -6,7 +6,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Layout, ActiveTab } from '../components/Layout';
 import { Dashboard } from '../components/Dashboard';
-import { SessionView, ExerciseCard } from '../components/SessionView';
+import { SessionView } from '../components/SessionView';
 import { FitnessContext, FitnessContextType, FitnessProvider, useFitness } from '../context/FitnessContext';
 import { FitnessDerivedProvider } from '../context/FitnessDerivedContext';
 import { ConfirmProvider } from '../context/ConfirmContext';
@@ -37,16 +37,20 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
   return {
     user: null,
     loading: false,
-    isInitialized: true,
     syncStatus: 'idle',
     syncError: null,
     login: vi.fn(),
     logout: vi.fn(),
     retrySync: vi.fn(),
+    accountResetStatus: 'idle',
+    accountResetError: null,
+    retryAccountReset: vi.fn().mockResolvedValue({ success: true }),
     exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
     workouts: INITIAL_WORKOUTS,
     logs: {},
     appState: { cycleStart: '2026-10-01' },
+    databaseLifecycleState: { phase: 'ready' },
+    retryStorageCommit: vi.fn().mockReturnValue({ success: true }),
     addExerciseDefinition: vi.fn(),
     updateExerciseDefinition: vi.fn(),
     deleteExerciseDefinition: vi.fn(),
@@ -59,6 +63,15 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     deleteLog: vi.fn(),
     resetLogs: vi.fn(),
     updateCycleStart: vi.fn().mockResolvedValue(undefined),
+    commitFitnessSnapshot: vi.fn((partial) => ({
+      success: true,
+      snapshot: {
+        exerciseDefinitions: partial.exerciseDefinitions ?? INITIAL_EXERCISE_DEFINITIONS,
+        workouts: partial.workouts ?? INITIAL_WORKOUTS,
+        logs: partial.logs ?? {},
+        appState: partial.appState ?? { cycleStart: '2026-10-01' }
+      }
+    })),
     activeSession: null,
     startActiveSession: vi.fn(),
     updateActiveSessionSets: vi.fn(),
@@ -67,11 +80,15 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     deleteBodyWeight: vi.fn(),
     pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
     getAutoBackups: vi.fn().mockReturnValue([]),
+    clearAutoBackups: vi.fn().mockResolvedValue({ success: true }),
     restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
     exportBackup: vi.fn().mockReturnValue('{}'),
     importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
+    isBackupsLoading: false,
+    hasPendingCloudSync: false,
+    pendingCloudSyncError: null,
     ...overrides
   };
 }
@@ -88,6 +105,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         contains: (name: string) => name === 'auto_backups'
       },
       createObjectStore: () => {},
+      close: () => {},
       transaction: () => {
         let pendingRequests = 0;
         let completed = false;
@@ -238,6 +256,22 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     const logsRef = { current: {} };
     const appStateRef = { current: { cycleStart: '2026-10-01' } };
 
+    const commitSnapshotSpy = (partial: any) => {
+      if (partial.exerciseDefinitions !== undefined) setDefsSpy(partial.exerciseDefinitions);
+      if (partial.workouts !== undefined) setWorkoutsSpy(partial.workouts);
+      if (partial.logs !== undefined) setLogsSpy(partial.logs);
+      if (partial.appState !== undefined) setAppStateSpy(partial.appState);
+      return {
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? defsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      };
+    };
+
     let hookResult: any = null;
     function TestSyncComponent() {
       hookResult = useFitnessSync({
@@ -245,10 +279,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         workoutsRef: workoutsRef as any,
         logsRef: logsRef as any,
         appStateRef: appStateRef as any,
-        setExerciseDefinitions: setDefsSpy,
-        setWorkouts: setWorkoutsSpy,
-        setLogs: setLogsSpy,
-        setAppState: setAppStateSpy,
+        commitFitnessSnapshot: commitSnapshotSpy,
         setSyncStatus: setSyncStatusSpy,
         resetToDefaultData: resetToDefaultDataSpy
       });
@@ -387,6 +418,22 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     const logsRef = { current: {} };
     const appStateRef = { current: { cycleStart: '2026-10-01' } };
 
+    const commitSnapshotSpy = (partial: any) => {
+      if (partial.exerciseDefinitions !== undefined) setDefsSpy(partial.exerciseDefinitions);
+      if (partial.workouts !== undefined) setWorkoutsSpy(partial.workouts);
+      if (partial.logs !== undefined) setLogsSpy(partial.logs);
+      if (partial.appState !== undefined) setAppStateSpy(partial.appState);
+      return {
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? defsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      };
+    };
+
     let hookResult: any = null;
     function TestSyncComponent() {
       hookResult = useFitnessSync({
@@ -394,10 +441,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         workoutsRef: workoutsRef as any,
         logsRef: logsRef as any,
         appStateRef: appStateRef as any,
-        setExerciseDefinitions: setDefsSpy,
-        setWorkouts: setWorkoutsSpy,
-        setLogs: setLogsSpy,
-        setAppState: setAppStateSpy,
+        commitFitnessSnapshot: commitSnapshotSpy,
         setSyncStatus: setSyncStatusSpy,
         resetToDefaultData: resetToDefaultDataSpy
       });
@@ -522,16 +566,29 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     const logsRef = { current: {} };
     const appStateRef = { current: { cycleStart: '2026-10-01' } };
 
+    const commitSnapshotSpy = (partial: any) => {
+      if (partial.exerciseDefinitions !== undefined) setDefsSpy(partial.exerciseDefinitions);
+      if (partial.workouts !== undefined) setWorkoutsSpy(partial.workouts);
+      if (partial.logs !== undefined) setLogsSpy(partial.logs);
+      if (partial.appState !== undefined) setAppStateSpy(partial.appState);
+      return {
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? defsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      };
+    };
+
     function TestSyncComponent() {
       useFitnessSync({
         exerciseDefsRef: defsRef as any,
         workoutsRef: workoutsRef as any,
         logsRef: logsRef as any,
         appStateRef: appStateRef as any,
-        setExerciseDefinitions: setDefsSpy,
-        setWorkouts: setWorkoutsSpy,
-        setLogs: setLogsSpy,
-        setAppState: setAppStateSpy,
+        commitFitnessSnapshot: commitSnapshotSpy,
         setSyncStatus: setSyncStatusSpy,
         resetToDefaultData: resetToDefaultDataSpy
       });
@@ -642,6 +699,22 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     const logsRef = { current: {} };
     const appStateRef = { current: { cycleStart: '2026-10-01' } };
 
+    const commitSnapshotSpy = (partial: any) => {
+      if (partial.exerciseDefinitions !== undefined) setDefsSpy(partial.exerciseDefinitions);
+      if (partial.workouts !== undefined) setWorkoutsSpy(partial.workouts);
+      if (partial.logs !== undefined) setLogsSpy(partial.logs);
+      if (partial.appState !== undefined) setAppStateSpy(partial.appState);
+      return {
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? defsRef.current,
+          workouts: partial.workouts ?? workoutsRef.current,
+          logs: partial.logs ?? logsRef.current,
+          appState: partial.appState ?? appStateRef.current
+        }
+      };
+    };
+
     let hookResult: any = null;
     function TestSyncComponent() {
       hookResult = useFitnessSync({
@@ -649,10 +722,7 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
         workoutsRef: workoutsRef as any,
         logsRef: logsRef as any,
         appStateRef: appStateRef as any,
-        setExerciseDefinitions: setDefsSpy,
-        setWorkouts: setWorkoutsSpy,
-        setLogs: setLogsSpy,
-        setAppState: setAppStateSpy,
+        commitFitnessSnapshot: commitSnapshotSpy,
         setSyncStatus: setSyncStatusSpy,
         resetToDefaultData: resetToDefaultDataSpy
       });
@@ -932,7 +1002,6 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
       );
     });
 
-    const baselineE1Commits = commitCounts['e1'] || 0;
     const baselineE2Commits = commitCounts['e2'] || 0;
     const baselineShellCommits = shellCommits;
 
@@ -1353,11 +1422,26 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     expect(reloaded).toHaveLength(2);
     expect(reloaded[0].desc).toBe('Legacy Point 2'); // Sorted descending
 
-    // 8b. Quota failure during migration retains recoverable backups in localStorage
+    // 8b. Quota/open-blocked failure during migration retains recoverable backups in localStorage
     localStorage.setItem('gl_auto_backups', JSON.stringify(legacyEntries));
-    vi.spyOn(backupDb, 'openBackupDb').mockResolvedValueOnce({ success: false, reason: 'blocked', error: new Error('IDB open blocked') });
+    backupDb.resetBackupDbForTesting();
+    const originalOpen = (window as any).indexedDB.open;
+    (window as any).indexedDB.open = () => {
+      const blockedReq: any = {
+        onsuccess: null,
+        onerror: null,
+        onblocked: null,
+        onupgradeneeded: null,
+        result: null
+      };
+      queueMicrotask(() => {
+        if (blockedReq.onblocked) blockedReq.onblocked({ target: blockedReq });
+      });
+      return blockedReq;
+    };
 
     const failedMigration = await backupDb.migrateLegacyLocalStorageBackups();
+    (window as any).indexedDB.open = originalOpen;
     expect(failedMigration).toHaveLength(0);
     // localStorage backup is RETAINED for recovery
     expect(localStorage.getItem('gl_auto_backups')).not.toBeNull();

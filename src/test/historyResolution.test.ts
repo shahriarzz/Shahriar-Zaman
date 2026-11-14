@@ -117,7 +117,6 @@ describe('History View Canonical Exercise Resolution Suite', () => {
   // 3. Monthly peak lift shows the real exercise name
   it('3. generates monthly peak lift summaries with canonical exercise names', () => {
     const defsById = buildExerciseDefinitionsById(mockDefs);
-    const workoutsById = buildWorkoutsById(mockWorkouts);
 
     const logs: SessionLog[] = [
       {
@@ -439,7 +438,6 @@ describe('History View Canonical Exercise Resolution Suite', () => {
     };
 
     it('opens several historical days and groups sessions accurately', () => {
-      const defsById = buildExerciseDefinitionsById(richDefs);
       const workoutsById = buildWorkoutsById(richWorkouts);
 
       // Extract unique chronological days
@@ -593,7 +591,6 @@ describe('History View Canonical Exercise Resolution Suite', () => {
 
     it('aggregates and verifies monthly peak lifts with exact canonical exercise names and highest weights', () => {
       const defsById = buildExerciseDefinitionsById(richDefs);
-      const workoutsById = buildWorkoutsById(richWorkouts);
 
       const summaries: Record<string, {
         monthKey: string;

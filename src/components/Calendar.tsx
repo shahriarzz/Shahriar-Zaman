@@ -20,7 +20,7 @@ import {
   formatCompactWeight
 } from '../utils/fitnessHelpers';
 import { resolveCalendarDayStatus } from '../utils/calendarHelpers';
-import { SessionLog, SetLog, Exercise, Workout } from '../types/fitness';
+import { SetLog, Exercise } from '../types/fitness';
 import { haptics } from '../utils/haptics';
 import { useCalendarGrid } from '../hooks/useCalendarGrid';
 import { cn } from '../lib/utils';
@@ -39,9 +39,7 @@ import {
   SURFACE,
   RADIUS,
   INTERACTIVE,
-  GAP,
   SEMANTIC_COLORS,
-  getAccentColor,
   DURATION,
   MOTION_CONFIG,
   TRANSITION,
@@ -68,10 +66,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
     monthStart,
     days,
     logsByDateMap,
-    dayDetailMap,
-    isCurrentMonth,
-    isToday: isDateToday,
-    isFuture: isDateFuture
+    dayDetailMap
   } = useCalendarGrid({
     monthDate: currentMonth,
     index,
@@ -121,7 +116,6 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
   // 4. Selected date analysis
   const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
   const selectedLog = selectedDateStr ? (logsByDateMap.get(selectedDateStr) || null) : null;
-  const selectedDetail = selectedDateStr ? dayDetailMap[selectedDateStr] : null;
 
   const selectedCycleDay = selectedDate
     ? getCycleDayForDate(selectedDate)

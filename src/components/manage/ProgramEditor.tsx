@@ -26,7 +26,6 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     workouts,
     setWorkouts,
     addExerciseDefinition,
-    updateExerciseDefinition,
     updateWorkoutExerciseProgramming
   } = useFitness();
 

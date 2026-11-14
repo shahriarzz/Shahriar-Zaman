@@ -4,7 +4,6 @@ import {
   calculateE1RM,
   sanitizeSetLog,
   sanitizeWorkout,
-  sanitizeSessionLog,
   getRelativeTimeString,
   formatCompactWeight,
   parseStrictWeight,

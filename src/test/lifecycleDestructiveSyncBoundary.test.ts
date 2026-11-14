@@ -12,18 +12,13 @@ import {
   buildFitnessIndex,
   selectLifetimeStats,
   selectExerciseWeightPR,
-  selectExerciseHistory,
-  selectSortedLogs,
-  selectMuscleDistribution,
-  selectExerciseFrequency,
-  selectTimeRangeAnalytics
+  selectSortedLogs
 } from '../utils/fitnessDerivedSelectors';
 import {
   createExerciseDefinitionMap,
   resolveExercise
 } from '../utils/exerciseResolver';
 import {
-  calculateE1RM,
   sanitizeSessionLog
 } from '../utils/fitnessCalculations';
 import {
@@ -48,7 +43,6 @@ describe('Step 9 — Regression and Reliability Hardening Test Suite', () => {
       { id: 'def_incline_db', name: 'Incline Dumbbell Press', target: 'Chest', equipment: 'Dumbbells', tags: ['push', 'hypertrophy'] },
       { id: 'def_lateral_raise', name: 'Lateral Raise', target: 'Shoulders', equipment: 'Dumbbells', tags: ['push', 'isolation'] }
     ];
-    const defsMap = createExerciseDefinitionMap(defs);
 
     const workout: Workout = {
       id: 'w_push_hypertrophy',
@@ -64,7 +58,6 @@ describe('Step 9 — Regression and Reliability Hardening Test Suite', () => {
     };
 
     // 2. Start Active Session
-    const workoutStartTime = 1787000000000;
     const activeSets: Record<string, SetLog[]> = {
       def_incline_db: [
         { id: 'set_inc_1', weight: '30', reps: '10', done: true },
@@ -297,19 +290,7 @@ describe('Step 9 — Regression and Reliability Hardening Test Suite', () => {
     expect(resolvedUnknown.name).not.toBe('Exercise');
     expect(resolvedUnknown.target).toBe('General');
 
-    // 2. Workout referencing missing exercise definition
-    const orphanedWorkout: Workout = {
-      id: 'w_orphan',
-      name: 'Orphaned Workout',
-      badge: 'ORPH',
-      type: 'custom',
-      isCore: false,
-      exercises: [
-        { exerciseDefinitionId: 'missing_def_xyz', sets: 3, reps: '10' }
-      ]
-    };
-
-    // 3. Log referencing missing exercise with malformed sets
+    // 2. Log referencing missing exercise with malformed sets
     const malformedLog = sanitizeSessionLog({
       id: 'log_malformed_test',
       workoutId: 'w_orphan',

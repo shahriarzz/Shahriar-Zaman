@@ -13,6 +13,7 @@
     "start": "node dist-server/server.cjs",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "typecheck:unused": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "test": "vitest run",
     "bench:performance": "vitest bench src/benchmarks/fitnessPerformance.bench.ts",
     "ci": "npm run lint && npm run test && npm run build",

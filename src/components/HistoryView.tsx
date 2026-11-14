@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Calendar, Edit2, Plus, Sparkles } from 'lucide-react';
+import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Edit2, Plus, Sparkles } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
-import { WORKOUT_COLORS, generateId, formatCompactWeight } from '../utils/fitnessHelpers';
-import { SessionLog, SetLog, ExerciseDefinition, Workout, WorkoutType } from '../types/fitness';
+import { generateId, formatCompactWeight } from '../utils/fitnessHelpers';
+import { SessionLog, SetLog, WorkoutType } from '../types/fitness';
 import { isCompletedSession, getCompletedSets, calculateSetsVolume } from '../utils/fitnessCalculations';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
@@ -30,9 +30,7 @@ import {
   BORDER,
   SPACING,
   TYPOGRAPHY,
-  SHADOW,
   GAP,
-  STACK_SPACING,
   CHART_THEME,
   TRANSITION,
   MOTION_CONFIG
@@ -53,7 +51,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   savedState,
   onSaveState
 }) => {
-  const { logs, workouts, exerciseDefinitions, deleteLog, addLog } = useFitness();
+  const { workouts, deleteLog, addLog } = useFitness();
   const { sortedLogs, workoutMap, index, prEvents, getStrengthTrendForRange, getVolumeForRange } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 

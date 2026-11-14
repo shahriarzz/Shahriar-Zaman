@@ -8,16 +8,12 @@ import {
   ArrowUp,
   ArrowDown,
   Edit3,
-  Sparkles,
-  Layers,
   Moon,
-  Clock,
   Dumbbell,
-  Check,
-  Tag
+  Check
 } from 'lucide-react';
 import { Workout, Exercise, WorkoutExercise, ExerciseDefinition } from '../../types/fitness';
-import { WORKOUT_COLORS, resolveWorkoutExercise } from '../../utils/fitnessHelpers';
+import { resolveWorkoutExercise } from '../../utils/fitnessHelpers';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useFitness } from '../../context/FitnessContext';
 import { haptics } from '../../utils/haptics';
@@ -32,12 +28,9 @@ import {
   Stack,
   Grid,
   TYPOGRAPHY,
-  GAP,
   BORDER,
   SURFACE,
   RADIUS,
-  SPACING,
-  INTERACTIVE,
   TRANSITION,
   MOTION_CONFIG,
   EDITOR_HEADER
@@ -54,7 +47,7 @@ export interface WorkoutEditorProps {
 
 export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   workout,
-  allWorkouts,
+  allWorkouts: _allWorkouts,
   onSaveWorkout,
   onOpenExerciseEditor,
   onBack
@@ -69,7 +62,6 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   // Adding exercise modal / drawer state
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [addMode, setAddMode] = useState<'pick' | 'new'>('pick');
-  const [selectedLibraryExName, setSelectedLibraryExName] = useState('');
   const [newExName, setNewExName] = useState('');
   const [newExTarget, setNewExTarget] = useState('');
   const [newExSets, setNewExSets] = useState(3);

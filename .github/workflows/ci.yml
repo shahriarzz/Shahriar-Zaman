@@ -27,6 +27,9 @@ jobs:
       - name: Type check (TypeScript)
         run: npm run lint
 
+      - name: Type check unused locals & parameters
+        run: npm run typecheck:unused
+
       - name: Run Test Suite
         run: npm test
 

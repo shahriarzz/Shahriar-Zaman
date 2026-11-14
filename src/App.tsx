@@ -3,7 +3,7 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { FitnessProvider, useFitness } from './context/FitnessContext';
+import { FitnessProvider } from './context/FitnessContext';
 import { useActiveSessionMeta } from './context/ActiveSessionContext';
 import { ConfirmProvider, useConfirm } from './context/ConfirmContext';
 import { Layout, ActiveTab } from './components/Layout';

@@ -4,7 +4,7 @@ import { Workout, ExerciseDefinition, SetLog, SessionLog } from '../types/fitnes
 import { calculateSessionPRs, SessionPR } from '../components/SessionView';
 import { WeightPRRecord, E1RMPRRecord, buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
 import { createExerciseDefinitionMap } from '../utils/exerciseResolver';
-import { calculateE1RM, sanitizeSessionLog } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog } from '../utils/fitnessCalculations';
 
 describe('Session Summary PR Pre-Persistence Detection Regression Suite', () => {
   const mockDefs: ExerciseDefinition[] = [

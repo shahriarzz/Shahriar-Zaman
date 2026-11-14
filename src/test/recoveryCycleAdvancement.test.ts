@@ -38,7 +38,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
       { id: 'log-2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
       { id: 'log-3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
     ];
-    const index = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // Day 3 evaluates to cycleDay 3
     const day3 = selectNextCycleDay(cycleStart, '2026-10-03');
@@ -59,7 +59,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const logs: SessionLog[] = [
       { id: 'log-3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
     ];
-    const index = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // On Day 5 (2026-10-05), protocol must advance to Day 5 (Push Day B)
     const day5 = selectNextCycleDay(cycleStart, '2026-10-05');
@@ -77,7 +77,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const logs: SessionLog[] = [
       { id: 'log-7', workoutId: 'hybrid-b', date: '2026-10-07', complete: true, durationMinutes: 45, sets: {} },
     ];
-    const index = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // Day 7 evaluates to cycleDay 7
     const day7 = selectNextCycleDay(cycleStart, '2026-10-07');
@@ -98,7 +98,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const logs: SessionLog[] = [
       { id: 'log-7', workoutId: 'hybrid-b', date: '2026-10-07', complete: true, durationMinutes: 45, sets: {} },
     ];
-    const index = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // On Day 1 (2026-10-09), protocol wraps to Day 1 (Push Day A)
     const day1NextCycle = selectNextCycleDay(cycleStart, '2026-10-09');
@@ -114,7 +114,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
 
   it('5. Skip Day 4 completely → Day 5: Even if user does not open app on Day 4, Day 5 resolves correctly', () => {
     // An empty log set or old logs from previous weeks
-    const index = buildFitnessIndex([]);
+    buildFitnessIndex([]);
 
     // Open on Day 5 directly
     const day5 = selectNextCycleDay(cycleStart, '2026-10-05');
@@ -125,7 +125,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
   });
 
   it('6. Skip Day 8 completely → Day 1: Even if user does not open app on Day 8, Day 1 resolves correctly', () => {
-    const index = buildFitnessIndex([]);
+    buildFitnessIndex([]);
 
     // Open on Day 1 of next cycle directly
     const day1 = selectNextCycleDay(cycleStart, '2026-10-09');
@@ -141,7 +141,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
       { id: 'log-3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
       { id: 'log-bonus', workoutId: 'date-night', date: '2026-10-04', complete: true, durationMinutes: 30, sets: {} },
     ];
-    const index = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // Day 4 scheduled protocol remains Recovery Day despite bonus workout
     const day4 = selectNextCycleDay(cycleStart, '2026-10-04');
@@ -162,7 +162,7 @@ describe('Recovery Day Cycle Advancement Regression Suite', () => {
     const logs: SessionLog[] = [
       { id: 'log-3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
     ];
-    const indexAfterReload = buildFitnessIndex(logs);
+    buildFitnessIndex(logs);
 
     // Reopen next morning (2026-10-05)
     const morningCycleDay = selectNextCycleDay(cycleStart, '2026-10-05');

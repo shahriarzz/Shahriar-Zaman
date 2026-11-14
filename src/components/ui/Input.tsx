@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, SEMANTIC_COLORS, SemanticColor, getAccentColor, FOCUS, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
+import { RADIUS, TYPOGRAPHY, BORDER, SURFACE, FOCUS, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {

@@ -109,7 +109,7 @@ async function startServer() {
   app.set('trust proxy', 1);
   
   // Safe incoming requests logging for debugging API interactions (limited to api routes)
-  app.use((req, res, next) => {
+  app.use((req, _res, next) => {
     if (req.url.startsWith('/api')) {
       console.log(`[API REQUEST] ${req.method} ${req.url}`);
     }
@@ -230,7 +230,7 @@ async function startServer() {
   });
 
   // API Routes
-  app.get(['/api/health', '/health'], (req, res) => {
+  app.get(['/api/health', '/health'], (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
@@ -315,7 +315,6 @@ async function startServer() {
 
       const aiClient = getAiClient();
       let suggestionText = '';
-      let lastModelError: unknown = null;
 
       for (const modelName of CANDIDATE_MODELS) {
         try {
@@ -323,8 +322,7 @@ async function startServer() {
           if (suggestionText) {
             break;
           }
-        } catch (modelErr: unknown) {
-          lastModelError = modelErr;
+        } catch {
           console.log(`[AI Coaching] Model ${modelName} unavailable, trying next candidate...`);
         }
       }
@@ -372,7 +370,7 @@ async function startServer() {
     ];
     const distPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html'))) || path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
@@ -383,7 +381,7 @@ async function startServer() {
   }
 
   // Global Express Error-handling Middleware to guarantee JSON responses
-  app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error("Express Error Handler caught:", err);
     const status = (typeof err === 'object' && err !== null && 'status' in err && typeof (err as { status: number }).status === 'number')
       ? (err as { status: number }).status

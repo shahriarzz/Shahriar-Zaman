@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  extractExerciseDefinitionsFromWorkouts,
-  migrateV1ToV2,
   validateAndSanitizeFitnessData,
   canonicalizeWorkoutExercise
 } from '../utils/fitnessMigration';
 import {
   buildFitnessIndex,
-  selectSortedLogs,
   selectLifetimeStats,
   selectWeightPRs,
   selectMuscleDistribution

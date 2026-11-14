@@ -8,7 +8,6 @@ import {
   clearDeletedIdsTracker, 
   areLogsEqual,
   mergeDefinitions,
-  mergeWorkouts,
   mergeLogs,
   mergeAppState
 } from '../utils/fitnessSyncHelpers';

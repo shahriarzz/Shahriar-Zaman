@@ -28,7 +28,6 @@ import {
   Grid,
   TYPOGRAPHY,
   BORDER,
-  SURFACE,
   RADIUS
 } from '../ui';
 import { cn } from '../../lib/utils';

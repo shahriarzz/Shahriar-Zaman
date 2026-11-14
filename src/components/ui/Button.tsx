@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { RADIUS, SemanticColor, getAccentColor, SEMANTIC_COLORS, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP, TRANSITION, CONTROL_HEIGHT, ICON_SIZE, INTERACTIVE } from '../../styles/tokens';
+import { RADIUS, SemanticColor, getAccentColor, BORDER, SURFACE, TYPOGRAPHY, FOCUS, GAP, TRANSITION, CONTROL_HEIGHT, ICON_SIZE, INTERACTIVE } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 import { haptics } from '../../utils/haptics';
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Edit3, Tag, Dumbbell, Layers, Filter } from 'lucide-react';
+import { Search, Plus, Edit3, Dumbbell } from 'lucide-react';
 import { Workout, Exercise, ExerciseDefinition } from '../../types/fitness';
 import { useFitness } from '../../context/FitnessContext';
 import {
@@ -9,13 +9,8 @@ import {
   Badge,
   EmptyState,
   Stack,
-  Grid,
   SegmentedControl,
   TYPOGRAPHY,
-  GAP,
-  BORDER,
-  SURFACE,
-  RADIUS,
   FOCUS,
   TRANSITION
 } from '../ui';

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { Workout, WorkoutType } from '../types/fitness';
+import { WorkoutType } from '../types/fitness';
 import {
   selectTimeRangeAnalytics
 } from '../utils/fitnessDerivedSelectors';

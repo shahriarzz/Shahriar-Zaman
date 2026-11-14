@@ -1,13 +1,11 @@
-import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, isSameDay, eachDayOfInterval } from 'date-fns';
+import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek } from 'date-fns';
 import { SessionLog, SetLog, Workout, ExerciseDefinition } from '../types/fitness';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import {
   calculateSetVolume,
-  calculateSetsVolume,
   calculateE1RM,
   parseStrictWeight,
   parseStrictReps,
-  getSortedLogsDescending,
   getSortedWeightEntries,
   getWeightSparklineData,
   getCycleDay,
@@ -22,13 +20,12 @@ import {
 export type { SparklineData };
 
 import {
-  createExerciseDefinitionMap,
   resolveExercise,
   MuscleCategory,
   MUSCLE_CATEGORIES,
   ResolvedExerciseMeta
 } from './exerciseResolver';
-import { calculateAdherence, calculateTrainingStreak, StreakInsight } from './trainingIntelligence';
+import { calculateAdherence, calculateTrainingStreak } from './trainingIntelligence';
 import {
   MuscleGroup,
   ALL_MUSCLE_GROUPS,

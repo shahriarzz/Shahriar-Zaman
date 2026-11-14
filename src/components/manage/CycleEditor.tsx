@@ -1,7 +1,6 @@
 import React from 'react';
 import { ChevronRight, Moon, AlertTriangle } from 'lucide-react';
 import { Workout } from '../../types/fitness';
-import { WORKOUT_COLORS } from '../../utils/fitnessHelpers';
 import { CYCLE_LENGTH } from '../../utils/fitnessCalculations';
 import { buildValidatedCoreWorkoutMap } from '../../utils/fitnessDerivedSelectors';
 import {
@@ -14,7 +13,6 @@ import {
   BORDER,
   SURFACE,
   RADIUS,
-  SEMANTIC_COLORS,
   TRANSITION
 } from '../ui';
 import { cn } from '../../lib/utils';
@@ -100,7 +98,6 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
         {cycleSlots.map(({ day, workout: wo, isFallback }) => {
           const isRest = wo.type === 'rest';
           const exerciseCount = wo.exercises ? wo.exercises.length : 0;
-          const accentColor = WORKOUT_COLORS[wo.type] || SEMANTIC_COLORS.zinc;
 
           return (
             <Card

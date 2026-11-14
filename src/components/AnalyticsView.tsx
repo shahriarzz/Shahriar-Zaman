@@ -19,7 +19,6 @@ import {
   Clock,
   Dumbbell,
   Flame,
-  Calendar as CalendarIcon,
   TrendingUp,
   TrendingDown,
   Activity,
@@ -40,8 +39,7 @@ import {
 import { MuscleBalanceRecovery } from './MuscleBalanceRecovery';
 import { DeferredViewSection } from './DeferredViewSection';
 import { AnalyticsTabState } from '../types/tabViewState';
-import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
-import { MUSCLE_CATEGORIES, MuscleCategory } from '../utils/exerciseResolver';
+import { formatCompactWeight } from '../utils/fitnessHelpers';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { cn } from '../lib/utils';
@@ -59,10 +57,8 @@ import {
   Stack,
   Grid,
   ChartTooltip,
-  SURFACE,
   BORDER,
   RADIUS,
-  SPACING,
   GAP,
   STACK_SPACING,
   TYPOGRAPHY,
@@ -118,7 +114,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
     trainingStreak,
     adherenceInsight,
     performanceScore,
-    strengthTrend,
     currentDate,
     todayStr
   } = useFitnessDerivedData();

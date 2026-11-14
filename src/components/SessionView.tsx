@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, MessageSquareQuote, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useActiveSessionContext } from '../context/ActiveSessionContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Workout, Exercise, SetLog, SessionLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
-import { WORKOUT_COLORS, getWorkoutBadgeStyle, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
+import { Workout, Exercise, SetLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
+import { WORKOUT_COLORS, dk, getAdjustedCycleStart, generateId, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
 import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, getCycleDay, parseStrictWeight, parseStrictReps, CYCLE_LENGTH } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
@@ -172,8 +172,7 @@ import {
   Stack,
   Grid,
   StatCard,
-  SectionHeader,
-  SEMANTIC_COLORS
+  SectionHeader
 } from './ui';
 import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, SHADOW } from '../styles/tokens';
 

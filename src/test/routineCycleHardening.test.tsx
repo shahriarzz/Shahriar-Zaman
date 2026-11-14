@@ -40,16 +40,20 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
     return {
       user: null,
       loading: false,
-      isInitialized: true,
       syncStatus: 'idle',
       syncError: null,
       login: vi.fn(),
       logout: vi.fn(),
       retrySync: vi.fn(),
+      accountResetStatus: 'idle',
+      accountResetError: null,
+      retryAccountReset: vi.fn().mockResolvedValue({ success: true }),
       exerciseDefinitions: initialDefs,
       workouts: initialWorkouts,
       logs: {},
       appState: { cycleStart: dk() },
+      databaseLifecycleState: { phase: 'ready' },
+      retryStorageCommit: vi.fn().mockReturnValue({ success: true }),
       addExerciseDefinition: vi.fn(),
       updateExerciseDefinition: vi.fn(),
       deleteExerciseDefinition: vi.fn(),
@@ -62,6 +66,15 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       deleteLog: vi.fn(),
       resetLogs: vi.fn(),
       updateCycleStart: vi.fn().mockResolvedValue(undefined),
+      commitFitnessSnapshot: vi.fn((partial) => ({
+        success: true,
+        snapshot: {
+          exerciseDefinitions: partial.exerciseDefinitions ?? initialDefs,
+          workouts: partial.workouts ?? initialWorkouts,
+          logs: partial.logs ?? {},
+          appState: partial.appState ?? { cycleStart: dk() }
+        }
+      })),
       activeSession: null,
       startActiveSession: vi.fn(),
       updateActiveSessionSets: vi.fn(),
@@ -70,11 +83,15 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       deleteBodyWeight: vi.fn(),
       pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
       getAutoBackups: vi.fn().mockReturnValue([]),
+      clearAutoBackups: vi.fn().mockResolvedValue({ success: true }),
       restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
       createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
       exportBackup: vi.fn().mockReturnValue('{}'),
       importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
       retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
+      isBackupsLoading: false,
+      hasPendingCloudSync: false,
+      pendingCloudSyncError: null,
       ...overrides
     };
   }

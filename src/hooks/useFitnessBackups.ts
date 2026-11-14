@@ -17,7 +17,7 @@ import {
   saveBackupToDb,
   getAllBackupsFromDb,
   pruneBackupsInDb,
-  clearAllBackupsFromDb,
+  clearBackupCheckpointsFromDb,
   migrateLegacyLocalStorageBackups,
   savePendingCloudReconciliationToDb,
   getPendingCloudReconciliationFromDb,
@@ -115,6 +115,8 @@ export function useFitnessBackups({
 
   // Track pending cloud reconciliation for restore/import (backed durably in IndexedDB)
   const pendingCloudRestoreRef = useRef<PendingCloudReconciliation | null>(null);
+  // Track in-memory fallback ONLY when durable IndexedDB persistence of pending record failed
+  const unsavedPendingCloudRestoreRef = useRef<PendingCloudReconciliation | null>(null);
 
   const ensureHydrated = useCallback((): Promise<void> => {
     if (hasHydratedRef.current) {
@@ -193,9 +195,10 @@ export function useFitnessBackups({
   // Hydrate per-UID pending cloud reconciliation record on account resolution/change
   useEffect(() => {
     const uid = user?.uid ?? null;
+    unsavedPendingCloudRestoreRef.current = null;
+    pendingCloudRestoreRef.current = null;
+    setPendingCloudSync(null);
     if (!uid) {
-      pendingCloudRestoreRef.current = null;
-      setPendingCloudSync(null);
       return;
     }
 
@@ -204,11 +207,12 @@ export function useFitnessBackups({
     getPendingCloudReconciliationFromDb(uid)
       .then((record) => {
         if (!active || userUidRef.current !== uid || resetEpochRef.current !== epochAtStart) return;
-        pendingCloudRestoreRef.current = record;
-        setPendingCloudSync(record);
+        const validRecord = record && record.uid === uid ? record : null;
+        pendingCloudRestoreRef.current = validRecord;
+        setPendingCloudSync(validRecord);
       })
       .catch(() => {
-        // Non-fatal read warning; retry path still queries DB directly
+        // Retry path queries DB directly without treating read error as empty queue
       });
 
     return () => {
@@ -344,7 +348,7 @@ export function useFitnessBackups({
     return backupsCacheRef.current;
   }, [backupsVersion]);
 
-  // Normal UI clear path: validates synchronous phase inside queue, preserves cache & metadata on failure,
+  // Normal UI clear path: clears checkpoint backups only, leaves pending cloud reconciliation untouched,
   // and returns an explicit result instead of reporting false success.
   const clearAutoBackups = useCallback((): Promise<AutoBackupResult> => {
     return runSerializedBackupOp(async () => {
@@ -357,14 +361,11 @@ export function useFitnessBackups({
       }
 
       const previousCache = [...backupsCacheRef.current];
-      const previousPending = pendingCloudRestoreRef.current;
       try {
-        await clearAllBackupsFromDb();
+        await clearBackupCheckpointsFromDb();
 
         // Update cache and legacy storage ONLY after durable IndexedDB clearing succeeds
         backupsCacheRef.current = [];
-        pendingCloudRestoreRef.current = null;
-        setPendingCloudSync(null);
         hasHydratedRef.current = true;
         initializationPromiseRef.current = Promise.resolve();
         try {
@@ -379,7 +380,6 @@ export function useFitnessBackups({
         console.warn("Failed clearing backups from IndexedDB:", err);
         const errorMsg = err?.message || String(err);
         backupsCacheRef.current = previousCache;
-        pendingCloudRestoreRef.current = previousPending;
         transitionBackupPhase({ type: 'CLEAR_FAILED', error: errorMsg });
         setBackupsVersion(v => v + 1);
         return { success: false, message: errorMsg };
@@ -388,8 +388,9 @@ export function useFitnessBackups({
   }, [runSerializedBackupOp, transitionBackupPhase]);
 
   // Authoritative account-boundary clear path: always enqueues a forced clear, waits for active mutations
-  // and in-flight legacy migrations, invalidates pending hydration via resetEpochRef, clears IndexedDB BEFORE
-  // updating cache/legacy keys, retains previous cache on failure, and exposes explicit failure.
+  // and in-flight legacy migrations, invalidates pending hydration via resetEpochRef, clears auto_backups ONLY
+  // (preserving UID-partitioned pending_cloud_sync records across account switches), clears in-memory pending
+  // refs so the next user starts clean, retains previous state on failure, and exposes explicit failure.
   const clearAutoBackupsForAccountReset = useCallback((): Promise<AutoBackupResult> => {
     if (activeForceClearPromiseRef.current) {
       return activeForceClearPromiseRef.current;
@@ -402,7 +403,7 @@ export function useFitnessBackups({
         try {
           await inFlightMigrationRef.current;
         } catch {
-          // Ignore migration failure; authoritative clear below wipes IndexedDB
+          // Ignore migration failure; authoritative clear below wipes IndexedDB checkpoints
         }
       }
 
@@ -414,11 +415,13 @@ export function useFitnessBackups({
 
       const previousCache = [...backupsCacheRef.current];
       const previousPending = pendingCloudRestoreRef.current;
+      const previousUnsavedPending = unsavedPendingCloudRestoreRef.current;
       try {
-        await clearAllBackupsFromDb();
+        await clearBackupCheckpointsFromDb();
 
         backupsCacheRef.current = [];
         pendingCloudRestoreRef.current = null;
+        unsavedPendingCloudRestoreRef.current = null;
         setPendingCloudSync(null);
         hasHydratedRef.current = true;
         initializationPromiseRef.current = Promise.resolve();
@@ -435,6 +438,8 @@ export function useFitnessBackups({
         const errorMsg = err?.message || String(err);
         backupsCacheRef.current = previousCache;
         pendingCloudRestoreRef.current = previousPending;
+        unsavedPendingCloudRestoreRef.current = previousUnsavedPending;
+        setPendingCloudSync(previousPending);
         hasHydratedRef.current = false;
         initializationPromiseRef.current = null;
         transitionBackupPhase({ type: 'CLEAR_FAILED', error: errorMsg });
@@ -448,6 +453,204 @@ export function useFitnessBackups({
     activeForceClearPromiseRef.current = clearPromise;
     return clearPromise;
   }, [runSerializedBackupOp, transitionBackupPhase]);
+
+  const executeWriteAheadCloudReconciliation = useCallback(async (
+    opUid: string,
+    opEpoch: number,
+    kind: 'restore' | 'import',
+    restoredSnapshot: FitnessDatabaseSnapshot,
+    sourceTimestamp: string,
+    sourceId: string,
+    successMessage: string
+  ): Promise<RestoreOperationResult> => {
+    const failPhase = (error: string) => {
+      if (kind === 'import') {
+        transitionBackupPhase({ type: 'IMPORT_FAILED', error });
+      } else {
+        transitionBackupPhase({ type: 'RESTORE_FAILED', error });
+      }
+    };
+    const succeedPhase = () => {
+      if (kind === 'import') {
+        transitionBackupPhase({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
+      } else {
+        transitionBackupPhase({ type: 'RESTORE_SUCCEEDED', count: backupsCacheRef.current.length });
+      }
+    };
+    const actionLabel = kind === 'import' ? 'Imported backup locally' : 'Restored locally';
+
+    // 1. Create pending reconciliation record with status: 'pending'
+    const pendingRecord: PendingCloudReconciliation = {
+      uid: opUid,
+      kind,
+      snapshot: restoredSnapshot,
+      sourceTimestamp,
+      sourceId,
+      createdAt: Date.now(),
+      status: 'pending'
+    };
+
+    // 2. Persist pending record to IndexedDB BEFORE local commit or cloud writes
+    let durablePendingPersisted = false;
+    let pendingPersistErrorMsg: string | null = null;
+    try {
+      await savePendingCloudReconciliationToDb(pendingRecord);
+      durablePendingPersisted = true;
+    } catch (persistErr: any) {
+      pendingPersistErrorMsg = persistErr?.message || String(persistErr);
+    }
+
+    // 3. Commit restored snapshot locally (keeping pre-operation checkpoint in IndexedDB)
+    try {
+      commitFitnessSnapshot(restoredSnapshot);
+    } catch (localCommitErr: any) {
+      const commitMsg = localCommitErr?.message || String(localCommitErr);
+      let cleanupNote = '';
+      if (durablePendingPersisted) {
+        try {
+          await clearPendingCloudReconciliationFromDb(opUid);
+          pendingCloudRestoreRef.current = null;
+          setPendingCloudSync(null);
+        } catch (cleanupErr: any) {
+          cleanupNote = ` Pending reconciliation cleanup also failed: ${cleanupErr?.message || String(cleanupErr)}.`;
+          pendingCloudRestoreRef.current = pendingRecord;
+          setPendingCloudSync(pendingRecord);
+        }
+      }
+      const errMsg = `Failed to commit ${kind === 'import' ? 'imported' : 'restored'} data locally: ${commitMsg}.${cleanupNote}`;
+      failPhase(errMsg);
+      return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
+    }
+
+    // If pending-record write-ahead persistence failed, DO NOT start cloud writes,
+    // DO NOT report fully_synced or durable cloud_sync_pending; expose recovery retry action cleanly.
+    if (!durablePendingPersisted) {
+      const recoveryFallback: PendingCloudReconciliation = {
+        ...pendingRecord,
+        status: 'failed',
+        lastError: `Durable cloud recovery metadata could not be saved: ${pendingPersistErrorMsg}. Retry cloud sync once IndexedDB is available.`
+      };
+      if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
+        unsavedPendingCloudRestoreRef.current = recoveryFallback;
+        pendingCloudRestoreRef.current = null;
+        setPendingCloudSync(recoveryFallback);
+      }
+      const distinctMsg = `${actionLabel}, but durable cloud recovery metadata could not be saved (${pendingPersistErrorMsg}). Cloud writes were not started; retry reconciliation after storage becomes available.`;
+      if (mountedRef.current) {
+        failPhase(distinctMsg);
+      }
+      return {
+        success: false,
+        restoreStatus: 'restore_failed',
+        message: distinctMsg
+      };
+    }
+
+    // Pending record is now durably stored in IndexedDB before starting cloud writes
+    if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
+      unsavedPendingCloudRestoreRef.current = null;
+      pendingCloudRestoreRef.current = pendingRecord;
+      setPendingCloudSync(pendingRecord);
+    }
+
+    // 4. Execute cloud writes
+    try {
+      await saveAppState(opUid, restoredSnapshot.appState, true);
+      await syncCloudDataWithRestored(
+        opUid,
+        restoredSnapshot.exerciseDefinitions,
+        restoredSnapshot.workouts,
+        restoredSnapshot.logs
+      );
+    } catch (cloudError: any) {
+      console.error(`Cloud synchronization failed during ${kind}:`, cloudError);
+      const cloudMsg = cloudError?.message || String(cloudError);
+      let finalMsg = `${actionLabel}, but cloud synchronization failed: ${cloudMsg}. Local and cloud states currently differ.`;
+
+      if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
+        const failedPending: PendingCloudReconciliation = {
+          ...pendingRecord,
+          status: 'failed',
+          lastError: cloudMsg
+        };
+        try {
+          await savePendingCloudReconciliationToDb(failedPending);
+          if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
+            pendingCloudRestoreRef.current = failedPending;
+            setPendingCloudSync(failedPending);
+          }
+        } catch (persistPendingErr: any) {
+          const storageMsg = persistPendingErr?.message || String(persistPendingErr);
+          if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
+            // Preserve last known durable pending record (status: 'pending') in ref, surface storage error separately
+            pendingCloudRestoreRef.current = pendingRecord;
+            setPendingCloudSync({
+              ...pendingRecord,
+              lastError: `Cloud error: ${cloudMsg}. Storage update error: ${storageMsg}`
+            });
+          }
+          finalMsg = `${actionLabel}, but cloud synchronization failed: ${cloudMsg}. Additionally, saving failure metadata to IndexedDB failed: ${storageMsg}.`;
+        }
+        if (mountedRef.current) {
+          failPhase(finalMsg);
+        }
+      }
+
+      return {
+        success: false,
+        restoreStatus: 'cloud_sync_pending',
+        message: finalMsg
+      };
+    }
+
+    // Re-check lifecycle, account & epoch after async cloud writes
+    if (!mountedRef.current || resetEpochRef.current !== opEpoch || userUidRef.current !== opUid) {
+      const supersededMsg = `${kind === 'import' ? 'Import' : 'Restore'} completed locally before account change or unmount.`;
+      if (mountedRef.current) {
+        failPhase(supersededMsg);
+      }
+      return {
+        success: false,
+        message: supersededMsg,
+        restoreStatus: 'restore_failed'
+      };
+    }
+
+    // 5. Durably remove the pending record ONLY after cloud writes succeed; never swallow clear errors
+    try {
+      await clearPendingCloudReconciliationFromDb(opUid);
+    } catch (clearErr: any) {
+      const clearMsg = clearErr?.message || String(clearErr);
+      const retainedMsg = `Cloud synchronization completed, but removing pending reconciliation metadata from IndexedDB failed: ${clearMsg}. Retry reconciliation once storage is writable to finalize cleanup.`;
+      const retainedPending: PendingCloudReconciliation = {
+        ...pendingRecord,
+        lastError: retainedMsg
+      };
+      pendingCloudRestoreRef.current = pendingRecord;
+      setPendingCloudSync(retainedPending);
+      failPhase(retainedMsg);
+      return {
+        success: false,
+        restoreStatus: 'cloud_sync_pending',
+        message: retainedMsg
+      };
+    }
+
+    pendingCloudRestoreRef.current = null;
+    unsavedPendingCloudRestoreRef.current = null;
+    setPendingCloudSync(null);
+
+    // Clear old UID tombstones ONLY after durable deletion of pending record succeeds
+    clearDeletedIdsTracker(opUid);
+    clearDeletedIdsTracker();
+
+    succeedPhase();
+    return {
+      success: true,
+      restoreStatus: 'fully_synced',
+      message: successMessage
+    };
+  }, [commitFitnessSnapshot, transitionBackupPhase]);
 
   const restoreAutoBackup = useCallback((timestamp: string): Promise<RestoreOperationResult> => {
     const opEpoch = resetEpochRef.current;
@@ -543,7 +746,21 @@ export function useFitnessBackups({
           appState: restoredAppState
         };
 
-        // 2. Durably commit the restored snapshot locally BEFORE modifying tombstones or cloud
+        const successMessage = `Successfully restored database checkpoint: "${match.desc}"`;
+
+        if (opUid) {
+          return await executeWriteAheadCloudReconciliation(
+            opUid,
+            opEpoch,
+            'restore',
+            restoredSnapshot,
+            timestamp,
+            timestamp,
+            successMessage
+          );
+        }
+
+        // Unauthenticated restore: commit locally and clear anonymous tombstones only
         try {
           commitFitnessSnapshot(restoredSnapshot);
         } catch (localCommitErr: any) {
@@ -551,75 +768,12 @@ export function useFitnessBackups({
           transitionBackupPhase({ type: 'RESTORE_FAILED', error: errMsg });
           return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
         }
-
-        // 3. Synchronize cloud data if authenticated; retain UID tombstones while pending, clear only after full success
-        if (opUid) {
-          const pendingRecord: PendingCloudReconciliation = {
-            uid: opUid,
-            kind: 'restore',
-            snapshot: restoredSnapshot,
-            sourceTimestamp: timestamp,
-            sourceId: timestamp,
-            createdAt: Date.now(),
-            status: 'pending'
-          };
-
-          try {
-            await saveAppState(opUid, restoredAppState, true);
-            await syncCloudDataWithRestored(opUid, restoredDefs, restoredWorkouts, restoredLogs);
-
-            if (resetEpochRef.current !== opEpoch || userUidRef.current !== opUid) {
-              transitionBackupPhase({ type: 'RESTORE_FAILED', error: 'Restore completed locally before account change.' });
-              return {
-                success: false,
-                message: 'Restore completed locally before account change.',
-                restoreStatus: 'restore_failed'
-              };
-            }
-
-            try {
-              await clearPendingCloudReconciliationFromDb(opUid);
-            } catch {}
-            pendingCloudRestoreRef.current = null;
-            setPendingCloudSync(null);
-
-            // Clear old UID tombstones ONLY after full cloud reconciliation succeeds
-            clearDeletedIdsTracker(opUid);
-            clearDeletedIdsTracker();
-          } catch (cloudError: any) {
-            console.error("Cloud synchronization failed during restore:", cloudError);
-            const cloudMsg = cloudError?.message || String(cloudError);
-            if (resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
-              const failedPending: PendingCloudReconciliation = {
-                ...pendingRecord,
-                status: 'failed',
-                lastError: cloudMsg
-              };
-              try {
-                await savePendingCloudReconciliationToDb(failedPending);
-              } catch (persistPendingErr) {
-                console.warn("Failed saving pending cloud reconciliation to IndexedDB:", persistPendingErr);
-              }
-              pendingCloudRestoreRef.current = failedPending;
-              setPendingCloudSync(failedPending);
-            }
-            transitionBackupPhase({ type: 'RESTORE_FAILED', error: `Cloud sync failed: ${cloudMsg}` });
-            return {
-              success: false,
-              restoreStatus: 'cloud_sync_pending',
-              message: `Restored locally, but cloud synchronization failed: ${cloudMsg}. Local and cloud states currently differ.`
-            };
-          }
-        } else {
-          // Unauthenticated restore: clear anonymous tombstones only
-          clearDeletedIdsTracker();
-        }
-
+        clearDeletedIdsTracker();
         transitionBackupPhase({ type: 'RESTORE_SUCCEEDED', count: backupsCacheRef.current.length });
         return {
           success: true,
-          restoreStatus: opUid ? 'fully_synced' : 'restored_locally',
-          message: `Successfully restored database checkpoint: "${match.desc}"`
+          restoreStatus: 'restored_locally',
+          message: successMessage
         };
       } catch (e: any) {
         console.error("Failed to restore checkpoint", e);
@@ -628,7 +782,7 @@ export function useFitnessBackups({
         return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
       }
     });
-  }, [user, performSaveBackup, workoutsRef, logsRef, appStateRef, exerciseDefsRef, commitFitnessSnapshot, runSerializedBackupOp, transitionBackupPhase]);
+  }, [user, performSaveBackup, workoutsRef, logsRef, appStateRef, exerciseDefsRef, commitFitnessSnapshot, executeWriteAheadCloudReconciliation, runSerializedBackupOp, transitionBackupPhase]);
 
   const createManualBackup = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
@@ -746,7 +900,22 @@ export function useFitnessBackups({
           appState: restoredAppState
         };
 
-        // 2. Durably commit the imported snapshot locally BEFORE clearing tombstones
+        const successMessage = 'Backup imported successfully. Data restored.';
+
+        if (opUid) {
+          const nowTs = Date.now();
+          const sourceTimestamp = new Date(nowTs).toISOString();
+          return await executeWriteAheadCloudReconciliation(
+            opUid,
+            opEpoch,
+            'import',
+            restoredSnapshot,
+            sourceTimestamp,
+            `import:${nowTs}`,
+            successMessage
+          );
+        }
+
         try {
           commitFitnessSnapshot(restoredSnapshot);
         } catch (localCommitErr: any) {
@@ -754,75 +923,12 @@ export function useFitnessBackups({
           transitionBackupPhase({ type: 'IMPORT_FAILED', error: errMsg });
           return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
         }
-
-        // 3. Synchronize cloud data if authenticated; retain UID tombstones while pending
-        if (opUid) {
-          const nowTs = Date.now();
-          const sourceTimestamp = new Date(nowTs).toISOString();
-          const pendingRecord: PendingCloudReconciliation = {
-            uid: opUid,
-            kind: 'import',
-            snapshot: restoredSnapshot,
-            sourceTimestamp,
-            sourceId: `import:${nowTs}`,
-            createdAt: nowTs,
-            status: 'pending'
-          };
-
-          try {
-            await saveAppState(opUid, restoredAppState, true);
-            await syncCloudDataWithRestored(opUid, restoredDefs, restoredWorkouts, restoredLogs);
-
-            if (resetEpochRef.current !== opEpoch || userUidRef.current !== opUid) {
-              transitionBackupPhase({ type: 'IMPORT_FAILED', error: 'Import completed locally before account change.' });
-              return {
-                success: false,
-                message: 'Import completed locally before account change.',
-                restoreStatus: 'restore_failed'
-              };
-            }
-
-            try {
-              await clearPendingCloudReconciliationFromDb(opUid);
-            } catch {}
-            pendingCloudRestoreRef.current = null;
-            setPendingCloudSync(null);
-
-            clearDeletedIdsTracker(opUid);
-            clearDeletedIdsTracker();
-          } catch (cloudError: any) {
-            console.error("Cloud synchronization failed during import:", cloudError);
-            const cloudMsg = cloudError?.message || String(cloudError);
-            if (resetEpochRef.current === opEpoch && userUidRef.current === opUid) {
-              const failedPending: PendingCloudReconciliation = {
-                ...pendingRecord,
-                status: 'failed',
-                lastError: cloudMsg
-              };
-              try {
-                await savePendingCloudReconciliationToDb(failedPending);
-              } catch (persistPendingErr) {
-                console.warn("Failed saving pending cloud reconciliation to IndexedDB:", persistPendingErr);
-              }
-              pendingCloudRestoreRef.current = failedPending;
-              setPendingCloudSync(failedPending);
-            }
-            transitionBackupPhase({ type: 'IMPORT_FAILED', error: `Cloud sync failed: ${cloudMsg}` });
-            return {
-              success: false,
-              restoreStatus: 'cloud_sync_pending',
-              message: `Imported backup locally, but cloud synchronization failed: ${cloudMsg}. Local and cloud states currently differ.`
-            };
-          }
-        } else {
-          clearDeletedIdsTracker();
-        }
-
+        clearDeletedIdsTracker();
         transitionBackupPhase({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
         return {
           success: true,
-          restoreStatus: opUid ? 'fully_synced' : 'restored_locally',
-          message: 'Backup imported successfully. Data restored.'
+          restoreStatus: 'restored_locally',
+          message: successMessage
         };
       } catch (e: any) {
         console.error("Import backup error", e);
@@ -831,7 +937,7 @@ export function useFitnessBackups({
         return { success: false, message: errMsg, restoreStatus: 'restore_failed' };
       }
     });
-  }, [user, ensureHydrated, performSaveBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, runSerializedBackupOp, transitionBackupPhase]);
+  }, [user, ensureHydrated, performSaveBackup, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, executeWriteAheadCloudReconciliation, runSerializedBackupOp, transitionBackupPhase]);
 
   // Real serialized retry and reconciliation path for cloud-pending restore/import
   const retryPendingCloudSync = useCallback((): Promise<RestoreOperationResult> => {
@@ -847,16 +953,42 @@ export function useFitnessBackups({
         };
       }
 
-      let pending = pendingCloudRestoreRef.current;
-      if (!pending || pending.uid !== activeUid) {
-        try {
-          pending = await getPendingCloudReconciliationFromDb(activeUid);
-        } catch {
-          pending = null;
-        }
+      // Always verify authoritative IndexedDB pending record state; NEVER interpret DB read failure as empty queue
+      let dbPending: PendingCloudReconciliation | null;
+      try {
+        dbPending = await getPendingCloudReconciliationFromDb(activeUid);
+      } catch (readErr: any) {
+        const readMsg = `Storage read error while checking pending cloud reconciliation: ${readErr?.message || String(readErr)}`;
+        // Preserve any previously loaded pending record and tombstones untouched
+        return {
+          success: false,
+          message: readMsg,
+          restoreStatus: 'cloud_sync_pending'
+        };
       }
 
+      if (dbPending && dbPending.uid !== activeUid) {
+        return {
+          success: false,
+          message: 'Cannot reconcile cloud restore: stored pending record belongs to a different account.',
+          restoreStatus: 'cloud_sync_pending'
+        };
+      }
+
+      const unsavedFallback =
+        !dbPending &&
+        unsavedPendingCloudRestoreRef.current &&
+        unsavedPendingCloudRestoreRef.current.uid === activeUid
+          ? unsavedPendingCloudRestoreRef.current
+          : null;
+
+      const pending = dbPending ?? unsavedFallback;
+
       if (!pending) {
+        if (pendingCloudRestoreRef.current?.uid === activeUid) {
+          pendingCloudRestoreRef.current = null;
+          setPendingCloudSync(null);
+        }
         return {
           success: true,
           message: 'No pending cloud restore reconciliation required.',
@@ -896,12 +1028,38 @@ export function useFitnessBackups({
         };
       }
 
+      const failRetryPhase = (errText: string) => {
+        if (pending.kind === 'import') {
+          transitionBackupPhase({ type: 'IMPORT_FAILED', error: errText });
+        } else {
+          transitionBackupPhase({ type: 'RESTORE_FAILED', error: errText });
+        }
+      };
+
+      const durableBaseline = dbPending ?? pendingCloudRestoreRef.current;
       const retryingRecord: PendingCloudReconciliation = { ...pending, status: 'retrying' };
-      pendingCloudRestoreRef.current = retryingRecord;
-      setPendingCloudSync(retryingRecord);
       try {
         await savePendingCloudReconciliationToDb(retryingRecord);
-      } catch {}
+        pendingCloudRestoreRef.current = retryingRecord;
+        unsavedPendingCloudRestoreRef.current = null;
+        setPendingCloudSync(retryingRecord);
+      } catch (saveRetryErr: any) {
+        const storageMsg = `Storage write error updating pending reconciliation status: ${saveRetryErr?.message || String(saveRetryErr)}`;
+        // Keep last known durable pending record intact
+        if (durableBaseline) {
+          pendingCloudRestoreRef.current = durableBaseline;
+          setPendingCloudSync({
+            ...durableBaseline,
+            lastError: storageMsg
+          });
+        }
+        failRetryPhase(storageMsg);
+        return {
+          success: false,
+          message: storageMsg,
+          restoreStatus: 'cloud_sync_pending'
+        };
+      }
 
       try {
         await saveAppState(activeUid, pending.snapshot.appState, true);
@@ -911,67 +1069,97 @@ export function useFitnessBackups({
           pending.snapshot.workouts,
           pending.snapshot.logs
         );
-
-        // Re-check account & epoch after async cloud writes
-        if (resetEpochRef.current !== opEpoch || userUidRef.current !== activeUid) {
-          const msg = 'Cloud reconciliation superseded by account change.';
-          if (pending.kind === 'import') {
-            transitionBackupPhase({ type: 'IMPORT_FAILED', error: msg });
-          } else {
-            transitionBackupPhase({ type: 'RESTORE_FAILED', error: msg });
-          }
-          return {
-            success: false,
-            message: msg,
-            restoreStatus: 'restore_failed'
-          };
-        }
-
-        await clearPendingCloudReconciliationFromDb(activeUid);
-        pendingCloudRestoreRef.current = null;
-        setPendingCloudSync(null);
-
-        // Clear corresponding UID tombstone tracker ONLY after full cloud reconciliation succeeds
-        clearDeletedIdsTracker(activeUid);
-        clearDeletedIdsTracker();
-
-        if (pending.kind === 'import') {
-          transitionBackupPhase({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
-        } else {
-          transitionBackupPhase({ type: 'RESTORE_SUCCEEDED', count: backupsCacheRef.current.length });
-        }
-
-        return {
-          success: true,
-          message: 'Cloud reconciliation completed successfully.',
-          restoreStatus: 'fully_synced'
-        };
       } catch (err: any) {
         console.error("Retry cloud sync failed:", err);
-        const errMsg = `Retry failed: ${err?.message || String(err)}`;
-        if (resetEpochRef.current === opEpoch && userUidRef.current === activeUid) {
+        const cloudErrMsg = `Retry failed: ${err?.message || String(err)}`;
+        let combinedMsg = cloudErrMsg;
+
+        if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === activeUid) {
           const failedRecord: PendingCloudReconciliation = {
             ...pending,
             status: 'failed',
-            lastError: errMsg
+            lastError: cloudErrMsg
           };
           try {
             await savePendingCloudReconciliationToDb(failedRecord);
-          } catch {}
-          pendingCloudRestoreRef.current = failedRecord;
-          setPendingCloudSync(failedRecord);
-        }
-        if (pending.kind === 'import') {
-          transitionBackupPhase({ type: 'IMPORT_FAILED', error: errMsg });
-        } else {
-          transitionBackupPhase({ type: 'RESTORE_FAILED', error: errMsg });
+            if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === activeUid) {
+              pendingCloudRestoreRef.current = failedRecord;
+              setPendingCloudSync(failedRecord);
+            }
+          } catch (persistErr: any) {
+            const storageErrMsg = persistErr?.message || String(persistErr);
+            if (mountedRef.current && resetEpochRef.current === opEpoch && userUidRef.current === activeUid) {
+              // Keep last known durable retryingRecord intact and report storage error separately
+              pendingCloudRestoreRef.current = retryingRecord;
+              setPendingCloudSync({
+                ...retryingRecord,
+                lastError: `${cloudErrMsg}; storage status update error: ${storageErrMsg}`
+              });
+            }
+            combinedMsg = `${cloudErrMsg} (Additionally, failed to persist retry error state to IndexedDB: ${storageErrMsg})`;
+          }
+          if (mountedRef.current) {
+            failRetryPhase(combinedMsg);
+          }
         }
         return {
           success: false,
-          message: errMsg,
+          message: combinedMsg,
           restoreStatus: 'cloud_sync_pending'
         };
       }
+
+      // Re-check lifecycle, account & epoch after async cloud writes
+      if (!mountedRef.current || resetEpochRef.current !== opEpoch || userUidRef.current !== activeUid) {
+        const msg = 'Cloud reconciliation superseded by account change or unmount.';
+        if (mountedRef.current) {
+          failRetryPhase(msg);
+        }
+        return {
+          success: false,
+          message: msg,
+          restoreStatus: 'restore_failed'
+        };
+      }
+
+      // Durably delete pending record ONLY after cloud reconciliation succeeds
+      try {
+        await clearPendingCloudReconciliationFromDb(activeUid);
+      } catch (clearErr: any) {
+        const storageDeleteMsg = `Cloud reconciliation writes succeeded, but removing the pending record from IndexedDB failed: ${clearErr?.message || String(clearErr)}. Retry once storage is writable to finish cleanup.`;
+        // Do NOT clear in-memory pending state or UID tombstones when delete fails
+        pendingCloudRestoreRef.current = retryingRecord;
+        setPendingCloudSync({
+          ...retryingRecord,
+          lastError: storageDeleteMsg
+        });
+        failRetryPhase(storageDeleteMsg);
+        return {
+          success: false,
+          message: storageDeleteMsg,
+          restoreStatus: 'cloud_sync_pending'
+        };
+      }
+
+      pendingCloudRestoreRef.current = null;
+      unsavedPendingCloudRestoreRef.current = null;
+      setPendingCloudSync(null);
+
+      // Clear corresponding UID tombstone tracker ONLY after durable pending record deletion succeeds
+      clearDeletedIdsTracker(activeUid);
+      clearDeletedIdsTracker();
+
+      if (pending.kind === 'import') {
+        transitionBackupPhase({ type: 'IMPORT_SUCCEEDED', count: backupsCacheRef.current.length });
+      } else {
+        transitionBackupPhase({ type: 'RESTORE_SUCCEEDED', count: backupsCacheRef.current.length });
+      }
+
+      return {
+        success: true,
+        message: 'Cloud reconciliation completed successfully.',
+        restoreStatus: 'fully_synced'
+      };
     });
   }, [user, runSerializedBackupOp, transitionBackupPhase]);
 

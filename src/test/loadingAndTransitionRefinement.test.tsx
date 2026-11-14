@@ -27,16 +27,20 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
   return {
     user: null,
     loading: false,
-    isInitialized: true,
     syncStatus: 'idle',
     syncError: null,
     login: vi.fn(),
     logout: vi.fn(),
     retrySync: vi.fn(),
+    accountResetStatus: 'idle',
+    accountResetError: null,
+    retryAccountReset: vi.fn().mockResolvedValue({ success: true }),
     exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
     workouts: INITIAL_WORKOUTS,
     logs: {},
     appState: { cycleStart: '2026-10-01' },
+    databaseLifecycleState: { phase: 'ready' },
+    retryStorageCommit: vi.fn().mockReturnValue({ success: true }),
     addExerciseDefinition: vi.fn(),
     updateExerciseDefinition: vi.fn(),
     deleteExerciseDefinition: vi.fn(),
@@ -49,6 +53,15 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     deleteLog: vi.fn(),
     resetLogs: vi.fn(),
     updateCycleStart: vi.fn().mockResolvedValue(undefined),
+    commitFitnessSnapshot: vi.fn((partial) => ({
+      success: true,
+      snapshot: {
+        exerciseDefinitions: partial.exerciseDefinitions ?? INITIAL_EXERCISE_DEFINITIONS,
+        workouts: partial.workouts ?? INITIAL_WORKOUTS,
+        logs: partial.logs ?? {},
+        appState: partial.appState ?? { cycleStart: '2026-10-01' }
+      }
+    })),
     activeSession: null,
     startActiveSession: vi.fn(),
     updateActiveSessionSets: vi.fn(),
@@ -57,11 +70,15 @@ function createMockFitnessContext(overrides: Partial<FitnessContextType> = {}): 
     deleteBodyWeight: vi.fn(),
     pushAutoBackup: vi.fn().mockResolvedValue({ success: true }),
     getAutoBackups: vi.fn().mockReturnValue([]),
+    clearAutoBackups: vi.fn().mockResolvedValue({ success: true }),
     restoreAutoBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     createManualBackup: vi.fn().mockResolvedValue({ success: true, message: '' }),
     exportBackup: vi.fn().mockReturnValue('{}'),
     importBackup: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'restored_locally' }),
     retryPendingCloudSync: vi.fn().mockResolvedValue({ success: true, message: '', restoreStatus: 'fully_synced' }),
+    isBackupsLoading: false,
+    hasPendingCloudSync: false,
+    pendingCloudSyncError: null,
     ...overrides
   };
 }

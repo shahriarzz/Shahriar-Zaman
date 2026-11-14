@@ -169,7 +169,6 @@ describe('8.1 Canonical Selector Correctness & Index Scaling Invariants', () => 
       const mockFitness: any = {
         user: null,
         loading: false,
-        isInitialized: true,
         syncStatus: 'idle',
         syncError: null,
         exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,

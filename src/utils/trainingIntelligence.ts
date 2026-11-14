@@ -8,10 +8,9 @@ import {
   startOfWeek,
   endOfWeek,
   isSameDay,
-  eachDayOfInterval,
-  differenceInCalendarDays
+  eachDayOfInterval
 } from 'date-fns';
-import { Workout, SessionLog, SetLog } from '../types/fitness';
+import { Workout, SetLog } from '../types/fitness';
 import type { FitnessIndex, ExerciseIndexEntry } from './fitnessDerivedSelectors';
 import { isCompletedSession, getCycleDay, parseStrictWeight, parseStrictReps, calculateE1RM } from './fitnessCalculations';
 
