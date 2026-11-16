@@ -3,6 +3,7 @@ import {
   getAuth, 
   setPersistence, 
   browserLocalPersistence, 
+  connectAuthEmulator,
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
@@ -14,6 +15,7 @@ import {
 import { 
   getFirestore,
   initializeFirestore,
+  connectFirestoreEmulator,
   setLogLevel,
   doc as fbDoc, 
   getDoc as fbGetDoc, 
@@ -38,22 +40,63 @@ const firebaseConfig = rawConfig;
 
 export type User = FirebaseUser;
 
-// Fallback to environment variables if the config is not set or left as placeholder
-const actualConfig = {
-  apiKey: (import.meta as any).env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-  authDomain: (import.meta as any).env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
-  projectId: (import.meta as any).env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-  storageBucket: (import.meta as any).env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
-  messagingSenderId: (import.meta as any).env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
-  appId: (import.meta as any).env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
-  firestoreDatabaseId: (import.meta as any).env.VITE_FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId
+const metaEnv = ((import.meta as any).env || {}) as Record<string, any>;
+const procEnv = typeof process !== 'undefined' && process.env ? (process.env as Record<string, any>) : {};
+const env: Record<string, any> = {
+  DEV: metaEnv.DEV,
+  VITE_FIREBASE_USE_EMULATOR: metaEnv.VITE_FIREBASE_USE_EMULATOR ?? procEnv.VITE_FIREBASE_USE_EMULATOR,
+  VITE_FIREBASE_API_KEY: metaEnv.VITE_FIREBASE_API_KEY ?? procEnv.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: metaEnv.VITE_FIREBASE_AUTH_DOMAIN ?? procEnv.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_PROJECT_ID: metaEnv.VITE_FIREBASE_PROJECT_ID ?? procEnv.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_STORAGE_BUCKET: metaEnv.VITE_FIREBASE_STORAGE_BUCKET ?? procEnv.VITE_FIREBASE_STORAGE_BUCKET,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID ?? procEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  VITE_FIREBASE_APP_ID: metaEnv.VITE_FIREBASE_APP_ID ?? procEnv.VITE_FIREBASE_APP_ID,
+  VITE_FIREBASE_DATABASE_ID: metaEnv.VITE_FIREBASE_DATABASE_ID ?? procEnv.VITE_FIREBASE_DATABASE_ID,
+  VITE_FIREBASE_AUTH_EMULATOR_HOST: metaEnv.VITE_FIREBASE_AUTH_EMULATOR_HOST ?? procEnv.VITE_FIREBASE_AUTH_EMULATOR_HOST,
+  VITE_FIREBASE_FIRESTORE_EMULATOR_HOST: metaEnv.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST ?? procEnv.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST,
 };
+export const isFirebaseEmulatorEnabled = env.VITE_FIREBASE_USE_EMULATOR === 'true';
 
 const isValidConfigField = (val: unknown): boolean =>
   typeof val === 'string' &&
   val.trim() !== '' &&
   !val.includes('YOUR_') &&
   val !== 'undefined';
+
+function parseLocalEmulatorHostPort(rawHostPort: unknown, fallbackHost: string, fallbackPort: number, label: string): { host: string; port: number } {
+  const raw = typeof rawHostPort === 'string' && rawHostPort.trim() ? rawHostPort.trim() : `${fallbackHost}:${fallbackPort}`;
+  const parts = raw.split(':');
+  if (parts.length !== 2) {
+    throw new Error(`[Firebase Integration Config Error] Invalid ${label} "${raw}". Expected host:port.`);
+  }
+  const [host, portStr] = parts;
+  const port = Number(portStr);
+  if ((host !== '127.0.0.1' && host !== 'localhost') || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`[Firebase Integration Config Error] Unsafe or invalid ${label} "${raw}". Must target localhost or 127.0.0.1.`);
+  }
+  return { host, port };
+}
+
+// In emulator integration mode, read exclusively from VITE_FIREBASE_* so local/prod applet configs never leak into tests
+const actualConfig = isFirebaseEmulatorEnabled
+  ? {
+      apiKey: env.VITE_FIREBASE_API_KEY,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || '',
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+      appId: env.VITE_FIREBASE_APP_ID,
+      firestoreDatabaseId: env.VITE_FIREBASE_DATABASE_ID
+    }
+  : {
+      apiKey: env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+      projectId: env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+      appId: env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+      firestoreDatabaseId: env.VITE_FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId
+    };
 
 export type FirebaseConfigState = 'configured' | 'incomplete' | 'offline_by_default';
 
@@ -79,6 +122,26 @@ export function computeFirebaseConfigState(config: Record<string, any>): Firebas
 
 export const firebaseConfigState: FirebaseConfigState = computeFirebaseConfigState(actualConfig);
 export const isFirebaseConfigured = firebaseConfigState === 'configured';
+
+if (isFirebaseEmulatorEnabled) {
+  if (!isFirebaseConfigured) {
+    throw new Error(
+      '[Firebase Integration Config Error] Emulator mode requested (VITE_FIREBASE_USE_EMULATOR=true), ' +
+      'but required Firebase configuration fields (apiKey, authDomain, projectId, appId) are incomplete.'
+    );
+  }
+  if (typeof actualConfig.projectId !== 'string' || !/^demo-[a-z0-9-]+$/i.test(actualConfig.projectId)) {
+    throw new Error(
+      `[Firebase Integration Config Error] Unsafe projectId "${String(actualConfig.projectId)}". ` +
+      'Integration mode must target a dedicated demo-* project ID (e.g. "demo-gainlog").'
+    );
+  }
+  if (actualConfig.firestoreDatabaseId && actualConfig.firestoreDatabaseId !== '(default)') {
+    throw new Error(
+      `[Firebase Integration Config Error] Unsupported custom firestoreDatabaseId "${actualConfig.firestoreDatabaseId}" in emulator mode.`
+    );
+  }
+}
 
 // Real implementation variables typed fully
 let dbInstance: Firestore;
@@ -161,6 +224,27 @@ if (isFirebaseConfigured) {
 
     authInstance = getAuth(app);
 
+    if (isFirebaseEmulatorEnabled) {
+      const authEp = parseLocalEmulatorHostPort(
+        env.VITE_FIREBASE_AUTH_EMULATOR_HOST,
+        '127.0.0.1',
+        9099,
+        'VITE_FIREBASE_AUTH_EMULATOR_HOST'
+      );
+      const fsEp = parseLocalEmulatorHostPort(
+        env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST,
+        '127.0.0.1',
+        8080,
+        'VITE_FIREBASE_FIRESTORE_EMULATOR_HOST'
+      );
+      if (!(dbInstance as any)._settingsFrozen) {
+        connectFirestoreEmulator(dbInstance, fsEp.host, fsEp.port);
+      }
+      if (!(authInstance as any).emulatorConfig) {
+        connectAuthEmulator(authInstance, `http://${authEp.host}:${authEp.port}`, { disableWarnings: true });
+      }
+    }
+
     // Configure local persistence to survive user app restarts
     setPersistence(authInstance, browserLocalPersistence).catch((err) => {
       console.error("Failed to enable browser local persistence on Firebase Auth:", err);
@@ -213,6 +297,9 @@ if (isFirebaseConfigured) {
     writeBatchFunc = fbWriteBatch;
 
   } catch (e) {
+    if (isFirebaseEmulatorEnabled) {
+      throw e;
+    }
     console.error("Failed to initialize real Firebase despite config being present:", e);
     applyOfflineStubs();
   }
@@ -279,6 +366,6 @@ async function testConnection() {
   }
 }
 
-if ((import.meta as any).env.DEV) {
+if (env.DEV && !isFirebaseEmulatorEnabled) {
   testConnection();
 }

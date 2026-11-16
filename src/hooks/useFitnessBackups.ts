@@ -583,9 +583,9 @@ export function useFitnessBackups({
       setPendingCloudSync(pendingRecord);
     }
 
-    // 4. Execute cloud writes
+    // 4. Execute cloud writes (full appState replacement so rolled-back weightLog keys are removed)
     try {
-      await saveAppState(opUid, restoredSnapshot.appState, true);
+      await saveAppState(opUid, restoredSnapshot.appState, false);
       await syncCloudDataWithRestored(
         opUid,
         restoredSnapshot.exerciseDefinitions,
@@ -1237,7 +1237,7 @@ export function useFitnessBackups({
       }
 
       try {
-        await saveAppState(activeUid, pending.snapshot.appState, true);
+        await saveAppState(activeUid, pending.snapshot.appState, false);
         await syncCloudDataWithRestored(
           activeUid,
           pending.snapshot.exerciseDefinitions,
@@ -1338,6 +1338,13 @@ export function useFitnessBackups({
     });
   }, [user, exerciseDefsRef, workoutsRef, logsRef, appStateRef, commitFitnessSnapshot, runSerializedBackupOp, transitionBackupPhase]);
 
+  const hasPendingReconciliationForUid = useCallback((uid: string): boolean => {
+    return (
+      pendingCloudRestoreRef.current?.uid === uid ||
+      unsavedPendingCloudRestoreRef.current?.uid === uid
+    );
+  }, []);
+
   const isBackupsLoading = backupPhase.status === 'loading' || backupPhase.status === 'migrating';
 
   return useMemo(() => ({
@@ -1350,6 +1357,7 @@ export function useFitnessBackups({
     exportBackup,
     importBackup,
     retryPendingCloudSync,
+    hasPendingReconciliationForUid,
     isBackupsLoading,
     backupPhase,
     backupPhaseRef,
@@ -1366,6 +1374,7 @@ export function useFitnessBackups({
     exportBackup,
     importBackup,
     retryPendingCloudSync,
+    hasPendingReconciliationForUid,
     isBackupsLoading,
     backupPhase,
     pendingCloudSync

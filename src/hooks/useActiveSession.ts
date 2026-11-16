@@ -5,12 +5,14 @@ export interface ActiveSession {
   workoutId: string;
   startTime: number;
   sessionSets: Record<string, SetLog[]>;
+  completionLogId?: string;
 }
 
 export type RawActiveSession = {
   workoutId?: unknown;
   startTime?: unknown;
   sessionSets?: Record<string, unknown>;
+  completionLogId?: unknown;
 };
 
 interface RawSetItem {
@@ -67,11 +69,23 @@ export function normalizeActiveSession(raw: unknown): ActiveSession | null {
     ? session.startTime
     : Date.now();
 
-  return {
-    workoutId,
-    startTime,
-    sessionSets: normalizedSets
-  };
+  const completionLogId =
+    typeof session.completionLogId === 'string' && session.completionLogId.trim()
+      ? session.completionLogId.trim()
+      : undefined;
+
+  return completionLogId
+    ? {
+        workoutId,
+        startTime,
+        sessionSets: normalizedSets,
+        completionLogId
+      }
+    : {
+        workoutId,
+        startTime,
+        sessionSets: normalizedSets
+      };
 }
 
 export interface ActiveSessionMeta {
@@ -208,6 +222,27 @@ export function useActiveSession() {
     }
   }, [scheduleDebouncedSave, flushActiveSession]);
 
+  const recordCompletionLogId = useCallback((logId: string) => {
+    const current = latestSessionRef.current;
+    if (!current || current.completionLogId === logId) return;
+
+    sessionRevisionRef.current += 1;
+    const nextSession: ActiveSession = {
+      ...current,
+      completionLogId: logId
+    };
+    latestSessionRef.current = nextSession;
+    setActiveSession(nextSession);
+    try {
+      localStorage.setItem('gl_active_session', JSON.stringify(nextSession));
+      setPersistenceError(null);
+    } catch (e: any) {
+      const errMsg = e?.message || String(e);
+      console.warn("Failed to persist completionLogId to gl_active_session", errMsg);
+      setPersistenceError(errMsg);
+    }
+  }, []);
+
   const clearActiveSession = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -240,6 +275,7 @@ export function useActiveSession() {
     updateActiveSessionSets,
     clearActiveSession,
     flushActiveSession,
+    recordCompletionLogId,
     persistenceError
   }), [
     activeSession,
@@ -248,6 +284,7 @@ export function useActiveSession() {
     updateActiveSessionSets,
     clearActiveSession,
     flushActiveSession,
+    recordCompletionLogId,
     persistenceError
   ]);
 }

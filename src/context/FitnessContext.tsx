@@ -100,6 +100,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
   const clearAutoBackupsForResetRef = useRef<() => Promise<AutoBackupResult>>(() =>
     Promise.resolve({ success: false, message: 'Backup manager unavailable during reset.' })
   );
+  const hasPendingReconciliationForUidRef = useRef<(uid: string) => boolean>(() => false);
   const activeResetPromiseRef = useRef<Promise<void> | null>(null);
 
   // Authoritative account-boundary reset coordinator:
@@ -139,7 +140,8 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     logsRef: data.logsRef,
     appStateRef: data.appStateRef,
     commitFitnessSnapshot: data.commitFitnessSnapshot,
-    resetToDefaultData: resetAccountCoordinator
+    resetToDefaultData: resetAccountCoordinator,
+    hasPendingReconciliationForUid: (uid: string) => hasPendingReconciliationForUidRef.current(uid)
   });
 
   // 3. Backups manager
@@ -152,6 +154,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     commitFitnessSnapshot: data.commitFitnessSnapshot
   });
   clearAutoBackupsForResetRef.current = backups.clearAutoBackupsForAccountReset;
+  hasPendingReconciliationForUidRef.current = backups.hasPendingReconciliationForUid;
 
   // 4. Domain hooks
   const exercises = useFitnessExercises({

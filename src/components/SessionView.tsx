@@ -561,6 +561,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   const { 
     workouts, 
     exerciseDefinitions,
+    logs,
     appState,
     addLog, 
     updateCycleStart,
@@ -570,7 +571,8 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     activeSession,
     startActiveSession,
     updateActiveSessionSets,
-    clearActiveSession
+    clearActiveSession,
+    recordCompletionLogId
   } = useActiveSessionContext();
   const { getLatestForExercise, getWeightPRForExercise, getE1RMPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
@@ -588,6 +590,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [finishedDuration, setFinishedDuration] = useState(0);
+  const [finishedSummary, setFinishedSummary] = useState<{
+    completedSets: number;
+    programmedSets: number;
+    totalVolume: number;
+  } | null>(null);
   const [sessionPRs, setSessionPRs] = useState<SessionPR[]>([]);
   const [sessionLifecycle, dispatchSessionLifecycle] = React.useReducer(
     sessionLifecycleTransition,
@@ -619,6 +626,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   const initializedWorkoutIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const finishInFlightRef = useRef<boolean>(false);
+  const committedLogIdRef = useRef<string | null>(null);
 
   // Synchronize activeWorkout when targetWorkoutId or workouts list changes
   useEffect(() => {
@@ -683,6 +691,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     const sessionStart = Date.now();
     setStartTime(sessionStart);
     setFinishedDuration(0);
+    setFinishedSummary(null);
     dispatchSessionLifecycle({
       type: 'START',
       workoutId: wo.id,
@@ -1008,37 +1017,51 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       setFinishedDuration(elapsedSecs);
       const calculatedDurationMinutes = Math.floor(elapsedSecs / 60);
 
-      const logId = `${dk()}_${activeWorkout.id}_${Date.now()}`;
-      const rawLog = {
-        id: logId,
-        workoutId: activeWorkout.id,
-        date: dk(),
-        sets: sessionSets,
-        complete: true,
-        durationMinutes: calculatedDurationMinutes
-      };
-      
-      // Harden log according to GainLog contract
-      const sanitizedLog = sanitizeSessionLog(rawLog);
+      const effectiveStartTime = activeSessionRef.current?.startTime || startTime || Date.now();
+      const logId =
+        committedLogIdRef.current ||
+        activeSessionRef.current?.completionLogId ||
+        `${dk()}_${activeWorkout.id}_${effectiveStartTime}`;
+      committedLogIdRef.current = logId;
+      recordCompletionLogId?.(logId);
 
-      // Snapshot qualifying PRs against pre-session canonical history BEFORE persistence
-      const detectedPRs = calculateSessionPRs({
-        workout: activeWorkout,
-        sessionSets,
-        exerciseDefinitions,
-        getWeightPRForExercise,
-        getE1RMPRForExercise
-      });
-      setSessionPRs(detectedPRs);
+      const existingPersistedLog = logs?.[logId];
+      const alreadyPersistedLocally = Boolean(existingPersistedLog && existingPersistedLog.complete === true);
+      let summarySetsSource: Record<string, SetLog[]> = existingPersistedLog?.sets || sessionSets;
 
-      // Await persistence: explicit local durability boundary
-      const persistResult = await addLog(logId, sanitizedLog);
-      if (!persistResult || persistResult.success !== true || persistResult.localPersisted !== true) {
-        throw new Error(persistResult?.error || "Failed to persist workout locally.");
+      if (!alreadyPersistedLocally) {
+        const rawLog = {
+          id: logId,
+          workoutId: activeWorkout.id,
+          date: dk(),
+          sets: sessionSets,
+          complete: true,
+          durationMinutes: calculatedDurationMinutes
+        };
+
+        // Harden log according to GainLog contract
+        const sanitizedLog = sanitizeSessionLog(rawLog);
+        summarySetsSource = sanitizedLog.sets;
+
+        // Snapshot qualifying PRs against pre-session canonical history BEFORE persistence
+        const detectedPRs = calculateSessionPRs({
+          workout: activeWorkout,
+          sessionSets,
+          exerciseDefinitions,
+          getWeightPRForExercise,
+          getE1RMPRForExercise
+        });
+        setSessionPRs(detectedPRs);
+
+        // Await persistence: explicit local durability boundary
+        const persistResult = await addLog(logId, sanitizedLog);
+        if (!persistResult || persistResult.success !== true || persistResult.localPersisted !== true) {
+          throw new Error(persistResult?.error || "Failed to persist workout locally.");
+        }
+
+        // Haptics fire only after confirmed durable local persistence
+        haptics.success();
       }
-
-      // Haptics fire only after confirmed durable local persistence
-      haptics.success();
 
       if (
         activeWorkout.isCore === true &&
@@ -1054,7 +1077,16 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
         }
       }
 
-      // Only after durable local persistence completes do we clear active session and display finish summary
+      // Snapshot final summary metrics before clearing active session so completion view stays accurate
+      const flatSummarySets = (Object.values(summarySetsSource || {}) as SetLog[][]).flat();
+      setFinishedSummary({
+        completedSets: flatSummarySets.filter(s => s.done).length,
+        programmedSets: activeWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0),
+        totalVolume: calculateSetsVolume(flatSummarySets),
+      });
+
+      // Only after durable local persistence and cycle realignment complete do we clear active session and display finish summary
+      committedLogIdRef.current = null;
       clearActiveSession();
       dispatchSessionLifecycle({ type: 'COMMIT_SUCCEEDED', logId });
     } catch (err: any) {
@@ -1136,13 +1168,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
           />
           <StatCard
             label="Sets Done"
-            value={`${completedLiveSets}/${programmedLiveSets}`}
+            value={`${finishedSummary ? finishedSummary.completedSets : completedLiveSets}/${finishedSummary ? finishedSummary.programmedSets : programmedLiveSets}`}
             accent="orange"
           />
           <div className="col-span-2">
             <StatCard
               label="Total Volume"
-              value={calculateVolumeLocal()}
+              value={finishedSummary ? finishedSummary.totalVolume : calculateVolumeLocal()}
               formatValue={formatCompactWeight}
               unit="kg"
               accent="emerald"

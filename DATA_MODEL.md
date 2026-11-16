@@ -148,6 +148,7 @@ export interface ActiveSession {
   workoutId: string;                      // Workout template being executed
   startTime: number;                      // Epoch milliseconds timestamp when workout started
   sessionSets: Record<string, SetLog[]>;  // Active draft sets per exerciseDefinitionId
+  completionLogId?: string;               // Stable ID pinned during finishSession() so retries stay idempotent if a later step fails
 }
 ```
 

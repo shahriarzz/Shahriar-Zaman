@@ -20,7 +20,9 @@ Payload structural constraints and application invariants are validated determin
 5. **No Secret Leaks**: Zero service credentials, secret API keys, or stack traces are bundled or transmitted to untrusted environments.
 
 ## 2. Invariant Verification & Test Coverage
-- Cloud isolation and UID-based tombstone partitioning are verified in `src/test/dataSyncAndIsolationRegression.test.ts` and `src/test/lifecycleDestructiveSyncBoundary.test.ts`.
+- **Live Firestore Security Rules (`firestore.rules`)**: Verified directly against the Firestore Emulator via `@firebase/rules-unit-testing` in `src/test/integration/firestoreRules.integration.test.ts` (unauthenticated denial, `/test/connection` auth gate, owner CRUD + collection queries, cross-UID read/write/list isolation, root `/users/{uid}` deletion denial, and default deny on unknown collections).
+- **Cloud Isolation & Integration Tests**: Real Firebase Auth & Firestore Emulator CRUD, batch chunking (`>= 405`), atomic `deleteExerciseDefinitionWithWorkouts`, realtime subscriptions, UID-based tombstone partitioning, and `A -> B -> A` isolation are verified in `src/test/integration/fitnessFirestore.integration.test.ts` and `src/test/integration/fitnessSync.integration.test.tsx`, alongside unit/regression suites `src/test/dataSyncAndIsolationRegression.test.ts` and `src/test/lifecycleDestructiveSyncBoundary.test.ts`.
+- **Execution Commands**: Run Pass One emulator + rules tests via `firebase emulators:exec --project demo-gainlog --only auth,firestore "npm run test:firebase"`, or run the full Firebase + Playwright browser integration suite via `npm run test:integration`.
 - Payload sanitization boundaries and extreme value resilience are verified in `src/test/persistenceBoundaries.test.ts` and `src/test/canonicalDataContract.test.ts`.
 
 ## 3. Documentation & Contract Cross-References

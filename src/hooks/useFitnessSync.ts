@@ -56,6 +56,7 @@ interface UseFitnessSyncProps {
   ) => { success: boolean; snapshot: FitnessDatabaseSnapshot };
   resetToDefaultData?: (prevUid?: string) => void | Promise<void>;
   setSyncStatus?: (status: 'idle' | 'syncing' | 'synced' | 'failed') => void;
+  hasPendingReconciliationForUid?: (uid: string) => boolean;
 }
 
 export function useFitnessSync({
@@ -65,7 +66,8 @@ export function useFitnessSync({
   appStateRef,
   commitFitnessSnapshot,
   resetToDefaultData,
-  setSyncStatus: externalSetSyncStatus
+  setSyncStatus: externalSetSyncStatus,
+  hasPendingReconciliationForUid
 }: UseFitnessSyncProps) {
   const [authState, dispatchAuth] = useReducer(authTransition, initialAuthState);
   const [syncPhase, dispatchSync] = useReducer(syncTransition, initialSyncPhase);
@@ -116,6 +118,16 @@ export function useFitnessSync({
 
   const resetToDefaultDataRef = useRef(resetToDefaultData);
   resetToDefaultDataRef.current = resetToDefaultData;
+
+  const hasPendingReconciliationForUidRef = useRef(hasPendingReconciliationForUid);
+  hasPendingReconciliationForUidRef.current = hasPendingReconciliationForUid;
+
+  const isPendingReconcileActive = useCallback((targetUid: string): boolean => {
+    if (hasPendingReconciliationForUidRef.current) {
+      return hasPendingReconciliationForUidRef.current(targetUid);
+    }
+    return pendingReconciliationRef.current?.uid === targetUid;
+  }, []);
 
   const publishResolvedAuthUser = useCallback((u: User | null) => {
     const nextUid = u ? u.uid : null;
@@ -417,6 +429,15 @@ export function useFitnessSync({
         }
       });
 
+      if (pendingReconciliation || hasPendingReconciliationForUidRef.current?.(uid)) {
+        // Pending backup restore/import reconciliation is active for this UID:
+        // preserve local restored state intact and do not merge pre-restore cloud data over it.
+        if (!isStale()) {
+          dispatchSync({ type: 'SYNC_SUCCEEDED', uid, generation: currentGen, timestamp: Date.now() });
+        }
+        return;
+      }
+
       // 1. Deterministic App State Sync
       const { merged: mergedState, needsUpload: stateNeedsUpload } = mergeAppState(appStateRef.current, cloudState);
       if (stateNeedsUpload) {
@@ -572,7 +593,7 @@ export function useFitnessSync({
     const unsubDefs = subscribeExerciseDefinitions(
       user.uid,
       (changes) => {
-        if (!isListenerValid()) return;
+        if (!isListenerValid() || isPendingReconcileActive(user.uid)) return;
         let hasChanges = false;
         const current = [...exerciseDefsRef.current];
         const cachedPending = pendingReconciliationRef.current;
@@ -634,7 +655,7 @@ export function useFitnessSync({
     const unsubWorkouts = subscribeWorkouts(
       user.uid,
       (changes) => {
-        if (!isListenerValid()) return;
+        if (!isListenerValid() || isPendingReconcileActive(user.uid)) return;
         let hasChanges = false;
         const current = [...workoutsRef.current];
         const cachedPending = pendingReconciliationRef.current;
@@ -696,7 +717,7 @@ export function useFitnessSync({
     const unsubLogs = subscribeLogs(
       user.uid,
       (changes) => {
-        if (!isListenerValid()) return;
+        if (!isListenerValid() || isPendingReconcileActive(user.uid)) return;
         let hasChanges = false;
         const current = { ...logsRef.current };
         const cachedPending = pendingReconciliationRef.current;
@@ -752,7 +773,7 @@ export function useFitnessSync({
     const unsubState = subscribeAppState(
       user.uid,
       (cloudState, hasPendingWrites) => {
-        if (!isListenerValid()) return;
+        if (!isListenerValid() || isPendingReconcileActive(user.uid)) return;
         if (!hasPendingWrites && cloudState) {
           const localState = appStateRef.current;
           const { merged } = mergeAppState(localState, cloudState);

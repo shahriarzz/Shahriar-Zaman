@@ -20,6 +20,7 @@ export interface ActiveSessionContextType {
   ) => void;
   clearActiveSession: () => void;
   flushActiveSession: () => void;
+  recordCompletionLogId?: (logId: string) => void;
   persistenceError?: string | null;
 }
 
@@ -55,6 +56,7 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     updateActiveSessionSets: sessionManager.updateActiveSessionSets,
     clearActiveSession: sessionManager.clearActiveSession,
     flushActiveSession: sessionManager.flushActiveSession,
+    recordCompletionLogId: sessionManager.recordCompletionLogId,
     persistenceError: sessionManager.persistenceError
   }), [
     sessionManager.activeSession,
@@ -63,6 +65,7 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     sessionManager.updateActiveSessionSets,
     sessionManager.clearActiveSession,
     sessionManager.flushActiveSession,
+    sessionManager.recordCompletionLogId,
     sessionManager.persistenceError
   ]);
 

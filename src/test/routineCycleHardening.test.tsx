@@ -28,6 +28,7 @@ import { CycleEditor } from '../components/manage/CycleEditor';
 import { Dashboard } from '../components/Dashboard';
 import { Calendar } from '../components/Calendar';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
+import { ActiveSessionProvider } from '../context/ActiveSessionContext';
 import { FitnessDerivedProvider, FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
 
@@ -977,6 +978,179 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(mockUpdateCycleStart).toHaveBeenCalledTimes(1);
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
       expect(container.textContent).toContain('Session Cleared');
+    });
+
+    it('Scenario 8: Idempotent completion retry after updateCycleStart failure does not create a second log', async () => {
+      const today = dk();
+      const recordedLogs: Record<string, any> = {};
+      let currentActiveSession: any = {
+        workoutId: 'push-b',
+        startTime: Date.now() - 60000,
+        sets: {},
+      };
+      let failCycleUpdate = true;
+
+      const mockAddLog = vi.fn().mockImplementation(async (id: string, log: any) => {
+        recordedLogs[id] = log;
+        return { success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false };
+      });
+      const mockUpdateCycleStart = vi.fn().mockImplementation(async () => {
+        if (failCycleUpdate) {
+          throw new Error('Temporary cycle update failure');
+        }
+      });
+      const mockClearActiveSession = vi.fn().mockImplementation(() => {
+        currentActiveSession = null;
+      });
+
+      const derivedIndex = buildFitnessIndex([], defsMap, today);
+
+      const renderSession = async () => {
+        const contextValue = createMockFitnessContext({
+          appState: { cycleStart: today },
+          logs: { ...recordedLogs },
+          activeSession: currentActiveSession,
+          addLog: mockAddLog,
+          updateCycleStart: mockUpdateCycleStart,
+          clearActiveSession: mockClearActiveSession,
+        });
+
+        await act(async () => {
+          root.render(
+            <FitnessContext.Provider value={contextValue}>
+              <FitnessDerivedContext.Provider
+                value={
+                  {
+                    index: derivedIndex,
+                    getLatestForExercise: () => null,
+                    getWeightPRForExercise: () => null,
+                    getE1RMPRForExercise: () => null,
+                    getHistoryForExercise: () => []
+                  } as any
+                }
+              >
+                <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                  <SessionView workoutId="push-b" onExit={vi.fn()} />
+                </ConfirmContext.Provider>
+              </FitnessDerivedContext.Provider>
+            </FitnessContext.Provider>
+          );
+        });
+      };
+
+      await renderSession();
+
+      const getFinishButton = () =>
+        Array.from(container.querySelectorAll('button')).find(
+          (b) => b.textContent?.includes('Finish') || b.textContent?.includes('✓')
+        )!;
+
+      // Attempt 1: addLog succeeds, updateCycleStart throws
+      await act(async () => {
+        getFinishButton().click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).toHaveBeenCalledTimes(1);
+      expect(mockClearActiveSession).not.toHaveBeenCalled();
+      expect(Object.keys(recordedLogs)).toHaveLength(1);
+      expect(container.textContent).not.toContain('Session Cleared');
+
+      // Re-render with updated logs reflecting persisted first attempt
+      failCycleUpdate = false;
+      await renderSession();
+
+      // Attempt 2: Retry completion — must NOT call addLog again, must complete cycle realignment and finish
+      await act(async () => {
+        getFinishButton().click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).toHaveBeenCalledTimes(2);
+      expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
+      expect(Object.keys(recordedLogs)).toHaveLength(1);
+      expect(container.textContent).toContain('Session Cleared');
+    });
+
+    it('Scenario 9: Completion summary preserves non-zero Sets Done and Total Volume after clearActiveSession() runs', async () => {
+      const origMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn()
+      })) as any;
+
+      try {
+        const today = dk();
+        localStorage.clear();
+        const pushAWorkout = initialWorkouts.find(w => w.id === 'push-a')!;
+        const firstExDefId = pushAWorkout.exercises[0].exerciseDefinitionId;
+        const programmedTotalSets = pushAWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0);
+
+        // Seed active draft with 2 completed sets (100x8 = 800, 120x5 = 600 => total 1400 kg)
+        localStorage.setItem('gl_active_session', JSON.stringify({
+          workoutId: 'push-a',
+          startTime: Date.now() - 120000,
+          sessionSets: {
+            [firstExDefId]: [
+              { id: 's1', weight: '100', reps: '8', done: true },
+              { id: 's2', weight: '120', reps: '5', done: true }
+            ]
+          }
+        }));
+
+        const contextValue = createMockFitnessContext({
+          appState: { cycleStart: today },
+          addLog: vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false }),
+        });
+
+        const derivedIndex = buildFitnessIndex([], defsMap, today);
+
+        await act(async () => {
+          root.render(
+            <FitnessContext.Provider value={contextValue}>
+              <ActiveSessionProvider>
+                <FitnessDerivedContext.Provider
+                  value={
+                    {
+                      index: derivedIndex,
+                      getLatestForExercise: () => null,
+                      getWeightPRForExercise: () => null,
+                      getE1RMPRForExercise: () => null,
+                      getHistoryForExercise: () => []
+                    } as any
+                  }
+                >
+                  <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                    <SessionView workoutId="push-a" onExit={vi.fn()} />
+                  </ConfirmContext.Provider>
+                </FitnessDerivedContext.Provider>
+              </ActiveSessionProvider>
+            </FitnessContext.Provider>
+          );
+        });
+
+        const finishBtn = Array.from(container.querySelectorAll('button')).find(
+          b => b.textContent?.includes('Finish') || b.textContent?.includes('✓')
+        );
+        expect(finishBtn).toBeDefined();
+
+        await act(async () => {
+          finishBtn!.click();
+        });
+
+        expect(container.textContent).toContain('Session Cleared');
+        expect(container.textContent).toContain(`2/${programmedTotalSets}`);
+        expect(container.textContent).toContain('1.4k');
+        expect(localStorage.getItem('gl_active_session')).toBeNull();
+      } finally {
+        window.matchMedia = origMatchMedia;
+      }
     });
   });
 

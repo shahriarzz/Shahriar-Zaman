@@ -2620,5 +2620,94 @@ describe('Persistence, Account Isolation & Lifecycle Hardening Suite', () => {
       });
       expect(syncHook.syncStatus).toBe('failed');
     });
+
+    it('P0 — Rollback events from realtime listeners do not overwrite local state while hasPendingReconciliationForUid is true', async () => {
+      const uid = 'reconcile-guard-user';
+      let authCb: any;
+      let stateListener: any;
+      let pendingActive = true;
+
+      const exerciseDefsRef = { current: [...INITIAL_EXERCISE_DEFINITIONS] };
+      const workoutsRef = { current: [] as any[] };
+      const logsRef = { current: {} as Record<string, any> };
+      const appStateRef = { current: { cycleStart: '2026-04-10', weightLog: { '2026-04-10': 78.2 }, updatedAt: 1000 } as any };
+
+      const commitSpy = vi.fn((partial: any) => {
+        if (partial.appState) appStateRef.current = partial.appState;
+        return {
+          success: true,
+          snapshot: {
+            exerciseDefinitions: exerciseDefsRef.current,
+            workouts: workoutsRef.current,
+            logs: logsRef.current,
+            appState: appStateRef.current
+          }
+        };
+      });
+
+      vi.spyOn(await import('../lib/firebase'), 'onAuthStateChanged').mockImplementation((_auth, cb: any) => {
+        authCb = cb;
+        return vi.fn();
+      });
+      vi.spyOn(firestoreService, 'getExerciseDefinitions').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getWorkouts').mockResolvedValue([]);
+      vi.spyOn(firestoreService, 'getLogs').mockResolvedValue({});
+      vi.spyOn(firestoreService, 'getAppState').mockResolvedValue({
+        cycleStart: '2026-04-10',
+        weightLog: { '2026-04-10': 95 },
+        updatedAt: 999999
+      });
+      vi.spyOn(firestoreService, 'saveAppState').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveExerciseDefinitionsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveWorkoutsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'saveLogsBatch').mockResolvedValue(undefined);
+      vi.spyOn(firestoreService, 'subscribeExerciseDefinitions').mockImplementation(() => vi.fn());
+      vi.spyOn(firestoreService, 'subscribeWorkouts').mockImplementation(() => vi.fn());
+      vi.spyOn(firestoreService, 'subscribeLogs').mockImplementation(() => vi.fn());
+      vi.spyOn(firestoreService, 'subscribeAppState').mockImplementation((_uid, cb) => {
+        stateListener = cb;
+        return vi.fn();
+      });
+
+      const SyncRollbackGuardHarness = () => {
+        useFitnessSync({
+          exerciseDefsRef,
+          workoutsRef,
+          logsRef,
+          appStateRef,
+          commitFitnessSnapshot: commitSpy,
+          hasPendingReconciliationForUid: (targetUid) => pendingActive && targetUid === uid
+        });
+        return null;
+      };
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(SyncRollbackGuardHarness));
+      });
+      await act(async () => {
+        await authCb({ uid, email: 'guard@test.com' });
+        await new Promise(r => setTimeout(r, 30));
+      });
+
+      // Background sync must not overwrite restored weight 78.2 with server weight 95 while pending reconciliation is active
+      expect(appStateRef.current.weightLog['2026-04-10']).toBe(78.2);
+      expect(commitSpy).not.toHaveBeenCalled();
+
+      // Simulate SDK rollback emission (hasPendingWrites: false, newer cloud updatedAt) while pending is active
+      act(() => {
+        stateListener({ cycleStart: '2026-04-10', weightLog: { '2026-04-10': 95 }, updatedAt: 9999999 }, false);
+      });
+      expect(appStateRef.current.weightLog['2026-04-10']).toBe(78.2);
+      expect(commitSpy).not.toHaveBeenCalled();
+
+      // Once pending reconciliation clears, normal realtime sync resumes
+      pendingActive = false;
+      act(() => {
+        stateListener({ cycleStart: '2026-04-10', weightLog: { '2026-04-10': 80.5 }, updatedAt: 9999999 }, false);
+      });
+      expect(appStateRef.current.weightLog['2026-04-10']).toBe(80.5);
+      expect(commitSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
