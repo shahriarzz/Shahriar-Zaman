@@ -258,7 +258,7 @@ describe('GAINLOG Dashboard & Calendar Polish Regression Suite', () => {
   });
 
   describe('2. Recent Achievements: 2x2 PR grid layout', () => {
-    it('renders up to 4 PRs in a responsive 2-column grid with compact cards without truncation', () => {
+    it('renders up to 4 PRs in a 2-column mobile/desktop grid with compact wrapping cards without truncation', () => {
       renderDashboard(getMockDashboardData(false));
 
       // Verified 4 PRs rendered
@@ -267,9 +267,13 @@ describe('GAINLOG Dashboard & Calendar Polish Regression Suite', () => {
       expect(container.textContent).toContain('Weighted Chest Dips');
       expect(container.textContent).toContain('Standing Military Press');
 
-      // Grid classes include cols-1 and colsSm-2 (sm:grid-cols-2)
-      const prGrid = container.querySelector('.grid.sm\\:grid-cols-2');
+      // Grid classes enforce 2-column layout on mobile as well as desktop
+      const prGrid = container.querySelector('.grid.grid-cols-2');
       expect(prGrid).toBeTruthy();
+
+      // Narrow-screen safety: exercise title wraps without truncation
+      expect(prGrid?.innerHTML).toContain('min-w-0');
+      expect(prGrid?.innerHTML).toContain('break-words');
 
       // Check card metrics are properly rendered
       expect(container.textContent).toContain('120 kg × 5 reps');

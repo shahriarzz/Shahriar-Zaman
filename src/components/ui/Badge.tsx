@@ -91,7 +91,7 @@ export const Badge: React.FC<BadgeProps> = ({
       className={cn(
         "inline-flex items-center border select-none shrink-0",
         TRANSITION.colors,
-        RADIUS.pill,
+        RADIUS.badge,
         size === 'sm'
           ? cn(GAP.micro, SPACING.badgeSm, TYPOGRAPHY.badgeSm)
           : cn(GAP.xs, SPACING.badgeMd, TYPOGRAPHY.badgeMd),

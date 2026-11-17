@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Save, Layers } from 'lucide-react';
+import { ChevronLeft, Save, Layers, Minus, Plus } from 'lucide-react';
 import { Exercise, Workout } from '../../types/fitness';
 import {
   Card,
@@ -14,7 +14,10 @@ import {
   BORDER,
   SURFACE,
   RADIUS,
-  EDITOR_HEADER
+  EDITOR_HEADER,
+  CONTROL_HEIGHT,
+  TRANSITION,
+  FOCUS
 } from '../ui';
 import { cn } from '../../lib/utils';
 import { haptics } from '../../utils/haptics';
@@ -114,7 +117,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
       </div>
 
       {/* Mode Selector Tabs using SegmentedControl primitive */}
-      <div className="w-fit">
+      <div className="w-full sm:w-fit overflow-x-auto scrollbar-none">
         <SegmentedControl
           options={[
             { value: 'definition', label: '1. Exercise Definition' },
@@ -168,14 +171,25 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
                 {['priority', 'daily', 'compound', 'isolation', 'machine', 'free-weight'].map(t => {
                   const isSelected = tags.includes(t);
                   return (
-                    <Badge
+                    <button
                       key={t}
-                      label={isSelected ? `✓ ${t}` : `+ ${t}`}
-                      color={isSelected ? 'orange' : 'zinc'}
-                      variant={isSelected ? 'subtle' : 'outline'}
-                      size="sm"
+                      type="button"
+                      aria-pressed={isSelected}
                       onClick={() => toggleTag(t)}
-                    />
+                      className={cn(
+                        CONTROL_HEIGHT.touchTarget,
+                        "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
+                        TYPOGRAPHY.badgeSm,
+                        RADIUS.badge,
+                        TRANSITION.colors,
+                        FOCUS.visible,
+                        isSelected
+                          ? "bg-orange-500/15 border-orange-500/35 text-orange-400"
+                          : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      )}
+                    >
+                      {isSelected ? `✓ ${t}` : `+ ${t}`}
+                    </button>
                   );
                 })}
               </div>
@@ -216,24 +230,20 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
                 <Button
                   variant="outline"
                   size="icon"
+                  icon={<Minus size={14} />}
                   aria-label="Decrease sets"
                   onClick={() => setSets(Math.max(1, sets - 1))}
-                  className="font-bold text-base"
-                >
-                  -
-                </Button>
+                />
                 <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-white text-base")}>
                   {sets}
                 </div>
                 <Button
                   variant="outline"
                   size="icon"
+                  icon={<Plus size={14} />}
                   aria-label="Increase sets"
                   onClick={() => setSets(sets + 1)}
-                  className="font-bold text-base"
-                >
-                  +
-                </Button>
+                />
               </div>
             </div>
 

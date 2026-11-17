@@ -19,7 +19,6 @@ import { INITIAL_WORKOUTS } from '../../types/initialData';
 import { haptics } from '../../utils/haptics';
 import {
   Section,
-  Card,
   Button,
   Banner,
   Badge,
@@ -28,7 +27,9 @@ import {
   Grid,
   TYPOGRAPHY,
   BORDER,
-  RADIUS
+  SURFACE,
+  RADIUS,
+  CONTROL_HEIGHT
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -301,17 +302,15 @@ export const DataMaintenanceSection: React.FC = () => {
     >
       <Stack spacing="lg">
         {/* 1. DATA HEALTH READOUT */}
-        <Card variant="standard" surface="recessed" padding="compact">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 flex items-center gap-1.5")}>
-              <Activity size={12} className="text-emerald-500" />
-              DATA HEALTH
-            </span>
-            <span className={cn(TYPOGRAPHY.label, "text-zinc-300 font-mono")}>
-              {dataHealthInfo}
-            </span>
-          </div>
-        </Card>
+        <div className={cn("p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
+          <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 flex items-center gap-1.5")}>
+            <Activity size={12} className="text-emerald-500 shrink-0" />
+            DATA HEALTH
+          </span>
+          <span className={cn(TYPOGRAPHY.label, "text-zinc-300 font-mono tabular-nums")}>
+            {dataHealthInfo}
+          </span>
+        </div>
 
         {hasPendingCloudSync && (
           <Banner
@@ -390,7 +389,7 @@ export const DataMaintenanceSection: React.FC = () => {
         {/* 2. BACKUP & RESTORE GROUP */}
         <Grid cols={1} colsMd={2} gap="md">
           {/* Action 1: Export Backup */}
-          <Card variant="standard" padding="standard" className="flex flex-col justify-between items-start gap-4">
+          <div className={cn("p-4 border flex flex-col justify-between items-start gap-4", SURFACE.subtle, BORDER.subtle, RADIUS.card)}>
             <div className="space-y-1">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Export</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Data Backup File</h4>
@@ -405,7 +404,7 @@ export const DataMaintenanceSection: React.FC = () => {
                 size="md"
                 fullWidth
                 loading={loadingAction === 'export'}
-                icon={<Download size={13} className="text-orange-500" />}
+                icon={<Download size={13} className="text-zinc-400" />}
                 onClick={handleExport}
               >
                 {loadingAction === 'export' ? 'Exporting...' : 'Download JSON'}
@@ -417,14 +416,15 @@ export const DataMaintenanceSection: React.FC = () => {
                 loading={loadingAction === 'copy'}
                 icon={copied ? <Check size={13} className="text-emerald-400" /> : <ClipboardCopy size={13} />}
                 onClick={handleCopyClipboard}
+                className="whitespace-nowrap shrink-0"
               >
                 {copied ? "Copied!" : "Copy JSON"}
               </Button>
             </div>
-          </Card>
+          </div>
 
           {/* Action 2: Import / Restore from Backup */}
-          <Card variant="standard" padding="standard" className="flex flex-col justify-between items-start gap-4">
+          <div className={cn("p-4 border flex flex-col justify-between items-start gap-4", SURFACE.subtle, BORDER.subtle, RADIUS.card)}>
             <div className="space-y-1 w-full">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Import</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Restore from Backup</h4>
@@ -444,7 +444,7 @@ export const DataMaintenanceSection: React.FC = () => {
                 aria-hidden="true"
               />
               <Button
-                variant="primary"
+                variant="secondary"
                 size="md"
                 fullWidth
                 loading={loadingAction === 'upload'}
@@ -458,11 +458,12 @@ export const DataMaintenanceSection: React.FC = () => {
                 variant="outline"
                 size="md"
                 onClick={() => setShowPasteBox(!showPasteBox)}
+                className="whitespace-nowrap shrink-0"
               >
                 {showPasteBox ? "Close" : "Paste JSON"}
               </Button>
             </div>
-          </Card>
+          </div>
         </Grid>
 
         {/* Dynamic Paste Area */}
@@ -473,44 +474,43 @@ export const DataMaintenanceSection: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               transition={shouldReduceMotion ? { duration: 0 } : undefined}
+              className={cn("p-4 border space-y-3", SURFACE.recessed, BORDER.standard, RADIUS.card)}
             >
-              <Card variant="recessed" padding="standard" className="space-y-3">
-                <Textarea
-                  label="Raw Backup JSON Structure"
-                  value={pastedJson}
-                  onChange={(e) => setPastedJson(e.target.value)}
-                  placeholder='Paste your backup JSON string here... (e.g., {"version": 1, ...})'
-                  rows={4}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPastedJson('')}
-                  >
-                    Clear
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    loading={loadingAction === 'paste'}
-                    disabled={!pastedJson.trim() || loadingAction === 'paste'}
-                    onClick={handlePasteRestore}
-                  >
-                    {loadingAction === 'paste' ? 'Restoring...' : 'Restore from JSON'}
-                  </Button>
-                </div>
-              </Card>
+              <Textarea
+                label="Raw Backup JSON Structure"
+                value={pastedJson}
+                onChange={(e) => setPastedJson(e.target.value)}
+                placeholder='Paste your backup JSON string here... (e.g., {"version": 1, ...})'
+                rows={4}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPastedJson('')}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={loadingAction === 'paste'}
+                  disabled={!pastedJson.trim() || loadingAction === 'paste'}
+                  onClick={handlePasteRestore}
+                >
+                  {loadingAction === 'paste' ? 'Restoring...' : 'Restore from JSON'}
+                </Button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* 3. RESTORE POINTS GROUP */}
-        <Card variant="standard" surface="recessed" padding="standard" className="space-y-3">
+        <div className={cn("pt-5 border-t space-y-3", BORDER.subtle)}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <History size={14} className="text-zinc-400" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <History size={14} className="text-zinc-400 shrink-0" />
                 <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200 font-bold")}>
                   Restore Points
                 </h4>
@@ -527,73 +527,72 @@ export const DataMaintenanceSection: React.FC = () => {
               variant="secondary"
               size="sm"
               loading={loadingAction === 'savepoint'}
-              icon={<Save size={13} className="text-orange-400" />}
+              icon={<Save size={13} className="text-zinc-300" />}
               onClick={handleCreateRestorePoint}
-              className="shrink-0 self-start sm:self-auto"
+              className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0 shrink-0 self-start sm:self-auto")}
             >
               {loadingAction === 'savepoint' ? 'Saving...' : 'Create Savepoint'}
             </Button>
           </div>
 
-          <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pt-1 pr-1">
+          <div className={cn("max-h-56 overflow-y-auto custom-scrollbar border overflow-hidden", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
             {checkpointHistory.length === 0 ? (
-              <div className={cn(BORDER.standard, RADIUS.button, "p-4 text-center border border-dashed text-zinc-500", TYPOGRAPHY.micro)}>
+              <div className={cn("p-4 text-center text-zinc-500", TYPOGRAPHY.micro)}>
                 No restore points available.
               </div>
             ) : (
-              checkpointHistory.map((b) => {
-                const isRestoringThis = restoringTimestamp === b.timestamp;
-                return (
-                  <Card
-                    key={b.timestamp}
-                    variant="standard"
-                    surface="subtle"
-                    padding="compact"
-                    className="flex items-center justify-between gap-3 text-left"
-                  >
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge
-                          label={b.changeType}
-                          color="orange"
-                          variant="subtle"
-                          size="sm"
-                        />
-                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-200 font-bold break-words")}>{b.desc}</span>
-                      </div>
-                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
-                        {new Date(b.timestamp).toLocaleString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          second: '2-digit'
-                        })}
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      loading={isRestoringThis}
-                      disabled={Boolean(restoringTimestamp && !isRestoringThis)}
-                      onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
-                      className="shrink-0"
+              <div className={cn("divide-y", BORDER.subtle)}>
+                {checkpointHistory.map((b) => {
+                  const isRestoringThis = restoringTimestamp === b.timestamp;
+                  return (
+                    <div
+                      key={b.timestamp}
+                      className="p-3 flex items-center justify-between gap-3 text-left"
                     >
-                      {isRestoringThis ? 'Restoring...' : 'Restore'}
-                    </Button>
-                  </Card>
-                );
-              })
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge
+                            label={b.changeType}
+                            color="zinc"
+                            variant="subtle"
+                            size="sm"
+                          />
+                          <span className={cn(TYPOGRAPHY.caption, "text-zinc-200 font-bold break-words")}>{b.desc}</span>
+                        </div>
+                        <div className={cn(TYPOGRAPHY.micro, "text-zinc-500 tabular-nums")}>
+                          {new Date(b.timestamp).toLocaleString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        loading={isRestoringThis}
+                        disabled={Boolean(restoringTimestamp && !isRestoringThis)}
+                        onClick={() => handleRestoreCheckpoint(b.timestamp, b.desc)}
+                        className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0 shrink-0")}
+                      >
+                        {isRestoringThis ? 'Restoring...' : 'Restore'}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
-        </Card>
+        </div>
 
         {/* 4. DANGER ZONE GROUP */}
-        <Card variant="standard" surface="recessed" padding="standard" className="border-red-500/20 bg-red-500/[0.02] space-y-4">
+        <div className={cn("p-4 border border-red-500/25 bg-red-500/[0.03] space-y-3", RADIUS.card)}>
           <div className="space-y-1">
             <h4 className={cn(TYPOGRAPHY.eyebrow, "text-red-400 font-bold flex items-center gap-1.5")}>
-              <AlertTriangle size={12} className="text-red-400" />
+              <AlertTriangle size={12} className="text-red-400 shrink-0" />
               Danger Zone
             </h4>
             <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
@@ -622,7 +621,7 @@ export const DataMaintenanceSection: React.FC = () => {
               {loadingAction === 'purge_logs' ? 'Deleting...' : 'Delete Training History'}
             </Button>
           </div>
-        </Card>
+        </div>
       </Stack>
     </Section>
   );

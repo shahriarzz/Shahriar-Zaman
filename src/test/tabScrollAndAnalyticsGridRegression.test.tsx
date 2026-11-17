@@ -611,4 +611,53 @@ describe('Tab Scroll Reset & Analytics Stat Grid Regression Suite', () => {
       expect(analyticsRes.heatmapData.days.length).toBeGreaterThanOrEqual(28);
     });
   });
+
+  describe('5. Analytics Hierarchy Ordering, Non-Stagger Entrances & Non-Glow Heatmap Contract', () => {
+    it('places Estimated 1RM Progression before Monthly Intensity Heatmap and omits decorative entrance staggers and heatmap glow', () => {
+      const mockFitness = createMockFitnessContext();
+
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue(
+        createMockFitnessDerivedReturn()
+      );
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(
+        createMockAnalyticsReturn({
+          active1RMTrend: [
+            { date: '2026-10-15', displayDate: 'Oct 15', epley1RM: 120, setDetail: '100kg × 6' }
+          ]
+        })
+      );
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <AnalyticsView />
+          </FitnessContext.Provider>
+        );
+      });
+
+      const headings = Array.from(container.querySelectorAll('h2, h3'));
+      const oneRmHeading = headings.find((el) => el.textContent?.includes('Estimated 1RM Progression'));
+      const heatmapHeading = headings.find((el) => el.textContent?.includes('Monthly Intensity Heatmap'));
+
+      expect(oneRmHeading).toBeTruthy();
+      expect(heatmapHeading).toBeTruthy();
+      expect(
+        Boolean(oneRmHeading!.compareDocumentPosition(heatmapHeading!) & Node.DOCUMENT_POSITION_FOLLOWING)
+      ).toBe(true);
+
+      // Heatmap legend swatches use RADIUS.badge (rounded-lg), not rounded-xl
+      const legendSwatches = Array.from(container.querySelectorAll('span.w-3\\.5.h-3\\.5'));
+      expect(legendSwatches.length).toBe(5);
+      legendSwatches.forEach((swatch) => {
+        expect(swatch.classList.contains('rounded-lg')).toBe(true);
+        expect(swatch.classList.contains('rounded-xl')).toBe(false);
+      });
+
+      // Month navigation buttons do not override to rounded-full pill shape
+      const prevBtn = container.querySelector('button[aria-label="Previous Month"]') as HTMLButtonElement;
+      const nextBtn = container.querySelector('button[aria-label="Next Month"]') as HTMLButtonElement;
+      expect(prevBtn?.classList.contains('rounded-full')).toBe(false);
+      expect(nextBtn?.classList.contains('rounded-full')).toBe(false);
+    });
+  });
 });

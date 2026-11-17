@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,12 +15,9 @@ import {
 } from 'recharts';
 import {
   Trophy,
-  Clock,
   Dumbbell,
-  Flame,
   TrendingUp,
   TrendingDown,
-  Activity,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -62,20 +58,17 @@ import {
   GAP,
   STACK_SPACING,
   TYPOGRAPHY,
-  SHADOW,
-  SEMANTIC_COLORS,
   CHART_THEME,
-  MOTION_CONFIG,
   TRANSITION
 } from './ui';
 
 // Unified heatmap intensity scale used for both matrix cells and legend
 const HEATMAP_INTENSITY_STEPS = [
-  { level: 0, bg: 'bg-zinc-900/60', border: 'border-zinc-800/40', text: 'text-zinc-600', maxRatio: 0, glow: false },
-  { level: 1, bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', text: 'text-emerald-400', maxRatio: 0.25, glow: false },
-  { level: 2, bg: 'bg-emerald-500/45', border: 'border-emerald-500/50', text: 'text-emerald-300', maxRatio: 0.50, glow: false },
-  { level: 3, bg: 'bg-emerald-500/75', border: 'border-emerald-500/70', text: 'text-emerald-200', maxRatio: 0.75, glow: false },
-  { level: 4, bg: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-black font-bold', maxRatio: 1.0, glow: true }
+  { level: 0, bg: 'bg-zinc-900/60', border: 'border-zinc-800/40', text: 'text-zinc-600', maxRatio: 0 },
+  { level: 1, bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', text: 'text-emerald-400', maxRatio: 0.25 },
+  { level: 2, bg: 'bg-emerald-500/45', border: 'border-emerald-500/50', text: 'text-emerald-300', maxRatio: 0.50 },
+  { level: 3, bg: 'bg-emerald-500/75', border: 'border-emerald-500/70', text: 'text-emerald-200', maxRatio: 0.75 },
+  { level: 4, bg: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-black font-bold', maxRatio: 1.0 }
 ] as const;
 
 function getHeatmapIntensity(vol: number, maxVol: number) {
@@ -99,7 +92,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
   const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(savedState?.currentHeatmapMonth ?? new Date());
   const [showAllRecords, setShowAllRecords] = useState<boolean>(false);
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
-  const shouldReduceMotion = useReducedMotion();
 
   React.useEffect(() => {
     onSaveState?.({
@@ -202,228 +194,100 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       />
 
       {/* 2. SECTION 1: OVERVIEW HERO STATS */}
-      <motion.div
-        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
-        animate={MOTION_CONFIG.entrance.animate}
-        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(0) }}
-      >
-        <Grid cols={2} colsLg={4} gap="md">
-          {/* 1. Scheduled Training Streak */}
-          <StatCard
-            label="Scheduled Training Streak"
-            value={trainingStreak.currentStreak}
-            unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
-            icon={<Flame size={16} />}
-            accent="orange"
-            sublabel="Respects recovery days"
-            trend={<span className={cn(TYPOGRAPHY.label, "text-orange-400 font-bold")}>Best: {trainingStreak.longestStreak}d</span>}
-          />
+      <Grid cols={2} colsLg={4} gap="md">
+        {/* 1. Scheduled Training Streak */}
+        <StatCard
+          label="Scheduled Training Streak"
+          value={trainingStreak.currentStreak}
+          unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
+          accent="zinc"
+          disableAnimation
+          sublabel="Respects recovery days"
+          trend={<span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold tabular-nums")}>Best: {trainingStreak.longestStreak}d</span>}
+        />
 
-          {/* 2. Adherence Rate */}
-          <StatCard
-            label="Adherence Rate"
-            value={adherenceInsight.percent}
-            unit="%"
-            icon={<Activity size={16} />}
-            accent="emerald"
-            sublabel={
-              adherenceInsight.pendingScheduledWorkouts > 0
-                ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
-                : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
-            }
-          />
-
-          {/* 3. Window Volume with Period-over-Period Trend */}
-          <StatCard
-            label="Window Volume"
-            value={aggregated.rangeVolume}
-            formatValue={formatCompactWeight}
-            unit="kg"
-            icon={<Dumbbell size={16} />}
-            accent="emerald"
-            sublabel={`${timeRange.toUpperCase()} completed volume`}
-            trend={
-              aggregated.volumePeriodChangePct !== null ? (
-                <span
-                  className={cn(
-                    "font-bold flex items-center gap-0.5",
-                    aggregated.volumePeriodChangePct > 0
-                      ? "text-emerald-400"
-                      : (aggregated.volumePeriodChangePct < 0 ? "text-red-400" : "text-zinc-400")
-                  )}
-                >
-                  {aggregated.volumePeriodChangePct > 0 ? (
-                    <TrendingUp size={12} />
-                  ) : aggregated.volumePeriodChangePct < 0 ? (
-                    <TrendingDown size={12} />
-                  ) : null}
-                  {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
-                </span>
-              ) : undefined
-            }
-          />
-
-          {/* 4. Performance Score */}
-          <StatCard
-            label="Performance Score"
-            value={performanceScore.score}
-            sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
-            isUnavailable={performanceScore.score === null}
-            unavailableLabel="Building baseline"
-            icon={<Award size={16} />}
-            accent={
-              performanceScore.score === null
-                ? 'zinc'
-                : performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
-                ? 'emerald'
-                : performanceScore.status === 'Good'
-                ? 'amber'
-                : 'red'
-            }
-          />
-        </Grid>
-      </motion.div>
-
-      {/* 3. SECTION 2: TRAINING ACTIVITY (HEATMAP & 1RM PROGRESSION) */}
-      <motion.div
-        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
-        animate={MOTION_CONFIG.entrance.animate}
-        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(1) }}
-      >
-        <Section
-          eyebrow="Adherence Matrix"
-          eyebrowColor="emerald"
-          title="Monthly Intensity Heatmap"
-          padding="section"
-          action={
-            <div className={cn("flex items-center", GAP.sm)}>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 mr-2")}>
-                {format(heatmapData.monthStart, 'MMMM yyyy')}
-              </span>
-              <Button
-                variant="secondary"
-                size="icon"
-                className={RADIUS.pill}
-                onClick={() => {
-                  haptics.selection();
-                  setCurrentHeatmapMonth(subMonths(currentHeatmapMonth, 1));
-                }}
-                icon={<ChevronLeft size={16} />}
-                aria-label="Previous Month"
-              />
-              <Button
-                variant="secondary"
-                size="icon"
-                className={RADIUS.pill}
-                onClick={() => {
-                  haptics.selection();
-                  setCurrentHeatmapMonth(addMonths(currentHeatmapMonth, 1));
-                }}
-                icon={<ChevronRight size={16} />}
-                aria-label="Next Month"
-              />
-            </div>
+        {/* 2. Adherence Rate */}
+        <StatCard
+          label="Adherence Rate"
+          value={adherenceInsight.percent}
+          unit="%"
+          accent={
+            adherenceInsight.evaluatedScheduledWorkouts === 0
+              ? 'zinc'
+              : adherenceInsight.percent >= 80
+              ? 'emerald'
+              : adherenceInsight.percent >= 50
+              ? 'amber'
+              : 'red'
           }
-        >
-          <Stack spacing="lg">
-            {/* Heatmap Grid */}
-            <Stack spacing="xs">
-              {/* Weekday headers */}
-              <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
-              </div>
+          disableAnimation
+          sublabel={
+            adherenceInsight.pendingScheduledWorkouts > 0
+              ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
+              : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
+          }
+        />
 
-              {/* Days grid */}
-              <div className={cn("grid grid-cols-7", GAP.xs)}>
-                {heatmapData.days.map((day, dayIdx) => {
-                  const dateStr = format(day, 'yyyy-MM-dd');
-                  const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
-                  const vol = heatmapData.logVolMap[dateStr] || 0;
-                  const detail = heatmapData.dayDetailMap[dateStr];
-                  const intensity = getHeatmapIntensity(vol, heatmapData.maxDayVol);
+        {/* 3. Window Volume with Period-over-Period Trend */}
+        <StatCard
+          label="Window Volume"
+          value={aggregated.rangeVolume}
+          formatValue={formatCompactWeight}
+          unit="kg"
+          accent={
+            aggregated.volumePeriodChangePct !== null
+              ? aggregated.volumePeriodChangePct > 0
+                ? 'emerald'
+                : aggregated.volumePeriodChangePct < 0
+                ? 'red'
+                : 'zinc'
+              : 'zinc'
+          }
+          disableAnimation
+          sublabel={`${timeRange.toUpperCase()} completed volume`}
+          trend={
+            aggregated.volumePeriodChangePct !== null ? (
+              <span
+                className={cn(
+                  "font-bold flex items-center gap-0.5 tabular-nums",
+                  aggregated.volumePeriodChangePct > 0
+                    ? "text-emerald-400"
+                    : (aggregated.volumePeriodChangePct < 0 ? "text-red-400" : "text-zinc-400")
+                )}
+              >
+                {aggregated.volumePeriodChangePct > 0 ? (
+                  <TrendingUp size={12} />
+                ) : aggregated.volumePeriodChangePct < 0 ? (
+                  <TrendingDown size={12} />
+                ) : null}
+                {aggregated.volumePeriodChangePct > 0 ? `+${aggregated.volumePeriodChangePct}%` : `${aggregated.volumePeriodChangePct}%`}
+              </span>
+            ) : undefined
+          }
+        />
 
-                  const cycleDay = getCycleDayForDate(day);
-                  const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+        {/* 4. Performance Score */}
+        <StatCard
+          label="Performance Score"
+          value={performanceScore.score}
+          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
+          isUnavailable={performanceScore.score === null}
+          unavailableLabel="Building baseline"
+          disableAnimation
+          accent={
+            performanceScore.score === null
+              ? 'zinc'
+              : performanceScore.status === 'Excellent' || performanceScore.status === 'Strong'
+              ? 'emerald'
+              : performanceScore.status === 'Good'
+              ? 'amber'
+              : 'red'
+          }
+        />
+      </Grid>
 
-                  let tooltipText = `${dateStr}`;
-                  if (detail && detail.workoutNames.length > 0) {
-                    tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg, ${detail.doneSets} sets)`;
-                  } else if (expectedWo?.type === 'rest') {
-                    tooltipText = `${dateStr} • Scheduled Rest (${expectedWo.name})`;
-                  } else if (expectedWo) {
-                    tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
-                  } else {
-                    tooltipText = `${dateStr} • Rest`;
-                  }
-
-                  return (
-                    <div
-                      key={`day-${dateStr}-${dayIdx}`}
-                      title={tooltipText}
-                      style={isCurrentMonth && intensity.glow ? SHADOW.accentGlowStyle(SEMANTIC_COLORS.emerald) : undefined}
-                      className={cn(
-                        "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
-                        TRANSITION.colors,
-                        RADIUS.button,
-                        isCurrentMonth
-                          ? cn(
-                              intensity.bg,
-                              intensity.border,
-                              intensity.text
-                            )
-                          : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
-                      )}
-                    >
-                      <span className={cn(TYPOGRAPHY.label, "leading-none")}>{format(day, 'd')}</span>
-                      {vol > 0 && isCurrentMonth && (
-                        <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80")}>
-                          {(vol / 1000).toFixed(1)}k
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Stack>
-
-            {/* Legend + Summary derived directly from single intensity scale */}
-            <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
-              <div className={cn("flex items-center", GAP.sm)}>
-                <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>Less</span>
-                <div className={cn("flex", GAP.xs)}>
-                  {HEATMAP_INTENSITY_STEPS.map((step) => (
-                    <span
-                      key={`step-${step.level}`}
-                      className={cn("w-3.5 h-3.5 border", RADIUS.button, step.bg, step.border)}
-                    />
-                  ))}
-                </div>
-                <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>More</span>
-              </div>
-
-              <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center", GAP.sm)}>
-                <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
-                <span className="text-zinc-500">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
-                <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
-              </div>
-            </div>
-          </Stack>
-        </Section>
-      </motion.div>
-
-      {/* 4. SECTION 3: STRENGTH PROGRESSION (1RM TREND) */}
+      {/* 3. SECTION 2: PRIMARY ANALYTICAL FOCUS — STRENGTH PROGRESSION (1RM TREND) */}
       <DeferredViewSection minHeight={420}>
-      <motion.div
-        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
-        animate={MOTION_CONFIG.entrance.animate}
-        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(2) }}
-      >
         <Section
           eyebrow="Strength Progression"
           eyebrowColor="emerald"
@@ -431,9 +295,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           padding="section"
           action={
             priorityExercises.length > 0 ? (
-              <div className={cn("flex items-center max-w-[220px] sm:max-w-md overflow-x-auto pb-1 scrollbar-none", GAP.sm)}>
+              <div className={cn("flex items-center w-full sm:w-auto sm:max-w-xl lg:max-w-2xl overflow-x-auto sm:overflow-visible pb-1 sm:pb-0 scrollbar-none", GAP.sm)}>
                 <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
-                <div className={cn("flex", GAP.xs)}>
+                <div className={cn("flex sm:flex-wrap", GAP.xs)}>
                   {priorityExercises.map((ex, idx) => (
                     <Button
                       key={ex.id ? `p-ex-${ex.id}-${idx}` : `p-ex-${idx}`}
@@ -486,7 +350,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                           return (
                             <ChartTooltip>
                               <p className="text-zinc-400 font-bold">{data.date}</p>
-                              <p className="text-emerald-400 font-black text-sm">
+                              <p className="text-emerald-400 font-black text-sm tabular-nums">
                                 Est. 1RM: {data.epley1RM} kg
                               </p>
                               <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
@@ -523,8 +387,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 value={aggregated.avgDuration}
                 unit="min"
                 isUnavailable={aggregated.avgDuration <= 0}
-                icon={<Clock size={20} />}
-                accent="emerald"
+                accent="zinc"
+                disableAnimation
                 sublabel={aggregated.avgDuration > 0 ? 'Measured duration' : 'No duration recorded'}
               />
 
@@ -537,19 +401,137 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             </Grid>
           </Stack>
         </Section>
-      </motion.div>
       </DeferredViewSection>
 
-      {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES, ROUTINES) */}
-      <DeferredViewSection minHeight={480}>
-      <motion.div
-        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
-        animate={MOTION_CONFIG.entrance.animate}
-        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(3) }}
+      {/* 4. SECTION 3: SUPPORTING TRAINING ACTIVITY HEATMAP */}
+      <Section
+        eyebrow="Adherence Matrix"
+        eyebrowColor="zinc"
+        title="Monthly Intensity Heatmap"
+        padding="section"
+        action={
+          <div className={cn("flex items-center", GAP.sm)}>
+            <span className={cn(TYPOGRAPHY.label, "text-zinc-300 mr-1 sm:mr-2 tabular-nums")}>
+              {format(heatmapData.monthStart, 'MMMM yyyy')}
+            </span>
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => {
+                haptics.selection();
+                setCurrentHeatmapMonth(subMonths(currentHeatmapMonth, 1));
+              }}
+              icon={<ChevronLeft size={16} />}
+              aria-label="Previous Month"
+            />
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => {
+                haptics.selection();
+                setCurrentHeatmapMonth(addMonths(currentHeatmapMonth, 1));
+              }}
+              icon={<ChevronRight size={16} />}
+              aria-label="Next Month"
+            />
+          </div>
+        }
       >
+        <Stack spacing="lg">
+          {/* Heatmap Grid */}
+          <Stack spacing="xs">
+            {/* Weekday headers */}
+            <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
+              <span>Mon</span>
+              <span>Tue</span>
+              <span>Wed</span>
+              <span>Thu</span>
+              <span>Fri</span>
+              <span>Sat</span>
+              <span>Sun</span>
+            </div>
+
+            {/* Days grid */}
+            <div className={cn("grid grid-cols-7", GAP.xs)}>
+              {heatmapData.days.map((day, dayIdx) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const isCurrentMonth = isSameMonth(day, heatmapData.monthStart);
+                const vol = heatmapData.logVolMap[dateStr] || 0;
+                const detail = heatmapData.dayDetailMap[dateStr];
+                const intensity = getHeatmapIntensity(vol, heatmapData.maxDayVol);
+
+                const cycleDay = getCycleDayForDate(day);
+                const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
+
+                let tooltipText = `${dateStr}`;
+                if (detail && detail.workoutNames.length > 0) {
+                  tooltipText = `${dateStr} • ${detail.workoutNames.join(', ')} (${vol.toLocaleString()} kg, ${detail.doneSets} sets)`;
+                } else if (expectedWo?.type === 'rest') {
+                  tooltipText = `${dateStr} • Scheduled Rest (${expectedWo.name})`;
+                } else if (expectedWo) {
+                  tooltipText = `${dateStr} • Scheduled: ${expectedWo.name} (No log recorded)`;
+                } else {
+                  tooltipText = `${dateStr} • Rest`;
+                }
+
+                return (
+                  <div
+                    key={`day-${dateStr}-${dayIdx}`}
+                    title={tooltipText}
+                    className={cn(
+                      "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
+                      TRANSITION.colors,
+                      RADIUS.badge,
+                      isCurrentMonth
+                        ? cn(
+                            intensity.bg,
+                            intensity.border,
+                            intensity.text
+                          )
+                        : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
+                    )}
+                  >
+                    <span className={cn(TYPOGRAPHY.label, "leading-none tabular-nums")}>{format(day, 'd')}</span>
+                    {vol > 0 && isCurrentMonth && (
+                      <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80 tabular-nums")}>
+                        {(vol / 1000).toFixed(1)}k
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Stack>
+
+          {/* Legend + Summary derived directly from single intensity scale */}
+          <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
+            <div className={cn("flex items-center", GAP.sm)}>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>Less</span>
+              <div className={cn("flex", GAP.xs)}>
+                {HEATMAP_INTENSITY_STEPS.map((step) => (
+                  <span
+                    key={`step-${step.level}`}
+                    className={cn("w-3.5 h-3.5 border", RADIUS.badge, step.bg, step.border)}
+                  />
+                ))}
+              </div>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>More</span>
+            </div>
+
+            <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-wrap items-center justify-center tabular-nums", GAP.sm)}>
+              <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
+              <span className="text-zinc-500">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
+              <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
+            </div>
+          </div>
+        </Stack>
+      </Section>
+
+      {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES) */}
+      <DeferredViewSection minHeight={480}>
         <Section
           eyebrow="Anatomical Load Distribution"
-          eyebrowColor="emerald"
+          eyebrowColor="zinc"
           title="Muscle Group Targeting"
           padding="section"
           action={
@@ -576,7 +558,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} horizontal={false} />
                   <XAxis type="number" stroke={CHART_THEME.axisText} fontSize={10} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="category" type="category" stroke={CHART_THEME.axisText} fontSize={11} axisLine={false} tickLine={false} width={80} />
+                  <YAxis dataKey="category" type="category" stroke={CHART_THEME.axisText} fontSize={11} axisLine={false} tickLine={false} width={84} />
                   <Tooltip
                     isAnimationActive={false}
                     animationDuration={0}
@@ -600,7 +582,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
 
             {/* Most Frequent Exercises inside one unified compact Card */}
             <Stack spacing="sm" className={cn("pt-4 border-t", BORDER.subtle)}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                   Most Frequent Exercises
                 </span>
@@ -630,8 +612,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                       >
                         <div className={cn("flex items-center min-w-0", GAP.sm)}>
                           <span className={cn(
-                            "w-6 h-6 flex items-center justify-center font-mono font-bold text-xs shrink-0 border",
-                            RADIUS.button,
+                            "w-6 h-6 flex items-center justify-center font-mono font-bold text-xs shrink-0 border tabular-nums",
+                            RADIUS.badge,
                             idx === 0
                               ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
                               : "bg-zinc-900 border-zinc-800 text-zinc-400"
@@ -640,14 +622,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-white break-words">{ex.name}</p>
-                            <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
+                            <p className={cn(TYPOGRAPHY.label, "text-zinc-500 tabular-nums")}>
                               {ex.count} {ex.count === 1 ? 'session' : 'sessions'} logged
                             </p>
                           </div>
                         </div>
 
                         <div className="text-right shrink-0">
-                          <span className="font-mono font-bold text-xs text-zinc-300">
+                          <span className="font-mono font-bold text-xs text-zinc-300 tabular-nums">
                             {(ex.volume / 1000).toFixed(1)}k kg
                           </span>
                         </div>
@@ -663,19 +645,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             </Stack>
           </Stack>
         </Section>
-      </motion.div>
       </DeferredViewSection>
 
       {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
       <DeferredViewSection minHeight={360}>
-      <motion.div
-        initial={shouldReduceMotion ? false : MOTION_CONFIG.entrance.initial}
-        animate={MOTION_CONFIG.entrance.animate}
-        transition={{ ...MOTION_CONFIG.entrance.transition, delay: shouldReduceMotion ? 0 : MOTION_CONFIG.staggerDelay(4) }}
-      >
         <Section
           eyebrow="Anatomical Distribution & Workload"
-          eyebrowColor="emerald"
+          eyebrowColor="zinc"
           title="Muscle Balance & Recovery"
           padding="section"
         >
@@ -686,7 +662,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             referenceDate={currentDate}
           />
         </Section>
-      </motion.div>
       </DeferredViewSection>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}
@@ -712,67 +687,47 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           ) : undefined
         }
       >
-        <Stack spacing="md">
-          {aggregated.recordsList.length > 0 ? (
-            <Grid cols={1} colsMd={2} colsLg={3} gap="sm">
-              {visibleRecords.map((rec, idx) => (
-                <Card
-                  key={rec.exerciseName ? `rec-${rec.exerciseName}-${idx}` : `rec-${idx}`}
-                  variant="standard"
-                  accent="orange"
-                  padding="standard"
-                  className="flex items-center justify-between group"
-                >
-                  <div className={cn("min-w-0 pr-2", STACK_SPACING.xs)}>
-                    <p className={cn("text-xs font-bold text-white group-hover:text-orange-400 break-words", TRANSITION.colors)}>
-                      {rec.exerciseName}
-                    </p>
-                    <p className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
-                      Logged: {rec.date}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-black font-mono text-orange-400">
-                      {rec.weight}kg × {rec.reps}
-                    </div>
-                    <div className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
-                      Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseDefinitionId)?.maxEpley ?? Math.round((rec.weight || 0) * (1 + (rec.reps || 1) / 30) * 10) / 10}kg
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState
-              icon={Award}
-              title="No strength records logged"
-              description="Record completed sets during workouts to automatically track your all-time heaviest lifts."
-            />
-          )}
-
-          {aggregated.recordsList.length > 3 && !showAllRecords && (
-            <div className="flex justify-center pt-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  haptics.selection();
-                  setShowAllRecords(true);
-                }}
-                icon={<ChevronDown size={14} />}
-                iconPosition="right"
+        {aggregated.recordsList.length > 0 ? (
+          <Grid cols={1} colsMd={2} colsLg={3} gap="sm">
+            {visibleRecords.map((rec, idx) => (
+              <Card
+                key={rec.exerciseName ? `rec-${rec.exerciseName}-${idx}` : `rec-${idx}`}
+                variant="standard"
+                padding="standard"
+                className="flex items-center justify-between group"
               >
-                View all {aggregated.recordsList.length} personal bests
-              </Button>
-            </div>
-          )}
-        </Stack>
+                <div className={cn("min-w-0 pr-2", STACK_SPACING.xs)}>
+                  <p className={cn("text-xs font-bold text-white group-hover:text-orange-400 break-words", TRANSITION.colors)}>
+                    {rec.exerciseName}
+                  </p>
+                  <p className={cn(TYPOGRAPHY.label, "text-zinc-500 tabular-nums")}>
+                    Logged: {rec.date}
+                  </p>
+                </div>
+                <div className="text-right shrink-0 tabular-nums">
+                  <div className="text-sm font-black font-mono text-orange-400">
+                    {rec.weight}kg × {rec.reps}
+                  </div>
+                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
+                    Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseDefinitionId)?.maxEpley ?? Math.round((rec.weight || 0) * (1 + (rec.reps || 1) / 30) * 10) / 10}kg
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </Grid>
+        ) : (
+          <EmptyState
+            icon={Award}
+            title="No strength records logged"
+            description="Record completed sets during workouts to automatically track your all-time heaviest lifts."
+          />
+        )}
       </Section>
 
       {/* 7. SECTION 6: LIFETIME SUMMARY */}
       <Section
         eyebrow="Cumulative Milestones"
-        eyebrowColor="emerald"
+        eyebrowColor="zinc"
         title="Lifetime Summary"
         padding="section"
       >
@@ -781,21 +736,24 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             <StatCard
               label="Total Workouts"
               value={aggregated.totalLogsCount}
-              accent="emerald"
+              accent="zinc"
+              disableAnimation
               sublabel="Completed runs"
             />
             <StatCard
               label="Hours Trained"
               value={aggregated.lifetimeHours}
               unit="hrs"
-              accent="emerald"
+              accent="zinc"
+              disableAnimation
               sublabel={aggregated.lifetimeHours > 0 ? "Measured duration" : "Logged sessions"}
             />
             <StatCard
               label="Total Sets"
               value={aggregated.lifetimeSets}
               formatValue={(val) => Math.round(val).toLocaleString()}
-              accent="emerald"
+              accent="zinc"
+              disableAnimation
               sublabel="Executed sets"
             />
             <StatCard
@@ -803,14 +761,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               value={aggregated.lifetimeVolume}
               formatValue={formatCompactWeight}
               unit="kg"
-              accent="emerald"
+              accent="zinc"
+              disableAnimation
               sublabel="Cumulative tonnage"
             />
           </Grid>
 
           {aggregated.firstLogDate && (
-            <div className={cn("pt-4 border-t flex items-center", GAP.sm, BORDER.subtle, TYPOGRAPHY.label, "text-zinc-400")}>
-              <Sparkles size={14} className="text-emerald-400 shrink-0" />
+            <div className={cn("pt-4 border-t flex items-center tabular-nums", GAP.sm, BORDER.subtle, TYPOGRAPHY.label, "text-zinc-400")}>
+              <Sparkles size={14} className="text-zinc-400 shrink-0" />
               <span>
                 Training active since <strong className="text-white">{aggregated.firstLogDate}</strong>
               </span>
@@ -843,6 +802,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             }
             isUnavailable={!aggregated.firstLogDate}
             accent="zinc"
+            disableAnimation
             sublabel={!aggregated.firstLogDate ? 'No sessions recorded' : 'Last recorded workout'}
           />
           <StatCard
@@ -850,20 +810,23 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             value={aggregated.avgGapDays}
             unit="days"
             accent="zinc"
+            disableAnimation
             sublabel="Spacing between sessions"
           />
           <StatCard
             label="Active Days in Window"
             value={aggregated.activeDaysCount}
             unit="days"
-            accent="emerald"
+            accent="zinc"
+            disableAnimation
             sublabel={`Logged in ${timeRange.toUpperCase()} window`}
           />
           <StatCard
             label="Sessions in Window"
             value={!aggregated.firstLogDate ? '—' : aggregated.rangeLogsCount}
             unit={!aggregated.firstLogDate ? undefined : (aggregated.rangeLogsCount === 1 ? 'session' : 'sessions')}
-            accent="emerald"
+            accent="zinc"
+            disableAnimation
             isUnavailable={!aggregated.firstLogDate}
             unavailableLabel="No sessions recorded"
             sublabel={
@@ -882,7 +845,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         {/* Performance Insights using standard Card primitives */}
         <Section
           eyebrow="Automated Synthesis"
-          eyebrowColor="emerald"
+          eyebrowColor="zinc"
           title="Performance Insights"
           padding="section"
           className="lg:col-span-2"

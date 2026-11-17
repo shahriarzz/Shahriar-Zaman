@@ -174,7 +174,7 @@ import {
   StatCard,
   SectionHeader
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, SHADOW } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, SHADOW, CONTROL_HEIGHT, FOCUS } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -241,7 +241,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   });
   const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
   const setsForEx = sets;
-  const isDone = setsForEx.slice(0, ex.sets).every(s => s.done);
+  const targetSets = setsForEx.slice(0, ex.sets);
+  const isDone = targetSets.length > 0 && targetSets.every(s => s.done);
 
   const prevIsDoneRef = useRef(false);
   const [justCompleted, setJustCompleted] = useState(false);
@@ -298,43 +299,69 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   const totalSets = ex.sets;
   const shouldReduceMotion = useReducedMotion();
 
+  const panelId = `exercise-panel-${exDefId}`;
+
   return (
     <motion.div
       key={ex.id}
       animate={justCompleted && !shouldReduceMotion ? MOTION_CONFIG.pulseSubtle : {}}
       className={cn(
-        "bg-zinc-900/80 border overflow-hidden",
+        SURFACE.default,
+        "border overflow-hidden",
         TRANSITION.interactive,
         RADIUS.card,
-        isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : BORDER.standard
+        isDone ? "border-emerald-500/30 bg-emerald-500/[0.03]" : cn(BORDER.standard, "border-l-2")
       )}
+      style={!isDone ? { borderLeftColor: `${WORKOUT_COLORS[workoutType]}66` } : undefined}
     >
       {/* Header */}
-      <div 
-        onClick={handleToggle}
-        className={cn("p-6 cursor-pointer hover:bg-zinc-800/10 flex items-start justify-between gap-4", TRANSITION.colors)}
-      >
-        <div className="space-y-1">
-          <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white flex items-center gap-2")}>
-            {ex.name}
-            {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
-          </h3>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 font-mono tracking-wider uppercase">
-            <span>{ex.target}</span>
-            <span>·</span>
-            <span>{ex.sets} Sets</span>
-            <span>·</span>
-            <span>{ex.reps} Reps</span>
-            <span>·</span>
+      <div className="p-4 sm:p-6 flex items-start justify-between gap-2">
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-expanded={isExpanded}
+          aria-controls={panelId}
+          className={cn(
+            "flex-1 min-w-0 text-left flex items-start justify-between gap-3 p-1 -m-1 hover:bg-zinc-800/20",
+            CONTROL_HEIGHT.touchTarget,
+            RADIUS.button,
+            TRANSITION.colors,
+            FOCUS.visible
+          )}
+        >
+          <div className="space-y-1 min-w-0">
+            <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white flex items-center gap-2 min-w-0 break-words")}>
+              <span className="min-w-0 break-words">{ex.name}</span>
+              {isDone && <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />}
+            </h3>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 font-mono tracking-wider uppercase">
+              <span>{ex.target}</span>
+              <span aria-hidden="true">·</span>
+              <span>{ex.sets} Sets</span>
+              <span aria-hidden="true">·</span>
+              <span>{ex.reps} Reps</span>
               <Badge
                 label={`${doneCount}/${totalSets} Done`}
                 color={isDone ? 'emerald' : 'zinc'}
                 size="sm"
                 dot={false}
               />
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <motion.span
+            animate={shouldReduceMotion ? undefined : { rotate: isExpanded ? 180 : 0 }}
+            style={shouldReduceMotion ? { transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' } : undefined}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: DURATION.standard / 1000 }}
+            aria-hidden="true"
+            className="text-zinc-500 p-2 shrink-0 self-center"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </motion.span>
+        </button>
+
+        <div className="flex items-center shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -350,22 +377,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
               />
             }
           />
-          <motion.div
-            animate={shouldReduceMotion ? undefined : { rotate: isExpanded ? 180 : 0 }}
-            style={shouldReduceMotion ? { transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' } : undefined}
-            transition={shouldReduceMotion ? { duration: 0 } : { duration: DURATION.standard / 1000 }}
-            className="text-zinc-500 p-2"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </motion.div>
         </div>
       </div>
 
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
+            id={panelId}
             initial={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.initial}
             animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
             exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
@@ -374,7 +392,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
           >
             {/* AI Advice Box */}
             {advice && (
-              <div className="mx-6 mb-4">
+              <div className="mx-4 sm:mx-6 mb-4">
                 <Banner
                   variant="achievement"
                   size="compact"
@@ -386,10 +404,10 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
 
             {/* Ghost Data Grid */}
             <Grid cols={2} gap="none" className={cn(SURFACE.recessed, BORDER.subtle, "border-y")}>
-              <div className={cn("p-4 border-r space-y-1", BORDER.subtle)}>
+              <div className={cn("p-3 sm:p-4 border-r space-y-1 min-w-0", BORDER.subtle)}>
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>Last Session</span>
                 {lastSession ? (
-                  <div className={TYPOGRAPHY.metadata}>
+                  <div className={cn(TYPOGRAPHY.metadata, "tabular-nums")}>
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
                       <div key={s.id || `ghost-set-${idx}`}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
                     ))}
@@ -398,11 +416,11 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                   <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No history data</div>
                 )}
               </div>
-              <div className="p-4 space-y-1">
+              <div className="p-3 sm:p-4 space-y-1 min-w-0">
                 <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>All-Time PR</span>
                 {allTimePR ? (
-                  <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1 text-orange-400")}>
-                    <Trophy size={10} className="text-orange-400" /> {allTimePR.weight}kg × {allTimePR.reps}
+                  <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1 text-orange-400 tabular-nums")}>
+                    <Trophy size={10} className="text-orange-400 shrink-0" /> {allTimePR.weight}kg × {allTimePR.reps}
                   </div>
                 ) : (
                   <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No PR recorded</div>
@@ -411,8 +429,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
             </Grid>
 
             {/* Sets Table */}
-            <div className="p-6 pt-4 space-y-3">
-              <div className={cn("grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 uppercase text-zinc-500 px-2 text-center", TYPOGRAPHY.eyebrow)}>
+            <div className="p-3 sm:p-6 pt-3 sm:pt-4 space-y-3">
+              <div className={cn("grid grid-cols-[24px_1fr_1fr_46px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1.5 sm:gap-3 uppercase text-zinc-500 px-1 sm:px-2 text-center", TYPOGRAPHY.eyebrow)}>
                 <span>Set</span>
                 <span>KG</span>
                 <span>Reps</span>
@@ -420,7 +438,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                 <span>Del</span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {setsForEx.map((s: SetLog, si: number) => {
                   const parsedW = parseStrictWeight(s.weight, 0, 5000);
                   const parsedR = parseStrictReps(s.reps, 0, 1000);
@@ -433,13 +451,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                       key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
                         // Deliberate 500ms set-completion celebration flash (differs from canonical 200ms TRANSITION.colors to provide clear visual acknowledgement)
-                        "space-y-1.5 px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
+                        "space-y-1.5 px-1 sm:px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
                         RADIUS.card,
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
                       )}
                     >
-                      <div className="grid grid-cols-[40px_1fr_1fr_60px_45px] gap-3 items-center">
-                        <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 text-center")}>{si + 1}</span>
+                      <div className="grid grid-cols-[24px_1fr_1fr_46px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1.5 sm:gap-3 items-center">
+                        <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 text-center tabular-nums")}>{si + 1}</span>
                         {/* specialized table/matrix input for active workout set weight */}
                         <Input
                           type="number"
@@ -451,7 +469,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                           onChange={(e) => updateSet(ex.id, si, 'weight', e.target.value)}
                           aria-label={`Set ${si + 1} weight`}
                           className={cn(
-                            "text-center font-mono",
+                            "text-center font-mono tabular-nums px-0.5 sm:px-3",
                             isExtremeWeight && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
                           )}
                         />
@@ -466,7 +484,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                           onChange={(e) => updateSet(ex.id, si, 'reps', e.target.value)}
                           aria-label={`Set ${si + 1} reps`}
                           className={cn(
-                            "text-center font-mono",
+                            "text-center font-mono tabular-nums px-0.5 sm:px-3",
                             isExtremeReps && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
                           )}
                         />
@@ -508,7 +526,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                       </div>
 
                       {isExtreme && (
-                        <div className={cn("mx-10 p-2 bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-amber-400", RADIUS.button, TYPOGRAPHY.metadata)}>
+                        <div className={cn("mx-1 sm:mx-10 p-2 bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-amber-400", RADIUS.button, TYPOGRAPHY.metadata)}>
                           <span className="shrink-0 font-bold">⚠️ UNUSUAL PARAMETER:</span>
                           <span>{isExtremeWeight ? 'Weight exceeds 500kg.' : ''} {isExtremeReps ? 'Reps exceed 100.' : ''} Double-check spelling!</span>
                         </div>
@@ -527,7 +545,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                   haptics.medium();
                   addSet(ex.id);
                 }}
-                className="py-2 border-dashed font-mono text-xs"
+                className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[36px] sm:min-w-0 py-2 border-dashed font-mono text-xs")}
               >
                 Add Additional Set
               </Button>
@@ -535,8 +553,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
 
             {/* Coach Note (Collapsed) */}
             {ex.note && (
-              <div className={cn("px-6 pb-6 pt-2 border-t", BORDER.subtle)}>
-                <div className={cn("p-4 leading-relaxed border", SURFACE.recessed, BORDER.subtle, RADIUS.card, TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
+              <div className={cn("px-4 sm:px-6 pb-4 sm:pb-6 pt-2 border-t", BORDER.subtle)}>
+                <div className={cn("p-3 sm:p-4 leading-relaxed border", SURFACE.recessed, BORDER.subtle, RADIUS.card, TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
                   <span className={cn(TYPOGRAPHY.micro, "text-zinc-700 block mb-2")}>Coach's Field Notes</span>
                   {ex.note}
                 </div>
@@ -1164,12 +1182,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             label="Duration"
             value={Math.floor(finishedDuration / 60)}
             unit="min"
-            accent="blue"
+            accent="zinc"
+            disableAnimation
           />
           <StatCard
             label="Sets Done"
             value={`${finishedSummary ? finishedSummary.completedSets : completedLiveSets}/${finishedSummary ? finishedSummary.programmedSets : programmedLiveSets}`}
-            accent="orange"
+            accent="zinc"
+            disableAnimation
           />
           <div className="col-span-2">
             <StatCard
@@ -1178,6 +1198,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
               formatValue={formatCompactWeight}
               unit="kg"
               accent="emerald"
+              disableAnimation
             />
           </div>
 
@@ -1238,16 +1259,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     );
   }
 
-  const allExercisesDone = activeWorkout.exercises.every(ex =>
-    (sessionSets[ex.exerciseDefinitionId] || []).slice(0, ex.sets).every(s => s.done)
-  );
+  const allExercisesDone =
+    activeWorkout.exercises.length > 0 &&
+    activeWorkout.exercises.every(ex => {
+      const sets = (sessionSets[ex.exerciseDefinitionId] || []).slice(0, ex.sets);
+      return sets.length > 0 && sets.every(s => s.done);
+    });
 
   return (
     <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
       <header 
         className={cn(
-          "sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b -mx-4 px-4 pb-6 mb-6 session-sticky-header",
+          "sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-4 sm:py-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b -mx-4 px-4 pb-4 sm:pb-6 mb-4 sm:mb-6 session-sticky-header",
           TRANSITION.colors,
           BORDER.subtle,
           SURFACE.canvasHeader
@@ -1256,7 +1280,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Button
             variant="ghost"
             size="icon"
@@ -1264,14 +1288,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             icon={<ChevronLeft size={20} />}
             aria-label="Exit session"
             title="Exit session"
+            className="shrink-0"
           />
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0">
             <Badge
               label={activeWorkout.badge}
               color={WORKOUT_COLORS[activeWorkout.type]}
               variant="subtle"
             />
-            <h2 className={cn(TYPOGRAPHY.titlePage, "text-2xl sm:text-3xl")}>{activeWorkout.name}</h2>
+            <h2 className={cn(TYPOGRAPHY.titlePage, "text-2xl sm:text-3xl break-words")}>{activeWorkout.name}</h2>
           </div>
         </div>
 
@@ -1295,8 +1320,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             loading={isSubmitting}
             disabled={isSubmitting || isFinishing}
             onClick={finishSession}
+            aria-label={isSubmitting ? 'Syncing session' : 'Finish Session'}
             className={cn(
-              "px-3 sm:px-4",
+              CONTROL_HEIGHT.touchTarget,
+              "px-3 sm:px-4 sm:min-h-[40px]",
               allExercisesDone && "font-extrabold ring-1 ring-white/30"
             )}
           >
@@ -1305,7 +1332,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             ) : (
               <>
                 <span className="hidden sm:inline">Finish</span>
-                <span className="sm:hidden">✓</span>
+                <span className="sm:hidden" aria-hidden="true">✓</span>
               </>
             )}
           </Button>

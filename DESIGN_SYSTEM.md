@@ -169,6 +169,7 @@ Do not add another spacing or radius scale without proving the current system ca
 ### 5.3 Radius and elevation
 
 - Reuse `RADIUS` role tokens rather than inventing arbitrary rounded values.
+- **Zero-pill badge & control discipline:** All `Badge` components, metadata chips, and interactive controls use `RADIUS.badge` (`rounded-lg`) or `RADIUS.button` (`rounded-xl`). Reserve `RADIUS.pill` (`rounded-full`) exclusively for truly circular indicators (status dots, circular markers, avatar shapes) and the preserved active mobile bottom-navigation item treatment (`#mobile-nav-item-*` in `Layout.tsx`).
 - **Card surface discipline:** Standard cards (`variant="standard"`) do not receive default box shadows (`SHADOW.elevation`). Surfaces are separated by border (`BORDER.standard`) and background (`SURFACE.default` / `SURFACE.subtle`).
 - Keep elevation levels limited. Elevation (`SHADOW.elevation`) is reserved for genuinely elevated surfaces (`variant="elevated"`, `Dialog`).
 - Use `SHADOW.accentGlowStyle` / `accentVariant="glow"` only for explicitly selected, active, or achievement states, consistent with its source comment.

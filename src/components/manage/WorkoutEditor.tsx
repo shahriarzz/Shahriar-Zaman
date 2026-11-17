@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Plus,
+  Minus,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -33,7 +34,9 @@ import {
   RADIUS,
   TRANSITION,
   MOTION_CONFIG,
-  EDITOR_HEADER
+  EDITOR_HEADER,
+  CONTROL_HEIGHT,
+  FOCUS
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -463,6 +466,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
               const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
               const exId = ex.exerciseDefinitionId;
               const isExpanded = expandedExIds.has(exId);
+              const exPanelId = `workout-ex-panel-${exId}-${index}`;
               const isFirst = index === 0;
               const isLast = index === workout.exercises.length - 1;
               const isPriority = (ex.tags || []).includes('priority');
@@ -477,20 +481,26 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     RADIUS.card,
                     "border overflow-hidden",
                     TRANSITION.interactive,
-                    isExpanded ? cn(BORDER.interactive, SURFACE.subtle, "shadow-lg") : BORDER.hover
+                    isExpanded ? cn(BORDER.interactive, SURFACE.subtle) : BORDER.hover
                   )}
                 >
-                  {/* COLLAPSED HEADER (SessionView Pattern) */}
-                  <div
-                    onClick={() => toggleExpandExercise(exId)}
-                    className={cn(
-                      "p-4 cursor-pointer hover:bg-zinc-800/20 flex items-center justify-between gap-3 select-none",
-                      TRANSITION.colors
-                    )}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
+                  {/* COLLAPSED HEADER: native summary button + sibling reorder & expand buttons */}
+                  <div className="p-3 sm:p-4 flex items-center justify-between gap-2 select-none">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandExercise(exId)}
+                      aria-expanded={isExpanded}
+                      aria-controls={exPanelId}
+                      className={cn(
+                        "flex-1 min-w-0 text-left flex items-center gap-3 p-1 -m-1 hover:bg-zinc-800/20",
+                        CONTROL_HEIGHT.touchTarget,
+                        RADIUS.button,
+                        TRANSITION.colors,
+                        FOCUS.visible
+                      )}
+                    >
                       {/* Exercise Index Badge */}
-                      <div className={cn("w-7 h-7 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0 border", RADIUS.badge, SURFACE.recessed, BORDER.standard)}>
+                      <div className={cn("w-7 h-7 flex items-center justify-center font-mono text-xs font-bold text-zinc-400 shrink-0 border tabular-nums", RADIUS.badge, SURFACE.recessed, BORDER.standard)}>
                         {index + 1}
                       </div>
 
@@ -507,27 +517,24 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                           )}
                         </div>
 
-                        <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap")}>
+                        <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap tabular-nums")}>
                           <span>{resolvedEx.target}</span>
-                          <span>·</span>
+                          <span aria-hidden="true">·</span>
                           <span className="text-zinc-300 font-bold">{ex.sets} Sets</span>
-                          <span>·</span>
+                          <span aria-hidden="true">·</span>
                           <span className="text-zinc-300 font-bold">{ex.reps} Reps</span>
                           {ex.rest && (
                             <>
-                              <span>·</span>
+                              <span aria-hidden="true">·</span>
                               <span className="text-zinc-400">{ex.rest} rest</span>
                             </>
                           )}
                         </div>
                       </div>
-                    </div>
+                    </button>
 
-                    {/* Reorder and Expand Affordances */}
-                    <div
-                      className="flex items-center gap-1 shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    {/* Reorder and Expand Affordances (sibling interactive controls) */}
+                    <div className="flex items-center gap-1 shrink-0">
                       {/* Quick touch-friendly reorder controls */}
                       <Button
                         variant="ghost"
@@ -564,9 +571,10 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             className={cn("transition-transform duration-200 motion-reduce:transition-none", isExpanded && "rotate-180")}
                           />
                         }
-                        onClick={() => toggleExpandExercise(ex.id)}
+                        onClick={() => toggleExpandExercise(exId)}
                         aria-label={isExpanded ? "Collapse exercise details" : "Expand exercise details"}
                         aria-expanded={isExpanded}
+                        aria-controls={exPanelId}
                         className="text-zinc-500 hover:text-zinc-200"
                       />
                     </div>
@@ -576,6 +584,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   <AnimatePresence initial={false}>
                     {isExpanded && (
                       <motion.div
+                        id={exPanelId}
                         initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                         animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
                         exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
@@ -590,22 +599,20 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                               <Button
                                 variant="outline"
                                 size="icon"
+                                icon={<Minus size={14} />}
                                 aria-label="Decrease sets"
                                 onClick={() => handleUpdateExerciseField(ex.id, 'sets', Math.max(1, ex.sets - 1))}
-                              >
-                                -
-                              </Button>
+                              />
                               <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-xs text-white")}>
                                 {ex.sets}
                               </div>
                               <Button
                                 variant="outline"
                                 size="icon"
+                                icon={<Plus size={14} />}
                                 aria-label="Increase sets"
                                 onClick={() => handleUpdateExerciseField(ex.id, 'sets', ex.sets + 1)}
-                              >
-                                +
-                              </Button>
+                              />
                             </div>
                           </div>
 
@@ -639,21 +646,43 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
                         {/* Priority / Tag Toggles & Deep Editor Link */}
                         <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t", BORDER.subtle)}>
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              label={isPriority ? '★ Priority Item' : '+ Mark Priority'}
-                              color={isPriority ? 'orange' : 'zinc'}
-                              variant={isPriority ? 'subtle' : 'outline'}
-                              size="sm"
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              aria-pressed={isPriority}
                               onClick={() => handleTogglePriorityTag(ex.id)}
-                            />
-                            <Badge
-                              label={isDaily ? '✓ Daily High-Frequency' : '+ Mark Daily'}
-                              color={isDaily ? 'amber' : 'zinc'}
-                              variant={isDaily ? 'subtle' : 'outline'}
-                              size="sm"
+                              className={cn(
+                                CONTROL_HEIGHT.touchTarget,
+                                "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
+                                TYPOGRAPHY.badgeSm,
+                                RADIUS.badge,
+                                TRANSITION.colors,
+                                FOCUS.visible,
+                                isPriority
+                                  ? "bg-orange-500/15 border-orange-500/35 text-orange-400"
+                                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                              )}
+                            >
+                              {isPriority ? '★ Priority Item' : '+ Mark Priority'}
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={isDaily}
                               onClick={() => handleToggleDailyTag(ex.id)}
-                            />
+                              className={cn(
+                                CONTROL_HEIGHT.touchTarget,
+                                "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
+                                TYPOGRAPHY.badgeSm,
+                                RADIUS.badge,
+                                TRANSITION.colors,
+                                FOCUS.visible,
+                                isDaily
+                                  ? "bg-amber-500/15 border-amber-500/35 text-amber-400"
+                                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                              )}
+                            >
+                              {isDaily ? 'Daily High-Frequency' : '+ Mark Daily'}
+                            </button>
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -689,7 +718,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
       {/* ADD EXERCISE MODAL / DRAWER */}
       {isAddingExercise && (
-        <Card variant="standard" surface="recessed" accent="orange" padding="standard" className="bg-zinc-950 space-y-4">
+        <Card variant="standard" surface="recessed" accent="orange" padding="standard" className="space-y-4">
           <div className={cn("flex items-center justify-between border-b pb-3", BORDER.standard)}>
             <h3 className={cn(TYPOGRAPHY.label, "text-white text-xs font-bold flex items-center gap-2")}>
               <Plus size={14} className="text-orange-500" />

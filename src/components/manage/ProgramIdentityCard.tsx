@@ -50,11 +50,14 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
   return (
     <Card variant="standard" padding="section">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className={cn(TYPOGRAPHY.titleSection, "text-white")}>
+        <div className="space-y-1.5 min-w-0">
+          <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>
+            Active Program
+          </span>
+          <h2 className={cn(TYPOGRAPHY.titleSection, "text-white break-words")}>
             {programName}
           </h2>
-          <p className={cn(TYPOGRAPHY.body, "text-zinc-400 text-sm")}>
+          <p className={cn(TYPOGRAPHY.body, "text-zinc-400 text-sm tabular-nums")}>
             Composition: <strong className="text-zinc-200">{activeCount} {activeCount === 1 ? 'workout' : 'workouts'}</strong> · <strong className="text-zinc-200">{restCount} rest {restCount === 1 ? 'day' : 'days'}</strong>
           </p>
         </div>

@@ -15,7 +15,8 @@ import {
   BORDER,
   RADIUS,
   TRANSITION,
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  CONTROL_HEIGHT
 } from './ui';
 
 interface MuscleBalanceRecoveryProps {
@@ -70,21 +71,21 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
       >
         <div>
           {/* Card Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
+                <h3 className={TYPOGRAPHY.cardTitle}>
                   Muscle Balance
                 </h3>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className={cn(TYPOGRAPHY.bodySecondary, "mt-1")}>
                 Multi-muscle attribution · {timeRangeLabel} · % of attributed WSE
               </p>
             </div>
 
             {/* Total WSE Tabular Summary */}
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
                 {totalAttributedWSE.toFixed(1)}
               </span>
@@ -94,8 +95,8 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
 
           {/* Transparent Attribution Coverage Banner (Unboxed, clean metadata) */}
           <div className={cn("p-2.5 mb-4 border", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-zinc-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 text-zinc-300 min-w-0">
                 <span className="text-zinc-400">Attribution Coverage:</span>
                 <span className="font-mono font-medium tabular-nums text-white">
                   {coverage.totalEligibleSets === 0
@@ -117,7 +118,8 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 }}
                 icon={<Info className="w-3.5 h-3.5" />}
                 aria-label="Toggle coverage breakdown details"
-                className="px-2 text-zinc-400 hover:text-white"
+                aria-expanded={showCoverageDetail}
+                className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0 px-2 text-zinc-400 hover:text-white")}
               >
                 {showCoverageDetail ? 'Hide' : 'Details'}
               </Button>
@@ -222,7 +224,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
               }}
               icon={showAllGroups ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               iconPosition="right"
-              className="text-xs text-zinc-400 hover:text-white"
+              className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0 text-xs text-zinc-400 hover:text-white")}
             >
               {showAllGroups ? 'Show Top 6' : `View All (15 Anatomical Groups)`}
             </Button>
@@ -241,20 +243,20 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
       >
         <div>
           {/* Card Header */}
-          <div className="flex items-start justify-between mb-2">
-            <div>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
+                <h3 className={TYPOGRAPHY.cardTitle}>
                   Workload & Recency
                 </h3>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Trailing 14-day exponential decay ($t_{'{1/2}'} = 2d$)
+              <p className={cn(TYPOGRAPHY.bodySecondary, "mt-1")}>
+                Trailing 14-day exponential decay (t½ = 2d)
               </p>
             </div>
 
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className={TYPOGRAPHY.label}>Window</span>
               <div className="text-xs font-mono text-zinc-400 tabular-nums">
                 14 Days
@@ -300,7 +302,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         </span>
 
                         {/* Residual Score with 2-decimal precision */}
-                        <span className="w-18 font-mono font-bold text-xs text-emerald-400 tabular-nums">
+                        <span className="min-w-[4.5rem] shrink-0 font-mono font-bold text-xs text-emerald-400 tabular-nums">
                           {item.residualStimulus.toFixed(2)} <span className={TYPOGRAPHY.unit}>res</span>
                         </span>
                       </div>

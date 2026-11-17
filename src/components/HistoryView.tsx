@@ -33,7 +33,9 @@ import {
   GAP,
   CHART_THEME,
   TRANSITION,
-  MOTION_CONFIG
+  MOTION_CONFIG,
+  CONTROL_HEIGHT,
+  FOCUS
 } from './ui';
 import { DeferredViewSection } from './DeferredViewSection';
 import { HistoryTabState } from '../types/tabViewState';
@@ -309,7 +311,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       {monthlySummaries.length > 0 && (
         <Section
           eyebrow="Month-End Summary Reports"
-          eyebrowColor="orange"
+          eyebrowColor="zinc"
           title="Monthly Training Analytics"
           action={
             activeMonthTab ? (
@@ -334,17 +336,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     key={summary.monthKey}
                     variant={isSelected ? 'selected' : 'interactive'}
                     surface={isSelected ? undefined : 'recessed'}
+                    aria-pressed={isSelected}
                     onClick={() => {
                       haptics.selection();
                       setActiveMonthTab(isSelected ? null : summary.monthKey);
                     }}
                     padding="standard"
-                    className="snap-center shrink-0 min-w-[200px] min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
+                    className="snap-start shrink-0 min-w-[172px] sm:min-w-[200px] min-h-[120px] sm:min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
                   >
                     <div
                       className={cn(
                         TYPOGRAPHY.eyebrow,
-                        "text-zinc-500 group-hover:text-amber-400",
+                        "tabular-nums",
+                        isSelected ? "text-orange-400" : "text-zinc-500 group-hover:text-zinc-300",
                         TRANSITION.colors
                       )}
                     >
@@ -352,7 +356,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     </div>
 
                     <div className="mt-1 min-h-[2.25rem] flex items-start">
-                      <div className="text-sm font-black uppercase tracking-wide leading-tight text-white break-words">
+                      <div className="text-sm font-bold uppercase tracking-wide leading-tight text-white break-words">
                         {summary.monthName}
                       </div>
                     </div>
@@ -362,7 +366,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         Completed Runs
                       </span>
 
-                      <span className="shrink-0 text-lg font-mono font-black tabular-nums text-white">
+                      <span className="shrink-0 text-lg font-mono font-bold tabular-nums text-white">
                         {summary.sessionsCount}
                       </span>
                     </div>
@@ -484,6 +488,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         label="Sessions"
                         value={currentSessions}
                         accent="zinc"
+                        disableAnimation
                         trend={sessionsTrendText}
                         trendDirection={sessionsTrendDir}
                         sublabel={sessionsSublabel}
@@ -493,14 +498,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         value={currentVolume}
                         unit="kg"
                         formatValue={formatCompactWeight}
-                        accent="emerald"
+                        accent="zinc"
+                        disableAnimation
                         trend={volumeTrendText}
                         trendDirection={volumeTrendDir}
                       />
                       <StatCard
                         label="PRs"
                         value={currentMonthPRs.length}
-                        accent="orange"
+                        accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
+                        disableAnimation
                         icon={Trophy}
                         trend={prTrendText}
                         trendDirection={prTrendDir}
@@ -511,7 +518,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         value={monthlyStrengthTrend.percentChange}
                         unit="%"
                         formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-                        accent="indigo"
+                        accent={
+                          strengthChange !== null
+                            ? strengthChange > 0
+                              ? 'emerald'
+                              : strengthChange < 0
+                              ? 'red'
+                              : 'zinc'
+                            : 'zinc'
+                        }
+                        disableAnimation
                         icon={Sparkles}
                         trend={strengthTrendText}
                         trendDirection={strengthTrendDir}
@@ -623,70 +639,91 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               const isExpanded = expandedDate === session.id;
               const sessionPRs = (index.weightPRs || []).filter(pr => pr.date === session.date);
 
+              const detailPanelId = `history-session-panel-${session.id || sIdx}`;
+
               return (
                 <Card
                   key={session.id ? `session-${session.id}-${sIdx}` : `session-${sIdx}`}
-                  variant={isExpanded ? "elevated" : "default"}
+                  variant="standard"
+                  surface={isExpanded ? "subtle" : undefined}
                   accent={isExpanded ? "orange" : undefined}
+                  accentVariant={isExpanded ? "left" : undefined}
                   padding="none"
                   className="overflow-hidden"
                 >
-                  {/* 1. Days list bar */}
-                    <div
+                  {/* 1. Days list bar: native expandable summary trigger + sibling actions */}
+                  <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <button
+                      type="button"
                       onClick={() => {
                         haptics.light();
                         setExpandedDate(isExpanded ? null : session.id);
                       }}
+                      aria-expanded={isExpanded}
+                      aria-controls={detailPanelId}
                       className={cn(
-                        "w-full text-left p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-800/30",
-                        TRANSITION.interactive
+                        "flex-1 min-w-0 text-left flex items-center justify-between gap-3 p-1.5 -m-1.5 hover:bg-zinc-800/30",
+                        CONTROL_HEIGHT.touchTarget,
+                        RADIUS.button,
+                        TRANSITION.colors,
+                        FOCUS.visible
                       )}
                     >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                        <span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold")}>
-                          {session.date}
-                        </span>
-                      </div>
-                      <h3 className={TYPOGRAPHY.titleSection}>
-                        {workout?.name || 'Custom Protocol'}
-                      </h3>
-                      <div className={cn(TYPOGRAPHY.metadata, "flex flex-wrap items-center gap-3 text-zinc-400 normal-case")}>
-                        <div className="flex items-center gap-1">
-                          <Clock size={13} className="text-zinc-500 shrink-0" /> {session.durationMinutes || 0} min
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold tabular-nums")}>
+                            {session.date}
+                          </span>
                         </div>
-                        <div>·</div>
-                        <div className="flex items-center gap-1">
-                          <Dumbbell size={13} className="text-zinc-500 shrink-0" /> {totalSets} sets
+                        <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white break-words")}>
+                          {workout?.name || 'Custom Protocol'}
+                        </h3>
+                        <div className={cn(TYPOGRAPHY.metadata, "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-zinc-400 normal-case tabular-nums")}>
+                          <div className="flex items-center gap-1">
+                            <Clock size={13} className="text-zinc-500 shrink-0" /> {session.durationMinutes || 0} min
+                          </div>
+                          <span aria-hidden="true">·</span>
+                          <div className="flex items-center gap-1">
+                            <Dumbbell size={13} className="text-zinc-500 shrink-0" /> {totalSets} sets
+                          </div>
+                          {vol > 0 && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <div>
+                                Volume: <span className="text-emerald-400 font-bold">{vol.toLocaleString()}kg</span>
+                              </div>
+                            </>
+                          )}
+                          {sessionPRs.length > 0 && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <div className="flex items-center gap-1 text-orange-400 font-bold">
+                                <Trophy size={12} className="shrink-0 text-orange-400" />
+                                <span>{sessionPRs.length} PR{sessionPRs.length > 1 ? 's' : ''}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {vol > 0 && (
-                          <>
-                            <div>·</div>
-                            <div>
-                              Volume: <span className="text-emerald-400 font-bold">{vol.toLocaleString()}kg</span>
-                            </div>
-                          </>
-                        )}
-                        {sessionPRs.length > 0 && (
-                          <>
-                            <div>·</div>
-                            <div className="flex items-center gap-1 text-orange-400 font-bold">
-                              <Trophy size={12} className="shrink-0 text-orange-400" />
-                              <span>{sessionPRs.length} PR{sessionPRs.length > 1 ? 's' : ''}</span>
-                            </div>
-                          </>
-                        )}
                       </div>
-                    </div>
 
-                    <div className={cn("flex items-center gap-3 self-stretch sm:self-auto justify-between border-t sm:border-t-0 pt-4 sm:pt-0", BORDER.subtle)}>
+                      <span
+                        aria-hidden="true"
+                        className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400 shrink-0", SURFACE.recessed, BORDER.standard)}
+                      >
+                        <ChevronRight 
+                          size={16} 
+                          className={cn(TRANSITION.transform, isExpanded && "rotate-90 text-orange-500")} 
+                        />
+                      </span>
+                    </button>
+
+                    <div className={cn("flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0", BORDER.subtle)}>
                       <Button
                         variant={editingLogId === session.id ? "primary" : "secondary"}
                         size="icon"
                         icon={<Edit2 size={14} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           setEditingLogId(session.id);
                           setEditSessionState(JSON.parse(JSON.stringify(session)));
                           setEditVerified(false);
@@ -700,8 +737,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         variant="ghost"
                         size="icon"
                         icon={<Trash2 size={14} />}
-                        onClick={async (e) => {
-                          e.stopPropagation();
+                        onClick={async () => {
                           const proceed = await confirm({
                             title: 'Purge Workout Log',
                             message: 'Are you sure you want to purge this workout log from history?',
@@ -716,13 +752,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         aria-label="Purge session"
                         className="hover:text-red-400"
                       />
-                      
-                      <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center text-zinc-400", SURFACE.recessed, BORDER.standard)}>
-                        <ChevronRight 
-                          size={16} 
-                          className={cn(TRANSITION.transform, isExpanded && "rotate-90 text-orange-500")} 
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -730,11 +759,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
+                      id={detailPanelId}
                       initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                       animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
                       exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
                       transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
-                      className={cn("border-t p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
+                      className={cn("border-t p-4 sm:p-6 space-y-4", BORDER.standard, SURFACE.recessed)}
                     >
                       {editingLogId === session.id && editSessionState ? (
                         <div className="space-y-6 text-zinc-300">
@@ -798,7 +828,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                     <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white")}>{exName}</h5>
                                   </div>
 
-                                  <div className={cn("grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
+                                  <div className={cn("grid grid-cols-[28px_1fr_1fr_44px] sm:grid-cols-[36px_1fr_1fr_44px] gap-2 sm:gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                                     <span className="text-center font-bold">Set</span>
                                     <span className="text-center font-bold">Weight (KG)</span>
                                     <span className="text-center font-bold">Reps</span>
@@ -813,8 +843,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                                       return (
                                         <div key={s.id ? `edit-set-${s.id}-${idx}` : `edit-set-${exId}-${idx}`} className="space-y-1.5">
-                                          <div className="grid grid-cols-[36px_1fr_1fr_36px] gap-2.5 items-center">
-                                            <span className="font-mono text-xs text-zinc-400 text-center font-bold">{idx + 1}</span>
+                                          <div className="grid grid-cols-[28px_1fr_1fr_44px] sm:grid-cols-[36px_1fr_1fr_44px] gap-2 sm:gap-2.5 items-center">
+                                            <span className="font-mono text-xs text-zinc-400 text-center font-bold tabular-nums">{idx + 1}</span>
                                             {/* specialized table/matrix input for historical set weight */}
                                             <Input
                                               type="number"
@@ -973,6 +1003,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                           const exKey = `${session.date}_${exId}`;
                           const isSelected = selectedExKey === exKey;
+                          const exPanelId = `history-ex-panel-${session.id || sIdx}-${exId}`;
 
                           // Canonical PR calculation directly from canonical index
                           const historyLogs = index.exerciseIndex.get(exId)?.sessions || [];
@@ -988,27 +1019,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               <button
                                 type="button"
                                 aria-expanded={isSelected}
+                                aria-controls={exPanelId}
                                 onClick={() => {
                                   haptics.selection();
                                   setSelectedExKey(isSelected ? null : exKey);
                                 }}
                                 className={cn(
                                   "w-full text-left p-4 pr-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-800/40 cursor-pointer relative",
+                                  CONTROL_HEIGHT.touchTarget,
                                   TRANSITION.colors,
+                                  FOCUS.visible,
                                   isSelected && "bg-zinc-800/30"
                                 )}
                               >
-                                <div className="space-y-1">
+                                <div className="space-y-1 min-w-0">
                                   <div className="flex items-center gap-2">
                                     <span 
                                       className="w-1.5 h-1.5 rounded-full shrink-0" 
                                       style={{ backgroundColor: exColor }} 
                                     />
-                                    <h4 className="font-bold text-zinc-200 text-sm tracking-wide">
+                                    <h4 className="font-bold text-zinc-200 text-sm tracking-wide break-words">
                                       {exerciseName}
                                     </h4>
                                   </div>
-                                  <div className={cn("flex flex-wrap items-center gap-2", TYPOGRAPHY.label, "text-zinc-400")}>
+                                  <div className={cn("flex flex-wrap items-center gap-2", TYPOGRAPHY.label, "text-zinc-400 tabular-nums")}>
                                     <span>{doneSets.length} sets logged</span>
                                     {isSessionPR && (
                                       <span className="text-orange-400 font-bold flex items-center gap-1">
@@ -1018,14 +1052,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 self-start sm:self-auto">
+                                <div className="flex items-center gap-4 self-start sm:self-auto shrink-0">
                                   {currentMaxWeight > 0 && (
-                                    <div className={cn("px-2.5 py-1 border text-zinc-300", SURFACE.recessed, BORDER.standard, RADIUS.button, TYPOGRAPHY.metadata)}>
+                                    <div className={cn("px-2.5 py-1 border text-zinc-300 tabular-nums", SURFACE.recessed, BORDER.standard, RADIUS.button, TYPOGRAPHY.metadata)}>
                                       Peak Today: <span className="text-white font-bold">{currentMaxWeight}kg</span>
                                     </div>
                                   )}
                                   <ChevronRight 
                                     size={14} 
+                                    aria-hidden="true"
                                     className={cn("text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2", TRANSITION.transform, isSelected && "rotate-90")} 
                                     style={isSelected ? { color: exColor } : undefined}
                                   />
@@ -1036,11 +1071,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               <AnimatePresence>
                                 {isSelected && (
                                   <motion.div
+                                    id={exPanelId}
                                     initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
                                     animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
                                     exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
                                     transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
-                                    className={cn("border-t p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
+                                    className={cn("border-t p-4 sm:p-5 space-y-4", BORDER.standard, SURFACE.recessed)}
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">

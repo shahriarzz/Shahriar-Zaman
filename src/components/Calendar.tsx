@@ -25,7 +25,6 @@ import { haptics } from '../utils/haptics';
 import { useCalendarGrid } from '../hooks/useCalendarGrid';
 import { cn } from '../lib/utils';
 import {
-  Section,
   SectionHeader,
   StatCard,
   EmptyState,
@@ -43,7 +42,6 @@ import {
   DURATION,
   MOTION_CONFIG,
   TRANSITION,
-  SHADOW,
   CONTROL_HEIGHT,
   FOCUS
 } from './ui';
@@ -136,29 +134,32 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
   const selectedDayVolume = selectedDateStr ? (index.volumeByDate[selectedDateStr] ?? 0) : 0;
 
   return (
-    <Stack spacing="xl" className="pt-4 pb-12">
+    <Stack spacing="md" className="pt-0 pb-6">
       <SectionHeader
         eyebrow="Schedule & Consistency"
-        eyebrowColor="emerald"
+        eyebrowColor="zinc"
         title="Calendar"
-        size="page"
+        size="section"
       />
 
-      <div className="flex flex-col lg:flex-row gap-8 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Calendar Grid Container */}
         <div className="flex-1 w-full min-w-0">
-        <Section
-          eyebrow="Timeline"
-          eyebrowColor="emerald"
-          title={`${format(currentMonth, 'MMMM')} ${format(currentMonth, 'yyyy')}`}
-          padding="standard"
-          className="p-3.5 sm:p-6 w-full min-w-0"
-          action={
-            <div className="flex gap-2 items-center">
+        <Card
+          variant="standard"
+          padding="none"
+          className="p-3 sm:p-6 w-full min-w-0"
+        >
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className={cn(TYPOGRAPHY.cardTitle, "min-w-0 truncate")}>
+              {format(currentMonth, 'MMMM')} {format(currentMonth, 'yyyy')}
+            </h3>
+            <div className="flex gap-1.5 sm:gap-2 items-center shrink-0">
               {!isSameMonthAsToday && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0")}
                   onClick={() => {
                     haptics.selection();
                     const today = new Date();
@@ -194,8 +195,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 title={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
               />
             </div>
-          }
-        >
+          </div>
           {/* Days Grid Responsive Container */}
           <div className="w-full">
             <div className="grid grid-cols-7 gap-1 sm:gap-1.5 pt-2 w-full [&>*]:min-w-0">
@@ -236,9 +236,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       RADIUS.card,
                       !isCurrentMonthDay && "opacity-20 pointer-events-none disabled:cursor-not-allowed",
                       isSelected
-                        ? cn("border-emerald-400/80 bg-zinc-800/90 ring-1 ring-emerald-400/50", SHADOW.emeraldSubtle)
+                        ? "border-emerald-400 bg-zinc-800/90 ring-1 ring-emerald-400/50"
                         : isToday
-                          ? cn("border-emerald-500/50 bg-emerald-500/10", SHADOW.emeraldInset)
+                          ? "border-emerald-500/60 bg-emerald-500/10"
                           : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
                     )}
                   >
@@ -252,7 +252,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         isSelected
                           ? (isToday ? "bg-zinc-800 text-emerald-400 font-black" : "bg-zinc-800 text-white font-bold")
                           : isToday
-                            ? cn("bg-emerald-500/20 text-emerald-400 font-black", SHADOW.emeraldDate)
+                            ? "bg-emerald-500/20 text-emerald-400 font-black"
                             : status
                               ? "text-zinc-200"
                               : "text-zinc-500"
@@ -303,7 +303,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
               </div>
             ))}
           </div>
-        </Section>
+        </Card>
       </div>
 
       {/* Selected Day Detail Panel */}
@@ -317,7 +317,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
             transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.calendarPanel.transition}
             className="w-full lg:w-96 flex flex-col"
           >
-            <Card variant="elevated" padding="none" className="overflow-hidden h-full flex flex-col">
+            <Card variant="standard" surface="subtle" padding="none" className="overflow-hidden h-full flex flex-col">
               {/* Header */}
               <div className={cn("p-5 border-b", BORDER.standard, SURFACE.subtle)}>
                 <div className="flex justify-between items-start mb-2">
@@ -400,7 +400,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       </span>
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className={cn("border divide-y divide-zinc-800/60 overflow-hidden", RADIUS.card, BORDER.subtle, SURFACE.recessed)}>
                       {Object.entries(selectedLog.sets || {}).map(([exId, sets]) => {
                         const exercise = exerciseMap.get(exId);
                         const meta = resolveExerciseMeta(exId);
@@ -410,14 +410,12 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         if (setsList.length === 0) return null;
 
                         return (
-                          <Card
+                          <div
                             key={exId}
-                            variant="standard"
-                            padding="compact"
-                            className="space-y-2"
+                            className="p-3 space-y-2"
                           >
                             <div className="flex justify-between items-start gap-2">
-                              <div>
+                              <div className="min-w-0">
                                 <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white leading-tight break-words")}>
                                   {meta?.name || exercise?.name || 'Custom Exercise'}
                                 </h5>
@@ -435,7 +433,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                             </div>
 
                             {/* Set Pills */}
-                            <div className="flex gap-1.5 flex-wrap pt-1">
+                            <div className="flex gap-1.5 flex-wrap pt-0.5">
                               {setsList.map((s, idx) => (
                                 <div
                                   key={`set-${exId}-${idx}`}
@@ -456,7 +454,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                                 </div>
                               ))}
                             </div>
-                          </Card>
+                          </div>
                         );
                       })}
                     </div>
@@ -644,22 +642,24 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                     <span className={cn(TYPOGRAPHY.label, "block")}>
                       Session Summary
                     </span>
-                    <Grid cols={3} gap="sm">
+                    <Grid cols={1} colsSm={3} gap="sm">
                       <StatCard
                         label="Total Volume"
                         value={selectedDayVolume}
                         formatValue={formatCompactWeight}
                         unit="kg"
-                        accent="emerald"
+                        accent="zinc"
                         icon={TrendingUp}
+                        disableAnimation
                         size="standard"
                       />
                       <StatCard
                         label="Duration"
                         value={selectedLog.durationMinutes ?? 0}
                         unit="min"
-                        accent="amber"
+                        accent="zinc"
                         icon={Clock}
+                        disableAnimation
                         size="standard"
                       />
                       <StatCard
@@ -667,6 +667,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         value={`${selectedDoneSets}/${selectedPlannedSets || selectedDoneSets}`}
                         accent="zinc"
                         icon={CheckCircle2}
+                        disableAnimation
                         size="standard"
                       />
                     </Grid>
@@ -682,7 +683,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                           haptics.selection();
                           onNavigateToHistory(selectedLog.id || selectedDateStr || undefined);
                         }}
-                        className="mt-2"
+                        className={cn("mt-2", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
                       >
                         View Full Log In History
                       </Button>

@@ -11,6 +11,8 @@ import {
   Stack,
   SegmentedControl,
   TYPOGRAPHY,
+  RADIUS,
+  CONTROL_HEIGHT,
   FOCUS,
   TRANSITION
 } from '../ui';
@@ -95,7 +97,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
           icon={<Plus size={14} />}
           onClick={onCreateNewExercise}
         >
-          + New Exercise
+          New Exercise
         </Button>
       </div>
 
@@ -151,14 +153,17 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                   type="button"
                   onClick={() => onOpenExerciseEditor(item as Exercise)}
                   className={cn(
-                    "text-left space-y-1.5 min-w-0 flex-1 p-1 -m-1 rounded-lg",
+                    "text-left space-y-1.5 min-w-0 flex-1 p-1 -m-1",
+                    CONTROL_HEIGHT.touchTarget,
+                    "sm:min-h-0",
+                    RADIUS.badge,
                     FOCUS.visible,
                     TRANSITION.colors
                   )}
                   aria-label={`Edit ${item.name} definition`}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("font-bold text-white text-sm group-hover:text-orange-400", TRANSITION.colors)}>
+                    <span className={cn("font-bold text-white text-sm break-words group-hover:text-orange-400", TRANSITION.colors)}>
                       {item.name}
                     </span>
                     {hasPriority && (
@@ -178,10 +183,10 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                     )}
                   </div>
 
-                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap")}>
+                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap break-words")}>
                     <span className="text-zinc-400 font-bold">{item.target}</span>
-                    <span>·</span>
-                    <span>
+                    <span aria-hidden="true">·</span>
+                    <span className="min-w-0 break-words">
                       Used in: {item.usedInWorkouts.map(w => w.name).join(', ') || 'None'}
                     </span>
                   </div>

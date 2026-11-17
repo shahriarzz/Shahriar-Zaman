@@ -5,10 +5,12 @@ import { useConfirm } from '../../context/ConfirmContext';
 import { haptics } from '../../utils/haptics';
 import {
   Section,
-  Card,
   Button,
   Stack,
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  SURFACE,
+  BORDER,
+  RADIUS
 } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -66,15 +68,15 @@ export const AccountSection: React.FC = () => {
       padding="section"
     >
       <Stack spacing="md">
-        <Card variant="standard" padding="standard" className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-2">
-              <Cloud className="text-orange-500 w-4 h-4" />
+              <Cloud className="text-zinc-400 w-4 h-4 shrink-0" />
               <h3 className={cn(TYPOGRAPHY.label, "text-white text-xs font-bold flex items-center gap-2")}>
                 Cloud Synchronization
                 {user && (
                   <span className={cn(
-                    "w-2 h-2 rounded-full",
+                    "w-2 h-2 rounded-full shrink-0",
                     syncStatus === 'synced' && 'bg-emerald-500',
                     syncStatus === 'syncing' && 'bg-amber-500',
                     syncStatus === 'failed' && 'bg-red-500',
@@ -88,29 +90,29 @@ export const AccountSection: React.FC = () => {
             <div className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400")}>
               {user ? (
                 <div className="flex flex-col gap-1">
-                  <span>
-                    Signed in as <strong className="text-white font-mono">{user.email}</strong>
+                  <span className="break-words">
+                    Signed in as <strong className="text-white font-mono break-all">{user.email}</strong>
                   </span>
                   {syncStatus === 'syncing' && (
                     <span className={cn(TYPOGRAPHY.label, "text-amber-400")}>
-                      ⚡ Synchronizing with Firestore...
+                      Synchronizing with Firestore...
                     </span>
                   )}
                   {syncStatus === 'synced' && (
                     <span className={cn(TYPOGRAPHY.label, "text-emerald-400")}>
-                      ✓ Cloud synchronization complete. Data secure.
+                      Cloud synchronization complete. Data secure.
                     </span>
                   )}
                   {syncStatus === 'offline' && (
                     <span className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-col gap-0.5")}>
-                      <span>⚡ Operating offline (local-first storage active).</span>
+                      <span>Operating offline (local-first storage active).</span>
                       <span className="text-zinc-500 normal-case tracking-normal">Changes queued and preserved locally.</span>
                     </span>
                   )}
                   {syncStatus === 'failed' && (
                     <span className={cn(TYPOGRAPHY.label, "text-red-400 flex flex-col gap-0.5")}>
-                      <span>⚠ Sync mismatch / connection timeout.</span>
-                      {syncError && <span className="text-zinc-400 normal-case tracking-normal">{syncError}</span>}
+                      <span>Sync mismatch / connection timeout.</span>
+                      {syncError && <span className="text-zinc-400 normal-case tracking-normal break-words">{syncError}</span>}
                     </span>
                   )}
                   {syncStatus === 'idle' && (
@@ -149,25 +151,25 @@ export const AccountSection: React.FC = () => {
             )}
 
             {authError && (
-              <span className={cn(TYPOGRAPHY.caption, "text-red-400 uppercase tracking-tighter text-left md:text-right max-w-xs")}>
+              <span className={cn(TYPOGRAPHY.caption, "text-red-400 uppercase tracking-tighter text-left md:text-right max-w-xs break-words")}>
                 {authError}
               </span>
             )}
           </div>
-        </Card>
+        </div>
 
         {/* Embedded preview disclaimer */}
         {typeof window !== 'undefined' && window.self !== window.top && (
-          <Card variant="standard" surface="recessed" padding="compact">
-            <div className="flex items-start gap-2.5">
-              <span className={cn(TYPOGRAPHY.label, "text-orange-400 shrink-0 mt-0.5")}>
-                💡 Web Preview Alert:
+          <div className={cn("p-3 border", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-2.5">
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 shrink-0 mt-0.5")}>
+                Web Preview Notice:
               </span>
               <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Google Sign-In popups are restricted inside embedded iframes. Open the app in a <strong className="text-zinc-200">New Tab</strong> to authenticate and synchronize seamlessly.
               </p>
             </div>
-          </Card>
+          </div>
         )}
       </Stack>
     </Section>

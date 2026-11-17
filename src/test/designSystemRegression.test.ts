@@ -25,16 +25,20 @@ import { cn } from '../lib/utils';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
+import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Dialog, DialogHeader } from '../components/ui/Dialog';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
+import { AchievementCard } from '../components/ui/AchievementCard';
 import { ListRow } from '../components/ui/ListRow';
 import { Layout } from '../components/Layout';
 import { Calendar } from '../components/Calendar';
-import { SessionView } from '../components/SessionView';
+import { SessionView, ExerciseCard } from '../components/SessionView';
 import { HistoryView } from '../components/HistoryView';
+import { WorkoutEditor } from '../components/manage/WorkoutEditor';
+import { ExerciseEditor } from '../components/manage/ExerciseEditor';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
 import { ConfirmContext } from '../context/ConfirmContext';
@@ -225,6 +229,27 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(RADIUS.card).toBe('rounded-2xl');
       expect(RADIUS.panel).toBe('rounded-3xl');
       expect(RADIUS.pill).toBe('rounded-full');
+
+      const badgeSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Badge.tsx'), 'utf8');
+      expect(badgeSrc).toContain('RADIUS.badge');
+      expect(badgeSrc).not.toContain('RADIUS.pill');
+
+      const tmpContainer = document.createElement('div');
+      document.body.appendChild(tmpContainer);
+      const tmpRoot = createRoot(tmpContainer);
+      act(() => {
+        tmpRoot.render(React.createElement(Badge, { label: 'PUSH FOCUS', color: 'orange', dot: true }));
+      });
+      const badgeEl = tmpContainer.firstElementChild as HTMLElement;
+      expect(badgeEl).toBeTruthy();
+      expect(badgeEl.classList.contains('rounded-lg')).toBe(true);
+      expect(badgeEl.classList.contains('rounded-full')).toBe(false);
+      const dotEl = badgeEl.querySelector('span');
+      expect(dotEl?.classList.contains('rounded-full')).toBe(true);
+      act(() => {
+        tmpRoot.unmount();
+      });
+      tmpContainer.remove();
     });
 
     it('verifies SPACING scale has canonical progression without obsolete aliases', () => {
@@ -1420,9 +1445,9 @@ describe('Design System Consolidation & Token Contracts', () => {
       const cardSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Card.tsx'), 'utf8');
       expect(cardSrc).toContain('SHADOW.accentGlowStyle');
 
-      // 3. Verified usage in AnalyticsView.tsx
+      // 3. Verified non-glow in AnalyticsView.tsx (ordinary heatmap cells do not emit decorative glow)
       const analyticsSrc = fs.readFileSync(path.join(rootDir, 'src/components/AnalyticsView.tsx'), 'utf8');
-      expect(analyticsSrc).toContain('SHADOW.accentGlowStyle(SEMANTIC_COLORS.emerald)');
+      expect(analyticsSrc).not.toContain('SHADOW.accentGlowStyle');
 
       // 4. Rendered behavior test on Card: inline style matches the helper output exactly
       act(() => {
@@ -2289,6 +2314,433 @@ describe('Design System Consolidation & Token Contracts', () => {
           }),
         })
       );
+    });
+  });
+
+  describe('16. Refined Screen Accessibility, Hierarchy & Non-Nested Interactive Contracts', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('verifies SessionView Finish button accessible name, native expandable ExerciseCard headers, sibling Coach Tip button, and 44px controls', async () => {
+      const mockWorkout: Workout = {
+        id: 'push-a',
+        name: 'Push Protocol Alpha',
+        badge: 'PUSH A',
+        cycleDay: 1,
+        type: 'push',
+        exercises: [
+          { sets: 2, reps: '5-8', exerciseDefinitionId: 'bench-press' },
+          { sets: 2, reps: '8-10', exerciseDefinitionId: 'incline-db-press' },
+        ],
+      };
+
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const mockIndex = buildFitnessIndex([], defsMap);
+
+      await act(async () => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            {
+              value: {
+                workouts: [mockWorkout],
+                exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+                appState: { cycleStart: '2026-10-25' },
+                addLog: vi.fn(),
+                updateCycleStart: vi.fn(),
+                activeSession: null,
+                startActiveSession: vi.fn(),
+                updateActiveSessionSets: vi.fn(),
+                clearActiveSession: vi.fn(),
+                user: null,
+              } as any,
+            },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              {
+                value: {
+                  index: mockIndex,
+                  getLatestForExercise: () => null,
+                  getWeightPRForExercise: () => null,
+                  getE1RMPRForExercise: () => null,
+                  getHistoryForExercise: () => [],
+                } as any,
+              },
+              React.createElement(
+                ConfirmContext.Provider,
+                { value: { confirm: vi.fn().mockResolvedValue(true) } as any },
+                React.createElement(SessionView, { workoutId: 'push-a', onExit: vi.fn() })
+              )
+            )
+          )
+        );
+      });
+
+      // 1. Finish button exposes explicit accessible name and enforces 44px minimum hit area
+      const finishBtn = container.querySelector('button[aria-label="Finish Session"]') as HTMLButtonElement;
+      expect(finishBtn).toBeTruthy();
+      expect(finishBtn.classList.contains('min-h-[44px]')).toBe(true);
+      expect(finishBtn.classList.contains('min-w-[44px]')).toBe(true);
+
+      // 2. Expandable exercise headers are native <button type="button"> elements with aria-expanded & aria-controls
+      const expandButtons = Array.from(
+        container.querySelectorAll('button[aria-expanded][aria-controls^="exercise-panel-"]')
+      ) as HTMLButtonElement[];
+      expect(expandButtons.length).toBe(2);
+
+      // First exercise auto-expanded; second collapsed
+      const firstToggle = expandButtons[0];
+      const secondToggle = expandButtons[1];
+      expect(firstToggle.getAttribute('aria-expanded')).toBe('true');
+      expect(secondToggle.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector(`#${firstToggle.getAttribute('aria-controls')}`)).toBeTruthy();
+      expect(container.querySelector(`#${secondToggle.getAttribute('aria-controls')}`)).toBeNull();
+
+      // Clicking second toggle expands it and connects aria-controls to mounted panel
+      await act(async () => {
+        secondToggle.click();
+      });
+      expect(secondToggle.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector(`#${secondToggle.getAttribute('aria-controls')}`)).toBeTruthy();
+
+      // 3. Coach tip button is a sibling control (never nested inside expandable button) and is >= 44px
+      const coachTipButtons = Array.from(
+        container.querySelectorAll('button[aria-label="Get Coach tip"]')
+      ) as HTMLButtonElement[];
+      expect(coachTipButtons.length).toBe(2);
+      coachTipButtons.forEach((btn) => {
+        expect(btn.closest('button[aria-expanded]')).toBeNull();
+        expect(btn.classList.contains('min-h-[44px]')).toBe(true);
+        expect(btn.classList.contains('min-w-[44px]')).toBe(true);
+      });
+      expandButtons.forEach((toggleBtn) => {
+        expect(toggleBtn.querySelector('button')).toBeNull();
+        expect(toggleBtn.classList.contains('min-h-[44px]')).toBe(true);
+      });
+
+      // 4. Set completion & delete buttons enforce 44x44px hit targets
+      const setDoneBtn = container.querySelector('button[aria-label="Mark set complete"]') as HTMLButtonElement;
+      const setDelBtn = container.querySelector('button[aria-label="Delete this set"]') as HTMLButtonElement;
+      expect(setDoneBtn?.classList.contains('min-h-[44px]')).toBe(true);
+      expect(setDoneBtn?.classList.contains('min-w-[44px]')).toBe(true);
+      expect(setDelBtn?.classList.contains('min-h-[44px]')).toBe(true);
+      expect(setDelBtn?.classList.contains('min-w-[44px]')).toBe(true);
+    });
+
+    it('verifies HistoryView native expandable rows, non-nested Edit/Purge buttons, flat card surface, and subsection title', async () => {
+      const mockWorkout: Workout = {
+        id: 'push-a',
+        name: 'Push Protocol Alpha',
+        badge: 'PUSH A',
+        cycleDay: 1,
+        type: 'push',
+        exercises: [{ sets: 1, reps: '8', exerciseDefinitionId: 'bench-press' }],
+      };
+
+      const mockHistoricalLog: SessionLog = {
+        id: 'history-row-1',
+        date: '2026-10-25',
+        workoutId: 'push-a',
+        complete: true,
+        durationMinutes: 45,
+        sets: {
+          'bench-press': [{ id: 'h-s1', reps: '8', weight: '80', done: true }],
+        },
+      };
+
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const historyIndex = buildFitnessIndex([mockHistoricalLog], defsMap);
+
+      await act(async () => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            {
+              value: {
+                logs: { 'history-row-1': mockHistoricalLog },
+                workouts: [mockWorkout],
+                exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+                appState: { cycleStart: '2026-10-25' },
+                addLog: vi.fn().mockResolvedValue(undefined),
+                deleteLog: vi.fn().mockResolvedValue(undefined),
+                updateCycleStart: vi.fn(),
+                activeSession: null,
+                startActiveSession: vi.fn(),
+                updateActiveSessionSets: vi.fn(),
+                clearActiveSession: vi.fn(),
+                user: null,
+              } as any,
+            },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              {
+                value: {
+                  sortedLogs: [mockHistoricalLog],
+                  workoutMap: new Map([[mockWorkout.id, mockWorkout]]),
+                  index: historyIndex,
+                  prEvents: [],
+                  getStrengthTrendForRange: () => [],
+                  getVolumeForRange: () => [],
+                } as any,
+              },
+              React.createElement(
+                ConfirmContext.Provider,
+                { value: { confirm: vi.fn().mockResolvedValue(true) } as any },
+                React.createElement(HistoryView, { initialDate: '2026-10-25' })
+              )
+            )
+          )
+        );
+      });
+
+      const toggleBtn = container.querySelector(
+        'button[aria-expanded][aria-controls^="history-session-panel-"]'
+      ) as HTMLButtonElement;
+      expect(toggleBtn).toBeTruthy();
+      expect(toggleBtn.tagName).toBe('BUTTON');
+      expect(toggleBtn.querySelector('button')).toBeNull();
+      expect(toggleBtn.classList.contains('min-h-[44px]')).toBe(true);
+
+      const editBtn = container.querySelector('button[aria-label="Edit session logs"]') as HTMLButtonElement;
+      const purgeBtn = container.querySelector('button[aria-label="Purge session"]') as HTMLButtonElement;
+      expect(editBtn).toBeTruthy();
+      expect(purgeBtn).toBeTruthy();
+      expect(editBtn.closest('button[aria-expanded]')).toBeNull();
+      expect(purgeBtn.closest('button[aria-expanded]')).toBeNull();
+      expect(editBtn.classList.contains('min-h-[44px]')).toBe(true);
+      expect(purgeBtn.classList.contains('min-h-[44px]')).toBe(true);
+
+      // Repeated session heading uses TYPOGRAPHY.titleSubsection (text-lg), not titleSection (text-2xl)
+      const sessionHeading = toggleBtn.querySelector('h3');
+      expect(sessionHeading?.className).toContain('text-lg');
+      expect(sessionHeading?.className).not.toContain('text-2xl');
+
+      // Card surface remains flat (no shadow-md elevation)
+      const cardWrapper = toggleBtn.closest('[class*="rounded-2xl"]') as HTMLElement;
+      expect(cardWrapper?.className).not.toContain(SHADOW.elevation);
+
+      // Toggle collapses and re-expands panel with matching aria-controls ID (initialDate auto-expands)
+      const panelId = toggleBtn.getAttribute('aria-controls')!;
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector(`#${panelId}`)).toBeTruthy();
+      await act(async () => {
+        toggleBtn.click();
+      });
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+      await act(async () => {
+        toggleBtn.click();
+      });
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector(`#${panelId}`)).toBeTruthy();
+    });
+
+    it('verifies Calendar embedded heading hierarchy uses section-level sizing and neutral eyebrow', () => {
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      const mockIndex = buildFitnessIndex([], defsMap);
+
+      act(() => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            { value: { workouts: [] } as any },
+            React.createElement(
+              FitnessDerivedContext.Provider,
+              {
+                value: {
+                  index: mockIndex,
+                  workoutMap: new Map(),
+                  coreWorkoutByCycleDayMap: new Map(),
+                  getCycleDayForDate: () => 1,
+                  resolveExerciseMeta: () => null,
+                } as any,
+              },
+              React.createElement(Calendar, null)
+            )
+          )
+        );
+      });
+
+      const heading = container.querySelector('h2');
+      expect(heading?.textContent).toBe('Calendar');
+      expect(heading?.className).toContain('text-2xl');
+      expect(heading?.className).not.toContain('text-3xl');
+      expect(container.textContent).toContain('Schedule');
+    });
+
+    it('verifies WorkoutEditor and ExerciseEditor expose accessible native toggle buttons with aria-pressed and non-nested headers', () => {
+      const mockWorkout: Workout = {
+        id: 'push-a',
+        name: 'Push Protocol Alpha',
+        badge: 'PUSH A',
+        cycleDay: 1,
+        type: 'push',
+        exercises: [
+          {
+            id: 'we-1',
+            exerciseDefinitionId: 'bench-press',
+            sets: 3,
+            reps: '5-8',
+            rest: '120s',
+            tags: ['priority'],
+          } as any,
+        ],
+      };
+
+      act(() => {
+        root.render(
+          React.createElement(
+            FitnessContext.Provider,
+            {
+              value: {
+                workouts: [mockWorkout],
+                exerciseDefinitions: INITIAL_EXERCISE_DEFINITIONS,
+                addExerciseDefinition: vi.fn(),
+              } as any,
+            },
+            React.createElement(
+              ConfirmContext.Provider,
+              { value: { confirm: vi.fn().mockResolvedValue(true) } as any },
+              React.createElement(WorkoutEditor, {
+                workout: mockWorkout,
+                allWorkouts: [mockWorkout],
+                onSaveWorkout: vi.fn(),
+                onOpenExerciseEditor: vi.fn(),
+                onBack: vi.fn(),
+              })
+            )
+          )
+        );
+      });
+
+      const expandHeaderBtn = container.querySelector('button[aria-expanded][aria-controls^="workout-ex-panel-"]') as HTMLButtonElement;
+      expect(expandHeaderBtn).toBeTruthy();
+      expect(expandHeaderBtn.querySelector('button')).toBeNull();
+      expect(expandHeaderBtn.classList.contains('min-h-[44px]')).toBe(true);
+
+      // Expand exercise details to inspect priority & daily toggle buttons
+      act(() => {
+        expandHeaderBtn.click();
+      });
+      const panelId = expandHeaderBtn.getAttribute('aria-controls')!;
+      const panel = container.querySelector(`#${panelId}`);
+      expect(panel).toBeTruthy();
+
+      const pressedButtons = Array.from(panel!.querySelectorAll('button[aria-pressed]')) as HTMLButtonElement[];
+      expect(pressedButtons.length).toBeGreaterThanOrEqual(2);
+      pressedButtons.forEach((btn) => {
+        expect(btn.classList.contains('min-h-[44px]')).toBe(true);
+      });
+
+      const decBtn = panel!.querySelector('button[aria-label="Decrease sets"]') as HTMLButtonElement;
+      const incBtn = panel!.querySelector('button[aria-label="Increase sets"]') as HTMLButtonElement;
+      expect(decBtn?.querySelector('svg')).toBeTruthy();
+      expect(incBtn?.querySelector('svg')).toBeTruthy();
+
+      // Render ExerciseEditor and confirm tag toggle buttons expose aria-pressed and touch targets
+      act(() => {
+        root.render(
+          React.createElement(ExerciseEditor, {
+            exercise: {
+              id: 'bench-press',
+              exerciseDefinitionId: 'bench-press',
+              name: 'Barbell Bench Press',
+              target: 'Chest',
+              sets: 3,
+              reps: '8',
+              tags: ['compound'],
+            },
+            workout: {
+              id: 'push-a',
+              name: 'Push Protocol Alpha',
+              badge: 'PUSH A',
+              cycleDay: 1,
+              type: 'push',
+              exercises: [],
+            } as any,
+            onSave: vi.fn(),
+            onCancel: vi.fn(),
+          })
+        );
+      });
+
+      const exDecBtn = container.querySelector('button[aria-label="Decrease sets"]') as HTMLButtonElement;
+      const exIncBtn = container.querySelector('button[aria-label="Increase sets"]') as HTMLButtonElement;
+      expect(exDecBtn?.querySelector('svg')).toBeTruthy();
+      expect(exIncBtn?.querySelector('svg')).toBeTruthy();
+
+      // Switch to Definition tab and confirm tag toggle buttons expose aria-pressed and touch targets
+      const defTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Exercise Definition')
+      ) as HTMLButtonElement;
+      act(() => {
+        defTabBtn?.click();
+      });
+
+      const tagToggleButtons = Array.from(container.querySelectorAll('button[aria-pressed]')) as HTMLButtonElement[];
+      expect(tagToggleButtons.length).toBeGreaterThanOrEqual(6);
+      const compoundToggle = tagToggleButtons.find((b) => b.textContent?.includes('compound'));
+      expect(compoundToggle?.getAttribute('aria-pressed')).toBe('true');
+      tagToggleButtons.forEach((btn) => {
+        expect(btn.classList.contains('min-h-[44px]')).toBe(true);
+      });
+    });
+
+    it('verifies ExerciseCard does not treat empty sets as completed and AchievementCard renders flat without decorative glow', () => {
+      act(() => {
+        root.render(
+          React.createElement(ExerciseCard, {
+            ex: {
+              id: 'bench-press',
+              exerciseDefinitionId: 'bench-press',
+              name: 'Barbell Bench Press',
+              target: 'Chest',
+              sets: 3,
+              reps: '8',
+            },
+            workoutType: 'push',
+            isLoadingAdvice: false,
+            sets: [],
+            getAiAdvice: vi.fn(),
+            updateSet: vi.fn(),
+            addSet: vi.fn(),
+            deleteSet: vi.fn(),
+            isExpanded: false,
+            onToggleExpand: vi.fn(),
+          })
+        );
+      });
+
+      const cardRoot = container.firstElementChild as HTMLElement;
+      expect(cardRoot.className).not.toContain('border-emerald-500/30');
+      expect(container.textContent).toContain('0/3 Done');
+
+      act(() => {
+        root.render(
+          React.createElement(AchievementCard, {
+            title: 'Biggest Week Ever',
+            value: '12.4k kg',
+            subtitle: 'Week of Oct 19',
+          })
+        );
+      });
+
+      const achCard = container.firstElementChild as HTMLElement;
+      expect(achCard.innerHTML).not.toContain('blur-3xl');
+      expect(achCard.style.boxShadow).toBe('');
+      expect(achCard.className).not.toContain(SHADOW.elevation);
     });
   });
 });

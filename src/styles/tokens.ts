@@ -8,7 +8,6 @@ export const SURFACE = {
   default: 'bg-zinc-900/60',   // standard card background
   elevated: 'bg-zinc-900/90', // elevated floating menus/dropdowns
   recessed: 'bg-zinc-950/80', // recessed/nested content
-  raised: 'bg-gradient-to-br from-zinc-900 to-zinc-950', // high-contrast card background
   panel: 'bg-[#0e0e15]',      // dialogs and prominent floating panels
   overlay: 'bg-zinc-950/95 backdrop-blur-xl', // modal popovers / sheets
   backdrop: 'bg-[#040409]/80 backdrop-blur-md', // modal dialog backdrops
@@ -236,9 +235,6 @@ export const SHADOW = {
     return { boxShadow: 'none' };
   },
   emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
-  emeraldSubtle: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
-  emeraldInset: 'shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]',
-  emeraldDate: 'shadow-[0_0_8px_rgba(16,185,129,0.4)]',
   amberWarning: 'shadow-[0_0_8px_rgba(245,158,11,0.15)]',
 } as const;
 

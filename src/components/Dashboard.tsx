@@ -26,6 +26,7 @@ import {
   RADIUS,
   SHADOW,
   TYPOGRAPHY,
+  CONTROL_HEIGHT,
 } from './ui';
 import { cn } from '../lib/utils';
 
@@ -136,8 +137,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             value={trainingStreak.currentStreak}
             unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
             sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
-            accent="orange"
+            accent="zinc"
             icon={TrendingUp}
+            disableAnimation
             size="standard"
           />
           <StatCard
@@ -146,8 +148,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             formatValue={(val) => val.toFixed(1)}
             unit="/ week"
             sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs prev 28d`}
-            accent="emerald"
+            accent="zinc"
             icon={CalendarIcon}
+            disableAnimation
             size="standard"
           />
           <StatCard
@@ -161,8 +164,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 : 'Insufficient 28d baseline'
             }
             isUnavailable={strengthTrend.percentChange === null}
-            accent={strengthTrend.percentChange !== null ? 'emerald' : 'zinc'}
+            accent={
+              strengthTrend.percentChange === null
+                ? 'zinc'
+                : strengthTrend.percentChange > 0
+                  ? 'emerald'
+                  : strengthTrend.percentChange < 0
+                    ? 'red'
+                    : 'zinc'
+            }
+            trendDirection={
+              strengthTrend.percentChange === null
+                ? undefined
+                : strengthTrend.percentChange > 0
+                  ? 'positive'
+                  : strengthTrend.percentChange < 0
+                    ? 'negative'
+                    : 'neutral'
+            }
             icon={Dumbbell}
+            disableAnimation
             size="standard"
           />
           {adherence && adherence.evaluatedScheduledWorkouts > 0 ? (
@@ -171,8 +192,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               value={adherence.percent}
               unit="%"
               sublabel={`${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`}
-              accent="emerald"
+              accent="zinc"
               icon={CheckCircle2}
+              disableAnimation
               size="standard"
             />
           ) : (
@@ -182,8 +204,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
               formatValue={formatCompactWeight}
               unit="kg"
               sublabel="Lifetime"
-              accent="emerald"
+              accent="zinc"
               icon={Weight}
+              disableAnimation
               size="standard"
             />
           )}
@@ -219,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       clearActiveSession();
                     }
                   }}
-                  className="flex-1 sm:flex-initial"
+                  className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
                 >
                   Discard
                 </Button>
@@ -232,7 +255,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   onClick={() => {
                     onStartWorkout(unfinishedSession.workoutId);
                   }}
-                  className="flex-1 sm:flex-initial"
+                  className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
                 >
                   Resume Session
                 </Button>
@@ -266,7 +289,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <Stack spacing="xs">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded border", SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
+                <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 border", RADIUS.badge, SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
                   DAY {currentCycleDay} / 8
                 </span>
                 {todayWorkout.type !== 'rest' && (
@@ -347,7 +370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
       >
         <Stack spacing="lg">
           {/* Training Volume Rolling 7-Day Card */}
-          <div className={cn("p-4 rounded border flex flex-col sm:flex-row sm:items-center justify-between gap-4", SURFACE.recessed, BORDER.subtle)}>
+          <div className={cn("p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4", RADIUS.card, SURFACE.recessed, BORDER.subtle)}>
             <div>
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Training Volume</span>
               <div className="flex items-baseline gap-2 mt-0.5">
@@ -380,26 +403,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 description="Personal records appear automatically as you log qualifying lifts."
               />
             ) : (
-              <Grid cols={1} colsSm={2} gap="md">
+              <Grid cols={2} gap="sm">
                 {recentMilestones.recentPREvents.map((pr) => (
                   <div
                     key={pr.id}
                     className={cn(
-                      "flex flex-col justify-between p-3.5 rounded border gap-2.5",
+                      "flex flex-col justify-between p-3 sm:p-3.5 border gap-2 min-w-0",
+                      RADIUS.card,
                       SURFACE.recessed,
                       BORDER.subtle
                     )}
                   >
                     <div className="space-y-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white break-words flex-1 min-w-0")}>
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2 min-w-0">
+                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white break-words flex-1 min-w-0 leading-snug")}>
                           {pr.exerciseName}
                         </span>
                         <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono shrink-0 whitespace-nowrap")}>
                           {formatDateStr(pr.date)}
                         </span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
                         {pr.isWeightPR && (
                           <Badge label="WEIGHT PR" color="orange" variant="subtle" />
                         )}
@@ -409,9 +433,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/60 text-xs font-mono">
-                      <span className="text-zinc-300 whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
-                      <span className="text-zinc-400 whitespace-nowrap">e1RM: <strong className="text-white font-bold">{pr.e1rm}</strong> kg</span>
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t border-zinc-800/60 text-xs font-mono min-w-0">
+                      <span className="text-zinc-300 break-words sm:whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
+                      <span className="text-zinc-400 break-words sm:whitespace-nowrap">e1RM: <strong className="text-white font-bold tabular-nums">{pr.e1rm}</strong> kg</span>
                     </div>
                   </div>
                 ))}
@@ -477,7 +501,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   haptic="none"
                   disabled={isSubmittingWeight}
                   onClick={handleLogWeightSubmit}
-                  className="whitespace-nowrap"
+                  className={cn("whitespace-nowrap", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
                 >
                   {isSubmittingWeight ? 'Logging...' : 'Log'}
                 </Button>
@@ -629,6 +653,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             }}
             className={cn(
               "p-4 pr-6 font-mono text-xs uppercase tracking-wider justify-between items-center text-left",
+              CONTROL_HEIGHT.touchTarget,
+              "sm:min-h-[40px] sm:min-w-0",
               SURFACE.recessed
             )}
             rightIcon={
