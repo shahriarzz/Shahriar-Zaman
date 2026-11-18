@@ -15,7 +15,6 @@ import {
 } from 'recharts';
 import {
   Trophy,
-  Dumbbell,
   TrendingUp,
   TrendingDown,
   ChevronLeft,

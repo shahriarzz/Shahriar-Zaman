@@ -381,7 +381,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       variant="subtle"
                     />
                   ) : (
-                    <Badge label="REST DAY" colorOverride={WORKOUT_COLORS.rest} variant="subtle" />
+                    <Badge label="OFF-PROTOCOL" color="zinc" variant="subtle" />
                   )}
                 </div>
               </div>

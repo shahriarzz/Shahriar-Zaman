@@ -12,7 +12,14 @@ import {
 } from 'date-fns';
 import { Workout, SetLog } from '../types/fitness';
 import type { FitnessIndex, ExerciseIndexEntry } from './fitnessDerivedSelectors';
-import { isCompletedSession, getCycleDay, parseStrictWeight, parseStrictReps, calculateE1RM } from './fitnessCalculations';
+import {
+  isCompletedSession,
+  buildCycleScheduleResolver,
+  CycleScheduleResolver,
+  parseStrictWeight,
+  parseStrictReps,
+  calculateE1RM
+} from './fitnessCalculations';
 
 // ----------------------------------------------------------------------------
 // Types & Contracts
@@ -141,19 +148,20 @@ export interface CalculateStreakOptions {
   coreWorkoutByCycleDayMap: Map<number, Workout>;
   cycleStart?: string | null;
   now?: Date | string;
+  scheduleResolver?: CycleScheduleResolver;
 }
 
 /**
  * Canonical Scheduled Protocol Streak:
- * Protocol-aware streak that respects scheduled training split and programmed recovery days.
- * An active scheduled protocol streak is NOT broken on rest days or by unperformed workouts on future days.
+ * Protocol-aware streak that respects completion-aware cycle progression and programmed recovery days.
+ * An active scheduled protocol streak is NOT broken on rest days or by unperformed workouts on future/current days.
  *
  * Invariants:
- * - completed scheduled workout -> continues streak
- * - skipped scheduled workout -> breaks streak
+ * - completed core workout on a scheduled core day -> continues streak
+ * - skipped scheduled core workout (missed day carried forward) -> breaks streak
  * - incomplete scheduled workout -> breaks completion continuity (not completed)
  * - programmed rest day -> neutral
- * - unscheduled day -> neutral
+ * - unscheduled / pre-cycle day gap -> breaks streak (prior to cycleStart) or neutral
  * - bonus workout -> does not extend scheduled streak
  * - future scheduled workout -> cannot break current streak
  * - current-day workout not yet completed -> does not prematurely break streak
@@ -162,7 +170,8 @@ function calculateScheduledProtocolStreak({
   index,
   coreWorkoutByCycleDayMap,
   cycleStart,
-  now = new Date()
+  now = new Date(),
+  scheduleResolver
 }: CalculateStreakOptions): StreakInsight {
   const completedLogs = index.sortedLogsAscending.filter(isCompletedSession);
   if (completedLogs.length === 0) {
@@ -193,6 +202,13 @@ function calculateScheduledProtocolStreak({
   const intervalStart = validStart > validNow ? validNow : validStart;
   const days = eachDayOfInterval({ start: intervalStart, end: validNow });
 
+  const resolver = scheduleResolver ?? buildCycleScheduleResolver({
+    cycleStart: cycleStart ?? format(intervalStart, 'yyyy-MM-dd'),
+    referenceToday: validNow,
+    coreWorkoutByCycleDayMap,
+    logsByDate: index.logsByDate
+  });
+
   let currentStreak = 0;
   let longestStreak = 0;
   let tempStreakStart: string | null = null;
@@ -207,15 +223,12 @@ function calculateScheduledProtocolStreak({
     const dayLogs = index.logsByDate.get(dateStr) || [];
 
     if (isWithinActiveSchedule) {
-      const cycleDay = getCycleDay(cycleStart, dayDate);
-      const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
-      const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
-      const hasCompletedExpected = isScheduledCore
-        ? dayLogs.some(l => isCompletedSession(l) && l.workoutId === expectedWo.id)
-        : false;
+      const dayState = resolver.getDayState(dateStr);
+      const isScheduledCore = Boolean(dayState?.isExpectedCore);
+      const hasCompletedCore = isScheduledCore && (dayState?.completedCoreLogs.length ?? 0) > 0;
 
       if (isScheduledCore) {
-        if (hasCompletedExpected) {
+        if (hasCompletedCore) {
           currentStreak++;
           if (!tempStreakStart) {
             tempStreakStart = dateStr;
@@ -334,6 +347,7 @@ export interface CalculateAdherenceOptions {
   startDate?: Date | string;
   endDate?: Date | string;
   now?: Date | string;
+  scheduleResolver?: CycleScheduleResolver;
 }
 
 /**
@@ -344,6 +358,7 @@ export interface CalculateAdherenceOptions {
  * - Rest days and bonus workouts are excluded from adherence formula.
  * - Incomplete scheduled workouts count as not completed.
  * - Pending today's workout does not count as skipped.
+ * - Carried-forward missed workouts increment missedPastCoreDays on each past unlogged day.
  */
 export function calculateAdherence({
   index,
@@ -351,7 +366,8 @@ export function calculateAdherence({
   cycleStart,
   startDate,
   endDate,
-  now = new Date()
+  now = new Date(),
+  scheduleResolver
 }: CalculateAdherenceOptions): AdherenceInsight {
   const parsedNow = typeof now === 'string' ? parseISO(now) : now;
   const validNow = isValid(parsedNow) ? startOfDay(parsedNow) : startOfDay(new Date());
@@ -370,6 +386,13 @@ export function calculateAdherence({
   const intervalStart = validStart > validEnd ? validEnd : validStart;
   const days = eachDayOfInterval({ start: intervalStart, end: validEnd });
 
+  const resolver = scheduleResolver ?? buildCycleScheduleResolver({
+    cycleStart: cycleStart ?? format(intervalStart, 'yyyy-MM-dd'),
+    referenceToday: validNow,
+    coreWorkoutByCycleDayMap,
+    logsByDate: index.logsByDate
+  });
+
   let completedScheduled = 0;
   let missedPastCoreDays = 0;
   let scheduledRestDays = 0;
@@ -386,27 +409,27 @@ export function calculateAdherence({
     const completedLogs = dayLogs.filter(isCompletedSession);
 
     if (isWithinActiveSchedule) {
-      const cycleDay = getCycleDay(cycleStart, dayDate);
-      const expectedWo = coreWorkoutByCycleDayMap.get(cycleDay);
-      const isScheduledCore = expectedWo && expectedWo.isCore && expectedWo.type !== 'rest';
-      const isScheduledRest = expectedWo && expectedWo.type === 'rest';
-
-      const hasCompletedExpected = isScheduledCore
-        ? completedLogs.some(l => l.workoutId === expectedWo.id)
-        : false;
+      const dayState = resolver.getDayState(dateStr);
+      const isScheduledCore = Boolean(dayState?.isExpectedCore);
+      const isScheduledRest = Boolean(dayState?.isScheduledRest);
+      const completedCoreLogs = dayState?.completedCoreLogs || [];
 
       if (isScheduledCore) {
-        if (hasCompletedExpected) {
+        if (completedCoreLogs.length > 0) {
           completedScheduled++;
-        } else if (isPast) {
-          missedPastCoreDays++;
-        } else if (isToday) {
-          isTodayPending = true;
+          // Any non-core completed sessions or additional same-day completed sessions beyond the primary core workout count as bonus
+          const primaryCoreLogId = completedCoreLogs[0]?.id;
+          const extraOnScheduledDay = completedLogs.filter(l => l.id !== primaryCoreLogId);
+          bonusCompletedSessions += extraOnScheduledDay.length;
+        } else {
+          if (isPast) {
+            missedPastCoreDays++;
+          } else if (isToday) {
+            isTodayPending = true;
+          }
+          // Bonus workouts on a scheduled training day never satisfy core adherence
+          bonusCompletedSessions += completedLogs.length;
         }
-
-        // Additional completed sessions on a scheduled core day (or alternate workout completed instead of scheduled)
-        const bonusOnScheduledDay = completedLogs.filter(l => l.workoutId !== expectedWo.id);
-        bonusCompletedSessions += bonusOnScheduledDay.length;
       } else if (isScheduledRest) {
         scheduledRestDays++;
         bonusCompletedSessions += completedLogs.length;

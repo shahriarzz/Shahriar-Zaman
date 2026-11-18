@@ -17,7 +17,7 @@ Before detailing the contracts, the following classification records the verific
 | **Indexing Structure** | "Single-pass index traversal over session logs" | Initial pass iterates chronologically over valid sorted logs to populate exercise maps, PR maps, date aggregations, and lifetime counts without secondary full log passes. | **SUPPORTED** |
 | **Completion Predicate** | "Strictly checks `log.complete === true`" | Enforced in `src/utils/fitnessCalculations.ts` (`isCompletedSession`), filtering invalid truthy values (`"true"`, `1`). Excludes incomplete sessions across all selectors and derived indices. | **SUPPORTED** |
 | **PR Pipeline** | "Single PR pipeline and event count" | Historical PR indexing in `buildFitnessIndex()` tracks separate `weightPR` and `e1RMPR` records. Pre-session comparison in `calculateSessionPRs()` snapshots against pre-session index. Session summary consolidates dual PRs into exactly 1 visible event. | **SUPPORTED & CLARIFIED** |
-| **Cycle Advancement** | "8-day date-based cycle; rest days advance naturally" | Evaluated via `differenceInCalendarDays` modulo 8 + 1. Days 4 and 8 (recovery) advance with calendar days; skipped workouts do not freeze the cycle; bonus workouts do not advance the cycle anchor. | **SUPPORTED** |
+| **Cycle Advancement** | "8-day date-based cycle; rest days advance naturally" | Calendar position (`getCycleDay`) is distinct from completion state (`buildCycleScheduleResolver()`). Incomplete/missed core training workouts carry forward to the next calendar day; Days 4 and 8 (recovery) advance naturally without logs; out-of-order core completions realign `cycleStart`; bonus/incomplete sessions never modify the cycle. | **SUPPORTED** |
 | **Sync Conflict Resolution** | "Deterministic merge via `updatedAt` timestamps and UID tombstones" | Verified in `fitnessSyncHelpers.ts` (`resolveLocalCloudRecord`). Local wins if timestamps equal but content differs. Deletion tombstones are strictly scoped per Firebase UID (`gl_deleted_ids_${uid}`), preserved across logout/switch, and flushed before normal merge on re-login. | **SUPPORTED** |
 | **Multi-Tenant Device Isolation** | "Complete isolation between accounts on shared device" | Tombstones and cloud sync data are partitioned per UID (`gl_deleted_ids_${uid}`). On account change/logout, `resetToDefaultData()` wipes snapshots and awaits authoritative `clearAutoBackupsForAccountReset()`, fencing user publication (`accountResetStatus: 'failed'` + `retryAccountReset()`) if cleanup fails. Shared same-profile concurrent sessions without sign-out remain unsupported. | **QUALIFIED / HARDENED** |
 
@@ -98,7 +98,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 | **Derived fitness statistics** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`, canonical selectors) | Memoized `FitnessIndex` in `FitnessDerivedContext` | Reimplement calculations or aggregate volumes/sets independently in screen components |
 | **Historical PR records** | `src/utils/fitnessDerivedSelectors.ts` (`buildFitnessIndex()`) | Canonical `weightPRsMap` and `e1RMPRsMap` in `FitnessIndex` | Re-scan raw logs for PRs or use un-sanitized weight/reps values |
 | **Session Summary PR detection** | `src/components/SessionView.tsx` (`calculateSessionPRs()`) | Current session's valid done sets snapshot against pre-session canonical index (`getWeightPRForExercise`, `getE1RMPRForExercise`) | Compare against in-session mutations or emit dual PR events for a single exercise |
-| **Cycle progression** | `src/utils/fitnessCalculations.ts` (`getCycleDay()`, `getAdjustedCycleStart()`) | Canonical `appState.cycleStart` anchor date string in `FitnessContext` | Infer the cycle from a separate UI-only rule, freeze cycle on missed days, or advance on bonus workouts |
+| **Cycle progression** | `src/utils/fitnessCalculations.ts` (`buildCycleScheduleResolver()`, `getCycleDay()`, `getAdjustedCycleStart()`), `src/utils/fitnessDerivedSelectors.ts` | Canonical `appState.cycleStart` + completed core `logs` in `FitnessContext` | Infer the cycle from a separate UI-only rule, skip missed core workouts, or advance on bonus/incomplete workouts |
 | **Sync conflicts & deletions** | `src/utils/fitnessSyncHelpers.ts` (`resolveLocalCloudRecord()`, `trackDeletedId()`, `commitBatchOperations()`) | Per-record `updatedAt` timestamps and UID-partitioned tombstones (`gl_deleted_ids_${uid}`) | Bypass tombstones, mix cross-account tombstones, or discard queued follow-up sync requests |
 | **Workflow lifecycles & transitions** | `src/state/` (Pure state machines indexed in `STATE_MACHINES.md`) | Canonical discriminated-union states (`NavigationState`, `SessionLifecycleState`, `CoachingMap`, `AuthState`, `SyncPhase`, `DatabaseState`, `BackupPhase`, `ConfirmationState`) | Represent mutually exclusive phases via competing boolean flags, trigger duplicate transitions, or perform side-effects inside pure transition functions |
 | **Design tokens & shared UI** | `src/styles/tokens.ts`, `src/components/ui/` | Token definitions (`SURFACE`, `BORDER`, `RADIUS`, `SPACING`, `TYPOGRAPHY`, etc.) and component primitives | Hardcode arbitrary styling classes, invent one-off dialogs/modals, or duplicate shared layouts |
@@ -261,21 +261,21 @@ syncDataBackground(uid)
 
 ### E. Cycle Progression
 ```
-appState.cycleStart (Anchor date YYYY-MM-DD) + targetDate
+appState.cycleStart (Anchor date YYYY-MM-DD) + completed core logs
     │
     ▼
-getCycleDay(cycleStart, targetDate) = ((differenceInCalendarDays(targetDate, cycleStart) % 8) + 8) % 8 + 1
-    │
+buildCycleScheduleResolver({ cycleStart, referenceToday, coreWorkoutByCycleDayMap, logsByDate })
+    │  (Calendar position via getCycleDay(); completion progression via chronological carry-forward)
     ▼
 Cycle Day (1-8):
   Day 1: PUSH A     Day 2: PULL A     Day 3: HYBRID A   Day 4: RECOVERY (Rest)
   Day 5: PUSH B     Day 6: PULL B     Day 7: HYBRID B   Day 8: RECOVERY (Rest)
 ```
 - **Rules**:
-  - Rest days (Days 4 and 8) naturally advance without requiring a completed session log.
-  - Skipped days do not pause or freeze the cycle.
-  - Bonus workouts (`isCore === false`) do not advance or alter `cycleStart`.
-  - Completing an out-of-order core workout recalculates `cycleStart` via `getAdjustedCycleStart(workout.cycleDay, new Date())`.
+  - **Missed Core Workout Carry-Forward**: When a scheduled core training day has no completed core log, the pending core workout carries forward and reappears the next calendar day. Historical past dates remain deterministic and are not rewritten by later completions.
+  - **Natural Rest Day Advancement**: Rest days (Days 4 and 8) naturally advance to the next cycle day without requiring a completed session log.
+  - **Out-of-Order Core Realignment**: Completing a different core workout than currently scheduled recalculates `cycleStart` via `getAdjustedCycleStart(workout.cycleDay, new Date())` and persists via `updateCycleStart()`, aligning the next scheduled workout to `(workout.cycleDay % 8) + 1`.
+  - **Bonus & Incomplete Isolation**: Bonus workouts (`isCore === false`) and incomplete sessions (`complete !== true`) never advance the core cycle or alter `cycleStart`.
   - **Core Workout Map Validation & UI Boundary**: `buildValidatedCoreWorkoutMap(workouts)` validates exactly 8 cycle slots (Days 1–8), detects duplicate `cycleDay` values without silent overwrite, excludes bonus workouts (`isCore === false`), and provides deterministic fallback to initial routines for corrupted or missing slots. `CycleEditor` is strictly driven by this canonical resolution, ensuring exactly 8 sequential slots (1–8) are displayed, while surfacing duplicate or malformed core workouts in a dedicated "Needs Review / Inactive Core Routines" repair list so they remain discoverable and editable without corrupting the primary cycle.
 
 ---
@@ -346,7 +346,7 @@ Cycle Day (1-8):
 | 5 | **Sets Accounting Distinction**: `completedSetsByDate` strictly counts `done: true` sets from completed sessions. `plannedSetsByDate` counts programmed/logged set rows across all sessions. | `src/utils/fitnessDerivedSelectors.ts` | `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
 | 6 | **PR Pipeline & Consolidation**: Historical index tracks independent weight and e1RM PRs. Session summary compares against pre-session index and consolidates a set establishing both weight and e1RM records into exactly 1 visible PR event. | `src/utils/fitnessDerivedSelectors.ts`, `src/components/SessionView.tsx` | `src/test/sessionPRRegression.test.ts`, `src/test/canonicalFitnessPipeline.test.ts` | **VERIFIED & TESTED** |
 | 7 | **Scheduled Core Adherence**: Adherence measures completion of the scheduled core workout for that cycle day. Bonus workouts do not satisfy core obligations; scheduled rest days do not enter the denominator. | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/routineCycleHardening.test.tsx` | **VERIFIED & TESTED** |
-| 8 | **Natural Recovery Day Advancement**: Cycle day advances naturally from Day 3 to Day 4 (Recovery) and Day 4 to Day 5 without requiring a session log on recovery days. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts`, `src/test/routineCycleHardening.test.tsx` | **VERIFIED & TESTED** |
+| 8 | **Completion-Aware Cycle & Recovery Advancement**: Incomplete core workouts carry forward when a scheduled training day is missed. Scheduled recovery days (Day 4 and Day 8) advance naturally to Day 5 / Day 1 without requiring a session log. Out-of-order core completions realign `cycleStart`; bonus and incomplete sessions are isolated. | `src/utils/fitnessCalculations.ts`, `src/utils/fitnessDerivedSelectors.ts` | `src/test/recoveryCycleAdvancement.test.ts`, `src/test/routineCycleHardening.test.tsx` | **VERIFIED & TESTED** |
 | 9 | **Cross-Surface Consistency**: Equivalent metrics and time windows produce identical numbers across Dashboard, History, Analytics, and Calendar. | `src/context/FitnessDerivedContext.tsx` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts`, `src/test/pipelineConsistencyRegression.test.ts` | **VERIFIED & TESTED** |
 | 10 | **Distinct Semantic Values for Data Availability**: Missing data, zero values, and unavailable metrics remain semantically distinct (`available: false` vs score `0`). | `src/utils/trainingIntelligence.ts` | `src/test/analyticsAdherenceAndPerformanceScore.test.ts` | **VERIFIED & TESTED** |
 | 11 | **Persistence Failure Safety**: If persistence throws, active workout state is retained in `gl_active_session` (including `completionLogId` pinned during `finishSession()` so retrying after a later `updateCycleStart()` failure never creates duplicate logs). Staged writes verify `gl_database_snapshot` before clearing `gl_snapshot_staging`. | `src/hooks/useFitnessData.ts`, `src/hooks/useActiveSession.ts`, `src/components/SessionView.tsx` | `src/test/supportingCodeAudit.test.ts`, `src/test/persistenceBoundaries.test.ts`, `src/test/routineCycleHardening.test.tsx` | **VERIFIED & TESTED** |

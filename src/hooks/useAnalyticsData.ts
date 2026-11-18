@@ -36,7 +36,8 @@ export function useAnalyticsData({
     workoutMap,
     coreWorkoutByCycleDayMap,
     priorityExercises,
-    getCycleDayForDate
+    getCycleDayForDate,
+    currentDate
   } = useFitnessDerivedData();
 
   // Active 1RM selection
@@ -49,9 +50,11 @@ export function useAnalyticsData({
       workoutMap,
       coreWorkoutByCycleDayMap,
       timeRange,
-      appState?.cycleStart
+      appState?.cycleStart,
+      undefined,
+      currentDate
     );
-  }, [index, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart]);
+  }, [index, workoutMap, coreWorkoutByCycleDayMap, timeRange, appState?.cycleStart, currentDate]);
 
   // Dedicated 1RM progression calculation - updates only 1RM trend when selected exercise changes
   const active1RMTrend = useMemo(() => {

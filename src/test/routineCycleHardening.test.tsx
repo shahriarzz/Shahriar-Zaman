@@ -1189,7 +1189,11 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       vi.setSystemTime(initialDate);
 
       const cycleStart = '2026-10-01'; // Day 1 on 2026-10-01
-      const contextValue = createMockFitnessContext({ appState: { cycleStart } });
+      const logs = {
+        'log-1': { id: 'log-1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+        'log-2': { id: 'log-2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} }
+      };
+      const contextValue = createMockFitnessContext({ appState: { cycleStart }, logs });
 
       await act(async () => {
         root.render(
@@ -1210,7 +1214,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       // Advance system time past midnight: +5 seconds to 2026-10-02 00:00:03
       vi.setSystemTime(new Date(2026, 9, 2, 0, 0, 3));
 
-      // 1. Midnight timer fires
+      // 1. Midnight timer fires (Day 1 completed -> advances to Day 2)
       await act(async () => {
         vi.advanceTimersByTime(5000);
       });
@@ -1218,7 +1222,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(todayEl.textContent).toBe('2026-10-02');
       expect(cycleEl.textContent).toBe('2');
 
-      // 2. Advance another day and simulate visibilitychange event
+      // 2. Advance another day and simulate visibilitychange event (Day 2 completed -> advances to Day 3)
       vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
       Object.defineProperty(document, 'visibilityState', {
         value: 'visible',
@@ -1231,6 +1235,39 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       expect(todayEl.textContent).toBe('2026-10-03');
       expect(cycleEl.textContent).toBe('3');
+    });
+
+    it('Scenario 8b: Midnight rollover carries forward incomplete workout when missed', async () => {
+      vi.setSystemTime(new Date(2026, 9, 1, 23, 59, 58));
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart: '2026-10-01' },
+        logs: {} // Day 1 not completed
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <TestCycleConsumer />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const todayEl = container.querySelector('[data-testid="todayStr"]')!;
+      const cycleEl = container.querySelector('[data-testid="nextCycleDay"]')!;
+
+      expect(todayEl.textContent).toBe('2026-10-01');
+      expect(cycleEl.textContent).toBe('1');
+
+      vi.setSystemTime(new Date(2026, 9, 2, 0, 0, 3));
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(todayEl.textContent).toBe('2026-10-02');
+      // Missed Day 1 carries forward rather than advancing
+      expect(cycleEl.textContent).toBe('1');
     });
   });
 
@@ -1253,14 +1290,17 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       vi.useRealTimers();
     });
 
-    it('1. Day 3 -> Day 4: Expected routine becomes Recovery on both Dashboard and Calendar without a log', async () => {
+    it('1. Day 3 -> Day 4: Expected routine becomes Recovery on both Dashboard and Calendar after Days 1–3 complete', async () => {
       const cycleStart = '2026-10-01'; // Day 1
-      // On Day 4: 2026-10-04
       vi.setSystemTime(new Date(2026, 9, 4, 10, 0, 0));
 
       const contextValue = createMockFitnessContext({
         appState: { cycleStart },
-        logs: {} // Zero logs
+        logs: {
+          'l1': { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+          'l2': { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
+          'l3': { id: 'l3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} }
+        }
       });
 
       // 1. Render real Dashboard
@@ -1316,12 +1356,16 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
     it('2. Day 4 -> Day 5: Push B appears automatically without a recovery-day log on both Dashboard and Calendar', async () => {
       const cycleStart = '2026-10-01';
-      // Advance clock to Day 5: 2026-10-05
       vi.setSystemTime(new Date(2026, 9, 5, 10, 0, 0));
 
       const contextValue = createMockFitnessContext({
         appState: { cycleStart },
-        logs: {} // Still zero logs
+        logs: {
+          'l1': { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+          'l2': { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
+          'l3': { id: 'l3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} }
+          // No log on 2026-10-04 Recovery Day
+        }
       });
 
       await act(async () => {
@@ -1374,12 +1418,19 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
     it('3. Day 8 -> Day 1: Push A appears automatically without a Day 8 log on both surfaces', async () => {
       const cycleStart = '2026-10-01';
-      // 2026-10-09 is Day 1 of cycle 2 (8 days after anchor)
       vi.setSystemTime(new Date(2026, 9, 9, 10, 0, 0));
 
       const contextValue = createMockFitnessContext({
         appState: { cycleStart },
-        logs: {}
+        logs: {
+          'l1': { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+          'l2': { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
+          'l3': { id: 'l3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
+          'l5': { id: 'l5', workoutId: 'push-b', date: '2026-10-05', complete: true, durationMinutes: 45, sets: {} },
+          'l6': { id: 'l6', workoutId: 'pull-b', date: '2026-10-06', complete: true, durationMinutes: 45, sets: {} },
+          'l7': { id: 'l7', workoutId: 'hybrid-b', date: '2026-10-07', complete: true, durationMinutes: 45, sets: {} }
+          // No log on 2026-10-08 Recovery Day
+        }
       });
 
       await act(async () => {
@@ -1427,11 +1478,10 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('DAY 1 · PUSH A');
     });
 
-    it('4. Missed days: cycle follows calendar rather than last completed workout', async () => {
+    it('4. Missed core training days carry forward incomplete core workout across Dashboard & Calendar without jumping ahead', async () => {
       const cycleStart = '2026-10-01';
-      // Lifter misses 11 days. Calendar day is 2026-10-12 (11 days after cycleStart).
-      // 11 % 8 = 3 -> Day 4 (Recovery)
-      vi.setSystemTime(new Date(2026, 9, 12, 10, 0, 0));
+      // Missed 2026-10-01 and 2026-10-02 with zero logs -> on 2026-10-03 Push Day A must carry forward
+      vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
 
       const contextValue = createMockFitnessContext({
         appState: { cycleStart },
@@ -1450,9 +1500,41 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      // Must show Day 4 Recovery, NOT Day 1 or Day 2
-      expect(container.textContent).toContain('DAY 4 · REST');
-      expect(container.textContent).toContain('Recovery Day');
+      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('Push Day A');
+
+      // Calendar verifies 2026-10-03 TODAY is Push Day A and past 2026-10-01 was MISSED Push Day A
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const todayBtn = container.querySelector('[data-testid="calendar-day-2026-10-03"]') as HTMLElement;
+      expect(todayBtn).not.toBeNull();
+      await act(async () => {
+        todayBtn.click();
+        vi.advanceTimersByTime(50);
+      });
+      expect(container.textContent).toContain('TODAY: Push Day A');
+
+      const pastMissedBtn = container.querySelector('[data-testid="calendar-day-2026-10-01"]') as HTMLElement;
+      await act(async () => {
+        pastMissedBtn.click();
+        vi.advanceTimersByTime(50);
+      });
+      expect(container.textContent).toContain('MISSED: Push Day A');
     });
 
     it('5. Duplicate Day 1 in workouts library resolves through deterministic fallback on both surfaces', async () => {
@@ -1527,13 +1609,17 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
     it('6. Missing core day (Day 3 missing) resolves to canonical Hybrid Day A on both surfaces', async () => {
       const cycleStart = '2026-10-01';
-      // 2026-10-03 is Day 3 (Hybrid Day A)
+      // 2026-10-03 is Day 3 after completing Days 1 & 2
       vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
 
       const withoutDay3 = initialWorkouts.filter(w => w.cycleDay !== 3);
       const contextValue = createMockFitnessContext({
         workouts: withoutDay3,
-        appState: { cycleStart }
+        appState: { cycleStart },
+        logs: {
+          'l1': { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+          'l2': { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} }
+        }
       });
 
       await act(async () => {
@@ -1581,48 +1667,216 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('Hybrid Day A');
       expect(container.textContent).toContain('DAY 3 · HYBRID A');
     });
+
+    it('7. Completing carried-forward Push A via SessionView persists log WITHOUT shifting cycleStart', async () => {
+      const cycleStart = '2026-10-01'; // Day 1 was yesterday
+      vi.setSystemTime(new Date(2026, 9, 2, 10, 0, 0)); // Today is 2026-10-02
+
+      const mockAddLog = vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false });
+      const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
+      const mockClearActiveSession = vi.fn();
+
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart },
+        logs: {}, // Push A missed on 2026-10-01
+        addLog: mockAddLog,
+        updateCycleStart: mockUpdateCycleStart,
+        clearActiveSession: mockClearActiveSession
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <SessionView workoutId="push-a" onExit={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const finishBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.includes('Finish') || b.textContent?.includes('✓')
+      );
+      expect(finishBtn).toBeDefined();
+
+      await act(async () => {
+        finishBtn!.click();
+      });
+
+      // Push A matches the carried-forward expectation -> no cycleStart overwrite
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).not.toHaveBeenCalled();
+      expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('8. Completing out-of-order Push B via SessionView realigns cycleStart and advances tomorrow to Pull B across Dashboard & Calendar', async () => {
+      const initialCycleStart = '2026-10-01';
+      vi.setSystemTime(new Date(2026, 9, 2, 10, 0, 0)); // 2026-10-02 after missing Day 1
+
+      let persistedCycleStart = initialCycleStart;
+      const recordedLogs: Record<string, any> = {};
+
+      const mockAddLog = vi.fn().mockImplementation(async (id: string, log: any) => {
+        recordedLogs[id] = log;
+        return { success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false };
+      });
+      const mockUpdateCycleStart = vi.fn().mockImplementation(async (nextAnchor: string) => {
+        persistedCycleStart = nextAnchor;
+      });
+
+      const sessionContext = createMockFitnessContext({
+        appState: { cycleStart: initialCycleStart },
+        logs: {},
+        addLog: mockAddLog,
+        updateCycleStart: mockUpdateCycleStart,
+        clearActiveSession: vi.fn()
+      });
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={sessionContext}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <SessionView workoutId="push-b" onExit={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const finishBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.includes('Finish') || b.textContent?.includes('✓')
+      );
+      expect(finishBtn).toBeDefined();
+
+      await act(async () => {
+        finishBtn!.click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).toHaveBeenCalledWith('2026-09-28');
+      expect(persistedCycleStart).toBe('2026-09-28');
+
+      // Advance to next calendar day (2026-10-03): both Dashboard & Calendar resolve Day 6 (Pull B)
+      vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
+      const nextDayContext = createMockFitnessContext({
+        appState: { cycleStart: persistedCycleStart },
+        logs: { ...recordedLogs }
+      });
+
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={nextDayContext}>
+            <FitnessDerivedProvider>
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <Dashboard onStartWorkout={vi.fn()} onNavigateToHistory={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(container.textContent).toContain('DAY 6 · PULL B');
+      expect(container.textContent).toContain('Pull Day B');
+
+      act(() => {
+        root.unmount();
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={nextDayContext}>
+            <FitnessDerivedProvider>
+              <Calendar onNavigateToHistory={vi.fn()} />
+            </FitnessDerivedProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const day3Btn = container.querySelector('[data-testid="calendar-day-2026-10-03"]') as HTMLElement;
+      expect(day3Btn).not.toBeNull();
+      await act(async () => {
+        day3Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+
+      expect(container.textContent).toContain('TODAY: Pull Day B');
+    });
   });
 
   describe('Cycle Progression & Date Boundary Scenarios', () => {
     const { coreWorkoutByCycleDayMap } = buildValidatedCoreWorkoutMap(initialWorkouts);
 
-    it('Scenario 4: Open app on Day 4 without a log, then advance reference date to Day 5: Push B selected', () => {
+    it('Scenario 4: Open app on Day 4 without a log after completing Days 1–3, then advance reference date to Day 5: Push B selected', () => {
       const cycleStart = '2026-10-01';
-      const day4 = getCycleDay(cycleStart, '2026-10-04');
+      const logs = [
+        { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} }
+      ];
+      const idx4 = buildFitnessIndex(logs, defsMap, '2026-10-04');
+      const day4 = selectNextCycleDay(cycleStart, '2026-10-04', idx4, coreWorkoutByCycleDayMap);
       expect(day4).toBe(4);
       const day4Workout = selectCoreWorkoutForCycleDay(coreWorkoutByCycleDayMap, day4);
       expect(day4Workout?.badge).toBe('DAY 4 · REST');
 
       // Zero logs recorded on Day 4. Advance reference date to Day 5
-      const day5 = getCycleDay(cycleStart, '2026-10-05');
+      const idx5 = buildFitnessIndex(logs, defsMap, '2026-10-05');
+      const day5 = selectNextCycleDay(cycleStart, '2026-10-05', idx5, coreWorkoutByCycleDayMap);
       expect(day5).toBe(5);
       const day5Workout = selectCoreWorkoutForCycleDay(coreWorkoutByCycleDayMap, day5);
       expect(day5Workout?.badge).toBe('DAY 5 · PUSH B');
       expect(day5Workout?.id).toBe('push-b');
     });
 
-    it('Scenario 5: Open app on Day 8 without a log, then advance to next date: Push A selected', () => {
+    it('Scenario 5: Open app on Day 8 without a log after completing Days 1–7, then advance to next date: Push A selected', () => {
       const cycleStart = '2026-10-01';
-      const day8 = getCycleDay(cycleStart, '2026-10-08');
+      const logs = [
+        { id: 'l1', workoutId: 'push-a', date: '2026-10-01', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l2', workoutId: 'pull-a', date: '2026-10-02', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l3', workoutId: 'hybrid-a', date: '2026-10-03', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l5', workoutId: 'push-b', date: '2026-10-05', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l6', workoutId: 'pull-b', date: '2026-10-06', complete: true, durationMinutes: 45, sets: {} },
+        { id: 'l7', workoutId: 'hybrid-b', date: '2026-10-07', complete: true, durationMinutes: 45, sets: {} }
+      ];
+      const idx8 = buildFitnessIndex(logs, defsMap, '2026-10-08');
+      const day8 = selectNextCycleDay(cycleStart, '2026-10-08', idx8, coreWorkoutByCycleDayMap);
       expect(day8).toBe(8);
       const day8Workout = selectCoreWorkoutForCycleDay(coreWorkoutByCycleDayMap, day8);
       expect(day8Workout?.badge).toBe('DAY 8 · REST');
 
       // Zero logs on Day 8. Advance date to 2026-10-09
-      const nextCycleDay = getCycleDay(cycleStart, '2026-10-09');
+      const idxNext = buildFitnessIndex(logs, defsMap, '2026-10-09');
+      const nextCycleDay = selectNextCycleDay(cycleStart, '2026-10-09', idxNext, coreWorkoutByCycleDayMap);
       expect(nextCycleDay).toBe(1);
       const nextCycleWorkout = selectCoreWorkoutForCycleDay(coreWorkoutByCycleDayMap, nextCycleDay);
       expect(nextCycleWorkout?.badge).toBe('DAY 1 · PUSH A');
       expect(nextCycleWorkout?.id).toBe('push-a');
     });
 
-    it('Scenario 6: Miss multiple days: cycle follows calendar rather than last completed workout', () => {
+    it('Scenario 6: Miss multiple training days: next incomplete core workout carries forward until completed', () => {
       const cycleStart = '2026-10-01';
-      // Lifter misses 11 days. Calendar day is 2026-10-12 (11 calendar days after cycleStart).
-      // 11 % 8 = 3 -> Day 4 (Recovery)
-      expect(getCycleDay(cycleStart, '2026-10-12')).toBe(4);
+      const emptyIdx = buildFitnessIndex([], defsMap, '2026-10-12');
+      // Lifter misses 11 days without completing Push A -> stays on Day 1 (Push A)
+      expect(selectNextCycleDay(cycleStart, '2026-10-12', emptyIdx, coreWorkoutByCycleDayMap)).toBe(1);
 
-      // On 2026-10-13 (12 days after cycleStart): 12 % 8 = 4 -> Day 5 (Push B)
+      const nextDayIdx = buildFitnessIndex([], defsMap, '2026-10-13');
+      expect(selectNextCycleDay(cycleStart, '2026-10-13', nextDayIdx, coreWorkoutByCycleDayMap)).toBe(1);
+
+      // Pure calendar math helper continues returning modulo calendar position independently
+      expect(getCycleDay(cycleStart, '2026-10-12')).toBe(4);
       expect(getCycleDay(cycleStart, '2026-10-13')).toBe(5);
     });
 

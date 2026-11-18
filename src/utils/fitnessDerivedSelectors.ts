@@ -9,6 +9,9 @@ import {
   getSortedWeightEntries,
   getWeightSparklineData,
   getCycleDay,
+  buildCycleScheduleResolver,
+  CycleScheduleResolver,
+  CycleScheduleDayState,
   isCompletedSession,
   getRollingDateRange,
   getPreviousDateRange,
@@ -17,7 +20,8 @@ import {
   SparklineData
 } from './fitnessCalculations';
 
-export type { SparklineData };
+export type { SparklineData, CycleScheduleResolver, CycleScheduleDayState };
+export { buildCycleScheduleResolver };
 
 import {
   resolveExercise,
@@ -839,27 +843,58 @@ export function selectLatestForExercise(
 
 /**
  * Canonical Cycle Day Selector:
- * The protocol is calendar-date driven anchored to cycleStart.
- * For any target or current date:
- *   cycleDay = getCycleDay(cycleStart, date)
- * Protocol core schedule does NOT depend on whether intermediate days were logged.
- * Specifically across Recovery Days (Day 4 and Day 8), no log is required to advance.
+ * Evaluates the current/next cycle day anchored to cycleStart.
+ * When index is provided, applies completion-aware carry-forward rules:
+ * - Missed core training days carry forward the incomplete core workout.
+ * - Scheduled recovery days (Day 4 and Day 8) advance naturally without logs.
+ * - Completing an out-of-order core workout advances the next day to (K % 8) + 1.
+ * - Bonus workouts and incomplete sessions never advance the core cycle.
+ * Without index, falls back to calendar modulo getCycleDay().
  */
 export function selectNextCycleDay(
   cycleStart?: string | null,
-  now: Date | string = new Date()
+  now: Date | string = new Date(),
+  index?: FitnessIndex | null,
+  coreWorkoutByCycleDayMap?: Map<number, Workout> | Map<string, Workout> | Workout[] | null,
+  excludeLogId?: string
 ): number {
-  return getCycleDay(cycleStart, now);
+  if (!index) {
+    return getCycleDay(cycleStart, now);
+  }
+  const resolver = buildCycleScheduleResolver({
+    cycleStart,
+    referenceToday: now,
+    coreWorkoutByCycleDayMap,
+    logsByDate: index.logsByDate,
+    excludeLogId
+  });
+  return resolver.getCycleDayForDate(now);
 }
 
 /**
  * Resolves the cycle day for a specific target date.
+ * Historical dates (< referenceToday) are deterministic based on state up to that date.
+ * Returns 0 for pre-cycleStart dates when evaluated against index.
  */
 export function selectCycleDayForDate(
   targetDate: Date | string,
-  cycleStart?: string | null
+  cycleStart?: string | null,
+  index?: FitnessIndex | null,
+  coreWorkoutByCycleDayMap?: Map<number, Workout> | Map<string, Workout> | Workout[] | null,
+  referenceToday?: Date | string,
+  excludeLogId?: string
 ): number {
-  return getCycleDay(cycleStart, targetDate);
+  if (!index) {
+    return getCycleDay(cycleStart, targetDate);
+  }
+  const resolver = buildCycleScheduleResolver({
+    cycleStart,
+    referenceToday: referenceToday ?? targetDate,
+    coreWorkoutByCycleDayMap,
+    logsByDate: index.logsByDate,
+    excludeLogId
+  });
+  return resolver.getCycleDayForDate(targetDate);
 }
 
 export interface CoreWorkoutMapValidationResult {
@@ -966,14 +1001,16 @@ export function selectCoreWorkoutForCycleDay(
 }
 
 /**
- * Resolves today's scheduled core workout based on canonical cycleStart date anchor.
+ * Resolves today's scheduled core workout based on canonical cycleStart and completion state.
  */
 export function selectTodayCoreWorkout(
   workoutMap: Map<string, Workout> | Map<number, Workout> | Workout[] | undefined | null,
   cycleStart?: string | null,
-  now: Date | string = new Date()
+  now: Date | string = new Date(),
+  index?: FitnessIndex | null,
+  excludeLogId?: string
 ): Workout | undefined {
-  const todayCycleDay = selectNextCycleDay(cycleStart, now);
+  const todayCycleDay = selectNextCycleDay(cycleStart, now, index, workoutMap, excludeLogId);
   return selectCoreWorkoutForCycleDay(workoutMap, todayCycleDay);
 }
 
@@ -1201,20 +1238,29 @@ export function selectTimeRangeAnalytics(
   const validRangeStart = isValid(rangeStartDate) ? rangeStartDate : subDays(validNow, 29);
   const intervalStart = validRangeStart > validNow ? validNow : validRangeStart;
 
+  const scheduleResolver = buildCycleScheduleResolver({
+    cycleStart: cycleStart ?? format(intervalStart, 'yyyy-MM-dd'),
+    referenceToday: validNow,
+    coreWorkoutByCycleDayMap,
+    logsByDate: index.logsByDate
+  });
+
   const adherence = calculateAdherence({
     index,
     coreWorkoutByCycleDayMap,
     cycleStart,
     startDate: intervalStart,
     endDate: validNow,
-    now: validNow
+    now: validNow,
+    scheduleResolver
   });
 
   const trainingStreak = calculateTrainingStreak({
     index,
     coreWorkoutByCycleDayMap,
     cycleStart,
-    now: validNow
+    now: validNow,
+    scheduleResolver
   });
 
   const avgDuration = rangeMeasuredCount > 0 ? Math.round(rangeMeasuredMinutes / rangeMeasuredCount) : 0;

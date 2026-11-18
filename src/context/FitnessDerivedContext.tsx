@@ -5,10 +5,9 @@ import { SessionLog, Workout, ExerciseDefinition } from '../types/fitness';
 import {
   buildFitnessIndex,
   buildValidatedCoreWorkoutMap,
+  buildCycleScheduleResolver,
   selectWeightSummary,
   selectMuscleDistribution,
-  selectNextCycleDay,
-  selectCycleDayForDate,
   FitnessIndex,
   ExerciseIndexEntry,
   WeightPRRecord,
@@ -195,14 +194,23 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
     return selectMuscleDistribution(index);
   }, [index]);
 
-  // 9. Canonical Cycle Day Calculations
+  // 9. Canonical Cycle Schedule Resolver & Cycle Day Calculations
+  const cycleScheduleResolver = useMemo(() => {
+    return buildCycleScheduleResolver({
+      cycleStart: appState?.cycleStart,
+      referenceToday: currentDate,
+      coreWorkoutByCycleDayMap,
+      logsByDate: index.logsByDate
+    });
+  }, [appState?.cycleStart, currentDate, coreWorkoutByCycleDayMap, index.logsByDate]);
+
   const nextCycleDay = useMemo(() => {
-    return selectNextCycleDay(appState?.cycleStart, currentDate);
-  }, [appState?.cycleStart, currentDate]);
+    return cycleScheduleResolver.getCycleDayForDate(currentDate);
+  }, [cycleScheduleResolver, currentDate]);
 
   const getCycleDayForDate = useCallback((targetDate: Date | string): number => {
-    return selectCycleDayForDate(targetDate, appState?.cycleStart);
-  }, [appState?.cycleStart]);
+    return cycleScheduleResolver.getCycleDayForDate(targetDate);
+  }, [cycleScheduleResolver]);
 
   // 10. Canonical Training Intelligence Calculations
 
@@ -211,9 +219,10 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
       index,
       coreWorkoutByCycleDayMap,
       cycleStart: appState?.cycleStart,
-      now: currentDate
+      now: currentDate,
+      scheduleResolver: appState?.cycleStart ? cycleScheduleResolver : undefined
     });
-  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate]);
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate, cycleScheduleResolver]);
 
   const trainingFrequency = useMemo(() => {
     return calculateTrainingFrequency({
@@ -232,9 +241,10 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
       cycleStart: appState?.cycleStart,
       startDate: currentStartStr,
       endDate: currentEndStr,
-      now: currentDate
+      now: currentDate,
+      scheduleResolver: appState?.cycleStart ? cycleScheduleResolver : undefined
     });
-  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate, todayStr]);
+  }, [index, coreWorkoutByCycleDayMap, appState?.cycleStart, currentDate, todayStr, cycleScheduleResolver]);
 
   const strengthTrend = useMemo(() => {
     const currentEndStr = todayStr;

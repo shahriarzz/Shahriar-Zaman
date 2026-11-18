@@ -433,6 +433,317 @@ export function getCycleDay(cycleStart: string | undefined | null, targetDate: D
   return (((diff % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
 }
 
+export interface CycleScheduleDayState {
+  /** Scheduled / carried-forward cycle day for this calendar date (1..8) */
+  scheduledCycleDay: number;
+  /** Effective cycle day for selectors/UI (matches scheduledCycleDay unless overridden today by a completed out-of-order core workout) */
+  effectiveCycleDay: number;
+  isScheduledRest: boolean;
+  isExpectedCore: boolean;
+  completedCoreLogs: SessionLog[];
+  expectedWorkout: Workout | undefined;
+}
+
+export interface CycleScheduleResolver {
+  effectiveStart: string;
+  todayStr: string;
+  nextDayAfterToday: number;
+  getCycleDayForDate: (targetDate: Date | string) => number;
+  getDayState: (targetDate: Date | string) => CycleScheduleDayState | null;
+}
+
+export interface BuildCycleScheduleOptions {
+  cycleStart?: string | null;
+  referenceToday?: Date | string;
+  coreWorkoutByCycleDayMap?: Map<number, Workout> | Map<string, Workout> | Workout[] | null;
+  logsByDate?: Map<string, SessionLog[]> | SessionLog[] | Record<string, SessionLog> | null;
+  excludeLogId?: string;
+}
+
+const EMPTY_SESSION_LOGS: SessionLog[] = [];
+
+function parseYMDParts(dateStr: string): [number, number, number] | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const y = Number(dateStr.slice(0, 4));
+  const m = Number(dateStr.slice(5, 7));
+  const d = Number(dateStr.slice(8, 10));
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+  return [y, m, d];
+}
+
+function addDaysToYMD(dateStr: string, days: number): string {
+  const parts = parseYMDParts(dateStr);
+  if (!parts) return dateStr;
+  const dt = new Date(parts[0], parts[1] - 1, parts[2] + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function diffCalendarDaysYMD(targetStr: string, baseStr: string): number {
+  const t = parseYMDParts(targetStr);
+  const b = parseYMDParts(baseStr);
+  if (!t || !b) return 0;
+  const utcT = Date.UTC(t[0], t[1] - 1, t[2]);
+  const utcB = Date.UTC(b[0], b[1] - 1, b[2]);
+  return Math.round((utcT - utcB) / 86400000);
+}
+
+function normalizeToDateStr(input: Date | string | undefined): string {
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (isValidCalendarDate(trimmed)) return trimmed;
+    const parsed = parseISO(trimmed);
+    return isValid(parsed) ? dk(parsed) : dk();
+  }
+  if (input instanceof Date && isValid(input)) {
+    return dk(input);
+  }
+  return dk();
+}
+
+/**
+ * Canonical completion-aware 8-day cycle schedule resolver.
+ *
+ * Rules:
+ * - Distinguishes calendar progression from core training completion state.
+ * - Missed core training days carry forward the incomplete core workout to the following calendar day.
+ * - Scheduled recovery days (type === 'rest') advance naturally without requiring a log.
+ * - Completing any core training workout (including out-of-order) advances the next day to (K % 8) + 1.
+ * - Bonus workouts (isCore !== true) and incomplete sessions (complete !== true) never advance or alter the cycle.
+ * - Historical dates (< todayStr) are deterministic and never rewritten by today's completion state.
+ */
+export function buildCycleScheduleResolver({
+  cycleStart,
+  referenceToday = new Date(),
+  coreWorkoutByCycleDayMap,
+  logsByDate,
+  excludeLogId
+}: BuildCycleScheduleOptions): CycleScheduleResolver {
+  const todayStr = normalizeToDateStr(referenceToday);
+  const effectiveStart = isValidCalendarDate(cycleStart) ? cycleStart.trim() : todayStr;
+
+  const coreWorkoutByDay = new Map<number, Workout>();
+  const coreWorkoutById = new Map<string, Workout>();
+
+  if (coreWorkoutByCycleDayMap) {
+    const registerCoreWorkout = (w: Workout | undefined | null, explicitDay?: number) => {
+      if (!w || w.isCore !== true) return;
+      const day = explicitDay !== undefined ? explicitDay : w.cycleDay;
+      if (typeof day === 'number' && Number.isInteger(day) && day >= 1 && day <= CYCLE_LENGTH) {
+        if (!coreWorkoutByDay.has(day)) {
+          coreWorkoutByDay.set(day, w);
+        }
+        if (w.id) {
+          coreWorkoutById.set(w.id, w);
+        }
+      }
+    };
+
+    if (Array.isArray(coreWorkoutByCycleDayMap)) {
+      coreWorkoutByCycleDayMap.forEach(w => registerCoreWorkout(w));
+    } else if (coreWorkoutByCycleDayMap instanceof Map) {
+      coreWorkoutByCycleDayMap.forEach((w, key) => {
+        if (typeof key === 'number') {
+          registerCoreWorkout(w, key);
+        } else {
+          registerCoreWorkout(w);
+        }
+      });
+    }
+  }
+
+  const isExplicitCoreMap = coreWorkoutByDay.size > 0;
+
+  // Normalize completed core training logs per calendar date
+  const completedCoreByDate = new Map<string, SessionLog[]>();
+  const addLogIfCompletedCore = (log: SessionLog | null | undefined) => {
+    if (!log || !isCompletedSession(log) || !log.date || log.date < effectiveStart || log.date > todayStr) {
+      return;
+    }
+    if (excludeLogId && log.id === excludeLogId) return;
+    const coreWo = log.workoutId ? coreWorkoutById.get(log.workoutId) : undefined;
+    if (!coreWo || coreWo.isCore !== true || coreWo.type === 'rest') return;
+    const list = completedCoreByDate.get(log.date);
+    if (list) {
+      list.push(log);
+    } else {
+      completedCoreByDate.set(log.date, [log]);
+    }
+  };
+
+  if (logsByDate instanceof Map) {
+    logsByDate.forEach(dayLogs => {
+      if (Array.isArray(dayLogs)) {
+        dayLogs.forEach(addLogIfCompletedCore);
+      }
+    });
+  } else if (Array.isArray(logsByDate)) {
+    logsByDate.forEach(addLogIfCompletedCore);
+  } else if (logsByDate && typeof logsByDate === 'object') {
+    Object.values(logsByDate).forEach(addLogIfCompletedCore);
+  }
+
+  completedCoreByDate.forEach(list => {
+    if (list.length > 1) {
+      list.sort((a, b) => {
+        const ua = Number(a.updatedAt) || 0;
+        const ub = Number(b.updatedAt) || 0;
+        if (ua !== ub) return ua - ub;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+    }
+  });
+
+  const sortedActiveCoreDates = Array.from(completedCoreByDate.keys()).sort();
+  let activeDatePtr = 0;
+
+  const dayStatesMap = new Map<string, CycleScheduleDayState>();
+  const carrySegments: { start: string; endBefore: string; state: CycleScheduleDayState }[] = [];
+
+  let scheduledDay = 1;
+  let nextDayAfterToday = 1;
+
+  if (effectiveStart <= todayStr) {
+    let curStr = effectiveStart;
+
+    while (curStr <= todayStr) {
+      const scheduledWo = coreWorkoutByDay.get(scheduledDay);
+      const isScheduledRest = scheduledWo
+        ? scheduledWo.type === 'rest'
+        : (!isExplicitCoreMap && (scheduledDay === 4 || scheduledDay === 8));
+      const isExpectedCore = scheduledWo
+        ? (scheduledWo.isCore === true && scheduledWo.type !== 'rest')
+        : (!isExplicitCoreMap && !isScheduledRest);
+
+      const completedCoreLogs = completedCoreByDate.get(curStr) || EMPTY_SESSION_LOGS;
+
+      if (curStr === todayStr) {
+        let effectiveCycleDay = scheduledDay;
+        if (completedCoreLogs.length > 0) {
+          const lastCoreLog = completedCoreLogs[completedCoreLogs.length - 1];
+          const lastCoreWo = coreWorkoutById.get(lastCoreLog.workoutId);
+          if (lastCoreWo?.cycleDay) {
+            effectiveCycleDay = lastCoreWo.cycleDay;
+          }
+        }
+        dayStatesMap.set(curStr, {
+          scheduledCycleDay: scheduledDay,
+          effectiveCycleDay,
+          isScheduledRest,
+          isExpectedCore,
+          completedCoreLogs,
+          expectedWorkout: scheduledWo
+        });
+        nextDayAfterToday = (effectiveCycleDay % CYCLE_LENGTH) + 1;
+        break;
+      }
+
+      // curStr < todayStr (historical date)
+      if (completedCoreLogs.length > 0) {
+        dayStatesMap.set(curStr, {
+          scheduledCycleDay: scheduledDay,
+          effectiveCycleDay: scheduledDay,
+          isScheduledRest,
+          isExpectedCore,
+          completedCoreLogs,
+          expectedWorkout: scheduledWo
+        });
+        const lastCoreLog = completedCoreLogs[completedCoreLogs.length - 1];
+        const lastCoreWo = coreWorkoutById.get(lastCoreLog.workoutId);
+        const completedDay = lastCoreWo?.cycleDay || scheduledDay;
+        scheduledDay = (completedDay % CYCLE_LENGTH) + 1;
+        curStr = addDaysToYMD(curStr, 1);
+      } else if (isScheduledRest || !isExpectedCore) {
+        // Recovery / unmapped slots advance naturally without requiring a log
+        dayStatesMap.set(curStr, {
+          scheduledCycleDay: scheduledDay,
+          effectiveCycleDay: scheduledDay,
+          isScheduledRest,
+          isExpectedCore,
+          completedCoreLogs: EMPTY_SESSION_LOGS,
+          expectedWorkout: scheduledWo
+        });
+        scheduledDay = (scheduledDay % CYCLE_LENGTH) + 1;
+        curStr = addDaysToYMD(curStr, 1);
+      } else {
+        // Missed core training day -> carries forward unchanged until next completed core log date (< todayStr) or todayStr
+        while (activeDatePtr < sortedActiveCoreDates.length && sortedActiveCoreDates[activeDatePtr] <= curStr) {
+          activeDatePtr++;
+        }
+        const nextActive =
+          activeDatePtr < sortedActiveCoreDates.length && sortedActiveCoreDates[activeDatePtr] < todayStr
+            ? sortedActiveCoreDates[activeDatePtr]
+            : todayStr;
+
+        carrySegments.push({
+          start: curStr,
+          endBefore: nextActive,
+          state: {
+            scheduledCycleDay: scheduledDay,
+            effectiveCycleDay: scheduledDay,
+            isScheduledRest: false,
+            isExpectedCore: true,
+            completedCoreLogs: EMPTY_SESSION_LOGS,
+            expectedWorkout: scheduledWo
+          }
+        });
+        curStr = nextActive;
+      }
+    }
+  }
+
+  const getDayState = (targetDate: Date | string): CycleScheduleDayState | null => {
+    const targetStr = normalizeToDateStr(targetDate);
+    if (targetStr < effectiveStart || targetStr > todayStr) return null;
+
+    const direct = dayStatesMap.get(targetStr);
+    if (direct) return direct;
+
+    // Binary search carrySegments (sorted, non-overlapping [start, endBefore))
+    let lo = 0;
+    let hi = carrySegments.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const seg = carrySegments[mid];
+      if (targetStr < seg.start) {
+        hi = mid - 1;
+      } else if (targetStr >= seg.endBefore) {
+        lo = mid + 1;
+      } else {
+        return seg.state;
+      }
+    }
+    return null;
+  };
+
+  const getCycleDayForDate = (targetDate: Date | string): number => {
+    const targetStr = normalizeToDateStr(targetDate);
+    if (targetStr < effectiveStart) {
+      return 0;
+    }
+    if (targetStr <= todayStr) {
+      return getDayState(targetStr)?.effectiveCycleDay ?? 0;
+    }
+    // Future date projection
+    if (effectiveStart > todayStr) {
+      const diffFromFutureStart = diffCalendarDaysYMD(targetStr, effectiveStart);
+      return ((diffFromFutureStart % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH + 1;
+    }
+    const daysBeyondToday = diffCalendarDaysYMD(targetStr, todayStr);
+    return ((nextDayAfterToday - 1 + (daysBeyondToday - 1)) % CYCLE_LENGTH) + 1;
+  };
+
+  return {
+    effectiveStart,
+    todayStr,
+    nextDayAfterToday,
+    getCycleDayForDate,
+    getDayState
+  };
+}
+
 export function normalizeWeightEntry(
   entry: number | { weight: number; updatedAt?: number } | undefined | null,
   defaultTimestamp = 0
