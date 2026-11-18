@@ -174,7 +174,7 @@ import {
   StatCard,
   SectionHeader
 } from './ui';
-import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, SHADOW, CONTROL_HEIGHT, FOCUS } from '../styles/tokens';
+import { TYPOGRAPHY, SURFACE, BORDER, RADIUS, TRANSITION, MOTION_CONFIG, DURATION, CONTROL_HEIGHT, FOCUS } from '../styles/tokens';
 
 export interface GhostDataEntry {
   lastSession: ExerciseSessionHistoryEntry | null;
@@ -470,7 +470,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                           aria-label={`Set ${si + 1} weight`}
                           className={cn(
                             "text-center font-mono tabular-nums px-0.5 sm:px-3",
-                            isExtremeWeight && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
+                            isExtremeWeight && "border-amber-500/80 text-amber-400 focus:border-amber-400"
                           )}
                         />
                         {/* specialized table/matrix input for active workout set reps */}
@@ -485,7 +485,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                           aria-label={`Set ${si + 1} reps`}
                           className={cn(
                             "text-center font-mono tabular-nums px-0.5 sm:px-3",
-                            isExtremeReps && cn("border-amber-500/80 text-amber-400 focus:border-amber-400", SHADOW.amberWarning)
+                            isExtremeReps && "border-amber-500/80 text-amber-400 focus:border-amber-400"
                           )}
                         />
                         <div className="flex justify-center">
@@ -497,7 +497,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                               "border",
                               TRANSITION.interactive,
                               RADIUS.button,
-                              s.done ? cn("bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400", SHADOW.emeraldGlow) : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
+                              s.done ? "bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400" : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
                             )}
                             icon={<CheckCircle2 size={24} />}
                             aria-label={s.done ? "Mark set incomplete" : "Mark set complete"}

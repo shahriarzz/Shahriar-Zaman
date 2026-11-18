@@ -293,21 +293,22 @@ describe('Design System Consolidation & Token Contracts', () => {
   });
 
   describe('6. Motion Tokens & DESIGN_SYSTEM.md Integration Invariants', () => {
-    it('exports canonical DURATION scale (fast, standard, relaxed)', () => {
+    it('exports canonical DURATION scale (fast, standard, relaxed, slow)', () => {
       expect(DURATION.fast).toBe(150);
       expect(DURATION.standard).toBe(200);
       expect(DURATION.relaxed).toBe(250);
+      expect(DURATION.slow).toBe(300);
     });
 
-    it('exports MOTION_CONFIG as the canonical preset object containing standard motion presets', () => {
+    it('exports MOTION_CONFIG as the canonical preset object without unused entrance or stagger helpers', () => {
       expect(MOTION_CONFIG).toBeDefined();
-      expect(MOTION_CONFIG.entrance).toBeDefined();
+      expect((MOTION_CONFIG as Record<string, unknown>).entrance).toBeUndefined();
+      expect((MOTION_CONFIG as Record<string, unknown>).staggerDelay).toBeUndefined();
       expect(MOTION_CONFIG.viewEntrance).toBeDefined();
       expect(MOTION_CONFIG.dialogSurface).toBeDefined();
       expect(MOTION_CONFIG.calendarPanel).toBeDefined();
       expect(MOTION_CONFIG.collapse).toBeDefined();
       expect(MOTION_CONFIG.pulseSubtle).toBeDefined();
-      expect(typeof MOTION_CONFIG.staggerDelay).toBe('function');
     });
 
     it('exports TRANSITION with property-specific utilities and reduced-motion guard', () => {
@@ -1415,53 +1416,31 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(tabCard.getAttribute('aria-selected')).toBe('true');
     });
 
-    it('verifies SHADOW.accentGlowStyle contract across color formats and consumer components', () => {
-      // 1. Contract tests for supported color inputs and alpha rules
-      // 6-digit hex: applies canonical 25% glow alpha (hex 40)
-      expect(SHADOW.accentGlowStyle('#10b981')).toEqual({ boxShadow: '0 0 20px #10b98140' });
-      // 3-digit hex: expands to 6 digits and applies canonical 25% glow alpha
-      expect(SHADOW.accentGlowStyle('#0f0')).toEqual({ boxShadow: '0 0 20px #00ff0040' });
-      // 8-digit hex: preserves caller alpha
-      expect(SHADOW.accentGlowStyle('#10b98180')).toEqual({ boxShadow: '0 0 20px #10b98180' });
-      // rgb(r, g, b): validates channels and applies canonical 25% alpha
-      expect(SHADOW.accentGlowStyle('rgb(16, 185, 129)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 0.25)' });
-      // rgba(r, g, b, a): validates channels and preserves caller alpha
-      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 0.5)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 0.5)' });
-      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 1)')).toEqual({ boxShadow: '0 0 20px rgba(16, 185, 129, 1)' });
+    it('verifies unused glow and warning shadow APIs are removed while Card retains left/top accents', () => {
+      expect((SHADOW as Record<string, unknown>).accentGlowStyle).toBeUndefined();
+      expect((SHADOW as Record<string, unknown>).emeraldGlow).toBeUndefined();
+      expect((SHADOW as Record<string, unknown>).amberWarning).toBeUndefined();
 
-      // Whitespace trimming
-      expect(SHADOW.accentGlowStyle('  #10b981  ')).toEqual({ boxShadow: '0 0 20px #10b98140' });
-
-      // Unsupported formats, malformed hex, out-of-range values -> safe { boxShadow: 'none' } fallback
-      expect(SHADOW.accentGlowStyle('')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('   ')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('#12')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('#gggggg')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('rgb(300, 185, 129)')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('rgba(16, 185, 129, 1.5)')).toEqual({ boxShadow: 'none' });
-      expect(SHADOW.accentGlowStyle('not-a-color')).toEqual({ boxShadow: 'none' });
-
-      // 2. Verified usage in Card.tsx
       const cardSrc = fs.readFileSync(path.join(rootDir, 'src/components/ui/Card.tsx'), 'utf8');
-      expect(cardSrc).toContain('SHADOW.accentGlowStyle');
+      expect(cardSrc).not.toContain('accentGlowStyle');
+      expect(cardSrc).not.toContain("'glow'");
 
-      // 3. Verified non-glow in AnalyticsView.tsx (ordinary heatmap cells do not emit decorative glow)
       const analyticsSrc = fs.readFileSync(path.join(rootDir, 'src/components/AnalyticsView.tsx'), 'utf8');
-      expect(analyticsSrc).not.toContain('SHADOW.accentGlowStyle');
+      expect(analyticsSrc).not.toContain('accentGlowStyle');
 
-      // 4. Rendered behavior test on Card: inline style matches the helper output exactly
       act(() => {
         root.render(
           React.createElement(
             Card,
-            { accent: 'emerald', accentVariant: 'glow' },
-            React.createElement('span', null, 'Glow Card')
+            { accent: 'orange', accentVariant: 'left' },
+            React.createElement('span', null, 'Left Accent Card')
           )
         );
       });
       const cardEl = container.firstElementChild as HTMLDivElement;
       expect(cardEl).toBeTruthy();
-      expect(cardEl.style.boxShadow).toBe('0 0 20px #10b98140');
+      expect(cardEl.className).toContain('border-l-4');
+      expect(cardEl.style.boxShadow).toBe('');
     });
 
     it('verifies ListRow keyboard operability and accessible semantics', () => {

@@ -15,7 +15,7 @@ import {
 } from '../../styles/tokens';
 
 export type CardSurface = 'base' | 'subtle' | 'recessed' | 'elevated';
-export type CardAccentVariant = 'left' | 'top' | 'glow';
+export type CardAccentVariant = 'left' | 'top';
 export type CardVariant = 
   | 'standard' 
   | 'elevated' 
@@ -133,8 +133,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
     } else if (effectiveAccentVariant === 'top') {
       accentClasses = 'border-t-4';
       accentStyles.borderTopColor = resolvedAccentHex;
-    } else if (effectiveAccentVariant === 'glow') {
-      Object.assign(accentStyles, SHADOW.accentGlowStyle(resolvedAccentHex));
     }
   }
 

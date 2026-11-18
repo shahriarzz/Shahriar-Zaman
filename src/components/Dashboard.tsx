@@ -522,6 +522,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             const lastDate = sorted[sorted.length - 1][0];
             const sparklineAriaLabel = `Body weight trend for last ${sorted.length} entries from ${formatDateStr(firstDate)} to ${formatDateStr(lastDate)}, ranging from ${observedMin} kg to ${observedMax} kg`;
 
+            // Prevent overlapping markers with dense histories while always keeping endpoints readable
+            const MAX_SPARKLINE_MARKERS = 6;
+            const visibleMarkerIndices = new Set<number>();
+            if (sorted.length <= MAX_SPARKLINE_MARKERS) {
+              for (let i = 0; i < sorted.length; i++) visibleMarkerIndices.add(i);
+            } else {
+              visibleMarkerIndices.add(0);
+              visibleMarkerIndices.add(sorted.length - 1);
+              const step = (sorted.length - 1) / (MAX_SPARKLINE_MARKERS - 1);
+              for (let k = 1; k < MAX_SPARKLINE_MARKERS - 1; k++) {
+                visibleMarkerIndices.add(Math.round(k * step));
+              }
+            }
+
             return (
               <Stack spacing="xs">
                 <div
@@ -551,6 +565,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   {/* Overlaid circular point markers matching E1RM chart points */}
                   <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
                     {sorted.map((e, i) => {
+                      if (!visibleMarkerIndices.has(i)) return null;
                       const leftPct = i * w;
                       const yCoord = 32 - ((e[1] - min) / safeRange) * 28;
                       const topPct = (yCoord / 32) * 100;

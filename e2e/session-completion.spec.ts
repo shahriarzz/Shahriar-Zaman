@@ -11,6 +11,7 @@ import {
   readCanonicalSnapshot,
   setFirestoreEmulatorRules,
   signInWithEmulatorHarness,
+  waitForAppReady,
   waitForCloudSynced,
 } from './helpers/emulatorE2E';
 
@@ -70,7 +71,7 @@ test.describe('Workout Session Completion E2E Flow (Real UI + Firestore Emulator
 
     // 8. Reload browser page and verify no duplicate logs exist locally or in Firestore
     await page.reload();
-    await expect(page.getByText('Stay Aggressive')).toBeVisible();
+    await waitForAppReady(page);
     await waitForCloudSynced(page);
 
     const snapAfterReload = await readCanonicalSnapshot(page);

@@ -151,7 +151,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   disableAnimation = false,
   animationDuration = 800,
   icon,
-  accent = 'emerald',
+  accent = 'zinc',
   colorOverride,
   accentVariant,
   sublabel,
@@ -172,7 +172,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     value === '';
   const effectiveAccent = effectiveUnavailable ? 'zinc' : accent;
   const effectiveColorOverride = effectiveUnavailable ? undefined : colorOverride;
-  const accentHex = effectiveColorOverride || (effectiveUnavailable ? SEMANTIC_COLORS.zinc : (getAccentColor(effectiveAccent as SemanticColor) || SEMANTIC_COLORS.emerald));
+  const accentHex = effectiveColorOverride || (effectiveUnavailable ? SEMANTIC_COLORS.zinc : (getAccentColor(effectiveAccent as SemanticColor) || SEMANTIC_COLORS.zinc));
 
   const parsed = useMemo(() => parseStatValue(value, formatValue), [value, formatValue]);
 

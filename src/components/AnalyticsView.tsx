@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -58,6 +58,7 @@ import {
   STACK_SPACING,
   TYPOGRAPHY,
   CHART_THEME,
+  SEMANTIC_PALETTE,
   TRANSITION
 } from './ui';
 
@@ -289,7 +290,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       <DeferredViewSection minHeight={420}>
         <Section
           eyebrow="Strength Progression"
-          eyebrowColor="emerald"
+          eyebrowColor="indigo"
           title="Estimated 1RM Progression"
           padding="section"
           action={
@@ -301,12 +302,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                     <Button
                       key={ex.id ? `p-ex-${ex.id}-${idx}` : `p-ex-${idx}`}
                       size="sm"
-                      variant={active1RMExerciseId === ex.id ? 'success' : 'secondary'}
+                      variant="secondary"
                       onClick={() => {
                         haptics.selection();
                         setSelected1RMExerciseId(ex.id);
                       }}
-                      className="whitespace-nowrap shrink-0"
+                      className={cn(
+                        "whitespace-nowrap shrink-0",
+                        active1RMExerciseId === ex.id && cn(SEMANTIC_PALETTE.indigo.compound, "text-indigo-300 hover:bg-indigo-500/20")
+                      )}
                     >
                       {ex.name}
                     </Button>
@@ -320,7 +324,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             {aggregated.active1RMTrend.length > 0 ? (
               <div className="h-64 sm:h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
+                  <AreaChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
+                    <defs>
+                      <linearGradient id="e1rmAreaFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_THEME.indigo} stopOpacity={0.22} />
+                        <stop offset="100%" stopColor={CHART_THEME.indigo} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
                     <XAxis
                       dataKey="displayDate"
@@ -330,6 +340,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                       axisLine={false}
                       dy={6}
                       interval="preserveStartEnd"
+                      minTickGap={24}
                     />
                     <YAxis
                       stroke={CHART_THEME.axisText}
@@ -349,7 +360,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                           return (
                             <ChartTooltip>
                               <p className="text-zinc-400 font-bold">{data.date}</p>
-                              <p className="text-emerald-400 font-black text-sm tabular-nums">
+                              <p className="text-indigo-400 font-black text-sm tabular-nums">
                                 Est. 1RM: {data.epley1RM} kg
                               </p>
                               <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
@@ -359,16 +370,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                         return null;
                       }}
                     />
-                    <Line
+                    <Area
                       isAnimationActive={false}
                       type="monotone"
                       dataKey="epley1RM"
-                      stroke={CHART_THEME.emerald}
-                      strokeWidth={3}
-                      dot={{ fill: CHART_THEME.emerald, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
-                      activeDot={{ r: 6, fill: CHART_THEME.emeraldLight, stroke: CHART_THEME.text, strokeWidth: 2 }}
+                      stroke={CHART_THEME.indigo}
+                      strokeWidth={2.5}
+                      fill="url(#e1rmAreaFill)"
+                      fillOpacity={1}
+                      dot={{ fill: CHART_THEME.indigo, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: CHART_THEME.indigo, stroke: CHART_THEME.text, strokeWidth: 2 }}
                     />
-                  </LineChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             ) : (

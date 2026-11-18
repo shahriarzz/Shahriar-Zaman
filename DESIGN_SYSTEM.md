@@ -7,7 +7,13 @@
 
 ---
 
-## 1. Product principle: clarity over decoration
+## 1. Visual direction & product principle: clarity over decoration
+
+- **Product:** A precise progressive-overload training log and analysis system for serious lifters.
+- **Character:** Technical, controlled, understated.
+- **World:** A dark training instrument / performance logbook, not a neon gym or generic dashboard.
+- **Visual moments:** Strength progression and the 8-day training protocol.
+- **Signature:** The 8-day cycle marker and restrained workout-identity indicator.
 
 GAINLOG is a training tool, not a generic lifestyle or gamification app. Its visual language should feel restrained, precise, compact, and consistent.
 
@@ -172,8 +178,7 @@ Do not add another spacing or radius scale without proving the current system ca
 - **Zero-pill badge & control discipline:** All `Badge` components, metadata chips, and interactive controls use `RADIUS.badge` (`rounded-lg`) or `RADIUS.button` (`rounded-xl`). Reserve `RADIUS.pill` (`rounded-full`) exclusively for truly circular indicators (status dots, circular markers, avatar shapes) and the preserved active mobile bottom-navigation item treatment (`#mobile-nav-item-*` in `Layout.tsx`).
 - **Card surface discipline:** Standard cards (`variant="standard"`) do not receive default box shadows (`SHADOW.elevation`). Surfaces are separated by border (`BORDER.standard`) and background (`SURFACE.default` / `SURFACE.subtle`).
 - Keep elevation levels limited. Elevation (`SHADOW.elevation`) is reserved for genuinely elevated surfaces (`variant="elevated"`, `Dialog`).
-- Use `SHADOW.accentGlowStyle` / `accentVariant="glow"` only for explicitly selected, active, or achievement states, consistent with its source comment.
-- Do not introduce new decorative halos, gradients, blur, or glass effects as routine card styling.
+- Do not introduce decorative glows, halos, blur, or glass effects as card or input styling (`Card` supports `'left' | 'top'` accent borders only).
 
 ### 5.4 Touch targets
 
@@ -185,7 +190,7 @@ The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (
 
 ### 6.1 Use the real motion API
 
-The token module exports `DURATION`, `TRANSITION`, and `MOTION_CONFIG`. `MOTION_CONFIG` is the sole canonical preset object in `src/styles/tokens.ts` (`entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `pulseSubtle`, `staggerDelay`). Do not introduce secondary alias objects.
+The token module exports `DURATION` (`fast`, `standard`, `relaxed`, `slow`), `TRANSITION`, and `MOTION_CONFIG`. `MOTION_CONFIG` is the sole canonical preset object in `src/styles/tokens.ts` (`viewEntrance`, `dialogSurface`, `calendarPanel`, `collapse`, `pulseSubtle`). Do not introduce secondary alias objects.
 
 `TRANSITION` provides property-specific CSS transitions coupled with `motion-reduce:transition-none`; prefer these over untargeted `transition-all`. For Framer Motion components, always inspect reduced-motion preference via `useReducedMotion()` from `motion/react` to provide a zero-motion or static alternative for users who prefer reduced motion.
 
@@ -210,12 +215,12 @@ Use and extend existing primitives before creating alternatives. The current `sr
 
 | Primitive/helper | Contract |
 |---|---|
-| `Card` | Shared surface, border, radius, padding, and state/accent styling (`standard`, `elevated`, `interactive`, `recessed`, `selected`, `warning`, `destructive` variants; no default elevation on standard) |
+| `Card` | Shared surface, border, radius, padding, and state/accent styling (`standard`, `elevated`, `interactive`, `recessed`, `selected`, `warning`, `destructive` variants; `'left' | 'top'` accent variants; no default elevation on standard) |
 | `Section` | Card-based section composition with optional `SectionHeader` |
 | `SectionHeader` | Reusable section heading, supporting description, and action |
-| `StatCard` | Compact metric presentation |
+| `StatCard` | Compact metric presentation; defaults to neutral `'zinc'` accent unless status requires semantic color |
 | `AchievementCard` | Achievement/record-specific presentation; keep its role narrow |
-| `Badge` | Compact status or category label |
+| `Badge` | Compact status or category label (workout identity must use `WORKOUT_COLORS`, never a generic emerald `'workout'` tone) |
 | `Button` | Standardized button variants, sizes (`sm`, `md`, `lg`, `icon` at 44px min), focus/disabled states |
 | `Input`, `Textarea` | Shared text-entry controls |
 | `Banner` | Inline notice/alert variants (non-elevated by default; distinct semantic borders & subtle fills; no gradients or ping dots) |
@@ -270,7 +275,7 @@ Charts exist to explain training history and trends, not decorate the dashboard.
 - Give series colors stable meanings within a chart; avoid arbitrary palette changes between screens.
 - Use direct labels, legends, units, and date ranges when they materially help interpretation.
 - Keep gridlines and axes visually subordinate to the data.
-- Avoid 3D charts, unnecessary gradients, heavy borders, excessive gridlines, and animation that delays interpretation.
+- Avoid 3D charts, unnecessary gradients, heavy borders, excessive gridlines, and animation that delays interpretation. Exception: the primary Estimated 1RM Progression chart in `AnalyticsView` uses a subtle indigo-to-transparent Recharts SVG gradient fill beneath `CHART_THEME.indigo` to visually anchor strength-trend analysis without shadows or glow.
 - Use a clear empty state when data is unavailable; do not imply zero when the correct state is unknown or not applicable.
 - Ensure charts remain interpretable without color alone and test tooltips/legends on touch devices.
 - Do not duplicate or recalculate domain metrics inside chart components. Consume canonical derived values.

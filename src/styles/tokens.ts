@@ -80,23 +80,25 @@ export const ICON_SIZE = {
  * Canonical duration scale in milliseconds.
  * - fast (150ms): Micro-interactions, value opacity transitions
  * - standard (200ms): Interactive hovers, color transitions, accordion collapses
- * - relaxed (250ms): View and section entrances, modal surfaces, completion pulses
+ * - relaxed (250ms): View entrances, modal surfaces, completion pulses
+ * - slow (300ms): Smooth transform and progress-bar transitions (matches Tailwind duration-300)
  */
 export const DURATION = {
   fast: 150,
   standard: 200,
   relaxed: 250,
+  slow: 300,
 } as const;
 
 // Reusable Tailwind CSS transition utility tokens.
 // Standardized on property-specific transitions with motion-reduce:transition-none for accessibility.
 export const TRANSITION = {
   colors: 'transition-colors duration-200 motion-reduce:transition-none',
-  transform: 'transition-transform duration-300 motion-reduce:transition-none',
+  transform: 'transition-transform duration-300 motion-reduce:transition-none', // matches DURATION.slow
   opacity: 'transition-opacity duration-150 motion-reduce:transition-none',
   interactive: 'transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none',
   button: 'transition-[background-color,border-color,color,transform] duration-200 motion-reduce:transition-none',
-  progressBar: 'transition-[width,background-color] duration-300 motion-reduce:transition-none',
+  progressBar: 'transition-[width,background-color] duration-300 motion-reduce:transition-none', // matches DURATION.slow
 } as const;
 
 /**
@@ -104,19 +106,13 @@ export const TRANSITION = {
  * 
  * Architecture Note on Compositor Performance vs Layout Reflow:
  * 1. Compositor-friendly entrances:
- *    - `entrance`, `viewEntrance`, `dialogSurface`, `calendarPanel`: operate strictly on GPU-accelerated
+ *    - `viewEntrance`, `dialogSurface`, `calendarPanel`: operate strictly on GPU-accelerated
  *      properties (opacity, translateY, scale) with small displacements (6-10px) to prevent layout reflow.
  * 2. Layout-affecting accordion collapses:
  *    - `collapse`: animates `height: 0` to `height: 'auto'` with overflow clipping. Reserved exclusively
  *      for progressive drawer disclosure where content layout expansion is functionally required.
  */
 export const MOTION_CONFIG = {
-  // Section entrance (subtle fade & rise: ~6px, 250ms relaxed)
-  entrance: {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
-  },
   // View/modal drill-down entrance (e.g. Program Editor, Fullscreen views)
   viewEntrance: {
     initial: { opacity: 0, y: 8 },
@@ -150,8 +146,6 @@ export const MOTION_CONFIG = {
     scale: [1, 1.015, 1],
     transition: { duration: DURATION.relaxed / 1000, ease: 'easeOut' },
   },
-  // Stagger delays for section sequences (subtle 40ms intervals, capped to avoid waiting)
-  staggerDelay: (index: number, maxDelay = 0.16) => Math.min(index * 0.04, maxDelay),
 } as const;
 
 export const INTERACTIVE = {
@@ -169,73 +163,6 @@ export const SHADOW = {
   elevation: 'shadow-md',
   panel: 'shadow-2xl',
   modal: 'shadow-2xl', // Narrow semantic alias for dialog modals sharing top elevation tier
-  /**
-   * Generates inline CSSProperties boxShadow for dynamic accent glow.
-   * Single source of truth for glow geometry (0 0 20px) and canonical ~25% alpha.
-   *
-   * Supported color formats and alpha rules:
-   * 1. Six-digit hex (#rrggbb): applies canonical 25% glow alpha (hex 40): `0 0 20px #rrggbb40`.
-   * 2. Three-digit hex (#rgb): expands each nibble to two characters and applies canonical 25% glow alpha: `0 0 20px #rrggbbaa40`.
-   * 3. Eight-digit hex (#rrggbbaa): explicitly preserves caller-supplied alpha: `0 0 20px #rrggbbaa`.
-   * 4. rgb(r, g, b): validates channels (0-255) and applies canonical 25% alpha: `0 0 20px rgba(r, g, b, 0.25)`.
-   * 5. rgba(r, g, b, a): validates channels (0-255) and alpha (0-1), explicitly preserving caller-supplied alpha: `0 0 20px rgba(r, g, b, a)`.
-   *
-   * Any unsupported format, malformed hex, out-of-range channel/alpha, or empty input returns `{ boxShadow: 'none' }`.
-   */
-  accentGlowStyle: (color: string): { boxShadow: string } => {
-    if (!color || typeof color !== 'string') return { boxShadow: 'none' };
-    const trimmed = color.trim();
-    if (!trimmed) return { boxShadow: 'none' };
-
-    // 1. 6-digit hex: #rrggbb
-    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-      return { boxShadow: `0 0 20px ${trimmed}40` };
-    }
-
-    // 2. 3-digit hex: #rgb
-    if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
-      const r = trimmed[1];
-      const g = trimmed[2];
-      const b = trimmed[3];
-      return { boxShadow: `0 0 20px #${r}${r}${g}${g}${b}${b}40` };
-    }
-
-    // 3. 8-digit hex: #rrggbbaa (preserves caller alpha)
-    if (/^#[0-9a-fA-F]{8}$/.test(trimmed)) {
-      return { boxShadow: `0 0 20px ${trimmed}` };
-    }
-
-    const isValidChannel = (val: number) => Number.isInteger(val) && val >= 0 && val <= 255;
-
-    // 4. rgb(r, g, b)
-    const rgbMatch = trimmed.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
-    if (rgbMatch) {
-      const r = Number(rgbMatch[1]);
-      const g = Number(rgbMatch[2]);
-      const b = Number(rgbMatch[3]);
-      if (isValidChannel(r) && isValidChannel(g) && isValidChannel(b)) {
-        return { boxShadow: `0 0 20px rgba(${r}, ${g}, ${b}, 0.25)` };
-      }
-      return { boxShadow: 'none' };
-    }
-
-    // 5. rgba(r, g, b, a) (preserves caller alpha)
-    const rgbaMatch = trimmed.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i);
-    if (rgbaMatch) {
-      const r = Number(rgbaMatch[1]);
-      const g = Number(rgbaMatch[2]);
-      const b = Number(rgbaMatch[3]);
-      const a = Number(rgbaMatch[4]);
-      if (isValidChannel(r) && isValidChannel(g) && isValidChannel(b) && !Number.isNaN(a) && a >= 0 && a <= 1) {
-        return { boxShadow: `0 0 20px rgba(${r}, ${g}, ${b}, ${rgbaMatch[4]})` };
-      }
-      return { boxShadow: 'none' };
-    }
-
-    return { boxShadow: 'none' };
-  },
-  emeraldGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]',
-  amberWarning: 'shadow-[0_0_8px_rgba(245,158,11,0.15)]',
 } as const;
 
 // Central color-semantic map — resolves a semantic name to its actual color value.

@@ -22,6 +22,7 @@ import {
   Stack,
   Grid,
   EmptyState,
+  ChartTooltip,
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
   getAccentColor,
@@ -1098,48 +1099,52 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                     {prWeight > 0 && historyLogs.length > 1 && (
                                       <div className="h-32 w-full pt-1">
                                         <ResponsiveContainer width="100%" height="100%">
-                                          <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -15, bottom: 4 }}>
+                                          <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -4, bottom: 4 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
-                                            <XAxis 
-                                              dataKey="date" 
-                                              stroke={CHART_THEME.axisText} 
-                                              fontSize={9} 
-                                              tickLine={false} 
+                                            <XAxis
+                                              dataKey="date"
+                                              stroke={CHART_THEME.axisText}
+                                              fontSize={10}
+                                              tickLine={false}
                                               axisLine={false}
+                                              interval="preserveStartEnd"
+                                              minTickGap={24}
                                               tickFormatter={(val) => val.split('-').slice(1).join('/')}
                                             />
-                                            <YAxis 
-                                              stroke={CHART_THEME.axisText} 
-                                              fontSize={9} 
-                                              tickLine={false} 
+                                            <YAxis
+                                              stroke={CHART_THEME.axisText}
+                                              fontSize={10}
+                                              tickLine={false}
                                               axisLine={false}
-                                              width={35}
+                                              width={42}
                                               tickFormatter={(val) => `${val}kg`}
                                             />
                                             <Tooltip
                                               isAnimationActive={false}
                                               animationDuration={0}
-                                              contentStyle={{
-                                                backgroundColor: CHART_THEME.background,
-                                                borderColor: CHART_THEME.grid,
-                                                borderRadius: '12px',
-                                                fontSize: '10px',
-                                                fontFamily: 'monospace',
-                                                color: CHART_THEME.text
+                                              content={({ active, payload }) => {
+                                                if (active && payload && payload.length) {
+                                                  const point = payload[0].payload as { date: string; maxW: number };
+                                                  return (
+                                                    <ChartTooltip>
+                                                      <p className="text-zinc-400 font-bold">Date: {point.date}</p>
+                                                      <p className="text-indigo-400 font-bold tabular-nums">
+                                                        Peak Weight: {point.maxW}kg
+                                                      </p>
+                                                    </ChartTooltip>
+                                                  );
+                                                }
+                                                return null;
                                               }}
-                                              itemStyle={{ color: exColor }}
-                                              labelStyle={{ color: CHART_THEME.labelText }}
-                                              formatter={(value) => [`${value}kg`, 'Peak Weight']}
-                                              labelFormatter={(label) => `Date: ${label}`}
                                             />
                                             <Line
                                               isAnimationActive={false}
                                               type="monotone"
                                               dataKey="maxW"
-                                              stroke={exColor}
+                                              stroke={CHART_THEME.indigo}
                                               strokeWidth={2}
-                                              dot={{ r: 2.5, fill: exColor, strokeWidth: 0 }}
-                                              activeDot={{ r: 4 }}
+                                              dot={{ r: 2.5, fill: CHART_THEME.indigo, strokeWidth: 0 }}
+                                              activeDot={{ r: 4, fill: CHART_THEME.indigo, stroke: CHART_THEME.text, strokeWidth: 1.5 }}
                                             />
                                           </LineChart>
                                         </ResponsiveContainer>

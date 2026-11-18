@@ -65,12 +65,20 @@ export async function resetBrowserStorage(page: Page): Promise<void> {
   });
 }
 
+export async function waitForAppReady(page: Page): Promise<void> {
+  await expect(page.getByRole('navigation').first()).toBeVisible();
+  const main = page.getByRole('main');
+  await expect(main).toBeVisible();
+  await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Active Target' })).toBeVisible();
+}
+
 export async function gotoCleanApp(page: Page): Promise<void> {
   await page.goto('');
-  await expect(page.getByText('Stay Aggressive')).toBeVisible();
+  await waitForAppReady(page);
   await resetBrowserStorage(page);
   await page.reload();
-  await expect(page.getByText('Stay Aggressive')).toBeVisible();
+  await waitForAppReady(page);
 }
 
 export async function signInWithEmulatorHarness(

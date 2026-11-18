@@ -236,9 +236,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       RADIUS.card,
                       !isCurrentMonthDay && "opacity-20 pointer-events-none disabled:cursor-not-allowed",
                       isSelected
-                        ? "border-emerald-400 bg-zinc-800/90 ring-1 ring-emerald-400/50"
+                        ? "border-orange-500/70 bg-zinc-800/90 ring-1 ring-orange-500/40"
                         : isToday
-                          ? "border-emerald-500/60 bg-emerald-500/10"
+                          ? "border-zinc-500 bg-zinc-800/50"
                           : cn(BORDER.subtle, SURFACE.recessed, INTERACTIVE.hover)
                     )}
                   >
@@ -250,9 +250,9 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         TRANSITION.colors,
                         status ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : 'border-2 border-transparent',
                         isSelected
-                          ? (isToday ? "bg-zinc-800 text-emerald-400 font-black" : "bg-zinc-800 text-white font-bold")
+                          ? (isToday ? "bg-zinc-800 text-orange-400 font-black" : "bg-zinc-800 text-white font-bold")
                           : isToday
-                            ? "bg-emerald-500/20 text-emerald-400 font-black"
+                            ? "bg-zinc-800 text-orange-400 font-black"
                             : status
                               ? "text-zinc-200"
                               : "text-zinc-500"
@@ -323,7 +323,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 <div className="flex justify-between items-start mb-2">
                   <SectionHeader
                     eyebrow="Day Overview"
-                    eyebrowColor="emerald"
+                    eyebrowColor="zinc"
                     title={format(selectedDate, 'EEEE')}
                     description={format(selectedDate, 'MMMM do, yyyy')}
                   />
@@ -354,7 +354,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         variant="subtle"
                       />
                       {isSelectedDateToday && (
-                        <Badge label="TODAY" color="emerald" variant="solid" />
+                        <Badge label="TODAY" color="orange" variant="subtle" />
                       )}
                     </>
                   ) : (isSelectedDateFuture || isSelectedDateToday) && expectedWoForSelected ? (
@@ -526,7 +526,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                                   <p className={TYPOGRAPHY.caption}>{meta?.target || ''}</p>
                                 </div>
                                 <div className="text-right">
-                                  <span className={cn("font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5", RADIUS.badge)}>
+                                  <span className={cn("font-mono text-xs font-bold text-zinc-200 bg-zinc-900 border border-zinc-800 px-2 py-0.5", RADIUS.badge)}>
                                     {ex.sets} × {ex.reps}
                                   </span>
                                 </div>
@@ -678,7 +678,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         variant="outline"
                         size="md"
                         fullWidth
-                        rightIcon={<ArrowRight size={14} className="text-emerald-400" />}
+                        rightIcon={<ArrowRight size={14} className="text-zinc-400" />}
                         onClick={() => {
                           haptics.selection();
                           onNavigateToHistory(selectedLog.id || selectedDateStr || undefined);

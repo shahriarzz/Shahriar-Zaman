@@ -3,7 +3,7 @@ import { cn } from '../../lib/utils';
 import { SemanticColor, getAccentColor, RADIUS, TYPOGRAPHY, SURFACE, BORDER, SPACING, GAP, TRANSITION } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
-export type BadgeTone = 'achievement' | 'success' | 'warning' | 'destructive' | 'info' | 'workout' | 'neutral';
+export type BadgeTone = 'achievement' | 'success' | 'warning' | 'destructive' | 'info' | 'neutral';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   label: React.ReactNode;
@@ -23,7 +23,6 @@ const TONE_PRESETS: Record<BadgeTone, { color: SemanticColor; variant: 'solid' |
   warning: { color: 'amber', variant: 'subtle' },
   destructive: { color: 'red', variant: 'subtle' },
   info: { color: 'zinc', variant: 'subtle' },
-  workout: { color: 'emerald', variant: 'subtle' },
   neutral: { color: 'zinc', variant: 'subtle' },
 };
 
