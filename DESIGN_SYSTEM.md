@@ -125,8 +125,8 @@ The token names and definitions in source are authoritative. Do not invent names
 ### Readable typography floors by role
 
 To preserve comfort and legibility across high-density mobile screens:
-- **Absolute floor (9px):** `TYPOGRAPHY.micro` (`text-[9px]`) and `TYPOGRAPHY.badgeSm` (`text-[9px]`) are the lowest permitted font sizes in the app, strictly reserved for micro-badges, tertiary status tags, and compact category tags.
-- **Secondary metadata floor (10px):** `eyebrow`, `label`, `caption`, `metadata`, `helperText`, `dialogFooter`, and `navLabel` use `text-[10px]`.
+- **Absolute floor (9px):** `TYPOGRAPHY.micro` (`text-[9px]`) and `TYPOGRAPHY.badgeSm` (`text-[9px]`) are the lowest permitted font sizes in the app, strictly reserved for micro-badges, tertiary status tags, and compact category tags. Important state badges (`TODAY`, `TRAINING DAY`, `COMPLETED TODAY`, `COMPLETED SESSION`) use `Badge` `size="md"` (`10px`).
+- **Secondary metadata floor (10px):** `eyebrow`, `label`, `caption`, `metadata`, `helperText`, `dialogFooter`, and `navLabel` use `text-[10px]`. Empty state descriptions (`EmptyState`) use `TYPOGRAPHY.bodySecondary` (`12px` sans, normal case).
 - **Interactive control floor (11px / 12px):** `buttonSm` (`text-[11px]`), `button` (`text-xs` / 12px), `segmentedSm` (`text-[10px]`), and `segmentedMd` (`text-xs`).
 - **Prohibited:** No typography token or inline text may use `text-[8px]` or below.
 
@@ -148,9 +148,9 @@ To preserve comfort and legibility across high-density mobile screens:
 
 Use the existing exports in `src/styles/tokens.ts`:
 
-- `SPACING`: intent-based padding utilities (`none`, `compact`, `standard`, `section`, `hero`) plus component-specific entries such as badge and segmented-control padding.
-- `GAP`: horizontal/grid gap scale (`none`, `micro`, `xs`, `sm`, `md`, `lg`, `xl`, `2xl`).
-- `STACK_SPACING`: vertical rhythm scale with corresponding size names.
+- `SPACING`: intent-based padding utilities aligned to the 4px grid (`none`, `compact` = `py-2 px-3`, `standard`, `section`, `hero`) plus component-specific entries such as badge and segmented-control padding.
+- `GAP`: horizontal/grid gap scale (`none`, `micro` = 4px, `xs` = 8px, `sm` = 12px, `md` = 16px, `lg` = 24px, `xl` = 32px, `2xl` = 40px).
+- `STACK_SPACING`: vertical rhythm scale with corresponding 4px-aligned size names.
 - `RADIUS`: `badge`, `button`, `card`, `panel`, `pill`.
 - `CONTROL_HEIGHT`: canonical height contract for interactive controls:
   - `sm`: `min-h-[32px] h-8` (compact inputs, secondary buttons)
@@ -229,6 +229,8 @@ Use and extend existing primitives before creating alternatives. The current `sr
 | `SegmentedControl` | Compact choice among a small set of options; not a universal replacement for every tab/navigation pattern |
 | `Grid`, `Stack` | Shared layout composition |
 | `ListRow` | Repeated list-row pattern |
+| `ProgressBar` | Accessible `role="progressbar"` meter with clamped 0–100 fill and semantic/custom color support |
+| `ToggleChip` | Interactive `aria-pressed` tag/attribute selector button with `44px` mobile hit target (separate from non-interactive `Badge`) |
 | `ChartTooltip` | Shared Recharts tooltip styling |
 | `WorkoutColorIndicator` | Workout-type color marker |
 | `Toast` | Transient feedback |
@@ -271,11 +273,11 @@ A local-first app may still need loading, error, empty, offline, sync, and pendi
 
 Charts exist to explain training history and trends, not decorate the dashboard.
 
-- Reuse `CHART_THEME` and existing `ChartTooltip` patterns.
-- Give series colors stable meanings within a chart; avoid arbitrary palette changes between screens.
-- Use direct labels, legends, units, and date ranges when they materially help interpretation.
+- Reuse `CHART_THEME`, `CHART_GRID_PROPS`, `CHART_AXIS_PROPS`, and existing `ChartTooltip` patterns.
+- Give series colors stable meanings within a chart (`indigo` for Estimated 1RM & exercise strength progression, `emerald` for muscle targeting bars and volume heatmap intensity, `WORKOUT_COLORS` for routine distribution, neutral `zinc` with optional `orange` latest-point marker for body weight trend without implying weight gain/loss is good or bad).
+- Use direct labels, legends, units, `aria-label` descriptions, and date ranges when they materially help interpretation.
 - Keep gridlines and axes visually subordinate to the data.
-- Avoid 3D charts, unnecessary gradients, heavy borders, excessive gridlines, and animation that delays interpretation. Exception: the primary Estimated 1RM Progression chart in `AnalyticsView` uses a subtle indigo-to-transparent Recharts SVG gradient fill beneath `CHART_THEME.indigo` to visually anchor strength-trend analysis without shadows or glow.
+- Avoid 3D charts, unnecessary gradients, heavy borders, excessive gridlines, and animation that delays interpretation. Exception: the primary Estimated 1RM Progression chart in `AnalyticsView` uses a subtle indigo-to-transparent Recharts SVG gradient fill (scoped via React `useId()`) beneath `CHART_THEME.indigo` to visually anchor strength-trend analysis without shadows or glow.
 - Use a clear empty state when data is unavailable; do not imply zero when the correct state is unknown or not applicable.
 - Ensure charts remain interpretable without color alone and test tooltips/legends on touch devices.
 - Do not duplicate or recalculate domain metrics inside chart components. Consume canonical derived values.

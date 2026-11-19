@@ -30,6 +30,7 @@ interface NavItemProps {
 }
 
 const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onClick, onPointerDown, isMobile = false }) => {
+  const shouldReduceMotion = useReducedMotion();
   const handleClick = () => {
     haptics.selection();
     onClick();
@@ -92,15 +93,19 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
         </div>
 
         {active && (
-          <span
+          <motion.span
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: shouldReduceMotion ? 0 : DURATION.fast / 1000, ease: 'easeOut' }}
             className={cn(
               TYPOGRAPHY.navLabel,
+              TRANSITION.opacity,
               "overflow-hidden whitespace-nowrap text-orange-500 font-bold pl-1.5 leading-none uppercase tracking-wider"
             )}
             aria-hidden="true"
           >
             {label}
-          </span>
+          </motion.span>
         )}
       </div>
     </button>

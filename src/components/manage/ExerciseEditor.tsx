@@ -7,6 +7,7 @@ import {
   Input,
   Textarea,
   Badge,
+  ToggleChip,
   Stack,
   Grid,
   SegmentedControl,
@@ -14,10 +15,7 @@ import {
   BORDER,
   SURFACE,
   RADIUS,
-  EDITOR_HEADER,
-  CONTROL_HEIGHT,
-  TRANSITION,
-  FOCUS
+  EDITOR_HEADER
 } from '../ui';
 import { cn } from '../../lib/utils';
 import { haptics } from '../../utils/haptics';
@@ -171,25 +169,13 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
                 {['priority', 'daily', 'compound', 'isolation', 'machine', 'free-weight'].map(t => {
                   const isSelected = tags.includes(t);
                   return (
-                    <button
+                    <ToggleChip
                       key={t}
-                      type="button"
-                      aria-pressed={isSelected}
+                      selected={isSelected}
                       onClick={() => toggleTag(t)}
-                      className={cn(
-                        CONTROL_HEIGHT.touchTarget,
-                        "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
-                        TYPOGRAPHY.badgeSm,
-                        RADIUS.badge,
-                        TRANSITION.colors,
-                        FOCUS.visible,
-                        isSelected
-                          ? "bg-orange-500/15 border-orange-500/35 text-orange-400"
-                          : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                      )}
                     >
                       {isSelected ? `✓ ${t}` : `+ ${t}`}
-                    </button>
+                    </ToggleChip>
                   );
                 })}
               </div>

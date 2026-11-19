@@ -297,6 +297,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     label={isTodayCompleted ? 'COMPLETED TODAY' : 'TRAINING DAY'}
                     color={isTodayCompleted ? 'emerald' : 'orange'}
                     variant="subtle"
+                    size="md"
                   />
                 )}
                 {todayWorkout.badge && todayWorkout.badge !== 'DAY 8 · REST' && (
@@ -554,7 +555,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         `${i * w},${32 - ((e[1] - min) / safeRange) * 28}`
                       ).join(' ')}
                       fill="none"
-                      stroke={SEMANTIC_COLORS.emerald}
+                      stroke={SEMANTIC_COLORS.zinc}
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -562,10 +563,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     />
                   </svg>
 
-                  {/* Overlaid circular point markers matching E1RM chart points */}
+                  {/* Overlaid circular point markers: neutral zinc series with orange latest marker */}
                   <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
                     {sorted.map((e, i) => {
                       if (!visibleMarkerIndices.has(i)) return null;
+                      const isLatest = i === sorted.length - 1;
                       const leftPct = i * w;
                       const yCoord = 32 - ((e[1] - min) / safeRange) * 28;
                       const topPct = (yCoord / 32) * 100;
@@ -573,7 +575,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         <div
                           key={`spark-dot-${e[0]}-${i}`}
                           data-testid="bodyweight-marker"
-                          className="absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-zinc-950 bg-emerald-500"
+                          data-latest={isLatest ? 'true' : undefined}
+                          className={cn(
+                            "absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-zinc-950",
+                            isLatest ? "bg-orange-500" : "bg-zinc-400"
+                          )}
                           style={{ left: `${leftPct}%`, top: `${topPct}%` }}
                         />
                       );

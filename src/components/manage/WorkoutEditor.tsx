@@ -23,6 +23,7 @@ import {
   Button,
   Input,
   Badge,
+  ToggleChip,
   WorkoutColorIndicator,
   SegmentedControl,
   ListRow,
@@ -647,42 +648,20 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         {/* Priority / Tag Toggles & Deep Editor Link */}
                         <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t", BORDER.subtle)}>
                           <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              aria-pressed={isPriority}
+                            <ToggleChip
+                              selected={isPriority}
+                              color="orange"
                               onClick={() => handleTogglePriorityTag(ex.id)}
-                              className={cn(
-                                CONTROL_HEIGHT.touchTarget,
-                                "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
-                                TYPOGRAPHY.badgeSm,
-                                RADIUS.badge,
-                                TRANSITION.colors,
-                                FOCUS.visible,
-                                isPriority
-                                  ? "bg-orange-500/15 border-orange-500/35 text-orange-400"
-                                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                              )}
                             >
                               {isPriority ? '★ Priority Item' : '+ Mark Priority'}
-                            </button>
-                            <button
-                              type="button"
-                              aria-pressed={isDaily}
+                            </ToggleChip>
+                            <ToggleChip
+                              selected={isDaily}
+                              color="amber"
                               onClick={() => handleToggleDailyTag(ex.id)}
-                              className={cn(
-                                CONTROL_HEIGHT.touchTarget,
-                                "sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 border inline-flex items-center gap-1",
-                                TYPOGRAPHY.badgeSm,
-                                RADIUS.badge,
-                                TRANSITION.colors,
-                                FOCUS.visible,
-                                isDaily
-                                  ? "bg-amber-500/15 border-amber-500/35 text-amber-400"
-                                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                              )}
                             >
                               {isDaily ? 'Daily High-Frequency' : '+ Mark Daily'}
-                            </button>
+                            </ToggleChip>
                           </div>
 
                           <div className="flex items-center gap-2">

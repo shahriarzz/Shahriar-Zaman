@@ -63,7 +63,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           {title}
         </p>
         {description && (
-          <p className={TYPOGRAPHY.emptyDescription}>
+          <p className={cn(TYPOGRAPHY.bodySecondary, "max-w-[280px] leading-relaxed")}>
             {description}
           </p>
         )}
@@ -103,7 +103,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         {title}
       </p>
       {description && (
-        <p className={TYPOGRAPHY.emptyDescription}>
+        <p className={cn(TYPOGRAPHY.bodySecondary, "max-w-[280px] leading-relaxed")}>
           {description}
         </p>
       )}

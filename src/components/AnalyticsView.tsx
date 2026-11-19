@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -58,6 +58,8 @@ import {
   STACK_SPACING,
   TYPOGRAPHY,
   CHART_THEME,
+  CHART_GRID_PROPS,
+  CHART_AXIS_PROPS,
   SEMANTIC_PALETTE,
   TRANSITION
 } from './ui';
@@ -92,6 +94,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
   const [currentHeatmapMonth, setCurrentHeatmapMonth] = useState<Date>(savedState?.currentHeatmapMonth ?? new Date());
   const [showAllRecords, setShowAllRecords] = useState<boolean>(false);
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
+  const rawE1rmGradientId = useId();
+  const e1rmGradientId = `e1rmAreaFill-${rawE1rmGradientId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   React.useEffect(() => {
     onSaveState?.({
@@ -135,6 +139,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
   const visibleExercises = showAllExercises
     ? aggregated.mostFrequentExercises
     : aggregated.mostFrequentExercises.slice(0, 3);
+
+  const active1RMExerciseName =
+    priorityExercises.find((ex) => ex.id === active1RMExerciseId)?.name || 'Selected Exercise';
 
   const muscleBalanceDateRange = useMemo(() => {
     const today = currentDate;
@@ -322,31 +329,29 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         >
           <Stack spacing="lg">
             {aggregated.active1RMTrend.length > 0 ? (
-              <div className="h-64 sm:h-72 w-full">
+              <div
+                className="h-64 sm:h-72 w-full"
+                role="img"
+                aria-label={`Estimated 1RM progression chart for ${active1RMExerciseName} across ${aggregated.active1RMTrend.length} sessions`}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={aggregated.active1RMTrend} margin={{ top: 12, right: 16, left: -4, bottom: 8 }}>
                     <defs>
-                      <linearGradient id="e1rmAreaFill" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id={e1rmGradientId} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={CHART_THEME.indigo} stopOpacity={0.22} />
                         <stop offset="100%" stopColor={CHART_THEME.indigo} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
+                    <CartesianGrid {...CHART_GRID_PROPS} vertical={false} />
                     <XAxis
                       dataKey="displayDate"
-                      stroke={CHART_THEME.axisText}
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
+                      {...CHART_AXIS_PROPS}
                       dy={6}
                       interval="preserveStartEnd"
                       minTickGap={24}
                     />
                     <YAxis
-                      stroke={CHART_THEME.axisText}
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
+                      {...CHART_AXIS_PROPS}
                       width={48}
                       tickFormatter={(v) => `${Math.round(v)}kg`}
                       domain={['dataMin - 5', 'dataMax + 5']}
@@ -376,7 +381,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                       dataKey="epley1RM"
                       stroke={CHART_THEME.indigo}
                       strokeWidth={2.5}
-                      fill="url(#e1rmAreaFill)"
+                      fill={`url(#${e1rmGradientId})`}
                       fillOpacity={1}
                       dot={{ fill: CHART_THEME.indigo, r: 4, stroke: CHART_THEME.background, strokeWidth: 2 }}
                       activeDot={{ r: 6, fill: CHART_THEME.indigo, stroke: CHART_THEME.text, strokeWidth: 2 }}
@@ -451,6 +456,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       >
         <Stack spacing="lg">
           {/* Heatmap Grid */}
+          <div
+            role="region"
+            aria-label={`Monthly volume intensity heatmap for ${format(heatmapData.monthStart, 'MMMM yyyy')}, ${aggregated.activeDaysCount} active days`}
+          >
           <Stack spacing="xs">
             {/* Weekday headers */}
             <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
@@ -514,6 +523,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               })}
             </div>
           </Stack>
+          </div>
 
           {/* Legend + Summary derived directly from single intensity scale */}
           <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
@@ -565,32 +575,51 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         >
           <Stack spacing="lg">
             {/* Horizontal Bar Chart without redundant Cell layers */}
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} horizontal={false} />
-                  <XAxis type="number" stroke={CHART_THEME.axisText} fontSize={10} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="category" type="category" stroke={CHART_THEME.axisText} fontSize={11} axisLine={false} tickLine={false} width={84} />
-                  <Tooltip
-                    isAnimationActive={false}
-                    animationDuration={0}
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const d = payload[0].payload;
-                        return (
-                          <ChartTooltip>
-                            <span className="text-zinc-400 uppercase">{d.category}: </span>
-                            <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
-                          </ChartTooltip>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar isAnimationActive={false} dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {muscleChartData.length > 0 ? (
+              <div
+                className="h-72 w-full"
+                role="img"
+                aria-label={`Muscle group targeting bar chart by ${muscleMetric} across ${muscleChartData.length} muscle groups`}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={muscleChartData} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
+                    <CartesianGrid {...CHART_GRID_PROPS} horizontal={false} />
+                    <XAxis type="number" {...CHART_AXIS_PROPS} />
+                    <YAxis
+                      dataKey="category"
+                      type="category"
+                      interval={0}
+                      {...CHART_AXIS_PROPS}
+                      width={88}
+                      tickFormatter={(val: string) => (val && val.length > 13 ? `${val.slice(0, 12)}…` : val)}
+                    />
+                    <Tooltip
+                      isAnimationActive={false}
+                      animationDuration={0}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const d = payload[0].payload;
+                          return (
+                            <ChartTooltip>
+                              <span className="text-zinc-400 uppercase">{d.category}: </span>
+                              <strong className="text-emerald-400 font-bold">{d.formattedVal}</strong>
+                            </ChartTooltip>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar isAnimationActive={false} dataKey="value" fill={CHART_THEME.emerald} radius={[0, 8, 8, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyState
+                size="compact"
+                title="No muscle targeting data"
+                description="Complete sets in this range to view muscle load distribution."
+              />
+            )}
 
             {/* Most Frequent Exercises inside one unified compact Card */}
             <Stack spacing="sm" className={cn("pt-4 border-t", BORDER.subtle)}>
@@ -890,7 +919,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             className="flex flex-col justify-between"
           >
             {workoutPieData.length > 0 ? (
-              <div className="h-48 w-full relative my-auto">
+              <div
+                className="h-48 w-full relative my-auto"
+                role="img"
+                aria-label={`Routine distribution pie chart across ${workoutPieData.length} workout types`}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -932,8 +965,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className={cn(TYPOGRAPHY.body, "h-48 flex items-center justify-center text-zinc-500")}>
-                No session data in range
+              <div className="h-48 flex items-center justify-center">
+                <EmptyState size="compact" title="No session data in range" className="w-full" />
               </div>
             )}
 

@@ -34,7 +34,7 @@ export const RADIUS = {
 
 export const SPACING = {
   none: 'p-0',
-  compact: 'py-2.5 px-3.5',
+  compact: 'py-2 px-3',
   standard: 'p-5',
   section: 'p-6',
   hero: 'p-8',
@@ -274,12 +274,23 @@ export const CHART_THEME = {
   background: CANVAS_HEX, // Shared canvas background
   text: '#ffffff',
   emerald: SEMANTIC_COLORS.emerald,
-  emeraldLight: '#34d399',
   orange: SEMANTIC_COLORS.orange,
   amber: SEMANTIC_COLORS.amber,
   red: SEMANTIC_COLORS.red,
   indigo: SEMANTIC_COLORS.indigo,
   zinc: SEMANTIC_COLORS.zinc,
+} as const;
+
+export const CHART_GRID_PROPS = {
+  strokeDasharray: '3 3',
+  stroke: CHART_THEME.grid,
+} as const;
+
+export const CHART_AXIS_PROPS = {
+  stroke: CHART_THEME.axisText,
+  fontSize: 10,
+  tickLine: false,
+  axisLine: false,
 } as const;
 
 export function getAccentColor(accent?: SemanticColor | null): string | undefined {
@@ -340,8 +351,8 @@ export const TYPOGRAPHY = {
 export const GAP = {
   none: 'gap-0',
   micro: 'gap-1',
-  xs: 'gap-1.5',
-  sm: 'gap-2.5',
+  xs: 'gap-2',
+  sm: 'gap-3',
   md: 'gap-4',
   lg: 'gap-6',
   xl: 'gap-8',
@@ -352,8 +363,8 @@ export type GapSize = keyof typeof GAP;
 
 export const STACK_SPACING = {
   none: 'space-y-0',
-  xs: 'space-y-1.5',
-  sm: 'space-y-2.5',
+  xs: 'space-y-2',
+  sm: 'space-y-3',
   md: 'space-y-4',
   lg: 'space-y-6',
   xl: 'space-y-8',

@@ -20,10 +20,6 @@ import '@fontsource/jetbrains-mono/600.css';
 import '../../index.css';
 import { ErrorFallback } from '../../components/ui';
 
-if (!isFirebaseEmulatorEnabled) {
-  throw new Error('[GAINLOG E2E Harness] Refusing to boot e2eEntry outside VITE_FIREBASE_USE_EMULATOR=true mode.');
-}
-
 interface Props {
   children?: ReactNode;
 }
@@ -62,41 +58,52 @@ class E2EErrorBoundary extends Component<Props, State> {
   }
 }
 
-(window as any).__GAINLOG_E2E__ = {
-  auth: {
-    async signInOrCreate(email: string, password = 'e2e-password-123') {
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        return { uid: cred.user.uid, email: cred.user.email };
-      } catch (err: any) {
-        if (err?.code === 'auth/email-already-in-use') {
-          const cred = await signInWithEmailAndPassword(auth, email, password);
+function E2EEmulatorGuard({ children }: { children: ReactNode }) {
+  if (!isFirebaseEmulatorEnabled) {
+    throw new Error('[GAINLOG E2E Harness] Refusing to boot e2eEntry outside VITE_FIREBASE_USE_EMULATOR=true mode.');
+  }
+  return <>{children}</>;
+}
+
+if (isFirebaseEmulatorEnabled) {
+  (window as any).__GAINLOG_E2E__ = {
+    auth: {
+      async signInOrCreate(email: string, password = 'e2e-password-123') {
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
           return { uid: cred.user.uid, email: cred.user.email };
+        } catch (err: any) {
+          if (err?.code === 'auth/email-already-in-use') {
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            return { uid: cred.user.uid, email: cred.user.email };
+          }
+          throw err;
         }
-        throw err;
-      }
+      },
+      async signOut() {
+        await fbSignOut(auth);
+      },
+      getCurrentUid() {
+        return auth.currentUser?.uid ?? null;
+      },
     },
-    async signOut() {
-      await fbSignOut(auth);
+    inspect: {
+      getPendingCloudSync(uid: string) {
+        return getPendingCloudReconciliationFromDb(uid);
+      },
+      getBackups() {
+        return getAllBackupsFromDb();
+      },
     },
-    getCurrentUid() {
-      return auth.currentUser?.uid ?? null;
-    },
-  },
-  inspect: {
-    getPendingCloudSync(uid: string) {
-      return getPendingCloudReconciliationFromDb(uid);
-    },
-    getBackups() {
-      return getAllBackupsFromDb();
-    },
-  },
-};
+  };
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <E2EErrorBoundary>
-      <App />
+      <E2EEmulatorGuard>
+        <App />
+      </E2EEmulatorGuard>
     </E2EErrorBoundary>
   </StrictMode>
 );

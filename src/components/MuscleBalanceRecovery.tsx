@@ -11,6 +11,7 @@ import { cn } from '../lib/utils';
 import {
   Card,
   Button,
+  ProgressBar,
   SURFACE,
   BORDER,
   RADIUS,
@@ -197,14 +198,14 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     </div>
 
                     {/* Progress Track */}
-                    <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
-                      {!isZero && (
-                        <div
-                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.progressBar)}
-                          style={{ width: `${Math.max(fillPercent, 2)}%` }}
-                        />
-                      )}
-                    </div>
+                    <ProgressBar
+                      value={isZero ? 0 : fillPercent}
+                      max={100}
+                      minVisiblePercent={2}
+                      color="emerald"
+                      fillClassName="bg-emerald-500/80 group-hover:bg-emerald-400"
+                      aria-label={`${group.label} muscle stimulus share ${group.sharePercent.toFixed(1)}%`}
+                    />
                   </div>
                 );
               })}
@@ -309,14 +310,14 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                     </div>
 
                     {/* Activity Bar */}
-                    <div className="h-1.5 w-full bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
-                      {item.residualStimulus > 0 && (
-                        <div
-                          className={cn("h-full bg-emerald-500/80 group-hover:bg-emerald-400 rounded-full", TRANSITION.progressBar)}
-                          style={{ width: `${Math.max(fillPercent, 3)}%` }}
-                        />
-                      )}
-                    </div>
+                    <ProgressBar
+                      value={item.residualStimulus > 0 ? fillPercent : 0}
+                      max={100}
+                      minVisiblePercent={3}
+                      color="emerald"
+                      fillClassName="bg-emerald-500/80 group-hover:bg-emerald-400"
+                      aria-label={`${item.label} residual workload ${item.residualStimulus.toFixed(2)}`}
+                    />
                   </div>
                 );
               })}

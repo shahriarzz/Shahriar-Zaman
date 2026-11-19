@@ -16,6 +16,8 @@ export * from './Grid';
 export * from './WorkoutColorIndicator';
 export * from './ChartTooltip';
 export * from './ListRow';
+export * from './ProgressBar';
+export * from './ToggleChip';
 export * from './Toast';
 export * from './ErrorFallback';
 export * from './renderIcon';

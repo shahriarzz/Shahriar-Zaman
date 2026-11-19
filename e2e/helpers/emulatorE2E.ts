@@ -65,15 +65,90 @@ export async function resetBrowserStorage(page: Page): Promise<void> {
   });
 }
 
+interface PageStartupDiagnostics {
+  consoleErrors: string[];
+  pageErrors: string[];
+  networkFailures: string[];
+}
+
+const pageDiagnosticsMap = new WeakMap<Page, PageStartupDiagnostics>();
+
+export function ensurePageStartupDiagnostics(page: Page): PageStartupDiagnostics {
+  const existing = pageDiagnosticsMap.get(page);
+  if (existing) return existing;
+
+  const diag: PageStartupDiagnostics = {
+    consoleErrors: [],
+    pageErrors: [],
+    networkFailures: [],
+  };
+
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      diag.consoleErrors.push(msg.text());
+    }
+  });
+  page.on('pageerror', (err) => {
+    diag.pageErrors.push(err?.stack || err?.message || String(err));
+  });
+  page.on('requestfailed', (req) => {
+    diag.networkFailures.push(`${req.method()} ${req.url()} FAILED: ${req.failure()?.errorText || 'unknown'}`);
+  });
+  page.on('response', (res) => {
+    if (res.status() >= 400) {
+      diag.networkFailures.push(`${res.status()} ${res.url()}`);
+    }
+  });
+
+  pageDiagnosticsMap.set(page, diag);
+  return diag;
+}
+
 export async function waitForAppReady(page: Page): Promise<void> {
-  await expect(page.getByRole('navigation').first()).toBeVisible();
-  const main = page.getByRole('main');
-  await expect(main).toBeVisible();
-  await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(main.getByRole('heading', { name: 'Active Target' })).toBeVisible();
+  const diag = ensurePageStartupDiagnostics(page);
+  try {
+    await expect(page.getByRole('navigation').first()).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main).toBeVisible();
+    await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Active Target' })).toBeVisible();
+  } catch (err) {
+    const domSnapshot = await page
+      .evaluate(() => {
+        const root = document.getElementById('root');
+        const bodyText = (document.body?.innerText || '').trim();
+        return {
+          url: window.location.href,
+          rootHtmlSnippet: root ? root.innerHTML.slice(0, 600) : '<missing #root>',
+          bodyTextSnippet: bodyText ? bodyText.slice(0, 600) : '<empty body>',
+          errorBoundaryVisible: bodyText.includes('Runtime Exception Caught') || bodyText.includes('Protocol Halt'),
+        };
+      })
+      .catch((evalErr) => ({
+        url: page.url(),
+        rootHtmlSnippet: `<evaluate failed: ${String(evalErr)}>`,
+        bodyTextSnippet: '',
+        errorBoundaryVisible: false,
+      }));
+
+    const originalMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      [
+        `waitForAppReady() failed: ${originalMsg}`,
+        `URL: ${domSnapshot.url}`,
+        `E2EErrorBoundary visible: ${domSnapshot.errorBoundaryVisible}`,
+        `#root HTML (${domSnapshot.rootHtmlSnippet.length} chars): ${domSnapshot.rootHtmlSnippet || '<empty>'}`,
+        `document.body.innerText: ${domSnapshot.bodyTextSnippet}`,
+        `pageerrors (${diag.pageErrors.length}): ${diag.pageErrors.join(' | ') || 'none'}`,
+        `console.error (${diag.consoleErrors.length}): ${diag.consoleErrors.join(' | ') || 'none'}`,
+        `network failures (${diag.networkFailures.length}): ${diag.networkFailures.join(' | ') || 'none'}`,
+      ].join('\n')
+    );
+  }
 }
 
 export async function gotoCleanApp(page: Page): Promise<void> {
+  ensurePageStartupDiagnostics(page);
   await page.goto('');
   await waitForAppReady(page);
   await resetBrowserStorage(page);

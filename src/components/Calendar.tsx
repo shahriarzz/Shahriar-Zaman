@@ -352,9 +352,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         }
                         color={selectedLog.complete ? 'emerald' : 'zinc'}
                         variant="subtle"
+                        size="md"
                       />
                       {isSelectedDateToday && (
-                        <Badge label="TODAY" color="orange" variant="subtle" />
+                        <Badge label="TODAY" color="orange" variant="subtle" size="md" />
                       )}
                     </>
                   ) : (isSelectedDateFuture || isSelectedDateToday) && expectedWoForSelected ? (

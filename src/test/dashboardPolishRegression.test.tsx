@@ -283,22 +283,22 @@ describe('GAINLOG Dashboard & Calendar Polish Regression Suite', () => {
     });
   });
 
-  describe('3. Body Weight chart: circular point markers matching E1RM point style', () => {
-    it('renders circular HTML marker dots with equal width/height, emerald fill, and dark border', () => {
+  describe('3. Body Weight chart: circular point markers with neutral zinc series and orange latest marker', () => {
+    it('renders circular HTML marker dots with equal width/height, neutral zinc fill, orange latest dot, and dark border', () => {
       renderDashboard(getMockDashboardData(false));
 
       const markers = container.querySelectorAll('[data-testid="bodyweight-marker"]');
       expect(markers.length).toBe(2);
 
-      markers.forEach(marker => {
+      markers.forEach((marker, idx) => {
         const classList = marker.className;
         // Equal width and height (w-2 h-2)
         expect(classList).toContain('w-2');
         expect(classList).toContain('h-2');
         // Fully rounded circle (never oval/egg)
         expect(classList).toContain('rounded-full');
-        // Matches E1RM chart point styling: emerald fill with dark border
-        expect(classList).toContain('bg-emerald-500');
+        // Neutral zinc for historical points, brand orange on latest entry
+        expect(classList).toContain(idx === markers.length - 1 ? 'bg-orange-500' : 'bg-zinc-400');
         expect(classList).toContain('border-zinc-950');
       });
 

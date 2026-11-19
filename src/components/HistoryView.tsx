@@ -23,6 +23,7 @@ import {
   Grid,
   EmptyState,
   ChartTooltip,
+  ProgressBar,
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
   getAccentColor,
@@ -33,6 +34,8 @@ import {
   TYPOGRAPHY,
   GAP,
   CHART_THEME,
+  CHART_GRID_PROPS,
+  CHART_AXIS_PROPS,
   TRANSITION,
   MOTION_CONFIG,
   CONTROL_HEIGHT,
@@ -575,15 +578,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                   <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
                                   <span className="text-zinc-500">{count} workouts ({percentage}%)</span>
                                 </div>
-                                <div className={cn("h-1.5 w-full rounded-full overflow-hidden", SURFACE.recessed)}>
-                                  <div 
-                                    className="h-full" 
-                                    style={{
-                                      width: `${percentage}%`,
-                                      backgroundColor: (type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc
-                                    }} 
-                                  />
-                                </div>
+                                <ProgressBar
+                                  value={percentage}
+                                  max={100}
+                                  colorOverride={(type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc}
+                                  aria-label={`${type} protocol coverage: ${percentage}%`}
+                                  className="border-0"
+                                />
                               </div>
                             ) : null;
                           })}
@@ -1097,25 +1098,23 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                                     {/* Progression Line Chart using Recharts */}
                                     {prWeight > 0 && historyLogs.length > 1 && (
-                                      <div className="h-32 w-full pt-1">
+                                      <div
+                                        className="h-32 w-full pt-1"
+                                        role="img"
+                                        aria-label={`Weight progression line chart for ${exerciseName} across ${historyLogs.length} sessions`}
+                                      >
                                         <ResponsiveContainer width="100%" height="100%">
                                           <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -4, bottom: 4 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
+                                            <CartesianGrid {...CHART_GRID_PROPS} vertical={false} />
                                             <XAxis
                                               dataKey="date"
-                                              stroke={CHART_THEME.axisText}
-                                              fontSize={10}
-                                              tickLine={false}
-                                              axisLine={false}
+                                              {...CHART_AXIS_PROPS}
                                               interval="preserveStartEnd"
                                               minTickGap={24}
                                               tickFormatter={(val) => val.split('-').slice(1).join('/')}
                                             />
                                             <YAxis
-                                              stroke={CHART_THEME.axisText}
-                                              fontSize={10}
-                                              tickLine={false}
-                                              axisLine={false}
+                                              {...CHART_AXIS_PROPS}
                                               width={42}
                                               tickFormatter={(val) => `${val}kg`}
                                             />

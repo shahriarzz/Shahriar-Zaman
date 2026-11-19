@@ -254,7 +254,7 @@ describe('Design System Consolidation & Token Contracts', () => {
 
     it('verifies SPACING scale has canonical progression without obsolete aliases', () => {
       expect(SPACING.none).toBe('p-0');
-      expect(SPACING.compact).toBe('py-2.5 px-3.5');
+      expect(SPACING.compact).toBe('py-2 px-3');
       expect(SPACING.standard).toBe('p-5');
       expect(SPACING.section).toBe('p-6');
       expect(SPACING.hero).toBe('p-8');
