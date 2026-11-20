@@ -52,7 +52,7 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
           TRANSITION.button,
           NAV.item,
           NAV.itemGap,
-          active ? "text-orange-500" : "text-zinc-500 hover:text-zinc-300",
+          active ? "text-orange-500" : "text-zinc-400 hover:text-zinc-200",
           INTERACTIVE.active
         )}
       >
@@ -131,7 +131,21 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
     retryStorageCommit
   } = useFitness();
   const [showTooltip, setShowTooltip] = useState(false);
+  const syncTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
+
+  React.useEffect(() => {
+    if (!showTooltip) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowTooltip(false);
+        syncTriggerRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showTooltip]);
 
   // Scroll preservation policy:
   // - Track continuous scroll position passively
@@ -249,7 +263,8 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
         <div className="flex items-center gap-2">
           {/* Subtle user status avatar with integrated sync indicator */}
           <div className="relative">
-            <button 
+            <button
+              ref={syncTriggerRef}
               type="button"
               className={cn(
                 "group/sync cursor-pointer select-none flex items-center justify-center relative",
@@ -266,6 +281,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
                 if (e.key === 'Escape' && showTooltip) {
                   e.stopPropagation();
                   setShowTooltip(false);
+                  syncTriggerRef.current?.focus();
                 }
               }}
             >

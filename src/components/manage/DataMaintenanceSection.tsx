@@ -272,7 +272,7 @@ export const DataMaintenanceSection: React.FC = () => {
     if (loadingAction) return;
     haptics.warning();
     const proceed = await confirm({
-      title: '🚨 DANGER: IRREVERSIBLE PURGE',
+      title: 'Delete All Training History',
       message: 'Are you absolutely positive you want to completely delete all training calendars and histories? This cannot be undone.',
       isDanger: true
     });
@@ -559,7 +559,7 @@ export const DataMaintenanceSection: React.FC = () => {
                           />
                           <span className={cn(TYPOGRAPHY.caption, "text-zinc-200 font-bold break-words")}>{b.desc}</span>
                         </div>
-                        <div className={cn(TYPOGRAPHY.micro, "text-zinc-500 tabular-nums")}>
+                        <div className={cn(TYPOGRAPHY.micro, "text-zinc-400 tabular-nums")}>
                           {new Date(b.timestamp).toLocaleString(undefined, {
                             month: 'short',
                             day: 'numeric',

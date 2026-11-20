@@ -61,7 +61,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         >
           <span>{label}</span>
           {typeof error === 'string' && (
-            <span className={cn(TYPOGRAPHY.errorText, "normal-case font-normal")}>
+            <span role="alert" className={cn(TYPOGRAPHY.errorText, "normal-case font-normal")}>
               {error}
             </span>
           )}
@@ -79,6 +79,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
           ref={ref}
           id={inputId}
           disabled={disabled}
+          aria-invalid={isError || undefined}
           className={cn(
             "w-full font-mono text-white placeholder-zinc-600 outline-none",
             TRANSITION.colors,
@@ -126,7 +127,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         </p>
       )}
       {typeof error === 'string' && !label && (
-        <p className={TYPOGRAPHY.errorText}>
+        <p role="alert" className={TYPOGRAPHY.errorText}>
           {error}
         </p>
       )}

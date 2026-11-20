@@ -118,7 +118,7 @@ Current token groups include:
 - **Metrics:** `label`, `unit`, `cardValue`, `statValue`, `statValueHero`
 - **Body/support:** `body`, `bodySecondary`, `metadata`, `caption`, `micro`
 - **Controls:** `buttonSm`, `button`, `badgeSm`, `badgeMd`, `segmentedSm`, `segmentedMd`, `dialogFooter`, `helperText`, `errorText`, `successText`, `navLabel`
-- **Lists and empty states:** `listValue`, `listLabel`, `emptyTitle`, `emptyDescription`
+- **Lists and empty states:** `listValue`, `listLabel`, `emptyTitle`
 
 The token names and definitions in source are authoritative. Do not invent names such as `buttonLabel`, `formLabel`, or `bodyTertiary` unless a real semantic gap is demonstrated and approved.
 

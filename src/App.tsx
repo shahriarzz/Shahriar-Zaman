@@ -218,7 +218,7 @@ function AppContent() {
         <Suspense
           fallback={
             <div
-              className="w-full py-8 flex items-center justify-center"
+              className="w-full min-h-[40vh] py-12 flex items-center justify-center"
               aria-busy="true"
             >
               <div className="w-6 h-6 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />

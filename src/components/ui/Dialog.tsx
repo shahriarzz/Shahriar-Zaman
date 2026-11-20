@@ -188,7 +188,7 @@ export const Dialog: React.FC<DialogProps> = ({
             aria-label={dialogAriaLabel}
             aria-labelledby={dialogAriaLabelledBy}
             className={cn(
-              "relative w-full min-w-0 max-w-full text-zinc-200 focus:outline-none",
+              "relative w-full min-w-0 max-w-full max-h-[90vh] overflow-y-auto custom-scrollbar text-zinc-200 focus:outline-none",
               SURFACE.panel,
               BORDER.standard,
               RADIUS.panel,

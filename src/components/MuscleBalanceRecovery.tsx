@@ -81,7 +81,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 </h3>
               </div>
               <p className={cn(TYPOGRAPHY.bodySecondary, "mt-1")}>
-                Multi-muscle attribution · {timeRangeLabel} · % of attributed WSE
+                Window: <strong className="text-zinc-200">{timeRangeLabel}</strong> · Multi-muscle WSE share
               </p>
             </div>
 
@@ -90,7 +90,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
               <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
                 {totalAttributedWSE.toFixed(1)}
               </span>
-              <span className={cn(TYPOGRAPHY.metadata, "ml-1")}>WSE</span>
+              <span className={cn(TYPOGRAPHY.metadata, "ml-1 text-zinc-400")}>WSE</span>
             </div>
           </div>
 
@@ -164,18 +164,18 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         <span className={cn(
                           "w-4 tabular-nums text-right",
                           TYPOGRAPHY.metadata,
-                          isZero ? "text-zinc-600" : "text-zinc-400"
+                          isZero ? "text-zinc-500" : "text-zinc-400"
                         )}>
                           {idx + 1}.
                         </span>
                         <span className={cn(
                           "font-medium",
-                          isZero ? "text-zinc-500" : cn("text-zinc-200 group-hover:text-white", TRANSITION.colors)
+                          isZero ? "text-zinc-400" : cn("text-zinc-200 group-hover:text-white", TRANSITION.colors)
                         )}>
                           {group.label}
                         </span>
                         {isZero && (
-                          <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 font-mono")}>
+                          <span className={cn(TYPOGRAPHY.metadata, "text-zinc-500 font-mono")}>
                             (0 exposure)
                           </span>
                         )}
@@ -184,13 +184,13 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                       <div className="flex items-center gap-2 text-right">
                         <span className={cn(
                           "font-mono font-medium tabular-nums",
-                          isZero ? "text-zinc-600" : "text-zinc-200"
+                          isZero ? "text-zinc-500" : "text-zinc-200"
                         )}>
-                          {group.wse.toFixed(1)} <span className={TYPOGRAPHY.metadata}>WSE</span>
+                          {group.wse.toFixed(1)} <span className={cn(TYPOGRAPHY.metadata, "text-zinc-400")}>WSE</span>
                         </span>
                         <span className={cn(
                           "w-12 text-right font-mono text-xs tabular-nums",
-                          isZero ? "text-zinc-600" : "text-emerald-400 font-semibold"
+                          isZero ? "text-zinc-500" : "text-emerald-400 font-semibold"
                         )}>
                           {group.sharePercent.toFixed(1)}%
                         </span>
@@ -253,21 +253,21 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                 </h3>
               </div>
               <p className={cn(TYPOGRAPHY.bodySecondary, "mt-1")}>
-                Trailing 14-day exponential decay (t½ = 2d)
+                Fixed Window: <strong className="text-zinc-200">14-Day Residual Decay</strong> (t½ = 2d)
               </p>
             </div>
 
             <div className="text-right shrink-0">
-              <span className={TYPOGRAPHY.label}>Window</span>
-              <div className="text-xs font-mono text-zinc-400 tabular-nums">
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>Rolling</span>
+              <div className="text-xs font-mono text-zinc-300 tabular-nums">
                 14 Days
               </div>
             </div>
           </div>
 
           {/* Model Disclaimer Notice */}
-          <p className={cn(TYPOGRAPHY.caption, "mb-4 leading-relaxed")}>
-            Recency-weighted residual workload estimate · Derived from completed sets · Not measured physiological recovery.
+          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 mb-4 leading-relaxed")}>
+            Recency-weighted residual workload estimate (independent of {timeRangeLabel} filter) · Not measured physiological recovery.
           </p>
 
           {/* Recovery Item List or Empty State */}

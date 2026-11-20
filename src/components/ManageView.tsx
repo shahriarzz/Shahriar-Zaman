@@ -71,7 +71,7 @@ export const ManageView: React.FC = () => {
                   Privacy Policy & Data Safety
                 </Button>
               </div>
-              <div className={cn(TYPOGRAPHY.micro, "text-zinc-600")}>
+              <div className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>
                 GAINLOG Protocol v1.0.0 · Build 1
               </div>
             </div>

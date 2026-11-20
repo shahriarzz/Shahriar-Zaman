@@ -111,7 +111,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
     const main = page.getByRole('main');
     await expect(main).toBeVisible();
     await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(main.getByRole('heading', { name: 'Active Target' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: "Today's Protocol" })).toBeVisible();
   } catch (err) {
     const domSnapshot = await page
       .evaluate(() => {

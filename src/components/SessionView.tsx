@@ -334,7 +334,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
               <span className="min-w-0 break-words">{ex.name}</span>
               {isDone && <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />}
             </h3>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 font-mono tracking-wider uppercase">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400 font-mono tracking-wider uppercase">
               <span>{ex.target}</span>
               <span aria-hidden="true">·</span>
               <span>{ex.sets} Sets</span>
@@ -405,37 +405,37 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
             {/* Ghost Data Grid */}
             <Grid cols={2} gap="none" className={cn(SURFACE.recessed, BORDER.subtle, "border-y")}>
               <div className={cn("p-3 sm:p-4 border-r space-y-1 min-w-0", BORDER.subtle)}>
-                <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>Last Session</span>
+                <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 uppercase tracking-widest block")}>Last Session</span>
                 {lastSession ? (
-                  <div className={cn(TYPOGRAPHY.metadata, "tabular-nums")}>
+                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-300 tabular-nums")}>
                     {lastSession.sets.slice(0, 3).map((s: SetLog, idx: number) => (
                       <div key={s.id || `ghost-set-${idx}`}>Set {idx + 1}: {s.weight}kg × {s.reps}</div>
                     ))}
                   </div>
                 ) : (
-                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No history data</div>
+                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-400 italic")}>No history data</div>
                 )}
               </div>
               <div className="p-3 sm:p-4 space-y-1 min-w-0">
-                <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 uppercase tracking-widest")}>All-Time PR</span>
+                <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 uppercase tracking-widest block")}>All-Time PR</span>
                 {allTimePR ? (
                   <div className={cn(TYPOGRAPHY.metadata, "flex items-center gap-1 text-orange-400 tabular-nums")}>
                     <Trophy size={10} className="text-orange-400 shrink-0" /> {allTimePR.weight}kg × {allTimePR.reps}
                   </div>
                 ) : (
-                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-600 italic")}>No PR recorded</div>
+                  <div className={cn(TYPOGRAPHY.metadata, "text-zinc-400 italic")}>No PR recorded</div>
                 )}
               </div>
             </Grid>
 
             {/* Sets Table */}
-            <div className="p-3 sm:p-6 pt-3 sm:pt-4 space-y-3">
-              <div className={cn("grid grid-cols-[24px_1fr_1fr_46px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1.5 sm:gap-3 uppercase text-zinc-500 px-1 sm:px-2 text-center", TYPOGRAPHY.eyebrow)}>
+            <div className="px-2.5 py-3 sm:p-6 sm:pt-4 space-y-3">
+              <div className={cn("grid grid-cols-[18px_minmax(0,1fr)_minmax(0,1fr)_44px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1 sm:gap-3 uppercase text-zinc-400 px-0 sm:px-2 text-center", TYPOGRAPHY.eyebrow)}>
                 <span>Set</span>
                 <span>KG</span>
                 <span>Reps</span>
                 <span>Done</span>
-                <span>Del</span>
+                <span className="text-zinc-500">Del</span>
               </div>
 
               <div className="space-y-3 sm:space-y-4">
@@ -451,13 +451,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                       key={s.id ? `set-${ex.id}-${s.id}-${si}` : `set-${ex.id}-${si}`}
                       className={cn(
                         // Deliberate 500ms set-completion celebration flash (differs from canonical 200ms TRANSITION.colors to provide clear visual acknowledgement)
-                        "space-y-1.5 px-1 sm:px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
+                        "space-y-1.5 px-0 sm:px-2 py-1.5 transition-colors duration-500 motion-reduce:transition-none",
                         RADIUS.card,
                         flashingSets.has(si) ? "bg-emerald-500/10" : "bg-transparent"
                       )}
                     >
-                      <div className="grid grid-cols-[24px_1fr_1fr_46px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1.5 sm:gap-3 items-center">
-                        <span className={cn(TYPOGRAPHY.metadata, "text-zinc-600 text-center tabular-nums")}>{si + 1}</span>
+                      <div className="grid grid-cols-[18px_minmax(0,1fr)_minmax(0,1fr)_44px_44px] sm:grid-cols-[40px_1fr_1fr_60px_45px] gap-1 sm:gap-3 items-center">
+                        <span className={cn(TYPOGRAPHY.metadata, "text-zinc-400 text-center tabular-nums")}>{si + 1}</span>
                         {/* specialized table/matrix input for active workout set weight */}
                         <Input
                           type="number"
@@ -507,17 +507,15 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                           <Button
                             variant="ghost"
                             size="icon"
-                            icon={<Trash2 size={16} />}
+                            icon={<Trash2 size={14} />}
                             onClick={() => {
                               haptics.warning();
                               deleteSet(ex.id, si);
                             }}
                             disabled={setsForEx.length <= 1}
                             className={cn(
-                              "border text-zinc-600 hover:text-red-500 hover:border-red-500/35 hover:bg-red-500/5 disabled:opacity-10",
-                              RADIUS.button,
-                              BORDER.subtle,
-                              SURFACE.recessed
+                              "border border-transparent bg-transparent text-zinc-500 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/10 disabled:opacity-15",
+                              RADIUS.button
                             )}
                             title="Delete this set"
                             aria-label="Delete this set"
@@ -551,11 +549,11 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
               </Button>
             </div>
 
-            {/* Coach Note (Collapsed) */}
+            {/* Coach Note (Subordinate Reference) */}
             {ex.note && (
               <div className={cn("px-4 sm:px-6 pb-4 sm:pb-6 pt-2 border-t", BORDER.subtle)}>
-                <div className={cn("p-3 sm:p-4 leading-relaxed border", SURFACE.recessed, BORDER.subtle, RADIUS.card, TYPOGRAPHY.bodySecondary, "text-zinc-500")}>
-                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-700 block mb-2")}>Coach's Field Notes</span>
+                <div className={cn("p-3 sm:p-4 leading-relaxed border border-l-2 border-l-zinc-700", SURFACE.recessed, BORDER.subtle, RADIUS.card, TYPOGRAPHY.bodySecondary, "text-zinc-400")}>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-400 block mb-1.5")}>Coach&apos;s Field Notes</span>
                   {ex.note}
                 </div>
               </div>
@@ -1165,7 +1163,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             }}
             className="text-left cursor-pointer"
           >
-            <div className="text-xs font-mono text-zinc-500 mb-1">{wo.badge}</div>
+            <div className="text-xs font-mono text-zinc-400 mb-1">{wo.badge}</div>
             <div className="font-bold text-white text-base">{wo.name}</div>
           </Card>
         ))}
@@ -1300,7 +1298,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
           <div className="space-y-1 min-w-0">
             <Badge
               label={activeWorkout.badge}
-              color={WORKOUT_COLORS[activeWorkout.type]}
+              colorOverride={WORKOUT_COLORS[activeWorkout.type]}
               variant="subtle"
             />
             <h2 className={cn(TYPOGRAPHY.titlePage, "text-2xl sm:text-3xl break-words")}>{activeWorkout.name}</h2>
@@ -1309,7 +1307,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           <div className={cn("flex items-center gap-1.5 font-mono px-2.5 py-1.5 border text-zinc-300", RADIUS.button, SURFACE.default, BORDER.standard)}>
-            <Clock size={15} className="text-zinc-500 shrink-0" />
+            <Clock size={15} className="text-zinc-400 shrink-0" />
             <SessionClock startTime={startTime} />
           </div>
 
@@ -1330,21 +1328,40 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             aria-label={isSubmitting ? 'Syncing session' : 'Finish Session'}
             className={cn(
               CONTROL_HEIGHT.touchTarget,
-              "px-3 sm:px-4 sm:min-h-[40px]",
+              "px-3.5 sm:px-4 sm:min-h-[40px]",
               allExercisesDone && "font-extrabold ring-1 ring-white/30"
             )}
           >
-            {isSubmitting ? (
-              'Syncing...'
-            ) : (
-              <>
-                <span className="hidden sm:inline">Finish</span>
-                <span className="sm:hidden" aria-hidden="true">✓</span>
-              </>
-            )}
+            {isSubmitting ? 'Syncing...' : 'Finish'}
           </Button>
         </div>
       </header>
+
+      {/* Session Completion / Validation Failure Banner */}
+      {sessionLifecycle.phase === 'error' && (
+        <Banner
+          variant="destructive"
+          badge="SESSION FINISH FAILED"
+          title={sessionLifecycle.message || 'Unable to save session. Your sets are still preserved.'}
+          onDismiss={() =>
+            dispatchSessionLifecycle({
+              type: 'START',
+              workoutId: activeWorkout.id,
+              startTime: startTime || Date.now()
+            })
+          }
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={finishSession}
+              className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:min-w-0")}
+            >
+              Retry Finish
+            </Button>
+          }
+        />
+      )}
 
       {/* Exercises List */}
       <Stack spacing="lg">

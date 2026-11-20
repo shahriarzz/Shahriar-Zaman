@@ -262,16 +262,43 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                       {format(day, 'd')}
                     </span>
 
-                    {/* Color-Coded Status Dot */}
+                    {/* Color-Coded Status Dot + Non-Color Status Glyph */}
                     {status && (
-                      <div
-                        className={cn(
-                          "w-1.5 h-1.5 rounded-full mt-1",
-                          TRANSITION.opacity,
-                          status.isFuture ? "opacity-70" : "opacity-100"
-                        )}
-                        style={{ backgroundColor: status.color }}
-                      />
+                      <div className="flex items-center justify-center gap-0.5 mt-1 leading-none">
+                        <div
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full shrink-0",
+                            TRANSITION.opacity,
+                            status.isFuture ? "opacity-70" : "opacity-100"
+                          )}
+                          style={{ backgroundColor: status.color }}
+                        />
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "text-[9px] font-mono font-bold leading-none",
+                            status.isMissed
+                              ? "text-red-400"
+                              : status.isPartial
+                              ? "text-amber-400"
+                              : status.isRest
+                              ? "text-emerald-400"
+                              : status.isFuture
+                              ? "text-zinc-400"
+                              : "text-zinc-200"
+                          )}
+                        >
+                          {status.isMissed
+                            ? '!'
+                            : status.isPartial
+                            ? '◐'
+                            : status.isRest
+                            ? '—'
+                            : status.isFuture
+                            ? '·'
+                            : '✓'}
+                        </span>
+                      </div>
                     )}
                   </button>
                 );
@@ -279,29 +306,51 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
             </div>
           </div>
 
-          {/* Legend */}
-          <div className={cn("mt-6 pt-5 border-t flex flex-wrap gap-x-3.5 sm:gap-x-5 gap-y-2", BORDER.standard)}>
-            {[
-              { label: 'Push', color: WORKOUT_COLORS.push },
-              { label: 'Pull', color: WORKOUT_COLORS.pull },
-              { label: 'Upper', color: WORKOUT_COLORS.upper },
-              { label: 'Lower', color: WORKOUT_COLORS.lower },
-              { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
-              { label: 'Custom', color: WORKOUT_COLORS.custom },
-              { label: 'Rest', color: WORKOUT_COLORS.rest },
-              { label: 'Missed', color: SEMANTIC_COLORS.red },
-              { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
-            ].map(l => (
-              <div key={l.label} className="flex items-center gap-2">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: l.color }}
-                />
-                <span className={TYPOGRAPHY.label}>
-                  {l.label}
-                </span>
-              </div>
-            ))}
+          {/* Legend — Status Shapes + Routine Colors */}
+          <div className={cn("mt-6 pt-5 border-t space-y-3", BORDER.standard)}>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Status:</span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
+                <span aria-hidden="true" className="font-mono text-zinc-200">✓</span> Completed
+              </span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
+                <span aria-hidden="true" className="font-mono text-amber-400">◐</span> Incomplete
+              </span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
+                <span aria-hidden="true" className="font-mono text-red-400">!</span> Missed
+              </span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
+                <span aria-hidden="true" className="font-mono text-emerald-400">—</span> Rest
+              </span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center gap-1")}>
+                <span aria-hidden="true" className="w-3 h-3 rounded-full border border-dashed border-zinc-400 inline-block" /> Scheduled
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-x-3.5 sm:gap-x-5 gap-y-2 items-center">
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Routines:</span>
+              {[
+                { label: 'Push', color: WORKOUT_COLORS.push },
+                { label: 'Pull', color: WORKOUT_COLORS.pull },
+                { label: 'Upper', color: WORKOUT_COLORS.upper },
+                { label: 'Lower', color: WORKOUT_COLORS.lower },
+                { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
+                { label: 'Custom', color: WORKOUT_COLORS.custom },
+                { label: 'Rest', color: WORKOUT_COLORS.rest },
+                { label: 'Missed', color: SEMANTIC_COLORS.red },
+                { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
+              ].map(l => (
+                <div key={l.label} className="flex items-center gap-1.5">
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                  <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
+                    {l.label}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
       </div>
@@ -510,37 +559,37 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                           />
                         </Card>
 
-                        {/* List of Planned Exercises */}
-                        <div className="space-y-1.5">
+                        {/* List of Planned Exercises as unified divided rows */}
+                        <div className={cn("border divide-y divide-zinc-800/60 overflow-hidden", RADIUS.card, BORDER.subtle, SURFACE.recessed)}>
                           {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
                             const exId = ex.exerciseDefinitionId || (ex as { id?: string }).id || '';
                             const meta = resolveExerciseMeta(exId);
                             return (
-                              <Card
+                              <div
                                 key={`planned-${exId || eIdx}`}
-                                variant="standard"
-                                padding="compact"
-                                className="flex items-center justify-between"
+                                className="p-3 flex items-center justify-between gap-2"
                               >
-                                <div className="space-y-0.5">
-                                  <p className={cn(TYPOGRAPHY.titleSubsection, "text-xs text-zinc-200")}>{meta?.name || 'Exercise'}</p>
-                                  <p className={TYPOGRAPHY.caption}>{meta?.target || ''}</p>
+                                <div className="space-y-0.5 min-w-0">
+                                  <p className="text-xs font-semibold text-zinc-200 break-words">{meta?.name || 'Exercise'}</p>
+                                  {meta?.target && (
+                                    <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>{meta.target}</p>
+                                  )}
                                 </div>
-                                <div className="text-right">
-                                  <span className={cn("font-mono text-xs font-bold text-zinc-200 bg-zinc-900 border border-zinc-800 px-2 py-0.5", RADIUS.badge)}>
+                                <div className="text-right shrink-0">
+                                  <span className={cn("font-mono text-xs font-bold text-zinc-200 bg-zinc-900 border border-zinc-800 px-2 py-0.5 tabular-nums", RADIUS.badge)}>
                                     {ex.sets} × {ex.reps}
                                   </span>
                                 </div>
-                              </Card>
+                              </div>
                             );
                           })}
                         </div>
 
                         {expectedWoForSelected.cardio && (
-                          <Card variant="standard" padding="compact" className="text-xs font-mono text-zinc-400 flex items-center justify-between">
+                          <div className={cn("p-2.5 border text-xs font-mono text-zinc-300 flex items-center justify-between", RADIUS.button, BORDER.subtle, SURFACE.recessed)}>
                             <span>Cardio: {expectedWoForSelected.cardio.name}</span>
-                            <span className="text-zinc-500">{expectedWoForSelected.cardio.duration}</span>
-                          </Card>
+                            <span className="text-zinc-400">{expectedWoForSelected.cardio.duration}</span>
+                          </div>
                         )}
 
                         {isSelectedDateToday && onStartWorkout && (
@@ -596,31 +645,31 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
 
                         {/* List of exercises that were scheduled */}
                         <div className="space-y-1.5">
-                          <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 block font-bold")}>
+                          <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 block font-bold")}>
                             Planned Exercises:
                           </span>
-                          {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
-                            const exId = ex.exerciseDefinitionId || (ex as { id?: string }).id || '';
-                            const meta = resolveExerciseMeta(exId);
-                            return (
-                              <Card
-                                key={`missed-${exId || eIdx}`}
-                                variant="standard"
-                                padding="compact"
-                                className="flex items-center justify-between text-xs"
-                              >
-                                <div>
-                                  <span className="font-display uppercase text-zinc-300">{meta?.name || 'Exercise'}</span>
-                                  {meta?.target && (
-                                    <span className={cn(TYPOGRAPHY.caption, "ml-2")}>({meta.target})</span>
-                                  )}
+                          <div className={cn("border divide-y divide-zinc-800/60 overflow-hidden", RADIUS.card, BORDER.subtle, SURFACE.recessed)}>
+                            {(expectedWoForSelected.exercises || []).map((ex, eIdx) => {
+                              const exId = ex.exerciseDefinitionId || (ex as { id?: string }).id || '';
+                              const meta = resolveExerciseMeta(exId);
+                              return (
+                                <div
+                                  key={`missed-${exId || eIdx}`}
+                                  className="p-3 flex items-center justify-between gap-2 text-xs"
+                                >
+                                  <div className="min-w-0">
+                                    <span className="font-sans font-semibold text-zinc-200 break-words">{meta?.name || 'Exercise'}</span>
+                                    {meta?.target && (
+                                      <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 ml-2")}>({meta.target})</span>
+                                    )}
+                                  </div>
+                                  <span className={cn(TYPOGRAPHY.metadata, "text-zinc-300 shrink-0 tabular-nums")}>
+                                    {ex.sets} × {ex.reps}
+                                  </span>
                                 </div>
-                                <span className={TYPOGRAPHY.metadata}>
-                                  {ex.sets} × {ex.reps}
-                                </span>
-                              </Card>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}

@@ -216,8 +216,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         {/* 2. Adherence Rate */}
         <StatCard
           label="Adherence Rate"
-          value={adherenceInsight.percent}
-          unit="%"
+          value={adherenceInsight.evaluatedScheduledWorkouts === 0 ? '—' : adherenceInsight.percent}
+          unit={adherenceInsight.evaluatedScheduledWorkouts === 0 ? undefined : '%'}
+          isUnavailable={adherenceInsight.evaluatedScheduledWorkouts === 0}
+          unavailableLabel="Building baseline"
           accent={
             adherenceInsight.evaluatedScheduledWorkouts === 0
               ? 'zinc'
@@ -229,7 +231,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           }
           disableAnimation
           sublabel={
-            adherenceInsight.pendingScheduledWorkouts > 0
+            adherenceInsight.evaluatedScheduledWorkouts === 0
+              ? 'Complete 1 scheduled workout'
+              : adherenceInsight.pendingScheduledWorkouts > 0
               ? `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated · ${adherenceInsight.pendingScheduledWorkouts} pending`
               : `${adherenceInsight.completedScheduled}/${adherenceInsight.evaluatedScheduledWorkouts} evaluated`
           }
@@ -277,7 +281,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         <StatCard
           label="Performance Score"
           value={performanceScore.score}
-          sublabel={performanceScore.score !== null ? `${performanceScore.status} · 28D` : 'Building baseline'}
+          sublabel={performanceScore.score !== null ? `${performanceScore.status} · Rolling 28D` : 'Building baseline'}
           isUnavailable={performanceScore.score === null}
           unavailableLabel="Building baseline"
           disableAnimation
@@ -296,14 +300,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       {/* 3. SECTION 2: PRIMARY ANALYTICAL FOCUS — STRENGTH PROGRESSION (1RM TREND) */}
       <DeferredViewSection minHeight={420}>
         <Section
-          eyebrow="Strength Progression"
+          eyebrow="Strength & Long-Term Progress"
           eyebrowColor="indigo"
           title="Estimated 1RM Progression"
           padding="section"
           action={
             priorityExercises.length > 0 ? (
               <div className={cn("flex items-center w-full sm:w-auto sm:max-w-xl lg:max-w-2xl overflow-x-auto sm:overflow-visible pb-1 sm:pb-0 scrollbar-none", GAP.sm)}>
-                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 shrink-0")}>Lift:</span>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 shrink-0")}>Lift:</span>
                 <div className={cn("flex sm:flex-wrap", GAP.xs)}>
                   {priorityExercises.map((ex, idx) => (
                     <Button
@@ -420,11 +424,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         </Section>
       </DeferredViewSection>
 
-      {/* 4. SECTION 3: SUPPORTING TRAINING ACTIVITY HEATMAP */}
+      {/* 4. SECTION 3: TRAINING ACTIVITY & CONSISTENCY */}
+      <div className="pt-2 border-t border-zinc-800/60">
+        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>01 · Training Activity & Cadence</p>
+      </div>
       <Section
         eyebrow="Adherence Matrix"
         eyebrowColor="zinc"
         title="Monthly Intensity Heatmap"
+        description="Daily volume concentration across completed sessions (kg)."
         padding="section"
         action={
           <div className={cn("flex items-center", GAP.sm)}>
@@ -462,7 +470,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           >
           <Stack spacing="xs">
             {/* Weekday headers */}
-            <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-500")}>
+            <div className={cn("grid grid-cols-7 text-center uppercase", GAP.xs, TYPOGRAPHY.label, "text-zinc-400")}>
               <span>Mon</span>
               <span>Tue</span>
               <span>Wed</span>
@@ -499,6 +507,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                   <div
                     key={`day-${dateStr}-${dayIdx}`}
                     title={tooltipText}
+                    aria-label={tooltipText}
                     className={cn(
                       "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
                       TRANSITION.colors,
@@ -528,7 +537,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           {/* Legend + Summary derived directly from single intensity scale */}
           <div className={cn("flex flex-col sm:flex-row items-center justify-between pt-3 border-t", GAP.md, BORDER.subtle)}>
             <div className={cn("flex items-center", GAP.sm)}>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>Less</span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>Less</span>
               <div className={cn("flex", GAP.xs)}>
                 {HEATMAP_INTENSITY_STEPS.map((step) => (
                   <span
@@ -537,12 +546,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                   />
                 ))}
               </div>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>More</span>
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>More</span>
             </div>
 
             <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-wrap items-center justify-center tabular-nums", GAP.sm)}>
               <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
-              <span className="text-zinc-500">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
+              <span className="text-zinc-400">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
               <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
             </div>
           </div>
@@ -550,9 +559,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Section>
 
       {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES) */}
+      <div className="pt-2 border-t border-zinc-800/60">
+        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>02 · Training Distribution & Anatomical Load</p>
+      </div>
       <DeferredViewSection minHeight={480}>
         <Section
-          eyebrow="Anatomical Load Distribution"
+          eyebrow={`Anatomical Load · ${muscleBalanceDateRange.label}`}
           eyebrowColor="zinc"
           title="Muscle Group Targeting"
           padding="section"
@@ -640,7 +652,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 )}
               </div>
 
-              <Card surface="recessed" variant="standard" padding="standard">
+              <div className={cn("p-4 border bg-zinc-950/80 border-zinc-800/50", RADIUS.button)}>
                 {visibleExercises.length > 0 ? (
                   <div className={cn("divide-y", BORDER.subtle)}>
                     {visibleExercises.map((ex, idx) => (
@@ -663,7 +675,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-white break-words">{ex.name}</p>
-                            <p className={cn(TYPOGRAPHY.label, "text-zinc-500 tabular-nums")}>
+                            <p className={cn(TYPOGRAPHY.label, "text-zinc-400 tabular-nums")}>
                               {ex.count} {ex.count === 1 ? 'session' : 'sessions'} logged
                             </p>
                           </div>
@@ -678,11 +690,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                     ))}
                   </div>
                 ) : (
-                  <p className={cn(TYPOGRAPHY.body, "text-zinc-500 text-center py-2")}>
+                  <p className={cn(TYPOGRAPHY.body, "text-zinc-400 text-center py-2")}>
                     No exercise logs recorded in this period.
                   </p>
                 )}
-              </Card>
+              </div>
             </Stack>
           </Stack>
         </Section>
@@ -691,7 +703,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       {/* 5B. SECTION 4B: MUSCLE BALANCE & RECOVERY ANALYTICS */}
       <DeferredViewSection minHeight={360}>
         <Section
-          eyebrow="Anatomical Distribution & Workload"
+          eyebrow={`Anatomical Balance · ${muscleBalanceDateRange.label} vs 14D Decay`}
           eyebrowColor="zinc"
           title="Muscle Balance & Recovery"
           padding="section"
@@ -706,6 +718,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </DeferredViewSection>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}
+      <div className="pt-2 border-t border-zinc-800/60">
+        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>03 · Records & Long-Term Progress</p>
+      </div>
       <Section
         eyebrow="Strength Records"
         eyebrowColor="orange"
@@ -848,11 +863,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           />
           <StatCard
             label="Average Training Gap"
-            value={aggregated.avgGapDays}
-            unit="days"
+            value={aggregated.totalLogsCount < 2 ? '—' : aggregated.avgGapDays}
+            unit={aggregated.totalLogsCount < 2 ? undefined : 'days'}
+            isUnavailable={aggregated.totalLogsCount < 2}
+            unavailableLabel="Need 2+ sessions"
             accent="zinc"
             disableAnimation
-            sublabel="Spacing between sessions"
+            sublabel={aggregated.totalLogsCount < 2 ? 'Need 2+ sessions' : 'Spacing between sessions'}
           />
           <StatCard
             label="Active Days in Window"
@@ -882,8 +899,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Section>
 
       {/* 9. SECTION 8: INSIGHTS & ROUTINE DISTRIBUTION */}
+      <div className="pt-2 border-t border-zinc-800/60">
+        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>04 · Training Patterns & Insights</p>
+      </div>
       <Grid cols={1} colsLg={3} gap="lg">
-        {/* Performance Insights using standard Card primitives */}
+        {/* Performance Insights as flat divided rows inside Section */}
         <Section
           eyebrow="Automated Synthesis"
           eyebrowColor="zinc"
@@ -891,22 +911,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           padding="section"
           className="lg:col-span-2"
         >
-          <Stack spacing="sm">
+          <ul className={cn("border divide-y bg-zinc-950/80 border-zinc-800/50", BORDER.subtle, RADIUS.button)}>
             {insightsList.map((sentence, idx) => (
-              <Card
+              <li
                 key={`insight-${idx}`}
-                surface="recessed"
-                variant="standard"
-                padding="compact"
-                className={cn("flex items-start", GAP.sm)}
+                className={cn("flex items-start p-3", GAP.sm)}
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" aria-hidden="true" />
                 <p className={cn(TYPOGRAPHY.body, "text-zinc-300 text-xs")}>
                   {sentence}
                 </p>
-              </Card>
+              </li>
             ))}
-          </Stack>
+          </ul>
         </Section>
 
         {/* Routine Distribution Pie Chart */}

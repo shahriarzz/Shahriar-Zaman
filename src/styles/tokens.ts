@@ -345,7 +345,6 @@ export const TYPOGRAPHY = {
   
   // Empty States
   emptyTitle: 'font-display text-sm uppercase tracking-wide text-zinc-300',
-  emptyDescription: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider max-w-[260px] leading-relaxed',
 } as const;
 
 export const GAP = {

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Search, ChevronRight, Trophy, Trash2, Clock, Dumbbell, X, Edit2, Plus, Sparkles } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, Trophy, Trash2, Clock, Dumbbell, X, Edit2, Plus, Sparkles } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
 import { useConfirm } from '../context/ConfirmContext';
@@ -66,11 +66,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [expandedDate, setExpandedDate] = useState<string | null>(savedState?.expandedDate ?? null);
   const [selectedExKey, setSelectedExKey] = useState<string | null>(savedState?.selectedExKey ?? null); // Format: "YYYY-MM-DD_exerciseDefinitionId"
   
-  // Custom states for Month-End reports and secure inline log editing
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editSessionState, setEditSessionState] = useState<SessionLog | null>(null);
   const [editVerified, setEditVerified] = useState(false);
   const [activeMonthTab, setActiveMonthTab] = useState<string | null>(savedState?.activeMonthTab ?? null);
+  const [showMonthlyReports, setShowMonthlyReports] = useState<boolean>(Boolean(savedState?.activeMonthTab));
+  const editVerifyCheckboxId = useId();
   const shouldReduceMotion = useReducedMotion();
 
   // Save lightweight state outside the view so preferences survive tab switches
@@ -122,7 +123,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       // Also match if any of the completed exercises match the search via canonical ExerciseMeta
       const matchesExercises = Object.keys(session.sets).some(exId => {
         const meta = index.exerciseMetaById.get(exId);
-        const exName = meta?.name || 'Unlisted Exercise';
+        const exName = meta?.name || 'Deleted or Custom Exercise';
         return exName.toLowerCase().includes(lowercaseSearch);
       });
 
@@ -196,7 +197,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         if (doneSets.length === 0) return;
 
         const meta = index.exerciseMetaById.get(exId);
-        const exerciseName = meta?.name || 'Unlisted Exercise';
+        const exerciseName = meta?.name || 'Deleted or Custom Exercise';
         const weights = doneSets.map(s => parseFloat(s.weight) || 0);
         const logMaxWeight = weights.length > 0 ? Math.max(...weights) : 0;
 
@@ -235,7 +236,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     const extremeSets: string[] = [];
     Object.entries(editSessionState.sets).forEach(([exId, sets]) => {
       const meta = index.exerciseMetaById.get(exId);
-      const exName = meta?.name || 'Unlisted Exercise';
+      const exName = meta?.name || 'Deleted or Custom Exercise';
       (sets as SetLog[]).forEach((s, idx) => {
         const w = parseFloat(s.weight) || 0;
         const r = parseInt(s.reps) || 0;
@@ -311,313 +312,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         />
       )}
 
-      {/* Monthly Archive Summaries Panel */}
-      {monthlySummaries.length > 0 && (
-        <Section
-          eyebrow="Month-End Summary Reports"
-          eyebrowColor="zinc"
-          title="Monthly Training Analytics"
-          action={
-            activeMonthTab ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveMonthTab(null)}
-              >
-                Close Report
-              </Button>
-            ) : undefined
-          }
-          padding="section"
-        >
-          <DeferredViewSection minHeight={150}>
-            <div className="space-y-4">
-            <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
-              {monthlySummaries.map((summary) => {
-                const isSelected = activeMonthTab === summary.monthKey;
-                return (
-                  <Card
-                    key={summary.monthKey}
-                    variant={isSelected ? 'selected' : 'interactive'}
-                    surface={isSelected ? undefined : 'recessed'}
-                    aria-pressed={isSelected}
-                    onClick={() => {
-                      haptics.selection();
-                      setActiveMonthTab(isSelected ? null : summary.monthKey);
-                    }}
-                    padding="standard"
-                    className="snap-start shrink-0 min-w-[172px] sm:min-w-[200px] min-h-[120px] sm:min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
-                  >
-                    <div
-                      className={cn(
-                        TYPOGRAPHY.eyebrow,
-                        "tabular-nums",
-                        isSelected ? "text-orange-400" : "text-zinc-500 group-hover:text-zinc-300",
-                        TRANSITION.colors
-                      )}
-                    >
-                      {summary.monthKey}
-                    </div>
-
-                    <div className="mt-1 min-h-[2.25rem] flex items-start">
-                      <div className="text-sm font-bold uppercase tracking-wide leading-tight text-white break-words">
-                        {summary.monthName}
-                      </div>
-                    </div>
-
-                    <div className="mt-auto pt-3 flex items-center justify-between gap-3">
-                      <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
-                        Completed Runs
-                      </span>
-
-                      <span className="shrink-0 text-lg font-mono font-bold tabular-nums text-white">
-                        {summary.sessionsCount}
-                      </span>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-
-            <AnimatePresence mode="wait">
-              {activeMonthTab && (() => {
-                const selectedReport = monthlySummaries.find(m => m.monthKey === activeMonthTab);
-                if (!selectedReport) return null;
-
-                const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
-                const prevMonthDate = new Date(curYear, curMonth - 2, 1);
-                const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-                const prevMonthName = prevMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
-
-                // Distinguish between no previous tracked month and previous month with zero completed workouts
-                const earliestMonthKey = monthlySummaries.length > 0
-                  ? monthlySummaries[monthlySummaries.length - 1].monthKey
-                  : selectedReport.monthKey;
-                const hasEarlierHistory = prevMonthKey >= earliestMonthKey;
-
-                // 1. Sessions comparison
-                const currentSessions = selectedReport.sessionsCount;
-                let sessionsTrendText = 'First recorded month';
-                let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-                let sessionsSublabel: string | undefined = undefined;
-
-                if (prevReport) {
-                  const sDiff = currentSessions - prevReport.sessionsCount;
-                  sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
-                  sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
-                  sessionsSublabel = `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}`;
-                } else if (hasEarlierHistory) {
-                  sessionsTrendText = currentSessions > 0 ? `+${currentSessions} vs prev month` : `Equal vs prev month`;
-                  sessionsTrendDir = currentSessions > 0 ? 'positive' : 'neutral';
-                  sessionsSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
-                }
-
-                // 2. Volume comparison
-                const currentVolume = selectedReport.totalVolume;
-                let volumeTrendText = 'First recorded month';
-                let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-
-                if (prevReport && prevReport.totalVolume > 0) {
-                  const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
-                  const roundedVPct = Math.round(vPct * 10) / 10;
-                  volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
-                  volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
-                } else if (prevReport) {
-                  volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
-                  volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
-                } else if (hasEarlierHistory) {
-                  volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
-                  volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
-                }
-
-                // 3. PRs comparison
-                const currentMonthPRs = (prEvents || []).filter(e => e.monthKey === selectedReport.monthKey);
-                const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
-                let prTrendText = 'First recorded month';
-                let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-                let prSublabel: string | undefined = undefined;
-
-                if (prevReport) {
-                  const prDiff = currentMonthPRs.length - prevMonthPRs.length;
-                  prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
-                  prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
-                  prSublabel = `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}`;
-                } else if (hasEarlierHistory) {
-                  prTrendText = currentMonthPRs.length > 0 ? `+${currentMonthPRs.length} vs prev month` : `Equal vs prev month`;
-                  prTrendDir = currentMonthPRs.length > 0 ? 'positive' : 'neutral';
-                  prSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
-                }
-
-                // 4. Strength Trend (Current month vs immediately preceding month)
-                const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
-                const curStart = `${selectedReport.monthKey}-01`;
-                const curEnd = `${selectedReport.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
-
-                const lastDayOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
-                const prevStart = `${prevMonthKey}-01`;
-                const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
-
-                const monthlyStrengthTrend = getStrengthTrendForRange(
-                  { start: curStart, end: curEnd },
-                  { start: prevStart, end: prevEnd }
-                );
-
-                const strengthChange = monthlyStrengthTrend.percentChange;
-                const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
-                  ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
-                  : undefined;
-                const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
-                  strengthChange !== null && strengthChange > 0 ? 'positive' : strengthChange !== null && strengthChange < 0 ? 'negative' : 'neutral';
-
-                const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
-
-                const durationHours = Math.floor(selectedReport.totalDuration / 60);
-                const durationMins = selectedReport.totalDuration % 60;
-                const avgDuration = selectedReport.sessionsCount > 0
-                  ? Math.round(selectedReport.totalDuration / selectedReport.sessionsCount)
-                  : 0;
-
-                return (
-                  <motion.div
-                    initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-                    animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
-                    exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
-                    transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
-                    className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
-                  >
-                    {/* Summary Grid: Sessions, Volume, PRs, Strength Trend */}
-                    <Grid cols={2} gap="md">
-                      <StatCard
-                        label="Sessions"
-                        value={currentSessions}
-                        accent="zinc"
-                        disableAnimation
-                        trend={sessionsTrendText}
-                        trendDirection={sessionsTrendDir}
-                        sublabel={sessionsSublabel}
-                      />
-                      <StatCard
-                        label="Window Volume"
-                        value={currentVolume}
-                        unit="kg"
-                        formatValue={formatCompactWeight}
-                        accent="zinc"
-                        disableAnimation
-                        trend={volumeTrendText}
-                        trendDirection={volumeTrendDir}
-                      />
-                      <StatCard
-                        label="PRs"
-                        value={currentMonthPRs.length}
-                        accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
-                        disableAnimation
-                        icon={Trophy}
-                        trend={prTrendText}
-                        trendDirection={prTrendDir}
-                        sublabel={prSublabel}
-                      />
-                      <StatCard
-                        label="Strength Progress"
-                        value={monthlyStrengthTrend.percentChange}
-                        unit="%"
-                        formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-                        accent={
-                          strengthChange !== null
-                            ? strengthChange > 0
-                              ? 'emerald'
-                              : strengthChange < 0
-                              ? 'red'
-                              : 'zinc'
-                            : 'zinc'
-                        }
-                        disableAnimation
-                        icon={Sparkles}
-                        trend={strengthTrendText}
-                        trendDirection={strengthTrendDir}
-                        isUnavailable={monthlyStrengthTrend.percentChange === null}
-                        unavailableLabel="No Overlap"
-                        sublabel={
-                          monthlyStrengthTrend.percentChange !== null
-                            ? 'vs previous month'
-                            : (monthlyStrengthTrend.comparableExercises > 0
-                              ? `Confidence: ${monthlyStrengthTrend.confidence}`
-                              : hasEarlierHistory
-                              ? 'No matching lifts vs prev'
-                              : 'First recorded month')
-                        }
-                      />
-                    </Grid>
-
-                    {/* Preserved Training Duration & Pacing details */}
-                    <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 border text-xs font-mono", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
-                      <div className="flex items-center gap-2 text-zinc-300">
-                        <Clock size={15} className="text-orange-400" />
-                        <span>Total Time Trained:</span>
-                        <span className="font-bold text-white">
-                          {durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`} ({selectedReport.totalDuration} mins)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-zinc-400">
-                        <span>Average Session Duration:</span>
-                        <span className="font-bold text-zinc-200">{avgDuration} mins</span>
-                      </div>
-                    </div>
-
-                    {/* Routine split and Peaks */}
-                    <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.standard)}>
-                      {/* Training Split Distribution */}
-                      <div className="space-y-3">
-                        <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
-                        <div className="space-y-2.5">
-                          {(Object.entries(selectedReport.workoutsByType) as [string, number][]).map(([type, count]) => {
-                            const percentage = totalWorkouts ? Math.round((count / totalWorkouts) * 100) : 0;
-                            return count > 0 ? (
-                              <div key={type} className="space-y-1">
-                                <div className="flex justify-between items-center text-xs font-mono">
-                                  <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
-                                  <span className="text-zinc-500">{count} workouts ({percentage}%)</span>
-                                </div>
-                                <ProgressBar
-                                  value={percentage}
-                                  max={100}
-                                  colorOverride={(type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc}
-                                  aria-label={`${type} protocol coverage: ${percentage}%`}
-                                  className="border-0"
-                                />
-                              </div>
-                            ) : null;
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Monthly Peak Performance */}
-                      <div className="space-y-3">
-                        <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
-                        <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
-                          {Object.keys(selectedReport.peakLifts).length === 0 ? (
-                            <div className="text-xs text-zinc-600 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
-                          ) : (
-                            (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
-                              <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 border text-xs text-zinc-300", RADIUS.button, SURFACE.subtle, BORDER.standard)}>
-                                <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
-                                <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </Grid>
-                  </motion.div>
-                );
-              })()}
-            </AnimatePresence>
-          </div>
-        </DeferredViewSection>
-      </Section>
-      )}
-
-      {/* Main Days Drill Down Hierarchy */}
+      {/* Main Days Drill Down Hierarchy — Primary Focus */}
       <Section
         eyebrow="Chronological Archive"
         eyebrowColor="zinc"
@@ -625,12 +320,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         padding="none"
       >
         {filteredSessions.length === 0 ? (
-          <EmptyState
-            icon={Dumbbell}
-            title="No Historical Milestones Detected"
-            description="No logged workouts match your active filters. Complete training protocols on the dashboard to register stats in the engine."
-            action={search ? { label: 'Clear Filters', onClick: clearFilter } : undefined}
-          />
+          sessionsList.length === 0 ? (
+            <EmptyState
+              icon={Dumbbell}
+              title="No Workouts Logged Yet"
+              description="Complete a training session from the Dashboard to start building your training logbook."
+            />
+          ) : (
+            <EmptyState
+              icon={Search}
+              title="No Matching Sessions"
+              description={`No logged workouts match "${search.trim()}". Try clearing filters or searching another exercise or date.`}
+              action={{ label: 'Clear Filters', onClick: clearFilter }}
+            />
+          )
         ) : (
           <div className="space-y-3">
             {filteredSessions.map((session, sIdx) => {
@@ -741,8 +444,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         icon={<Trash2 size={14} />}
                         onClick={async () => {
                           const proceed = await confirm({
-                            title: 'Purge Workout Log',
-                            message: 'Are you sure you want to purge this workout log from history?',
+                            title: 'Delete Workout Log',
+                            message: 'Permanently delete this workout log from history? This cannot be undone.',
                             isDanger: true
                           });
                           if (proceed) {
@@ -770,10 +473,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     >
                       {editingLogId === session.id && editSessionState ? (
                         <div className="space-y-6 text-zinc-300">
-                          {/* Secure Editor Header */}
+                          {/* Editor Header */}
                           <div className={cn("flex justify-between items-center p-4 border", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                             <div className="space-y-1">
-                              <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-500 block")}>Secure Archive Modification</span>
+                              <span className={cn(TYPOGRAPHY.eyebrow, "text-orange-400 block")}>Editing Historical Session</span>
                               <h4 className={cn(TYPOGRAPHY.titleSubsection, "text-sm text-white")}>Edit Session Logs</h4>
                             </div>
                             <Button
@@ -822,15 +525,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           <div className="space-y-6">
                             {Object.entries(editSessionState.sets).map(([exId, sets]) => {
                               const meta = index.exerciseMetaById.get(exId);
-                              const exName = meta?.name || 'Unlisted Exercise';
+                              const exName = meta?.name || 'Deleted or Custom Exercise';
                               return (
-                                <div key={exId} className={cn("border p-4 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
+                                <div key={exId} className={cn("border p-3 sm:p-5 space-y-4 text-zinc-300", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                                   <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500" />
                                     <h5 className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white")}>{exName}</h5>
                                   </div>
 
-                                  <div className={cn("grid grid-cols-[28px_1fr_1fr_44px] sm:grid-cols-[36px_1fr_1fr_44px] gap-2 sm:gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
+                                  <div className={cn("grid grid-cols-[20px_minmax(0,1fr)_minmax(0,1fr)_44px] gap-1.5 sm:grid-cols-[36px_1fr_1fr_44px] sm:gap-2.5 items-center", TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                                     <span className="text-center font-bold">Set</span>
                                     <span className="text-center font-bold">Weight (KG)</span>
                                     <span className="text-center font-bold">Reps</span>
@@ -845,7 +548,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                                       return (
                                         <div key={s.id ? `edit-set-${s.id}-${idx}` : `edit-set-${exId}-${idx}`} className="space-y-1.5">
-                                          <div className="grid grid-cols-[28px_1fr_1fr_44px] sm:grid-cols-[36px_1fr_1fr_44px] gap-2 sm:gap-2.5 items-center">
+                                          <div className="grid grid-cols-[20px_minmax(0,1fr)_minmax(0,1fr)_44px] gap-1.5 sm:grid-cols-[36px_1fr_1fr_44px] sm:gap-2.5 items-center">
                                             <span className="font-mono text-xs text-zinc-400 text-center font-bold tabular-nums">{idx + 1}</span>
                                             {/* specialized table/matrix input for historical set weight */}
                                             <Input
@@ -952,13 +655,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           </div>
 
                           {/* Dynamic Safeguard: Verification Checkbox */}
-                          <div className={cn("p-4 border text-zinc-400", SURFACE.recessed, BORDER.standard, RADIUS.card)}>
-                            <label className="flex items-start gap-3 cursor-pointer text-xs select-none">
+                          <div className={cn("p-3 sm:p-4 border text-zinc-300", SURFACE.recessed, BORDER.standard, RADIUS.card)}>
+                            <label
+                              htmlFor={editVerifyCheckboxId}
+                              className={cn("flex items-center gap-3 cursor-pointer text-xs select-none", CONTROL_HEIGHT.touchTarget)}
+                            >
                               <input
+                                id={editVerifyCheckboxId}
                                 type="checkbox"
                                 checked={editVerified}
                                 onChange={(e) => setEditVerified(e.target.checked)}
-                                className="mt-0.5 rounded border-zinc-800 bg-zinc-950 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer"
+                                className="shrink-0 rounded border-zinc-700 bg-zinc-950 text-orange-500 focus:ring-orange-500 w-5 h-5 cursor-pointer"
                               />
                               <span>
                                 I verify that these data alterations are <strong className="text-white">intentional, accurate, and correct</strong>. I want to sync updates securely to my history archives.
@@ -998,7 +705,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           <div className="space-y-3">
                         {Object.entries(session.sets).map(([exId, sets]) => {
                           const meta = index.exerciseMetaById.get(exId);
-                          const exerciseName = meta?.name || 'Unlisted Exercise';
+                          const exerciseName = meta?.name || 'Deleted or Custom Exercise';
                           const workout = workoutsById.get(session.workoutId);
                           const doneSets = (sets as SetLog[]).filter(s => s.done);
                           if (doneSets.length === 0) return null;
@@ -1211,6 +918,317 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
         )}
       </Section>
+
+      {/* Secondary Monthly Reports Section — Progressive disclosure below chronological archive */}
+      {monthlySummaries.length > 0 && (
+        <Section
+          eyebrow="Month-End Summary Reports"
+          eyebrowColor="zinc"
+          title="Monthly Training Analytics"
+          action={
+            <div className="flex items-center gap-2">
+              {activeMonthTab && showMonthlyReports && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveMonthTab(null)}
+                >
+                  Close Report
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-expanded={showMonthlyReports}
+                onClick={() => setShowMonthlyReports((prev) => !prev)}
+                icon={<ChevronDown size={14} className={cn(TRANSITION.transform, showMonthlyReports && "rotate-180")} />}
+                iconPosition="right"
+              >
+                {showMonthlyReports ? 'Hide Monthly Reports' : `Monthly Reports (${monthlySummaries.length})`}
+              </Button>
+            </div>
+          }
+          padding="section"
+        >
+          {showMonthlyReports ? (
+            <DeferredViewSection minHeight={150}>
+              <div className="space-y-4">
+                <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
+                  {monthlySummaries.map((summary) => {
+                    const isSelected = activeMonthTab === summary.monthKey;
+                    return (
+                      <Card
+                        key={summary.monthKey}
+                        variant={isSelected ? 'selected' : 'interactive'}
+                        surface={isSelected ? undefined : 'recessed'}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          haptics.selection();
+                          setActiveMonthTab(isSelected ? null : summary.monthKey);
+                        }}
+                        padding="standard"
+                        className="snap-start shrink-0 min-w-[172px] sm:min-w-[200px] min-h-[120px] sm:min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
+                      >
+                        <div
+                          className={cn(
+                            TYPOGRAPHY.eyebrow,
+                            "tabular-nums",
+                            isSelected ? "text-orange-400" : "text-zinc-400 group-hover:text-zinc-300",
+                            TRANSITION.colors
+                          )}
+                        >
+                          {summary.monthKey}
+                        </div>
+
+                        <div className="mt-1 min-h-[2.25rem] flex items-start">
+                          <div className="text-sm font-bold uppercase tracking-wide leading-tight text-white break-words">
+                            {summary.monthName}
+                          </div>
+                        </div>
+
+                        <div className="mt-auto pt-3 flex items-center justify-between gap-3">
+                          <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
+                            Completed Runs
+                          </span>
+
+                          <span className="shrink-0 text-lg font-mono font-bold tabular-nums text-white">
+                            {summary.sessionsCount}
+                          </span>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {activeMonthTab && (() => {
+                    const selectedReport = monthlySummaries.find(m => m.monthKey === activeMonthTab);
+                    if (!selectedReport) return null;
+
+                    const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
+                    const prevMonthDate = new Date(curYear, curMonth - 2, 1);
+                    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+                    const prevMonthName = prevMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
+
+                    const earliestMonthKey = monthlySummaries.length > 0
+                      ? monthlySummaries[monthlySummaries.length - 1].monthKey
+                      : selectedReport.monthKey;
+                    const hasEarlierHistory = prevMonthKey >= earliestMonthKey;
+
+                    const currentSessions = selectedReport.sessionsCount;
+                    let sessionsTrendText = 'First recorded month';
+                    let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                    let sessionsSublabel: string | undefined = undefined;
+
+                    if (prevReport) {
+                      const sDiff = currentSessions - prevReport.sessionsCount;
+                      sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
+                      sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
+                      sessionsSublabel = `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}`;
+                    } else if (hasEarlierHistory) {
+                      sessionsTrendText = currentSessions > 0 ? `+${currentSessions} vs prev month` : `Equal vs prev month`;
+                      sessionsTrendDir = currentSessions > 0 ? 'positive' : 'neutral';
+                      sessionsSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
+                    }
+
+                    const currentVolume = selectedReport.totalVolume;
+                    let volumeTrendText = 'First recorded month';
+                    let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+
+                    if (prevReport && prevReport.totalVolume > 0) {
+                      const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
+                      const roundedVPct = Math.round(vPct * 10) / 10;
+                      volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
+                      volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
+                    } else if (prevReport || hasEarlierHistory) {
+                      volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
+                      volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
+                    }
+
+                    const currentMonthPRs = (prEvents || []).filter(e => e.monthKey === selectedReport.monthKey);
+                    const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
+                    let prTrendText = 'First recorded month';
+                    let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                    let prSublabel: string | undefined = undefined;
+
+                    if (prevReport) {
+                      const prDiff = currentMonthPRs.length - prevMonthPRs.length;
+                      prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
+                      prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
+                      prSublabel = `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}`;
+                    } else if (hasEarlierHistory) {
+                      prTrendText = currentMonthPRs.length > 0 ? `+${currentMonthPRs.length} vs prev month` : `Equal vs prev month`;
+                      prTrendDir = currentMonthPRs.length > 0 ? 'positive' : 'neutral';
+                      prSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
+                    }
+
+                    const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
+                    const curStart = `${selectedReport.monthKey}-01`;
+                    const curEnd = `${selectedReport.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
+
+                    const lastDayOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
+                    const prevStart = `${prevMonthKey}-01`;
+                    const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
+
+                    const monthlyStrengthTrend = getStrengthTrendForRange(
+                      { start: curStart, end: curEnd },
+                      { start: prevStart, end: prevEnd }
+                    );
+
+                    const strengthChange = monthlyStrengthTrend.percentChange;
+                    const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
+                      ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
+                      : undefined;
+                    const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
+                      strengthChange !== null && strengthChange > 0 ? 'positive' : strengthChange !== null && strengthChange < 0 ? 'negative' : 'neutral';
+
+                    const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
+
+                    const durationHours = Math.floor(selectedReport.totalDuration / 60);
+                    const durationMins = selectedReport.totalDuration % 60;
+                    const avgDuration = selectedReport.sessionsCount > 0
+                      ? Math.round(selectedReport.totalDuration / selectedReport.sessionsCount)
+                      : 0;
+
+                    return (
+                      <motion.div
+                        initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                        animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                        exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                        transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
+                        className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
+                      >
+                        <Grid cols={2} gap="md">
+                          <StatCard
+                            label="Sessions"
+                            value={currentSessions}
+                            accent="zinc"
+                            disableAnimation
+                            trend={sessionsTrendText}
+                            trendDirection={sessionsTrendDir}
+                            sublabel={sessionsSublabel}
+                          />
+                          <StatCard
+                            label="Window Volume"
+                            value={currentVolume}
+                            unit="kg"
+                            formatValue={formatCompactWeight}
+                            accent="zinc"
+                            disableAnimation
+                            trend={volumeTrendText}
+                            trendDirection={volumeTrendDir}
+                          />
+                          <StatCard
+                            label="PRs"
+                            value={currentMonthPRs.length}
+                            accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
+                            disableAnimation
+                            icon={Trophy}
+                            trend={prTrendText}
+                            trendDirection={prTrendDir}
+                            sublabel={prSublabel}
+                          />
+                          <StatCard
+                            label="Strength Progress"
+                            value={monthlyStrengthTrend.percentChange}
+                            unit="%"
+                            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
+                            accent={
+                              strengthChange !== null
+                                ? strengthChange > 0
+                                  ? 'emerald'
+                                  : strengthChange < 0
+                                  ? 'red'
+                                  : 'zinc'
+                                : 'zinc'
+                            }
+                            disableAnimation
+                            icon={Sparkles}
+                            trend={strengthTrendText}
+                            trendDirection={strengthTrendDir}
+                            isUnavailable={monthlyStrengthTrend.percentChange === null}
+                            unavailableLabel="No Overlap"
+                            sublabel={
+                              monthlyStrengthTrend.percentChange !== null
+                                ? 'vs previous month'
+                                : (monthlyStrengthTrend.comparableExercises > 0
+                                  ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                                  : hasEarlierHistory
+                                  ? 'No matching lifts vs prev'
+                                  : 'First recorded month')
+                            }
+                          />
+                        </Grid>
+
+                        <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 border text-xs font-mono", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Clock size={15} className="text-orange-400" />
+                            <span>Total Time Trained:</span>
+                            <span className="font-bold text-white">
+                              {durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`} ({selectedReport.totalDuration} mins)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-400">
+                            <span>Average Session Duration:</span>
+                            <span className="font-bold text-zinc-200">{avgDuration} mins</span>
+                          </div>
+                        </div>
+
+                        <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.standard)}>
+                          <div className="space-y-3">
+                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
+                            <div className="space-y-2.5">
+                              {(Object.entries(selectedReport.workoutsByType) as [string, number][]).map(([type, count]) => {
+                                const percentage = totalWorkouts ? Math.round((count / totalWorkouts) * 100) : 0;
+                                return count > 0 ? (
+                                  <div key={type} className="space-y-1">
+                                    <div className="flex justify-between items-center text-xs font-mono">
+                                      <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
+                                      <span className="text-zinc-400">{count} workouts ({percentage}%)</span>
+                                    </div>
+                                    <ProgressBar
+                                      value={percentage}
+                                      max={100}
+                                      colorOverride={(type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc}
+                                      aria-label={`${type} protocol coverage: ${percentage}%`}
+                                      className="border-0"
+                                    />
+                                  </div>
+                                ) : null;
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
+                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                              {Object.keys(selectedReport.peakLifts).length === 0 ? (
+                                <div className="text-xs text-zinc-400 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
+                              ) : (
+                                (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
+                                  <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 border text-xs text-zinc-300", RADIUS.button, SURFACE.subtle, BORDER.standard)}>
+                                    <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
+                                    <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </Grid>
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
+              </div>
+            </DeferredViewSection>
+          ) : (
+            <p className={cn(TYPOGRAPHY.bodySecondary, "text-zinc-400")}>
+              Compare session totals, volume trends, PR counts, and lift peaks across {monthlySummaries.length} recorded {monthlySummaries.length === 1 ? 'month' : 'months'}.
+            </p>
+          )}
+        </Section>
+      )}
     </Stack>
   );
 };

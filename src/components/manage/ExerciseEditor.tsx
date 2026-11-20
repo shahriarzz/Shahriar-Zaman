@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronLeft, Save, Layers, Minus, Plus } from 'lucide-react';
 import { Exercise, Workout } from '../../types/fitness';
 import {
@@ -7,10 +7,12 @@ import {
   Input,
   Textarea,
   Badge,
+  Banner,
   ToggleChip,
   Stack,
   Grid,
   SegmentedControl,
+  showToast,
   TYPOGRAPHY,
   BORDER,
   SURFACE,
@@ -35,6 +37,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
 }) => {
   // 1. Global Exercise Definition State
   const [name, setName] = useState(exercise.name || '');
+  const [nameTouched, setNameTouched] = useState(false);
   const [target, setTarget] = useState(exercise.target || '');
   const [equipment, setEquipment] = useState(exercise.equipment || '');
   const [instructions, setInstructions] = useState(exercise.instructions || '');
@@ -50,12 +53,29 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
     workout ? 'programming' : 'definition'
   );
 
+  const isDirty = useMemo(() => {
+    const origTags = (exercise.tags || []).slice().sort().join(',');
+    const curTags = tags.slice().sort().join(',');
+    return (
+      name !== (exercise.name || '') ||
+      target !== (exercise.target || '') ||
+      equipment !== (exercise.equipment || '') ||
+      instructions !== (exercise.instructions || '') ||
+      curTags !== origTags ||
+      sets !== (exercise.sets || 3) ||
+      reps !== (exercise.reps || '10–12') ||
+      rest !== (exercise.rest || '90s') ||
+      note !== (exercise.note || '')
+    );
+  }, [name, target, equipment, instructions, tags, sets, reps, rest, note, exercise]);
+
   const toggleTag = (t: string) => {
     haptics.selection();
     setTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
   };
 
   const handleSave = () => {
+    setNameTouched(true);
     if (!name.trim()) return;
     haptics.success();
 
@@ -72,6 +92,12 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
       note: note.trim()
     };
 
+    showToast({
+      message: workout
+        ? `Saved ${updated.name} prescription for ${workout.name}`
+        : `Saved ${updated.name} definition`,
+      tone: 'success'
+    });
     onSave(updated);
   };
 
@@ -79,7 +105,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
     <Stack spacing="lg">
       {/* Top Header & Navigation */}
       <div className={cn(EDITOR_HEADER.container, BORDER.standard)}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
           <Button
             variant="ghost"
             size="sm"
@@ -92,9 +118,12 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
           <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
             Exercise Configuration
           </span>
+          {isDirty && (
+            <Badge label="Unsaved Changes" color="amber" variant="subtle" size="sm" />
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="ghost"
             size="sm"
@@ -130,14 +159,22 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
       {/* SECTION 1: GLOBAL EXERCISE DEFINITION */}
       {activeTab === 'definition' && (
         <Card variant="standard" padding="standard" className="space-y-6">
+          <Banner
+            variant={workout ? 'warning' : 'info'}
+            size="compact"
+            title={workout ? `Viewing Global Definition inside ${workout.name}` : 'Global Exercise Definition'}
+            description={
+              workout
+                ? `Saving from a workout updates sets, reps, rest, and notes for ${workout.name}. To rename or edit global attributes across all workouts, edit from Manage → Exercises.`
+                : 'Changes here update this movement name, target muscle, equipment, and technique cues across your entire Exercise Library.'
+            }
+          />
+
           <div className="space-y-1">
             <h3 className={cn(TYPOGRAPHY.label, "text-white text-sm font-bold flex items-center gap-2")}>
-              <Layers size={14} className="text-orange-500" />
-              Global Exercise Definition
+              <Layers size={14} className="text-orange-400" />
+              Identity & Movement Details
             </h3>
-            <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400")}>
-              Core properties that define this movement across all workouts and catalog views.
-            </p>
           </div>
 
           <Grid cols={1} colsMd={2} gap="md">
@@ -145,7 +182,12 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
               label="Exercise Name"
               placeholder="e.g. Incline Dumbbell Press"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setNameTouched(true);
+                setName(e.target.value);
+              }}
+              onBlur={() => setNameTouched(true)}
+              error={nameTouched && !name.trim() ? 'Exercise name is required.' : undefined}
               required
             />
 
@@ -196,17 +238,21 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
       {/* SECTION 2: WORKOUT SPECIFIC PROGRAMMING */}
       {activeTab === 'programming' && workout && (
         <Card variant="standard" padding="standard" className="space-y-6">
+          <Banner
+            variant="info"
+            size="compact"
+            title={`Workout-Specific Prescription · ${workout.name}`}
+            description={`Sets, reps, rest, and coaching notes below apply only to ${workout.name} and leave other routines unchanged.`}
+          />
+
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Badge label={workout.name} color="orange" variant="subtle" size="sm" />
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Protocol Assignment</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Protocol Assignment</span>
             </div>
             <h3 className={cn(TYPOGRAPHY.label, "text-white text-sm font-bold")}>
-              Workout Specific Programming
+              Volume & Intensity Targets
             </h3>
-            <p className={cn(TYPOGRAPHY.body, "text-xs text-zinc-400")}>
-              Target volume, intensity, and coaching notes programmed specifically for <strong className="text-zinc-200">{workout.name}</strong>.
-            </p>
           </div>
 
           <Grid cols={1} colsMd={3} gap="md">
@@ -220,7 +266,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
                   aria-label="Decrease sets"
                   onClick={() => setSets(Math.max(1, sets - 1))}
                 />
-                <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-white text-base")}>
+                <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-white text-base tabular-nums")}>
                   {sets}
                 </div>
                 <Button

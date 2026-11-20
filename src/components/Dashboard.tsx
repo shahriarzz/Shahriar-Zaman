@@ -121,155 +121,70 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
-      {/* Header + StatCards Hero Block */}
+      {/* 1. Page Header + Primary Action Zone (Unfinished Session or Today's Protocol) */}
       <Stack spacing="lg">
         <SectionHeader
           eyebrow={heroDateStr}
           eyebrowColor="zinc"
-          title="Stay Aggressive"
+          title="Dashboard"
           size="page"
         />
 
-        {/* Stats Grid */}
-        <Grid cols={2} colsMd={4} gap="md">
-          <StatCard
-            label="Streak"
-            value={trainingStreak.currentStreak}
-            unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
-            sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
-            accent="zinc"
-            icon={TrendingUp}
-            disableAnimation
-            size="standard"
-          />
-          <StatCard
-            label="Training Frequency"
-            value={trainingFrequency.sessionsPerWeek}
-            formatValue={(val) => val.toFixed(1)}
-            unit="/ week"
-            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs prev 28d`}
-            accent="zinc"
-            icon={CalendarIcon}
-            disableAnimation
-            size="standard"
-          />
-          <StatCard
-            label="Strength Progress"
-            value={strengthTrend.percentChange}
-            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-            unit="%"
-            sublabel={
-              strengthTrend.percentChange !== null
-                ? `${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'exercise' : 'exercises'} (${strengthTrend.confidence} confidence)`
-                : 'Insufficient 28d baseline'
-            }
-            isUnavailable={strengthTrend.percentChange === null}
-            accent={
-              strengthTrend.percentChange === null
-                ? 'zinc'
-                : strengthTrend.percentChange > 0
-                  ? 'emerald'
-                  : strengthTrend.percentChange < 0
-                    ? 'red'
-                    : 'zinc'
-            }
-            trendDirection={
-              strengthTrend.percentChange === null
-                ? undefined
-                : strengthTrend.percentChange > 0
-                  ? 'positive'
-                  : strengthTrend.percentChange < 0
-                    ? 'negative'
-                    : 'neutral'
-            }
-            icon={Dumbbell}
-            disableAnimation
-            size="standard"
-          />
-          {adherence && adherence.evaluatedScheduledWorkouts > 0 ? (
-            <StatCard
-              label="Adherence"
-              value={adherence.percent}
-              unit="%"
-              sublabel={`${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`}
-              accent="zinc"
-              icon={CheckCircle2}
-              disableAnimation
-              size="standard"
+        {/* Unfinished Session Alert (Highest Priority when present) */}
+        {unfinishedSession && (
+          <motion.div
+            initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={shouldReduceMotion ? { duration: 0 } : undefined}
+          >
+            <Banner
+              variant="warning"
+              badge="UNFINISHED SESSION RESTORED"
+              title={unfinishedSession.workout.name}
+              description={`Started ${unfinishedSession.relativeTime}`}
+              action={
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Discard Unfinished Session?',
+                        message: 'All unsubmitted progress and logged sets in this active session will be lost.',
+                        confirmText: 'Discard Session',
+                        isDanger: true,
+                      });
+                      if (confirmed) {
+                        haptics.destructive();
+                        clearActiveSession();
+                      }
+                    }}
+                    className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    variant="warning"
+                    size="md"
+                    haptic="medium"
+                    onPointerDown={() => onPrewarmSession?.()}
+                    onMouseEnter={() => onPrewarmSession?.()}
+                    onClick={() => {
+                      onStartWorkout(unfinishedSession.workoutId);
+                    }}
+                    className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
+                  >
+                    Resume Session
+                  </Button>
+                </div>
+              }
             />
-          ) : (
-            <StatCard
-              label="Total Volume"
-              value={stats.totalWeight}
-              formatValue={formatCompactWeight}
-              unit="kg"
-              sublabel="Lifetime"
-              accent="zinc"
-              icon={Weight}
-              disableAnimation
-              size="standard"
-            />
-          )}
-        </Grid>
-      </Stack>
+          </motion.div>
+        )}
 
-      {/* Unfinished Session Alert */}
-      {unfinishedSession && (
-        <motion.div
-          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={shouldReduceMotion ? { duration: 0 } : undefined}
-        >
-          <Banner
-            variant="warning"
-            badge="UNFINISHED SESSION RESTORED"
-            title={unfinishedSession.workout.name}
-            description={`Started ${unfinishedSession.relativeTime}`}
-            action={
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={async () => {
-                    const confirmed = await confirm({
-                      title: 'Discard Unfinished Session?',
-                      message: 'All unsubmitted progress and logged sets in this active session will be lost.',
-                      confirmText: 'Discard Session',
-                      isDanger: true,
-                    });
-                    if (confirmed) {
-                      haptics.destructive();
-                      clearActiveSession();
-                    }
-                  }}
-                  className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
-                >
-                  Discard
-                </Button>
-                <Button
-                  variant="warning"
-                  size="md"
-                  haptic="medium"
-                  onPointerDown={() => onPrewarmSession?.()}
-                  onMouseEnter={() => onPrewarmSession?.()}
-                  onClick={() => {
-                    onStartWorkout(unfinishedSession.workoutId);
-                  }}
-                  className={cn("flex-1 sm:flex-initial", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:min-w-0")}
-                >
-                  Resume Session
-                </Button>
-              </div>
-            }
-          />
-        </motion.div>
-      )}
-
-      {/* Today's Workout */}
+      {/* 2. Today's Workout (Single consolidated section heading) */}
       <Section
-        eyebrow="Today's Protocol"
-        eyebrowColor="zinc"
-        title="Active Target"
+        title="Today's Protocol"
         variant="standard"
         padding="section"
       >
@@ -327,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                   )}
                 </div>
               ) : (
-                <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>
+                <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case")}>
                   {todayWorkout.type === 'rest' ? 'Scheduled recovery' : `${todayWorkout.exercises.length} Exercises`}
                 </p>
               )}
@@ -361,8 +276,83 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           />
         )}
       </Section>
+      </Stack>
 
-      {/* Recent Milestones */}
+      {/* 3. Stable 4-KPI Overview Grid (Locked slot identities) */}
+      <Grid cols={2} colsMd={4} gap="md">
+        <StatCard
+          label="Streak"
+          value={trainingStreak.currentStreak}
+          unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
+          sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
+          accent="zinc"
+          icon={TrendingUp}
+          disableAnimation
+          size="standard"
+        />
+        <StatCard
+          label="Training Frequency"
+          value={trainingFrequency.sessionsPerWeek}
+          formatValue={(val) => val.toFixed(1)}
+          unit="/ week"
+          sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
+          accent="zinc"
+          icon={CalendarIcon}
+          disableAnimation
+          size="standard"
+        />
+        <StatCard
+          label="Strength Progress"
+          value={strengthTrend.percentChange}
+          formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
+          unit="%"
+          sublabel={
+            strengthTrend.percentChange !== null
+              ? `28d vs prev · ${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'lift' : 'lifts'} (${strengthTrend.confidence})`
+              : 'Insufficient 28d baseline'
+          }
+          isUnavailable={strengthTrend.percentChange === null}
+          accent={
+            strengthTrend.percentChange === null
+              ? 'zinc'
+              : strengthTrend.percentChange > 0
+                ? 'emerald'
+                : strengthTrend.percentChange < 0
+                  ? 'red'
+                  : 'zinc'
+          }
+          trendDirection={
+            strengthTrend.percentChange === null
+              ? undefined
+              : strengthTrend.percentChange > 0
+                ? 'positive'
+                : strengthTrend.percentChange < 0
+                  ? 'negative'
+                  : 'neutral'
+          }
+          icon={Dumbbell}
+          disableAnimation
+          size="standard"
+        />
+        <StatCard
+          label="Adherence"
+          value={adherence && adherence.evaluatedScheduledWorkouts > 0 ? adherence.percent : null}
+          unit="%"
+          isUnavailable={!adherence || adherence.evaluatedScheduledWorkouts === 0}
+          unavailableLabel="Building baseline"
+          sublabel={
+            adherence && adherence.evaluatedScheduledWorkouts > 0
+              ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
+              : 'Complete 1 scheduled workout'
+          }
+          accent="zinc"
+          icon={CheckCircle2}
+          disableAnimation
+          size="standard"
+        />
+      </Grid>
+
+      {/* 4. Recent Milestones */}
       <Section
         eyebrow="Milestones"
         eyebrowColor="zinc"
@@ -370,21 +360,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         padding="section"
       >
         <Stack spacing="lg">
-          {/* Training Volume Rolling 7-Day Card */}
+          {/* Rolling 7-Day & Lifetime Training Volume Summary */}
           <div className={cn("p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4", RADIUS.card, SURFACE.recessed, BORDER.subtle)}>
             <div>
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Training Volume</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Rolling 7-Day Volume</span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className={cn(TYPOGRAPHY.statValue, "text-white")}>
                   {formatCompactWeight(recentMilestones.recentVolume.volume)}
                 </span>
                 <span className={TYPOGRAPHY.unit}>kg</span>
               </div>
-            </div>
-            <div className="text-left sm:text-right">
-              <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+              <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono block mt-1")}>
                 {recentMilestones.recentVolume.dateRangeLabel}
               </span>
+            </div>
+            <div className="sm:text-right border-t sm:border-t-0 sm:border-l border-zinc-800/70 pt-3 sm:pt-0 sm:pl-6 shrink-0">
+              <div className="flex items-center sm:justify-end gap-1.5">
+                <Weight size={12} className="text-zinc-400 shrink-0" />
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Total Volume (Lifetime)</span>
+              </div>
+              <div className="flex items-baseline sm:justify-end gap-1.5 mt-0.5">
+                <span className={cn(TYPOGRAPHY.statValue, "text-zinc-200")}>
+                  {formatCompactWeight(stats.totalWeight)}
+                </span>
+                <span className={TYPOGRAPHY.unit}>kg</span>
+              </div>
             </div>
           </div>
 
@@ -457,7 +457,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {/* Current + Input Row */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
             <div className="space-y-1">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Current</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Current</span>
               <div className="flex items-end gap-1.5">
                 <span className={cn(TYPOGRAPHY.statValueHero, "text-white")}>
                   {weightSummary.currentWeight}
@@ -468,7 +468,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
             {/* Quick log input */}
             <div className="flex flex-col gap-1 w-full sm:w-auto">
-              <label htmlFor="quick-body-weight-input" className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>
+              <label htmlFor="quick-body-weight-input" className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>
                 Body Weight
               </label>
               <div className="flex items-center gap-2 w-full sm:w-auto">

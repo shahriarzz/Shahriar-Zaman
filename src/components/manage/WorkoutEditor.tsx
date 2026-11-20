@@ -29,6 +29,7 @@ import {
   ListRow,
   Stack,
   Grid,
+  showToast,
   TYPOGRAPHY,
   BORDER,
   SURFACE,
@@ -248,6 +249,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
       name: workoutName.trim(),
       badge: workoutBadge.trim() || workout.badge
     });
+    showToast({ message: `Renamed routine to ${workoutName.trim()}`, tone: 'success' });
     setIsEditingMeta(false);
   };
 
@@ -518,7 +520,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                           )}
                         </div>
 
-                        <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap tabular-nums")}>
+                        <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center gap-1.5 flex-wrap tabular-nums")}>
                           <span>{resolvedEx.target}</span>
                           <span aria-hidden="true">·</span>
                           <span className="text-zinc-300 font-bold">{ex.sets} Sets</span>
@@ -671,7 +673,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                               icon={<Edit3 size={12} />}
                               onClick={() => onOpenExerciseEditor(resolvedEx)}
                             >
-                              Edit Definition →
+                              Edit Prescription →
                             </Button>
 
                             <Button

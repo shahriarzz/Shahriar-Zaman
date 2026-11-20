@@ -17,6 +17,9 @@ import { AnalyticsView } from '../components/AnalyticsView';
 import { HistoryView } from '../components/HistoryView';
 import { Calendar } from '../components/Calendar';
 import { MuscleBalanceRecovery } from '../components/MuscleBalanceRecovery';
+import { Layout } from '../components/Layout';
+import { ExerciseEditor } from '../components/manage/ExerciseEditor';
+import { SessionView } from '../components/SessionView';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
@@ -857,6 +860,281 @@ describe('Targeted UI Refinement Regression Suite', () => {
     it('ensures internal Paste brief does not remain in public/assets', () => {
       const pastePath = path.join(rootDir, 'public/assets/aistudio/Paste_November_16__2026_-_3_11PM_9d51c0de');
       expect(fs.existsSync(pastePath)).toBe(false);
+    });
+  });
+
+  describe('6. Post-Audit UI Clarity, Hierarchy & Accessibility Regressions', () => {
+    it('renders AnalyticsView Adherence Rate and Average Training Gap unavailable states cleanly when baseline data is missing', () => {
+      const mockFitness = createMockFitnessContext();
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        trainingStreak: { currentStreak: 0, longestStreak: 0 },
+        adherenceInsight: { percent: 100, completedScheduled: 0, evaluatedScheduledWorkouts: 0, pendingScheduledWorkouts: 1 },
+        performanceScore: { score: null, status: 'Building baseline' },
+        currentDate: new Date('2026-10-26T12:00:00Z'),
+        todayStr: '2026-10-26',
+        index: buildFitnessIndex({}),
+      } as any);
+
+      const baseFixture = createAnalyticsFixture({
+        heatmapDays: [new Date('2026-10-01T12:00:00Z')],
+        logVolMap: { '2026-10-01': 1200 },
+        maxDayVol: 1200,
+      });
+      baseFixture.aggregated.totalLogsCount = 1;
+      baseFixture.aggregated.avgGapDays = 0;
+
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockReturnValue(baseFixture);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <AnalyticsView />
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(container.textContent).toContain('Complete 1 scheduled workout');
+      expect(container.textContent).toContain('Need 2+ sessions');
+      const heatmapCell = container.querySelector('[role="region"][aria-label*="Monthly volume intensity heatmap"] [aria-label*="2026-10-01"]');
+      expect(heatmapCell).toBeTruthy();
+    });
+
+    it('orders HistoryView Training Sessions before collapsed Monthly Reports, distinguishes empty vs search-empty states, and binds verification checkbox label', () => {
+      const mockFitnessEmpty = createMockFitnessContext({ logs: {} });
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        sortedLogs: [],
+        workoutMap: new Map(INITIAL_WORKOUTS.map((w) => [w.id, w])),
+        index: buildFitnessIndex({}),
+        prEvents: [],
+        getStrengthTrendForRange: () => ({ percentChange: null, comparableExercises: 0, confidence: 'low', currentValue: 0, previousValue: 0, exerciseBreakdown: [] }),
+        getVolumeForRange: () => 0,
+      } as any);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitnessEmpty}>
+            <ConfirmProvider>
+              <HistoryView />
+            </ConfirmProvider>
+          </FitnessContext.Provider>
+        );
+      });
+      expect(container.textContent).toContain('No Workouts Logged Yet');
+
+      const mockFitnessWithLog = createMockFitnessContext({
+        logs: {
+          l1: {
+            id: 'l1',
+            workoutId: 'push-a',
+            date: '2026-10-10',
+            complete: true,
+            durationMinutes: 40,
+            sets: { 'bench-press': [{ id: 's1', weight: '100', reps: '5', done: true }] },
+          },
+        },
+      });
+      const idx = buildFitnessIndex(mockFitnessWithLog.logs);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        sortedLogs: Object.values(mockFitnessWithLog.logs),
+        workoutMap: new Map(INITIAL_WORKOUTS.map((w) => [w.id, w])),
+        index: idx,
+        prEvents: [],
+        getStrengthTrendForRange: () => ({ percentChange: null, comparableExercises: 0, confidence: 'low', currentValue: 0, previousValue: 0, exerciseBreakdown: [] }),
+        getVolumeForRange: () => 500,
+      } as any);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitnessWithLog}>
+            <ConfirmProvider>
+              <HistoryView />
+            </ConfirmProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const html = container.innerHTML;
+      expect(html.indexOf('Training Sessions')).toBeLessThan(html.indexOf('Monthly Training Analytics'));
+
+      const reportsToggle = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Monthly Reports')
+      ) as HTMLButtonElement;
+      expect(reportsToggle).toBeTruthy();
+      expect(reportsToggle.getAttribute('aria-expanded')).toBe('false');
+
+      // Open editor and check verification checkbox htmlFor -> id binding
+      const editBtn = container.querySelector('button[aria-label="Edit session logs"]') as HTMLButtonElement;
+      act(() => {
+        editBtn.click();
+      });
+      const verifyInput = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      const verifyLabel = verifyInput?.closest('label');
+      expect(verifyInput?.id).toBeTruthy();
+      expect(verifyLabel?.getAttribute('for')).toBe(verifyInput?.id);
+
+      // Filter search to non-existent string to verify empty search state & Clear Filters action
+      const searchInput = container.querySelector('input[type="search"]') as HTMLInputElement;
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      act(() => {
+        nativeSetter?.call(searchInput, 'zzzznonexistent');
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(container.textContent).toContain('No Matching Sessions');
+      const clearBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Clear Filters')
+      ) as HTMLButtonElement;
+      expect(clearBtn).toBeTruthy();
+      act(() => {
+        clearBtn.click();
+      });
+      expect(container.textContent).not.toContain('No Matching Sessions');
+    });
+
+    it('renders non-color status glyphs alongside calendar color dots and Status legend', () => {
+      const calWorkouts: Workout[] = [
+        { id: 'wo-push', name: 'Push A', badge: 'PUSH A', type: 'push', isCore: true, cycleDay: 1, exercises: [] },
+        { id: 'wo-rest', name: 'Rest Day', badge: 'REST', type: 'rest', isCore: true, cycleDay: 2, exercises: [] },
+      ];
+      const calWorkoutMap = new Map(calWorkouts.map((w) => [w.id, w]));
+      const calCoreMap = new Map(calWorkouts.map((w) => [w.cycleDay, w]));
+      const calLogsMap = new Map<string, any[]>([
+        ['2026-10-10', [{ id: 'l1', workoutId: 'wo-push', date: '2026-10-10', complete: true, sets: {}, durationMinutes: 40 }]],
+        ['2026-10-11', [{ id: 'l2', workoutId: 'wo-push', date: '2026-10-11', complete: false, sets: {}, durationMinutes: 15 }]],
+      ]);
+
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        currentDate: new Date('2026-10-15T12:00:00Z'),
+        todayStr: '2026-10-15',
+        index: {
+          logsByDate: calLogsMap,
+          volumeByDate: {},
+          completedSetsByDate: {},
+          plannedSetsByDate: {},
+        } as any,
+        workoutMap: calWorkoutMap,
+        coreWorkoutByCycleDayMap: calCoreMap,
+        getCycleDayForDate: (d: Date) => (d.getDate() === 12 ? 1 : d.getDate() === 13 ? 2 : 1),
+        resolveExerciseMeta: () => ({ name: 'Bench Press', target: 'Chest' }),
+      } as any);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={{ workouts: calWorkouts } as any}>
+            <Calendar />
+          </FitnessContext.Provider>
+        );
+      });
+
+      const completedDay = container.querySelector('[data-testid="calendar-day-2026-10-10"]');
+      const partialDay = container.querySelector('[data-testid="calendar-day-2026-10-11"]');
+      const missedDay = container.querySelector('[data-testid="calendar-day-2026-10-12"]');
+      const restDay = container.querySelector('[data-testid="calendar-day-2026-10-13"]');
+      expect(completedDay?.textContent).toContain('✓');
+      expect(partialDay?.textContent).toContain('◐');
+      expect(missedDay?.textContent).toContain('!');
+      expect(restDay?.textContent).toContain('—');
+      expect(container.textContent).toContain('Status:');
+      expect(container.textContent).toContain('Missed');
+    });
+
+    it('shows scope banners, Unsaved Changes badge, and inline validation in ExerciseEditor', () => {
+      act(() => {
+        root.render(
+          <ExerciseEditor
+            exercise={{
+              id: 'bench-press',
+              exerciseDefinitionId: 'bench-press',
+              name: 'Barbell Bench Press',
+              target: 'Chest',
+              sets: 3,
+              reps: '8',
+            }}
+            workout={{
+              id: 'push-a',
+              name: 'Push Protocol Alpha',
+              badge: 'PUSH A',
+              cycleDay: 1,
+              type: 'push',
+              exercises: [],
+            } as any}
+            onSave={vi.fn()}
+            onCancel={vi.fn()}
+          />
+        );
+      });
+
+      expect(container.textContent).toContain('Workout-Specific Prescription');
+      expect(container.textContent).not.toContain('Unsaved Changes');
+
+      const defTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Exercise Definition')
+      ) as HTMLButtonElement;
+      act(() => {
+        defTabBtn.click();
+      });
+      expect(container.textContent).toContain('Viewing Global Definition inside Push Protocol Alpha');
+
+      const nameInput = container.querySelector('input[required]') as HTMLInputElement;
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      act(() => {
+        nativeSetter?.call(nameInput, '');
+        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(container.textContent).toContain('Unsaved Changes');
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain('Exercise name is required.');
+    });
+
+    it('restores focus to status trigger when closing Layout cloud popover via Escape and preserves Finish text in SessionView', () => {
+      const mockFitness = createMockFitnessContext();
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <Layout activeTab="dashboard" onTabChange={() => {}}>
+              <div>Content</div>
+            </Layout>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const statusBtn = container.querySelector('button.group\\/sync') as HTMLButtonElement;
+      act(() => {
+        statusBtn.focus();
+        statusBtn.click();
+      });
+      expect(container.querySelector('#cloud-status-popover')).toBeTruthy();
+
+      const otherEl = document.createElement('button');
+      container.appendChild(otherEl);
+      act(() => {
+        otherEl.focus();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(statusBtn.getAttribute('aria-expanded')).toBe('false');
+      expect(statusBtn.hasAttribute('aria-controls')).toBe(false);
+      expect(document.activeElement).toBe(statusBtn);
+
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        index: buildFitnessIndex([], defsMap),
+        getLatestForExercise: () => null,
+        getWeightPRForExercise: () => null,
+        getE1RMPRForExercise: () => null,
+        getHistoryForExercise: () => [],
+      } as any);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <ConfirmProvider>
+              <SessionView workoutId={INITIAL_WORKOUTS[0].id} onExit={vi.fn()} />
+            </ConfirmProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const finishBtn = container.querySelector('button[aria-label="Finish Session"]') as HTMLButtonElement;
+      expect(finishBtn).toBeTruthy();
+      expect(finishBtn.textContent).toContain('Finish');
     });
   });
 });
