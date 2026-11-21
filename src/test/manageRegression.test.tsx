@@ -3,6 +3,7 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ProgramEditor } from '../components/manage/ProgramEditor';
 import { WorkoutEditor } from '../components/manage/WorkoutEditor';
 import { CycleEditor } from '../components/manage/CycleEditor';
 import { ExerciseLibrary } from '../components/manage/ExerciseLibrary';
@@ -486,6 +487,375 @@ describe('Manage Subsystem Regression & Defect Verification Suite', () => {
       });
       expect(importBackup).toHaveBeenCalledWith('{bad json');
       expect(container.textContent).toContain('Invalid JSON string');
+    });
+  });
+
+  describe('4. ProgramEditor Navigation, Mode Switch & Drill-Down State Preservation', () => {
+    it('supports Back to Manage exit, Cycle/Exercises mode toggle, multi-level drill-down, and preserves activeMode across drill-downs', async () => {
+      const onBackToManage = vi.fn();
+      const updateWorkoutExerciseProgramming = vi.fn().mockResolvedValue(undefined);
+      const addExerciseDefinition = vi.fn().mockResolvedValue({
+        id: 'ex-created',
+        name: 'Cable Fly',
+        target: 'Chest',
+        equipment: 'Cable',
+        instructions: '',
+        tags: [],
+      });
+      const mockFitness = createMockFitnessContext({
+        updateWorkoutExerciseProgramming,
+        addExerciseDefinition,
+      });
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <ConfirmProvider>
+              <ProgramEditor onBackToManage={onBackToManage} />
+            </ConfirmProvider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(container.textContent).toContain('Program Configuration');
+      expect(container.querySelector('[data-testid="cycle-list"]')).toBeTruthy();
+
+      // Switch to Exercises mode -> drill into ExerciseEditor -> Cancel -> preserves Exercises mode
+      const exercisesTab = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Exercises'
+      ) as HTMLButtonElement;
+      expect(exercisesTab).toBeTruthy();
+      act(() => {
+        exercisesTab.click();
+      });
+      expect(container.textContent).toContain('Exercise Library');
+
+      const editDefBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Edit Definition')
+      ) as HTMLButtonElement;
+      act(() => {
+        editDefBtn.click();
+      });
+      expect(container.textContent).toContain('Global Exercise Definition');
+
+      const cancelExBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Cancel'
+      ) as HTMLButtonElement;
+      act(() => {
+        cancelExBtn.click();
+      });
+      // Still in Exercises mode after exiting ExerciseEditor
+      expect(container.textContent).toContain('Exercise Library');
+
+      // Switch back to Cycle mode -> drill into Day 1 -> open ExerciseEditor -> save workout programming -> back to Cycle mode
+      const cycleTab = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Cycle'
+      ) as HTMLButtonElement;
+      act(() => {
+        cycleTab.click();
+      });
+      expect(container.querySelector('[data-testid="cycle-list"]')).toBeTruthy();
+
+      const slot1 = container.querySelector('[data-testid="cycle-slot-1"]') as HTMLElement;
+      act(() => {
+        slot1.click();
+      });
+      expect(container.textContent).toContain('Back to Program Cycle');
+
+      const firstExHeader = container.querySelector('button[aria-controls^="workout-ex-panel-"]') as HTMLButtonElement;
+      act(() => {
+        firstExHeader.click();
+      });
+      const editRxBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Edit Prescription')
+      ) as HTMLButtonElement;
+      act(() => {
+        editRxBtn.click();
+      });
+      expect(container.textContent).toContain('Workout-Specific Prescription');
+
+      const saveBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Save Changes'
+      ) as HTMLButtonElement;
+      await act(async () => {
+        saveBtn.click();
+      });
+      expect(updateWorkoutExerciseProgramming).toHaveBeenCalledTimes(1);
+
+      // Return from WorkoutEditor back to CycleEditor (still in Cycle mode)
+      const backCycleBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Back to Program Cycle')
+      ) as HTMLButtonElement;
+      act(() => {
+        backCycleBtn.click();
+      });
+      expect(container.querySelector('[data-testid="cycle-list"]')).toBeTruthy();
+
+      // Exit ProgramEditor via Back to Manage
+      const backManageBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Back to Manage')
+      ) as HTMLButtonElement;
+      act(() => {
+        backManageBtn.click();
+      });
+      expect(onBackToManage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('5. CycleEditor Malformed, Rest Day & Bonus Workout Handling', () => {
+    it('flags invalid cycleDays alongside duplicates, keeps rest days distinct, and separates bonus protocols from core slots', () => {
+      const onSelectWorkout = vi.fn();
+      const workoutsWithIssues: Workout[] = [
+        ...INITIAL_WORKOUTS,
+        { id: 'malformed-invalid', name: 'Invalid Day 99', badge: 'ERR', type: 'push', isCore: true, cycleDay: 99, exercises: [] },
+        { id: 'malformed-dup-5', name: 'Duplicate Day 5', badge: 'DUP', type: 'push', isCore: true, cycleDay: 5, exercises: [] },
+        { id: 'bonus-pump', name: 'Saturday Pump', badge: 'BONUS', type: 'date', isCore: false, cycleDay: null, exercises: [] },
+      ];
+
+      act(() => {
+        root.render(<CycleEditor workouts={workoutsWithIssues} onSelectWorkout={onSelectWorkout} />);
+      });
+
+      const slots = container.querySelectorAll('[data-testid^="cycle-slot-"]');
+      expect(slots).toHaveLength(8);
+      // Day 4 and Day 8 are rest days in INITIAL_WORKOUTS
+      expect(container.querySelector('[data-testid="cycle-slot-4"]')?.textContent).toContain('Rest Day');
+      expect(container.querySelector('[data-testid="cycle-slot-8"]')?.textContent).toContain('Rest Day');
+      // Fallback badge shown on conflicted Day 5
+      expect(container.querySelector('[data-testid="cycle-slot-5"]')?.textContent).toContain('Fallback');
+
+      // Malformed section catches invalid & duplicate core workouts without merging into slots or bonus
+      const malformedSection = container.querySelector('[data-testid="malformed-core-section"]')!;
+      expect(malformedSection.textContent).toContain('INVALID DAY: 99');
+      expect(malformedSection.textContent).toContain('DUPLICATE DAY 5');
+
+      // Clicking slot triggers selection callback
+      act(() => {
+        (container.querySelector('[data-testid="cycle-slot-4"]') as HTMLElement).click();
+      });
+      expect(onSelectWorkout).toHaveBeenCalledWith('rest-1');
+
+      // Bonus protocol clickable separately
+      const bonusHeading = Array.from(container.querySelectorAll('h3, h2')).find((h) =>
+        h.textContent?.includes('Bonus & Auxiliary Protocols')
+      );
+      expect(bonusHeading).toBeTruthy();
+      expect(container.textContent).toContain('Saturday Pump');
+    });
+  });
+
+  describe('6. ExerciseLibrary Search, Muscle Filters, Priority/Daily Tags & Empty States', () => {
+    it('filters by muscle group & search, renders Priority and Daily badges, triggers edit/create, and handles completely empty libraries', () => {
+      const onOpenExerciseEditor = vi.fn();
+      const onCreateNewExercise = vi.fn();
+      const mockFitness = createMockFitnessContext();
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <ExerciseLibrary
+              workouts={INITIAL_WORKOUTS}
+              onOpenExerciseEditor={onOpenExerciseEditor}
+              onCreateNewExercise={onCreateNewExercise}
+            />
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(container.textContent).toContain(`Exercise Library (${INITIAL_EXERCISE_DEFINITIONS.length})`);
+      // Both Priority & Daily tags render on initial definitions
+      expect(container.textContent).toContain('PRIORITY');
+      expect(container.textContent).toContain('DAILY');
+
+      // Muscle filter: click 'chest'
+      const chestBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim().toLowerCase() === 'chest'
+      ) as HTMLButtonElement;
+      act(() => {
+        chestBtn.click();
+      });
+      expect(container.textContent).toContain('Incline DB Press');
+      expect(container.textContent).not.toContain('Barbell Back Squat');
+
+      // Click edit definition on visible exercise
+      const editBtns = Array.from(container.querySelectorAll('button')).filter((b) =>
+        b.textContent?.includes('Edit Definition')
+      ) as HTMLButtonElement[];
+      expect(editBtns.length).toBeGreaterThan(0);
+      act(() => {
+        editBtns[0].click();
+      });
+      expect(onOpenExerciseEditor).toHaveBeenCalledTimes(1);
+
+      // Completely empty library shows 0 count and empty state
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={createMockFitnessContext({ exerciseDefinitions: [] })}>
+            <ExerciseLibrary
+              workouts={INITIAL_WORKOUTS}
+              onOpenExerciseEditor={onOpenExerciseEditor}
+              onCreateNewExercise={onCreateNewExercise}
+            />
+          </FitnessContext.Provider>
+        );
+      });
+      expect(container.textContent).toContain('Exercise Library (0)');
+      expect(container.textContent).toContain('No exercises match your search');
+    });
+  });
+
+  describe('7. DataMaintenanceSection Full Export, Import, Savepoints & Danger Zone Flows', () => {
+    it('supports Download/Copy JSON export, File & valid Paste JSON import, Savepoint create/restore, and destructive Reset/Delete with confirmation & failure recovery', async () => {
+      const setWorkouts = vi.fn().mockResolvedValue(undefined);
+      const resetLogs = vi.fn().mockResolvedValue(undefined);
+      const createManualBackup = vi.fn().mockResolvedValue({ success: true, message: 'Manual savepoint stored' });
+      const restoreAutoBackup = vi.fn().mockResolvedValue({ success: true, message: 'Savepoint restored successfully', restoreStatus: 'restored_locally' });
+      const importBackup = vi.fn().mockResolvedValue({ success: true, message: 'Imported 2 workouts', restoreStatus: 'restored_locally' });
+      const exportBackup = vi.fn().mockReturnValue('{"version":2,"workouts":[]}');
+      const getAutoBackups = vi.fn().mockReturnValue([
+        { timestamp: '2026-10-15T10:00:00Z', changeType: 'manual', desc: 'Pre-block backup' },
+      ]);
+
+      // Mock URL.createObjectURL, revokeObjectURL, clipboard, and anchor click cleanly
+      const originalCreateObjUrl = URL.createObjectURL;
+      const originalRevokeObjUrl = URL.revokeObjectURL;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-backup');
+      URL.revokeObjectURL = vi.fn();
+      const anchorClickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+
+      const mockFitness = createMockFitnessContext({
+        setWorkouts,
+        resetLogs,
+        createManualBackup,
+        restoreAutoBackup,
+        importBackup,
+        exportBackup,
+        getAutoBackups,
+      });
+
+      try {
+        act(() => {
+          root.render(
+            <FitnessContext.Provider value={mockFitness}>
+              <ConfirmProvider>
+                <DataMaintenanceSection />
+              </ConfirmProvider>
+            </FitnessContext.Provider>
+          );
+        });
+
+        // 1. Export Download JSON
+        const downloadBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Download JSON')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          downloadBtn.click();
+        });
+        expect(exportBackup).toHaveBeenCalledTimes(1);
+        expect(anchorClickSpy).toHaveBeenCalledTimes(1);
+        expect(container.textContent).toContain('Backup File downloaded successfully.');
+
+        // 2. Copy JSON
+        const copyBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Copy JSON')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          copyBtn.click();
+        });
+        expect(writeText).toHaveBeenCalledWith('{"version":2,"workouts":[]}');
+        expect(container.textContent).toContain('Copied!');
+
+        // 3. Valid Paste JSON import
+        const pasteToggle = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Paste JSON')
+        ) as HTMLButtonElement;
+        act(() => {
+          pasteToggle.click();
+        });
+        const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+        act(() => {
+          setInputValue(textarea, '{"version":2,"workouts":[],"logs":{}}');
+        });
+        const restoreJsonBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Restore from JSON')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          restoreJsonBtn.click();
+        });
+        expect(importBackup).toHaveBeenCalledWith('{"version":2,"workouts":[],"logs":{}}');
+        expect(container.textContent).toContain('Imported 2 workouts');
+
+        // 4. File Upload import
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+        const mockFile = new File(['{"version":2,"logs":{}}'], 'gainlog.json', { type: 'application/json' });
+        await act(async () => {
+          Object.defineProperty(fileInput, 'files', { value: [mockFile], configurable: true });
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+          await new Promise((r) => setTimeout(r, 20));
+        });
+        expect(importBackup).toHaveBeenCalledWith('{"version":2,"logs":{}}');
+
+        // 5. Create manual savepoint & Restore savepoint after confirm
+        const createSpBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Create Savepoint')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          createSpBtn.click();
+        });
+        expect(createManualBackup).toHaveBeenCalledTimes(1);
+        expect(container.textContent).toContain('Manual savepoint stored');
+
+        const restoreSpBtn = Array.from(container.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Restore'
+        ) as HTMLButtonElement;
+        await act(async () => {
+          restoreSpBtn.click();
+        });
+        const dialogBtns1 = Array.from(document.body.querySelectorAll('[role="dialog"] button')) as HTMLButtonElement[];
+        await act(async () => {
+          dialogBtns1[dialogBtns1.length - 1].click();
+        });
+        expect(restoreAutoBackup).toHaveBeenCalledWith('2026-10-15T10:00:00Z');
+        expect(container.textContent).toContain('Savepoint restored successfully');
+
+        // 6. Reset Default Routines -> confirm -> executes setWorkouts(INITIAL_WORKOUTS)
+        const resetWorkoutsBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Reset Default Routines')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          resetWorkoutsBtn.click();
+        });
+        const dialogBtns2 = Array.from(document.body.querySelectorAll('[role="dialog"] button')) as HTMLButtonElement[];
+        await act(async () => {
+          dialogBtns2[dialogBtns2.length - 1].click();
+        });
+        expect(setWorkouts).toHaveBeenCalledWith(INITIAL_WORKOUTS);
+        expect(container.textContent).toContain('Training routines reset to factory defaults.');
+
+        // 7. Delete Training History failure recovery: rejection shows error banner cleanly
+        resetLogs.mockRejectedValueOnce(new Error('Storage locked'));
+        const purgeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Delete Training History')
+        ) as HTMLButtonElement;
+        await act(async () => {
+          purgeBtn.click();
+        });
+        const dialogBtns3 = Array.from(document.body.querySelectorAll('[role="dialog"] button')) as HTMLButtonElement[];
+        await act(async () => {
+          dialogBtns3[dialogBtns3.length - 1].click();
+        });
+        expect(resetLogs).toHaveBeenCalledTimes(1);
+        expect(container.textContent).toContain('Failed to delete training history.');
+      } finally {
+        URL.createObjectURL = originalCreateObjUrl;
+        URL.revokeObjectURL = originalRevokeObjUrl;
+        anchorClickSpy.mockRestore();
+      }
     });
   });
 });

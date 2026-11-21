@@ -217,7 +217,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Browser Design Quality, Axe-Core & Visual E2E Gate
-        run: npx playwright test e2e/design-quality.spec.ts --update-snapshots=missing
+        run: npx playwright test e2e/design-quality.spec.ts
 
       - name: Upload Design Quality Artifacts
         if: always()

@@ -221,6 +221,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     return Object.values(summaries).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   }, [sortedLogs, workoutsById, index.exerciseMetaById, prEvents, getVolumeForRange]);
 
+  const latestMonthlySummary = React.useMemo(() => {
+    if (monthlySummaries.length === 0) return null;
+    return monthlySummaries.reduce((latest, candidate) => {
+      const [ly, lm] = latest.monthKey.split('-').map(Number);
+      const [cy, cm] = candidate.monthKey.split('-').map(Number);
+      const latestTs = new Date(ly || 0, (lm || 1) - 1, 1).getTime();
+      const candidateTs = new Date(cy || 0, (cm || 1) - 1, 1).getTime();
+      return candidateTs > latestTs ? candidate : latest;
+    }, monthlySummaries[0]);
+  }, [monthlySummaries]);
+
   // Securely finalize edited log back to the Context store
   const handleSaveEdit = async () => {
     if (!editSessionState || !editingLogId) return;
@@ -312,7 +323,357 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         />
       )}
 
-      {/* Main Days Drill Down Hierarchy — Primary Focus */}
+      {/* Monthly Training Analytics — Compact preview & expandable reports above archive */}
+      {monthlySummaries.length > 0 && latestMonthlySummary && (
+        <Section
+          eyebrow="Month-End Summary Reports"
+          eyebrowColor="zinc"
+          title="Monthly Training Analytics"
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {activeMonthTab && showMonthlyReports && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveMonthTab(null)}
+                  className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:h-8 sm:min-w-0 whitespace-nowrap")}
+                >
+                  Close Report
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-expanded={showMonthlyReports}
+                onClick={() => setShowMonthlyReports((prev) => !prev)}
+                icon={<ChevronDown size={14} className={cn(TRANSITION.transform, showMonthlyReports && "rotate-180")} />}
+                iconPosition="right"
+                className={cn(CONTROL_HEIGHT.touchTarget, "sm:min-h-[32px] sm:h-8 sm:min-w-0 whitespace-nowrap")}
+              >
+                {showMonthlyReports ? 'Hide Monthly Reports' : `Monthly Reports (${monthlySummaries.length})`}
+              </Button>
+            </div>
+          }
+          padding="section"
+        >
+          {showMonthlyReports ? (
+            <DeferredViewSection minHeight={150}>
+              <div className="space-y-4">
+                <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
+                  {monthlySummaries.map((summary) => {
+                    const isSelected = activeMonthTab === summary.monthKey;
+                    return (
+                      <Card
+                        key={summary.monthKey}
+                        variant={isSelected ? 'selected' : 'interactive'}
+                        surface={isSelected ? undefined : 'recessed'}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          haptics.selection();
+                          setActiveMonthTab(isSelected ? null : summary.monthKey);
+                        }}
+                        padding="standard"
+                        className="snap-start shrink-0 min-w-[172px] sm:min-w-[200px] min-h-[120px] sm:min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
+                      >
+                        <div
+                          className={cn(
+                            TYPOGRAPHY.eyebrow,
+                            "tabular-nums",
+                            isSelected ? "text-orange-400" : "text-zinc-400 group-hover:text-zinc-300",
+                            TRANSITION.colors
+                          )}
+                        >
+                          {summary.monthKey}
+                        </div>
+
+                        <div className="mt-1 min-h-[2.25rem] flex items-start">
+                          <div className="text-sm font-bold uppercase tracking-wide leading-tight text-white break-words">
+                            {summary.monthName}
+                          </div>
+                        </div>
+
+                        <div className="mt-auto pt-3 flex items-center justify-between gap-3">
+                          <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
+                            Completed Runs
+                          </span>
+
+                          <span className="shrink-0 text-lg font-mono font-bold tabular-nums text-white">
+                            {summary.sessionsCount}
+                          </span>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {activeMonthTab && (() => {
+                    const selectedReport = monthlySummaries.find(m => m.monthKey === activeMonthTab);
+                    if (!selectedReport) return null;
+
+                    const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
+                    const prevMonthDate = new Date(curYear, curMonth - 2, 1);
+                    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+                    const prevMonthName = prevMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
+
+                    const earliestMonthKey = monthlySummaries.length > 0
+                      ? monthlySummaries[monthlySummaries.length - 1].monthKey
+                      : selectedReport.monthKey;
+                    const hasEarlierHistory = prevMonthKey >= earliestMonthKey;
+
+                    const currentSessions = selectedReport.sessionsCount;
+                    let sessionsTrendText = 'First recorded month';
+                    let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                    let sessionsSublabel: string | undefined = undefined;
+
+                    if (prevReport) {
+                      const sDiff = currentSessions - prevReport.sessionsCount;
+                      sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
+                      sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
+                      sessionsSublabel = `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}`;
+                    } else if (hasEarlierHistory) {
+                      sessionsTrendText = currentSessions > 0 ? `+${currentSessions} vs prev month` : `Equal vs prev month`;
+                      sessionsTrendDir = currentSessions > 0 ? 'positive' : 'neutral';
+                      sessionsSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
+                    }
+
+                    const currentVolume = selectedReport.totalVolume;
+                    let volumeTrendText = 'First recorded month';
+                    let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+
+                    if (prevReport && prevReport.totalVolume > 0) {
+                      const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
+                      const roundedVPct = Math.round(vPct * 10) / 10;
+                      volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
+                      volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
+                    } else if (prevReport || hasEarlierHistory) {
+                      volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
+                      volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
+                    }
+
+                    const currentMonthPRs = (prEvents || []).filter(e => e.monthKey === selectedReport.monthKey);
+                    const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
+                    let prTrendText = 'First recorded month';
+                    let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
+                    let prSublabel: string | undefined = undefined;
+
+                    if (prevReport) {
+                      const prDiff = currentMonthPRs.length - prevMonthPRs.length;
+                      prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
+                      prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
+                      prSublabel = `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}`;
+                    } else if (hasEarlierHistory) {
+                      prTrendText = currentMonthPRs.length > 0 ? `+${currentMonthPRs.length} vs prev month` : `Equal vs prev month`;
+                      prTrendDir = currentMonthPRs.length > 0 ? 'positive' : 'neutral';
+                      prSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
+                    }
+
+                    const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
+                    const curStart = `${selectedReport.monthKey}-01`;
+                    const curEnd = `${selectedReport.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
+
+                    const lastDayOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
+                    const prevStart = `${prevMonthKey}-01`;
+                    const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
+
+                    const monthlyStrengthTrend = getStrengthTrendForRange(
+                      { start: curStart, end: curEnd },
+                      { start: prevStart, end: prevEnd }
+                    );
+
+                    const strengthChange = monthlyStrengthTrend.percentChange;
+                    const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
+                      ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
+                      : undefined;
+                    const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
+                      strengthChange !== null && strengthChange > 0 ? 'positive' : strengthChange !== null && strengthChange < 0 ? 'negative' : 'neutral';
+
+                    const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
+
+                    const durationHours = Math.floor(selectedReport.totalDuration / 60);
+                    const durationMins = selectedReport.totalDuration % 60;
+                    const avgDuration = selectedReport.sessionsCount > 0
+                      ? Math.round(selectedReport.totalDuration / selectedReport.sessionsCount)
+                      : 0;
+
+                    return (
+                      <motion.div
+                        initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
+                        animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
+                        exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
+                        transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
+                        className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
+                      >
+                        <Grid cols={2} gap="md">
+                          <StatCard
+                            label="Sessions"
+                            value={currentSessions}
+                            accent="zinc"
+                            disableAnimation
+                            trend={sessionsTrendText}
+                            trendDirection={sessionsTrendDir}
+                            sublabel={sessionsSublabel}
+                          />
+                          <StatCard
+                            label="Window Volume"
+                            value={currentVolume}
+                            unit="kg"
+                            formatValue={formatCompactWeight}
+                            accent="zinc"
+                            disableAnimation
+                            trend={volumeTrendText}
+                            trendDirection={volumeTrendDir}
+                          />
+                          <StatCard
+                            label="PRs"
+                            value={currentMonthPRs.length}
+                            accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
+                            disableAnimation
+                            icon={Trophy}
+                            trend={prTrendText}
+                            trendDirection={prTrendDir}
+                            sublabel={prSublabel}
+                          />
+                          <StatCard
+                            label="Strength Progress"
+                            value={monthlyStrengthTrend.percentChange}
+                            unit="%"
+                            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
+                            accent={
+                              strengthChange !== null
+                                ? strengthChange > 0
+                                  ? 'emerald'
+                                  : strengthChange < 0
+                                  ? 'red'
+                                  : 'zinc'
+                                : 'zinc'
+                            }
+                            disableAnimation
+                            icon={Sparkles}
+                            trend={strengthTrendText}
+                            trendDirection={strengthTrendDir}
+                            isUnavailable={monthlyStrengthTrend.percentChange === null}
+                            unavailableLabel="No Overlap"
+                            sublabel={
+                              monthlyStrengthTrend.percentChange !== null
+                                ? 'vs previous month'
+                                : (monthlyStrengthTrend.comparableExercises > 0
+                                  ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                                  : hasEarlierHistory
+                                  ? 'No matching lifts vs prev'
+                                  : 'First recorded month')
+                            }
+                          />
+                        </Grid>
+
+                        <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 border text-xs font-mono", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Clock size={15} className="text-orange-400" />
+                            <span>Total Time Trained:</span>
+                            <span className="font-bold text-white">
+                              {durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`} ({selectedReport.totalDuration} mins)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-400">
+                            <span>Average Session Duration:</span>
+                            <span className="font-bold text-zinc-200">{avgDuration} mins</span>
+                          </div>
+                        </div>
+
+                        <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.standard)}>
+                          <div className="space-y-3">
+                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
+                            <div className="space-y-2.5">
+                              {(Object.entries(selectedReport.workoutsByType) as [string, number][]).map(([type, count]) => {
+                                const percentage = totalWorkouts ? Math.round((count / totalWorkouts) * 100) : 0;
+                                return count > 0 ? (
+                                  <div key={type} className="space-y-1">
+                                    <div className="flex justify-between items-center text-xs font-mono">
+                                      <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
+                                      <span className="text-zinc-400">{count} workouts ({percentage}%)</span>
+                                    </div>
+                                    <ProgressBar
+                                      value={percentage}
+                                      max={100}
+                                      colorOverride={(type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc}
+                                      aria-label={`${type} protocol coverage: ${percentage}%`}
+                                      className="border-0"
+                                    />
+                                  </div>
+                                ) : null;
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
+                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                              {Object.keys(selectedReport.peakLifts).length === 0 ? (
+                                <div className="text-xs text-zinc-400 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
+                              ) : (
+                                (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
+                                  <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 border text-xs text-zinc-300", RADIUS.button, SURFACE.subtle, BORDER.standard)}>
+                                    <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
+                                    <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </Grid>
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
+              </div>
+            </DeferredViewSection>
+          ) : (
+            <div
+              data-testid="latest-month-preview"
+              className={cn(
+                "border p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+                SURFACE.recessed,
+                BORDER.standard,
+                RADIUS.card
+              )}
+            >
+              <div className="space-y-0.5 min-w-0">
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>
+                  Latest Month · {latestMonthlySummary.monthName}
+                </span>
+                <p className={cn(TYPOGRAPHY.bodySecondary, "text-zinc-400")}>
+                  {monthlySummaries.length} recorded {monthlySummaries.length === 1 ? 'month' : 'months'} available
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 sm:gap-5 tabular-nums shrink-0">
+                <div>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-400 block")}>Sessions</span>
+                  <span className="font-mono text-sm sm:text-base font-bold text-white">
+                    {latestMonthlySummary.sessionsCount}
+                  </span>
+                </div>
+                <div>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-400 block")}>Volume</span>
+                  <span className="font-mono text-sm sm:text-base font-bold text-emerald-400">
+                    {formatCompactWeight(latestMonthlySummary.totalVolume)}
+                    <span className="text-xs font-normal text-zinc-400 ml-0.5">kg</span>
+                  </span>
+                </div>
+                <div>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-400 block")}>PRs</span>
+                  <span className="font-mono text-sm sm:text-base font-bold text-orange-400">
+                    {latestMonthlySummary.prCount}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Main Days Drill Down Hierarchy — Chronological Archive */}
       <Section
         eyebrow="Chronological Archive"
         eyebrowColor="zinc"
@@ -918,317 +1279,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
         )}
       </Section>
-
-      {/* Secondary Monthly Reports Section — Progressive disclosure below chronological archive */}
-      {monthlySummaries.length > 0 && (
-        <Section
-          eyebrow="Month-End Summary Reports"
-          eyebrowColor="zinc"
-          title="Monthly Training Analytics"
-          action={
-            <div className="flex items-center gap-2">
-              {activeMonthTab && showMonthlyReports && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveMonthTab(null)}
-                >
-                  Close Report
-                </Button>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-expanded={showMonthlyReports}
-                onClick={() => setShowMonthlyReports((prev) => !prev)}
-                icon={<ChevronDown size={14} className={cn(TRANSITION.transform, showMonthlyReports && "rotate-180")} />}
-                iconPosition="right"
-              >
-                {showMonthlyReports ? 'Hide Monthly Reports' : `Monthly Reports (${monthlySummaries.length})`}
-              </Button>
-            </div>
-          }
-          padding="section"
-        >
-          {showMonthlyReports ? (
-            <DeferredViewSection minHeight={150}>
-              <div className="space-y-4">
-                <div className={cn("flex overflow-x-auto pb-2 scrollbar-none snap-x pr-2", GAP.sm)}>
-                  {monthlySummaries.map((summary) => {
-                    const isSelected = activeMonthTab === summary.monthKey;
-                    return (
-                      <Card
-                        key={summary.monthKey}
-                        variant={isSelected ? 'selected' : 'interactive'}
-                        surface={isSelected ? undefined : 'recessed'}
-                        aria-pressed={isSelected}
-                        onClick={() => {
-                          haptics.selection();
-                          setActiveMonthTab(isSelected ? null : summary.monthKey);
-                        }}
-                        padding="standard"
-                        className="snap-start shrink-0 min-w-[172px] sm:min-w-[200px] min-h-[120px] sm:min-h-[132px] text-left relative overflow-hidden group cursor-pointer flex flex-col"
-                      >
-                        <div
-                          className={cn(
-                            TYPOGRAPHY.eyebrow,
-                            "tabular-nums",
-                            isSelected ? "text-orange-400" : "text-zinc-400 group-hover:text-zinc-300",
-                            TRANSITION.colors
-                          )}
-                        >
-                          {summary.monthKey}
-                        </div>
-
-                        <div className="mt-1 min-h-[2.25rem] flex items-start">
-                          <div className="text-sm font-bold uppercase tracking-wide leading-tight text-white break-words">
-                            {summary.monthName}
-                          </div>
-                        </div>
-
-                        <div className="mt-auto pt-3 flex items-center justify-between gap-3">
-                          <span className={cn(TYPOGRAPHY.label, "min-w-0 break-words")}>
-                            Completed Runs
-                          </span>
-
-                          <span className="shrink-0 text-lg font-mono font-bold tabular-nums text-white">
-                            {summary.sessionsCount}
-                          </span>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-
-                <AnimatePresence mode="wait">
-                  {activeMonthTab && (() => {
-                    const selectedReport = monthlySummaries.find(m => m.monthKey === activeMonthTab);
-                    if (!selectedReport) return null;
-
-                    const [curYear, curMonth] = selectedReport.monthKey.split('-').map(Number);
-                    const prevMonthDate = new Date(curYear, curMonth - 2, 1);
-                    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-                    const prevMonthName = prevMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    const prevReport = monthlySummaries.find(m => m.monthKey === prevMonthKey);
-
-                    const earliestMonthKey = monthlySummaries.length > 0
-                      ? monthlySummaries[monthlySummaries.length - 1].monthKey
-                      : selectedReport.monthKey;
-                    const hasEarlierHistory = prevMonthKey >= earliestMonthKey;
-
-                    const currentSessions = selectedReport.sessionsCount;
-                    let sessionsTrendText = 'First recorded month';
-                    let sessionsTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-                    let sessionsSublabel: string | undefined = undefined;
-
-                    if (prevReport) {
-                      const sDiff = currentSessions - prevReport.sessionsCount;
-                      sessionsTrendText = sDiff > 0 ? `+${sDiff} vs prev month` : sDiff < 0 ? `${sDiff} vs prev month` : `Equal vs prev month`;
-                      sessionsTrendDir = sDiff > 0 ? 'positive' : sDiff < 0 ? 'negative' : 'neutral';
-                      sessionsSublabel = `${prevReport.sessionsCount} in ${prevReport.monthName.split(' ')[0]}`;
-                    } else if (hasEarlierHistory) {
-                      sessionsTrendText = currentSessions > 0 ? `+${currentSessions} vs prev month` : `Equal vs prev month`;
-                      sessionsTrendDir = currentSessions > 0 ? 'positive' : 'neutral';
-                      sessionsSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
-                    }
-
-                    const currentVolume = selectedReport.totalVolume;
-                    let volumeTrendText = 'First recorded month';
-                    let volumeTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-
-                    if (prevReport && prevReport.totalVolume > 0) {
-                      const vPct = ((currentVolume - prevReport.totalVolume) / prevReport.totalVolume) * 100;
-                      const roundedVPct = Math.round(vPct * 10) / 10;
-                      volumeTrendText = roundedVPct > 0 ? `+${roundedVPct}% vs prev month` : `${roundedVPct}% vs prev month`;
-                      volumeTrendDir = roundedVPct > 0 ? 'positive' : roundedVPct < 0 ? 'negative' : 'neutral';
-                    } else if (prevReport || hasEarlierHistory) {
-                      volumeTrendText = currentVolume > 0 ? `+${Math.round(currentVolume)}kg (0 prev)` : 'Equal vs prev month';
-                      volumeTrendDir = currentVolume > 0 ? 'positive' : 'neutral';
-                    }
-
-                    const currentMonthPRs = (prEvents || []).filter(e => e.monthKey === selectedReport.monthKey);
-                    const prevMonthPRs = prevReport ? (prEvents || []).filter(e => e.monthKey === prevMonthKey) : [];
-                    let prTrendText = 'First recorded month';
-                    let prTrendDir: 'positive' | 'negative' | 'neutral' = 'neutral';
-                    let prSublabel: string | undefined = undefined;
-
-                    if (prevReport) {
-                      const prDiff = currentMonthPRs.length - prevMonthPRs.length;
-                      prTrendText = prDiff > 0 ? `+${prDiff} vs prev month` : prDiff < 0 ? `${prDiff} vs prev month` : `Equal vs prev month`;
-                      prTrendDir = prDiff > 0 ? 'positive' : prDiff < 0 ? 'negative' : 'neutral';
-                      prSublabel = `${prevMonthPRs.length} in ${prevReport.monthName.split(' ')[0]}`;
-                    } else if (hasEarlierHistory) {
-                      prTrendText = currentMonthPRs.length > 0 ? `+${currentMonthPRs.length} vs prev month` : `Equal vs prev month`;
-                      prTrendDir = currentMonthPRs.length > 0 ? 'positive' : 'neutral';
-                      prSublabel = `0 in ${prevMonthName.split(' ')[0]}`;
-                    }
-
-                    const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
-                    const curStart = `${selectedReport.monthKey}-01`;
-                    const curEnd = `${selectedReport.monthKey}-${String(lastDayOfCurMonth).padStart(2, '0')}`;
-
-                    const lastDayOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
-                    const prevStart = `${prevMonthKey}-01`;
-                    const prevEnd = `${prevMonthKey}-${String(lastDayOfPrevMonth).padStart(2, '0')}`;
-
-                    const monthlyStrengthTrend = getStrengthTrendForRange(
-                      { start: curStart, end: curEnd },
-                      { start: prevStart, end: prevEnd }
-                    );
-
-                    const strengthChange = monthlyStrengthTrend.percentChange;
-                    const strengthTrendText = monthlyStrengthTrend.comparableExercises > 0
-                      ? `${monthlyStrengthTrend.comparableExercises} lift${monthlyStrengthTrend.comparableExercises > 1 ? 's' : ''} compared`
-                      : undefined;
-                    const strengthTrendDir: 'positive' | 'negative' | 'neutral' =
-                      strengthChange !== null && strengthChange > 0 ? 'positive' : strengthChange !== null && strengthChange < 0 ? 'negative' : 'neutral';
-
-                    const totalWorkouts = (Object.values(selectedReport.workoutsByType) as number[]).reduce((a, b) => a + b, 0);
-
-                    const durationHours = Math.floor(selectedReport.totalDuration / 60);
-                    const durationMins = selectedReport.totalDuration % 60;
-                    const avgDuration = selectedReport.sessionsCount > 0
-                      ? Math.round(selectedReport.totalDuration / selectedReport.sessionsCount)
-                      : 0;
-
-                    return (
-                      <motion.div
-                        initial={shouldReduceMotion ? false : MOTION_CONFIG.collapse.initial}
-                        animate={shouldReduceMotion ? { opacity: 1 } : MOTION_CONFIG.collapse.animate}
-                        exit={shouldReduceMotion ? { opacity: 0 } : MOTION_CONFIG.collapse.exit}
-                        transition={shouldReduceMotion ? { duration: 0 } : MOTION_CONFIG.collapse.transition}
-                        className={cn(SURFACE.recessed, BORDER.standard, RADIUS.card, SPACING.section, "border space-y-6 overflow-hidden text-zinc-200")}
-                      >
-                        <Grid cols={2} gap="md">
-                          <StatCard
-                            label="Sessions"
-                            value={currentSessions}
-                            accent="zinc"
-                            disableAnimation
-                            trend={sessionsTrendText}
-                            trendDirection={sessionsTrendDir}
-                            sublabel={sessionsSublabel}
-                          />
-                          <StatCard
-                            label="Window Volume"
-                            value={currentVolume}
-                            unit="kg"
-                            formatValue={formatCompactWeight}
-                            accent="zinc"
-                            disableAnimation
-                            trend={volumeTrendText}
-                            trendDirection={volumeTrendDir}
-                          />
-                          <StatCard
-                            label="PRs"
-                            value={currentMonthPRs.length}
-                            accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
-                            disableAnimation
-                            icon={Trophy}
-                            trend={prTrendText}
-                            trendDirection={prTrendDir}
-                            sublabel={prSublabel}
-                          />
-                          <StatCard
-                            label="Strength Progress"
-                            value={monthlyStrengthTrend.percentChange}
-                            unit="%"
-                            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-                            accent={
-                              strengthChange !== null
-                                ? strengthChange > 0
-                                  ? 'emerald'
-                                  : strengthChange < 0
-                                  ? 'red'
-                                  : 'zinc'
-                                : 'zinc'
-                            }
-                            disableAnimation
-                            icon={Sparkles}
-                            trend={strengthTrendText}
-                            trendDirection={strengthTrendDir}
-                            isUnavailable={monthlyStrengthTrend.percentChange === null}
-                            unavailableLabel="No Overlap"
-                            sublabel={
-                              monthlyStrengthTrend.percentChange !== null
-                                ? 'vs previous month'
-                                : (monthlyStrengthTrend.comparableExercises > 0
-                                  ? `Confidence: ${monthlyStrengthTrend.confidence}`
-                                  : hasEarlierHistory
-                                  ? 'No matching lifts vs prev'
-                                  : 'First recorded month')
-                            }
-                          />
-                        </Grid>
-
-                        <div className={cn("flex flex-wrap items-center justify-between gap-4 p-3 border text-xs font-mono", RADIUS.card, SURFACE.subtle, BORDER.standard)}>
-                          <div className="flex items-center gap-2 text-zinc-300">
-                            <Clock size={15} className="text-orange-400" />
-                            <span>Total Time Trained:</span>
-                            <span className="font-bold text-white">
-                              {durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`} ({selectedReport.totalDuration} mins)
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-zinc-400">
-                            <span>Average Session Duration:</span>
-                            <span className="font-bold text-zinc-200">{avgDuration} mins</span>
-                          </div>
-                        </div>
-
-                        <Grid cols={1} colsMd={2} gap="lg" className={cn("pt-2 border-t", BORDER.standard)}>
-                          <div className="space-y-3">
-                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Training Plan Coverage</h4>
-                            <div className="space-y-2.5">
-                              {(Object.entries(selectedReport.workoutsByType) as [string, number][]).map(([type, count]) => {
-                                const percentage = totalWorkouts ? Math.round((count / totalWorkouts) * 100) : 0;
-                                return count > 0 ? (
-                                  <div key={type} className="space-y-1">
-                                    <div className="flex justify-between items-center text-xs font-mono">
-                                      <span className="uppercase font-bold text-zinc-400">{type} Protocol</span>
-                                      <span className="text-zinc-400">{count} workouts ({percentage}%)</span>
-                                    </div>
-                                    <ProgressBar
-                                      value={percentage}
-                                      max={100}
-                                      colorOverride={(type && getAccentColor(type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc}
-                                      aria-label={`${type} protocol coverage: ${percentage}%`}
-                                      className="border-0"
-                                    />
-                                  </div>
-                                ) : null;
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
-                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
-                              {Object.keys(selectedReport.peakLifts).length === 0 ? (
-                                <div className="text-xs text-zinc-400 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
-                              ) : (
-                                (Object.entries(selectedReport.peakLifts) as [string, { exerciseName: string; weight: number }][]).map(([exId, lift]) => (
-                                  <div key={exId} className={cn("flex justify-between items-center gap-3 p-2 border text-xs text-zinc-300", RADIUS.button, SURFACE.subtle, BORDER.standard)}>
-                                    <span className="min-w-0 flex-1 break-words font-medium">{lift.exerciseName}</span>
-                                    <Badge label={`${lift.weight}kg`} color="orange" variant="subtle" className="shrink-0" />
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        </Grid>
-                      </motion.div>
-                    );
-                  })()}
-                </AnimatePresence>
-              </div>
-            </DeferredViewSection>
-          ) : (
-            <p className={cn(TYPOGRAPHY.bodySecondary, "text-zinc-400")}>
-              Compare session totals, volume trends, PR counts, and lift peaks across {monthlySummaries.length} recorded {monthlySummaries.length === 1 ? 'month' : 'months'}.
-            </p>
-          )}
-        </Section>
-      )}
     </Stack>
   );
 };

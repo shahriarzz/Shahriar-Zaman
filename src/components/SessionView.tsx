@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { ChevronLeft, Plus, CheckCircle2, Trophy, Clock, Zap, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Check, CheckCircle2, Trophy, Clock, Zap, Trash2 } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useActiveSessionContext } from '../context/ActiveSessionContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -162,6 +162,25 @@ export function calculateSessionPRs({
   });
 
   return prs;
+}
+
+export function areAllProgrammedSetsDone(
+  workout: Workout | null | undefined,
+  sessionSets: Record<string, SetLog[]>
+): boolean {
+  if (!workout || !Array.isArray(workout.exercises) || workout.exercises.length === 0) {
+    return false;
+  }
+  const programmedExercises = workout.exercises.filter((ex) => (ex.sets || 0) > 0);
+  if (programmedExercises.length === 0) return false;
+
+  return programmedExercises.every((ex) => {
+    const setsForEx = sessionSets[ex.exerciseDefinitionId] || [];
+    return (
+      setsForEx.length >= ex.sets &&
+      setsForEx.slice(0, ex.sets).every((s) => Boolean(s.done))
+    );
+  });
 }
 import {
   Card,
@@ -620,6 +639,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   const isFinishing = sessionLifecycle.phase === 'completed';
   const [coachingMap, dispatchCoaching] = React.useReducer(coachingTransition, initialCoachingState);
   const [expandedExId, setExpandedExId] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const [finishAnimationCount, setFinishAnimationCount] = useState(0);
+  const [isFinishAnimating, setIsFinishAnimating] = useState(false);
+  const prevAllExercisesDoneRef = useRef<boolean | null>(null);
+  const finishAnimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
@@ -1122,6 +1146,57 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
 
   const completedLiveSets = (Object.values(sessionSets) as SetLog[][]).reduce((sum, sets) => sum + (sets || []).filter(s => s.done).length, 0);
   const programmedLiveSets = activeWorkout ? activeWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0) : 0;
+  const allExercisesDone = areAllProgrammedSetsDone(activeWorkout, sessionSets);
+
+  useEffect(() => {
+    prevAllExercisesDoneRef.current = null;
+    setIsFinishAnimating(false);
+    setFinishAnimationCount(0);
+    if (finishAnimTimeoutRef.current) {
+      clearTimeout(finishAnimTimeoutRef.current);
+      finishAnimTimeoutRef.current = null;
+    }
+  }, [activeWorkout?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (finishAnimTimeoutRef.current) {
+        clearTimeout(finishAnimTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeWorkout) return;
+    const prev = prevAllExercisesDoneRef.current;
+
+    if (prev === null) {
+      prevAllExercisesDoneRef.current = allExercisesDone;
+      return;
+    }
+
+    if (!prev && allExercisesDone) {
+      if (!shouldReduceMotion) {
+        setFinishAnimationCount((c) => c + 1);
+        setIsFinishAnimating(true);
+        if (finishAnimTimeoutRef.current) {
+          clearTimeout(finishAnimTimeoutRef.current);
+        }
+        finishAnimTimeoutRef.current = setTimeout(() => {
+          setIsFinishAnimating(false);
+          finishAnimTimeoutRef.current = null;
+        }, 520);
+      }
+    } else if (prev && !allExercisesDone) {
+      setIsFinishAnimating(false);
+      if (finishAnimTimeoutRef.current) {
+        clearTimeout(finishAnimTimeoutRef.current);
+        finishAnimTimeoutRef.current = null;
+      }
+    }
+
+    prevAllExercisesDoneRef.current = allExercisesDone;
+  }, [allExercisesDone, activeWorkout, shouldReduceMotion]);
 
   const handleExitAttempt = async () => {
     const proceed = await confirm({
@@ -1264,19 +1339,13 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     );
   }
 
-  const allExercisesDone =
-    activeWorkout.exercises.length > 0 &&
-    activeWorkout.exercises.every(ex => {
-      const sets = (sessionSets[ex.exerciseDefinitionId] || []).slice(0, ex.sets);
-      return sets.length > 0 && sets.every(s => s.done);
-    });
-
   return (
     <Stack spacing="xl" className="pb-32">
       {/* Session Top Bar */}
-      <header 
+      <header
+        data-testid="session-sticky-header"
         className={cn(
-          "sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-4 sm:py-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b -mx-4 px-4 pb-4 sm:pb-6 mb-4 sm:mb-6 session-sticky-header",
+          "sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 transform-gpu will-change-transform py-3.5 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b -mx-4 px-4 mb-4 sm:mb-6 session-sticky-header",
           TRANSITION.colors,
           BORDER.subtle,
           SURFACE.canvasHeader
@@ -1285,7 +1354,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
           borderTop: `1px solid ${WORKOUT_COLORS[activeWorkout.type]}40`
         }}
       >
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
           <Button
             variant="ghost"
             size="icon"
@@ -1305,35 +1374,72 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-          <div className={cn("flex items-center gap-1.5 font-mono px-2.5 py-1.5 border text-zinc-300", RADIUS.button, SURFACE.default, BORDER.standard)}>
-            <Clock size={15} className="text-zinc-400 shrink-0" />
+        <div
+          data-testid="session-header-controls"
+          className="flex flex-nowrap items-center justify-between md:justify-end gap-1.5 sm:gap-3 w-full md:w-auto shrink-0"
+        >
+          <div className={cn("h-11 flex items-center gap-1.5 font-mono px-2 sm:px-2.5 border text-zinc-300 whitespace-nowrap shrink-0", RADIUS.button, SURFACE.default, BORDER.standard)}>
+            <Clock size={14} className="text-zinc-400 shrink-0" />
             <SessionClock startTime={startTime} />
           </div>
 
           <Badge
             label={`${completedLiveSets}/${programmedLiveSets} SETS`}
-            color={completedLiveSets === programmedLiveSets && programmedLiveSets > 0 ? 'emerald' : 'zinc'}
+            color={allExercisesDone ? 'emerald' : 'zinc'}
             variant="subtle"
             dot={false}
-            className="font-mono text-xs whitespace-nowrap"
+            className="h-11 px-2 sm:px-2.5 font-mono text-xs whitespace-nowrap shrink-0"
           />
 
-          <Button
-            variant="primary"
-            size="md"
-            loading={isSubmitting}
-            disabled={isSubmitting || isFinishing}
-            onClick={finishSession}
-            aria-label={isSubmitting ? 'Syncing session' : 'Finish Session'}
-            className={cn(
-              CONTROL_HEIGHT.touchTarget,
-              "px-3.5 sm:px-4 sm:min-h-[40px]",
-              allExercisesDone && "font-extrabold ring-1 ring-white/30"
+          <div className="relative inline-flex items-center shrink-0">
+            {isFinishAnimating && !shouldReduceMotion && (
+              <motion.span
+                key={`finish-ring-${finishAnimationCount}`}
+                aria-hidden="true"
+                initial={{ opacity: 0.75, scale: 0.98 }}
+                animate={{ opacity: 0, scale: 1.08 }}
+                transition={{ duration: 0.52, ease: 'easeOut' }}
+                className={cn(
+                  "pointer-events-none absolute inset-0 border border-orange-400/50",
+                  RADIUS.button
+                )}
+              />
             )}
-          >
-            {isSubmitting ? 'Syncing...' : 'Finish'}
-          </Button>
+            <motion.div
+              key={finishAnimationCount > 0 && !shouldReduceMotion ? `finish-btn-${finishAnimationCount}` : 'finish-btn-idle'}
+              initial={false}
+              animate={
+                isFinishAnimating && !shouldReduceMotion
+                  ? { scale: [1, 1.025, 1] }
+                  : { scale: 1 }
+              }
+              transition={
+                shouldReduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.5, ease: 'easeOut' }
+              }
+            >
+              <Button
+                data-testid="session-finish-button"
+                data-finish-ready={allExercisesDone ? 'true' : 'false'}
+                data-finish-animating={isFinishAnimating && !shouldReduceMotion ? 'true' : 'false'}
+                data-finish-animation-count={String(finishAnimationCount)}
+                variant={allExercisesDone ? 'primary' : 'secondary'}
+                size="md"
+                icon={!isSubmitting && allExercisesDone ? <Check size={15} /> : undefined}
+                loading={isSubmitting}
+                disabled={isSubmitting || isFinishing}
+                onClick={finishSession}
+                aria-label={isSubmitting ? 'Syncing session' : 'Finish Session'}
+                className={cn(
+                  CONTROL_HEIGHT.touchTarget,
+                  "h-11 px-3 sm:px-4 whitespace-nowrap shrink-0"
+                )}
+              >
+                {isSubmitting ? 'Syncing...' : 'Finish'}
+              </Button>
+            </motion.div>
+          </div>
         </div>
       </header>
 

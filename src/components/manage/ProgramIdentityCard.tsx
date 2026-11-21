@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ArrowRight, Layers } from 'lucide-react';
 import { Workout } from '../../types/fitness';
-import { Card, Button, EmptyState, TYPOGRAPHY } from '../ui';
+import { Card, Button, EmptyState, TYPOGRAPHY, CONTROL_HEIGHT } from '../ui';
 import { cn } from '../../lib/utils';
 
 export interface ProgramIdentityCardProps {
@@ -68,7 +68,7 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
           onClick={onEditProgram}
           icon={<ArrowRight size={15} />}
           iconPosition="right"
-          className="w-full md:w-auto"
+          className={cn("w-full md:w-auto", CONTROL_HEIGHT.touchTarget, "sm:min-h-[40px] sm:h-10 sm:min-w-0")}
         >
           Edit Program
         </Button>

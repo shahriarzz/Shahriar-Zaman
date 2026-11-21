@@ -19,7 +19,8 @@ import { Calendar } from '../components/Calendar';
 import { MuscleBalanceRecovery } from '../components/MuscleBalanceRecovery';
 import { Layout } from '../components/Layout';
 import { ExerciseEditor } from '../components/manage/ExerciseEditor';
-import { SessionView } from '../components/SessionView';
+import { SessionView, areAllProgrammedSetsDone } from '../components/SessionView';
+import { ActiveSessionProvider } from '../context/ActiveSessionContext';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
@@ -59,6 +60,15 @@ vi.mock('../utils/haptics', () => ({
 vi.mock('../hooks/useCountUp', () => ({
   useCountUp: (target: number) => target,
 }));
+
+let mockReducedMotion = false;
+vi.mock('motion/react', async () => {
+  const actual = await vi.importActual<typeof import('motion/react')>('motion/react');
+  return {
+    ...actual,
+    useReducedMotion: () => mockReducedMotion,
+  };
+});
 
 // Deterministic ResponsiveContainer mock so Recharts SVG children render in JSDOM
 // Respects optional global mock width so narrow/wide responsive tests work cleanly.
@@ -999,7 +1009,8 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(heatmapSection.textContent).toContain('0 Active Days · 0 Skipped · — Adherence');
     });
 
-    it('orders HistoryView Training Sessions before collapsed Monthly Reports, distinguishes empty vs search-empty states, and binds verification checkbox label', () => {
+    it('orders Monthly Training Analytics & compact latest-month preview before Training Sessions, supports report expand/select/close & saved tab state, hides panel when empty, distinguishes empty vs search-empty states, and binds verification checkbox label', async () => {
+      // 1. Empty state: no monthly summaries -> must NOT render an empty analytics panel
       const mockFitnessEmpty = createMockFitnessContext({ logs: {} });
       vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
         sortedLogs: [],
@@ -1020,47 +1031,127 @@ describe('Targeted UI Refinement Regression Suite', () => {
         );
       });
       expect(container.textContent).toContain('No Workouts Logged Yet');
+      expect(container.textContent).not.toContain('Monthly Training Analytics');
+      expect(container.querySelector('[data-testid="latest-month-preview"]')).toBeNull();
 
-      const mockFitnessWithLog = createMockFitnessContext({
-        logs: {
-          l1: {
-            id: 'l1',
-            workoutId: 'push-a',
-            date: '2026-10-10',
-            complete: true,
-            durationMinutes: 40,
-            sets: { 'bench-press': [{ id: 's1', weight: '100', reps: '5', done: true }] },
-          },
+      // 2. Populated multi-month logs (Sep 2026 & Oct 2026, passed unsorted by date)
+      const multiMonthLogs = [
+        {
+          id: 'l-sep',
+          workoutId: 'push-a',
+          date: '2026-09-12',
+          complete: true,
+          durationMinutes: 45,
+          sets: { e1: [{ id: 's-sep', weight: '80', reps: '5', done: true }] },
         },
+        {
+          id: 'l-oct-1',
+          workoutId: 'push-a',
+          date: '2026-10-10',
+          complete: true,
+          durationMinutes: 40,
+          sets: { e1: [{ id: 's-oct-1', weight: '100', reps: '5', done: true }] },
+        },
+        {
+          id: 'l-oct-2',
+          workoutId: 'pull-a',
+          date: '2026-10-14',
+          complete: true,
+          durationMinutes: 50,
+          sets: { e7: [{ id: 's-oct-2', weight: '90', reps: '10', done: true }] },
+        },
+      ];
+      const mockFitnessWithLogs = createMockFitnessContext({
+        logs: Object.fromEntries(multiMonthLogs.map((l) => [l.id, l])),
       });
-      const idx = buildFitnessIndex(mockFitnessWithLog.logs);
+      const idx = buildFitnessIndex(mockFitnessWithLogs.logs);
+      const prEventsFixture = [
+        { id: 'pr-1', exerciseDefinitionId: 'e1', exerciseName: 'Incline DB Press', date: '2026-10-10', monthKey: '2026-10', weight: 100, reps: 5, e1rm: 116.7, isWeightPR: true, isE1RMPR: true },
+        { id: 'pr-2', exerciseDefinitionId: 'e7', exerciseName: 'Lat Pulldown', date: '2026-10-14', monthKey: '2026-10', weight: 90, reps: 10, e1rm: 120, isWeightPR: true, isE1RMPR: true },
+        { id: 'pr-sep', exerciseDefinitionId: 'e1', exerciseName: 'Incline DB Press', date: '2026-09-12', monthKey: '2026-09', weight: 80, reps: 5, e1rm: 93.3, isWeightPR: true, isE1RMPR: true },
+      ];
+      const onSaveState = vi.fn();
+
       vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
-        sortedLogs: Object.values(mockFitnessWithLog.logs),
+        sortedLogs: multiMonthLogs,
         workoutMap: new Map(INITIAL_WORKOUTS.map((w) => [w.id, w])),
         index: idx,
-        prEvents: [],
-        getStrengthTrendForRange: () => ({ percentChange: null, comparableExercises: 0, confidence: 'low', currentValue: 0, previousValue: 0, exerciseBreakdown: [] }),
-        getVolumeForRange: () => 500,
+        prEvents: prEventsFixture,
+        getStrengthTrendForRange: () => ({ percentChange: 12.5, comparableExercises: 1, confidence: 'low', currentValue: 116.7, previousValue: 93.3, exerciseBreakdown: [] }),
+        getVolumeForRange: (start: string) => (start.startsWith('2026-10') ? 1400 : 400),
       } as any);
 
       act(() => {
         root.render(
-          <FitnessContext.Provider value={mockFitnessWithLog}>
+          <FitnessContext.Provider value={mockFitnessWithLogs}>
             <ConfirmProvider>
-              <HistoryView />
+              <HistoryView onSaveState={onSaveState} />
             </ConfirmProvider>
           </FitnessContext.Provider>
         );
       });
 
       const html = container.innerHTML;
-      expect(html.indexOf('Training Sessions')).toBeLessThan(html.indexOf('Monthly Training Analytics'));
+      expect(html.indexOf('Monthly Training Analytics')).toBeLessThan(html.indexOf('Training Sessions'));
+      expect(html.indexOf('data-testid="latest-month-preview"')).toBeLessThan(html.indexOf('Training Sessions'));
+
+      const preview = container.querySelector('[data-testid="latest-month-preview"]') as HTMLElement;
+      expect(preview).toBeTruthy();
+      expect(preview.textContent).toContain('October 2026');
+      expect(preview.textContent).toContain('2');
+      expect(preview.textContent).toContain('1.4k');
+      expect(preview.textContent).toContain('kg');
 
       const reportsToggle = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('Monthly Reports')
       ) as HTMLButtonElement;
       expect(reportsToggle).toBeTruthy();
       expect(reportsToggle.getAttribute('aria-expanded')).toBe('false');
+
+      // Open Monthly Reports, select September, verify details, Close Report
+      act(() => {
+        reportsToggle.click();
+      });
+      expect(reportsToggle.getAttribute('aria-expanded')).toBe('true');
+
+      const sepCard = Array.from(container.querySelectorAll('[aria-pressed]')).find((el) =>
+        el.textContent?.includes('2026-09')
+      ) as HTMLElement;
+      expect(sepCard).toBeTruthy();
+      act(() => {
+        sepCard.click();
+      });
+      expect(sepCard.getAttribute('aria-pressed')).toBe('true');
+      expect(container.textContent).toContain('Window Volume');
+      expect(container.textContent).toContain('400');
+
+      const closeReportBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.trim() === 'Close Report'
+      ) as HTMLButtonElement;
+      expect(closeReportBtn).toBeTruthy();
+      await act(async () => {
+        closeReportBtn.click();
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      });
+      expect(sepCard.getAttribute('aria-pressed')).toBe('false');
+      expect(container.textContent).not.toContain('Window Volume');
+
+      // Restore savedState with preselected month tab -> remounts cleanly like switching back to History tab
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitnessWithLogs}>
+            <ConfirmProvider>
+              <HistoryView
+                key="restored-history-tab"
+                savedState={{ search: '', expandedDate: null, selectedExKey: null, activeMonthTab: '2026-10' }}
+                onSaveState={onSaveState}
+              />
+            </ConfirmProvider>
+          </FitnessContext.Provider>
+        );
+      });
+      expect(container.textContent).toContain('Hide Monthly Reports');
+      expect(container.textContent).toContain('Window Volume');
 
       // Open editor and check verification checkbox htmlFor -> id binding
       const editBtn = container.querySelector('button[aria-label="Edit session logs"]') as HTMLButtonElement;
@@ -1283,6 +1374,209 @@ describe('Targeted UI Refinement Regression Suite', () => {
       const finishBtn = container.querySelector('button[aria-label="Finish Session"]') as HTMLButtonElement;
       expect(finishBtn).toBeTruthy();
       expect(finishBtn.textContent).toContain('Finish');
+    });
+
+    it('verifies SessionView Finish readiness states, shorter-than-programmed set validation, one-time animation lifecycle, reduced-motion compliance, and completion persistence', async () => {
+      vi.useFakeTimers();
+      mockReducedMotion = false;
+      window.localStorage.clear();
+
+      const customWorkout: Workout = {
+        id: 'wo-finish-test',
+        name: 'Push Short Protocol',
+        badge: 'DAY 1 · PUSH',
+        type: 'push',
+        cycleDay: 1,
+        isCore: true,
+        exercises: [
+          { exerciseDefinitionId: 'e1', sets: 2, reps: '8', note: '' },
+        ],
+      };
+
+      // Pure helper invariant check: shorter-than-programmed set arrays MUST NEVER count as complete
+      expect(areAllProgrammedSetsDone(customWorkout, {})).toBe(false);
+      expect(
+        areAllProgrammedSetsDone(customWorkout, {
+          e1: [{ id: 'only-one', weight: '100', reps: '8', done: true }],
+        })
+      ).toBe(false);
+      expect(
+        areAllProgrammedSetsDone(customWorkout, {
+          e1: [
+            { id: 's1', weight: '100', reps: '8', done: true },
+            { id: 's2', weight: '100', reps: '8', done: false },
+          ],
+        })
+      ).toBe(false);
+      expect(
+        areAllProgrammedSetsDone(customWorkout, {
+          e1: [
+            { id: 's1', weight: '100', reps: '8', done: true },
+            { id: 's2', weight: '100', reps: '8', done: true },
+          ],
+        })
+      ).toBe(true);
+      expect(
+        areAllProgrammedSetsDone({ ...customWorkout, exercises: [{ exerciseDefinitionId: 'e1', sets: 0, reps: '8' }] }, {})
+      ).toBe(false);
+
+      const defsMap = createExerciseDefinitionMap(INITIAL_EXERCISE_DEFINITIONS);
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        index: buildFitnessIndex([], defsMap),
+        getLatestForExercise: () => null,
+        getWeightPRForExercise: () => null,
+        getE1RMPRForExercise: () => null,
+        getHistoryForExercise: () => [],
+      } as any);
+
+      const addLog = vi.fn().mockResolvedValue({ success: true, localPersisted: true });
+      const baseFitness = createMockFitnessContext({
+        workouts: [customWorkout],
+        addLog,
+      });
+
+      const renderSession = (fitnessOverride = baseFitness) => {
+        act(() => {
+          root.render(
+            <FitnessContext.Provider value={fitnessOverride}>
+              <ActiveSessionProvider>
+                <ConfirmProvider>
+                  <SessionView workoutId="wo-finish-test" onExit={vi.fn()} />
+                </ConfirmProvider>
+              </ActiveSessionProvider>
+            </FitnessContext.Provider>
+          );
+        });
+      };
+
+      renderSession();
+
+      // 1. Initially incomplete: restrained secondary styling, stays enabled, >=44px height, no glow ring
+      let finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn).toBeTruthy();
+      expect(finishBtn.disabled).toBe(false);
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('0');
+      expect(finishBtn.className).not.toContain('bg-orange-500');
+      expect(finishBtn.className).not.toContain('ring-1');
+      expect(finishBtn.className).toContain('min-h-[44px]');
+      expect(finishBtn.className).toContain('h-11');
+
+      // 2. Complete first set only -> still incomplete
+      let markDoneBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set complete"]')
+      ) as HTMLButtonElement[];
+      expect(markDoneBtns).toHaveLength(2);
+      const weightInputs = Array.from(container.querySelectorAll('input[aria-label$="weight"]')) as HTMLInputElement[];
+      const repInputs = Array.from(container.querySelectorAll('input[aria-label$="reps"]')) as HTMLInputElement[];
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      act(() => {
+        nativeSetter?.call(weightInputs[0], '100');
+        weightInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+        nativeSetter?.call(repInputs[0], '5');
+        repInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+        nativeSetter?.call(weightInputs[1], '100');
+        weightInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+        nativeSetter?.call(repInputs[1], '5');
+        repInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      act(() => {
+        markDoneBtns[0].click();
+      });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('0');
+
+      // 3. Complete final programmed set -> promotes to primary orange + Check icon & triggers ONE animation
+      markDoneBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set complete"]')
+      ) as HTMLButtonElement[];
+      expect(markDoneBtns).toHaveLength(1);
+      act(() => {
+        markDoneBtns[0].click();
+      });
+
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('1');
+      expect(finishBtn.className).toContain('bg-orange-500');
+      expect(finishBtn.querySelector('svg')).toBeTruthy();
+
+      // Advance past 520ms animation timeout -> stops animating, stays ready
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('1');
+
+      // 4. Unrelated rerender while still complete -> does NOT restart animation
+      renderSession({ ...baseFitness });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('1');
+
+      // 5. Unchecking a set clears ready state; re-completing triggers ONE new animation
+      const uncheckBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set incomplete"]')
+      ) as HTMLButtonElement[];
+      expect(uncheckBtns).toHaveLength(2);
+      act(() => {
+        uncheckBtns[1].click();
+      });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('false');
+      expect(finishBtn.className).not.toContain('bg-orange-500');
+
+      const recheckBtn = container.querySelector('button[aria-label="Mark set complete"]') as HTMLButtonElement;
+      act(() => {
+        recheckBtn.click();
+      });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('2');
+
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+
+      // 6. Reduced motion skips animation while preserving static ready styling
+      mockReducedMotion = true;
+      window.localStorage.clear();
+      act(() => {
+        root.unmount();
+        root = createRoot(container);
+      });
+      renderSession();
+      const rmMarks = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set complete"]')
+      ) as HTMLButtonElement[];
+      act(() => {
+        rmMarks[0].click();
+      });
+      act(() => {
+        (container.querySelector('button[aria-label="Mark set complete"]') as HTMLButtonElement).click();
+      });
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animating')).toBe('false');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('0');
+      expect(finishBtn.className).toContain('bg-orange-500');
+
+      // 7. Finishing persists via addLog & displays summary cleanly
+      vi.useRealTimers();
+      await act(async () => {
+        finishBtn.click();
+      });
+      expect(addLog).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Session Cleared');
+
+      mockReducedMotion = false;
+      window.localStorage.clear();
     });
   });
 });
