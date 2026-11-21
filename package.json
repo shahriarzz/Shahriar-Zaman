@@ -16,7 +16,9 @@
     "typecheck:unused": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "test": "vitest run",
     "test:firebase": "vitest run --config vitest.integration.config.ts --mode integration",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @design-quality",
+    "design:check:static": "npm run lint && npm run typecheck:unused && npx vitest run src/test/designSystemRegression.test.ts src/test/uiRefinementRegression.test.tsx src/test/colorTokenIntegrity.test.ts src/test/dashboardRegression.test.tsx src/test/dashboardPolishRegression.test.tsx src/test/tabScrollAndAnalyticsGridRegression.test.tsx src/test/manageRegression.test.tsx",
+    "design:check": "npm run design:check:static && npx playwright test e2e/design-quality.spec.ts --update-snapshots=missing",
     "emulators:start": "firebase emulators:start --project demo-gainlog --only auth,firestore",
     "test:integration": "firebase emulators:exec --project demo-gainlog --only auth,firestore \"npm run test:firebase && npm run test:e2e\"",
     "bench:performance": "vitest bench src/benchmarks/fitnessPerformance.bench.ts",
@@ -57,6 +59,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.65.1",

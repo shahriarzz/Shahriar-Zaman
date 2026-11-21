@@ -1,4 +1,12 @@
-import { defineConfig } from '@playwright/test';
+import fs from 'fs';
+import { defineConfig, chromium } from '@playwright/test';
+
+const FALLBACK_CHROMIUM_PATH = '/ms-playwright/chrome-headless-shell-linux64/chrome-headless-shell';
+const defaultChromiumPath = chromium.executablePath();
+const resolvedExecutablePath =
+  !fs.existsSync(defaultChromiumPath) && fs.existsSync(FALLBACK_CHROMIUM_PATH)
+    ? FALLBACK_CHROMIUM_PATH
+    : undefined;
 
 export default defineConfig({
   testDir: './e2e',
@@ -16,9 +24,10 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173/e2e.html',
     browserName: 'chromium',
     headless: true,
+    launchOptions: resolvedExecutablePath ? { executablePath: resolvedExecutablePath } : undefined,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: resolvedExecutablePath ? 'off' : 'retain-on-failure',
     viewport: { width: 1280, height: 900 },
   },
   webServer: {

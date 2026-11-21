@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Cloud, LogOut, LogIn } from 'lucide-react';
 import { useFitness } from '../../context/FitnessContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -25,8 +25,11 @@ export const AccountSection: React.FC = () => {
   const { confirm } = useConfirm();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const authInFlightRef = useRef(false);
 
   const handleLogin = async () => {
+    if (authInFlightRef.current || loadingAction === 'auth') return;
+    authInFlightRef.current = true;
     setAuthError(null);
     setLoadingAction('auth');
     haptics.medium();
@@ -44,17 +47,20 @@ export const AccountSection: React.FC = () => {
       }
       setAuthError(e?.message || "Authentication failed");
     } finally {
+      authInFlightRef.current = false;
       setLoadingAction(null);
     }
   };
 
   const handleLogout = async () => {
-    if (loadingAction === 'auth') return;
+    if (authInFlightRef.current || loadingAction === 'auth') return;
+    authInFlightRef.current = true;
     setLoadingAction('auth');
     haptics.warning();
     try {
       await logout();
     } finally {
+      authInFlightRef.current = false;
       setLoadingAction(null);
     }
   };
@@ -106,7 +112,7 @@ export const AccountSection: React.FC = () => {
                   {syncStatus === 'offline' && (
                     <span className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-col gap-0.5")}>
                       <span>Operating offline (local-first storage active).</span>
-                      <span className="text-zinc-500 normal-case tracking-normal">Changes queued and preserved locally.</span>
+                      <span className="text-zinc-400 normal-case tracking-normal">Changes queued and preserved locally.</span>
                     </span>
                   )}
                   {syncStatus === 'failed' && (
@@ -151,7 +157,10 @@ export const AccountSection: React.FC = () => {
             )}
 
             {authError && (
-              <span className={cn(TYPOGRAPHY.caption, "text-red-400 uppercase tracking-tighter text-left md:text-right max-w-xs break-words")}>
+              <span
+                role="alert"
+                className={cn(TYPOGRAPHY.errorText, "text-left md:text-right max-w-xs break-words")}
+              >
                 {authError}
               </span>
             )}

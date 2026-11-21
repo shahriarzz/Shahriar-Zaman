@@ -1,4 +1,4 @@
-import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek } from 'date-fns';
+import { format, parseISO, subDays, differenceInCalendarDays, isValid, startOfWeek, startOfMonth, endOfMonth, startOfDay } from 'date-fns';
 import { SessionLog, SetLog, Workout, ExerciseDefinition } from '../types/fitness';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import {
@@ -1344,3 +1344,72 @@ export function selectTimeRangeAnalytics(
     avgGapDays
   };
 }
+
+export interface MonthlyHeatmapSummary {
+  activeDaysCount: number;
+  missedPastCoreDays: number;
+  completedScheduled: number;
+  evaluatedScheduledWorkouts: number;
+  adherencePct: number;
+}
+
+/**
+ * Pure selector computing completed active days and scheduled adherence strictly
+ * for the displayed calendar month (clamped to `now` so future dates are excluded).
+ */
+export function selectMonthlyHeatmapSummary(
+  index: FitnessIndex,
+  coreWorkoutByCycleDayMap: Map<number, Workout>,
+  monthDate: Date | string,
+  cycleStart?: string | null,
+  now: Date | string = new Date()
+): MonthlyHeatmapSummary {
+  const parsedNow = typeof now === 'string' ? parseISO(now) : now;
+  const validNow = startOfDay(isValid(parsedNow) ? parsedNow : new Date());
+  const todayStr = format(validNow, 'yyyy-MM-dd');
+
+  const parsedMonth = typeof monthDate === 'string' ? parseISO(monthDate) : monthDate;
+  const validMonth = isValid(parsedMonth) ? parsedMonth : validNow;
+  const monthStart = startOfDay(startOfMonth(validMonth));
+  const monthEnd = startOfDay(endOfMonth(validMonth));
+  const monthStartStr = format(monthStart, 'yyyy-MM-dd');
+  const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
+
+  const activeMonthDates = new Set<string>();
+  for (let i = 0; i < index.sortedLogsAscending.length; i++) {
+    const l = index.sortedLogsAscending[i];
+    if (!isCompletedSession(l) || !l.date) continue;
+    if (l.date >= monthStartStr && l.date <= monthEndStr && l.date <= todayStr) {
+      activeMonthDates.add(l.date);
+    }
+  }
+
+  if (monthStart > validNow) {
+    return {
+      activeDaysCount: activeMonthDates.size,
+      missedPastCoreDays: 0,
+      completedScheduled: 0,
+      evaluatedScheduledWorkouts: 0,
+      adherencePct: 0,
+    };
+  }
+
+  const clampedEnd = monthEnd > validNow ? validNow : monthEnd;
+  const adherence = calculateAdherence({
+    index,
+    coreWorkoutByCycleDayMap,
+    cycleStart,
+    startDate: monthStart,
+    endDate: clampedEnd,
+    now: validNow,
+  });
+
+  return {
+    activeDaysCount: activeMonthDates.size,
+    missedPastCoreDays: adherence.missedPastCoreDays,
+    completedScheduled: adherence.completedScheduled,
+    evaluatedScheduledWorkouts: adherence.evaluatedScheduledWorkouts,
+    adherencePct: adherence.percent,
+  };
+}
+

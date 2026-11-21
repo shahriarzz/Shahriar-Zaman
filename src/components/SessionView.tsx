@@ -435,7 +435,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                 <span>KG</span>
                 <span>Reps</span>
                 <span>Done</span>
-                <span className="text-zinc-500">Del</span>
+                <span className="text-zinc-400">Del</span>
               </div>
 
               <div className="space-y-3 sm:space-y-4">
@@ -1234,7 +1234,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
                   <div key={`session-pr-${pr.name}-${idx}`} className={cn("flex justify-between items-center py-1.5 border-b last:border-0 text-xs", BORDER.subtle)}>
                     <div>
                       <div className="font-bold text-white leading-tight">{pr.name}</div>
-                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>
                         {pr.isNew ? 'Baseline Established' : 'Personal Record Smashed'}
                       </div>
                     </div>
@@ -1393,15 +1393,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: WORKOUT_COLORS[activeWorkout.type] }} />
-                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Active Finish Protocol</span>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Active Finish Protocol</span>
               </div>
               <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>{activeWorkout.cardio.name}</h3>
-              <p className={cn(TYPOGRAPHY.metadata, "text-zinc-500 normal-case")}>{activeWorkout.cardio.detail}</p>
+              <p className={cn(TYPOGRAPHY.metadata, "normal-case")}>{activeWorkout.cardio.detail}</p>
             </div>
             <div className={cn("border px-4 py-2.5 flex items-center gap-3 self-stretch sm:self-auto justify-center", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
               <Clock size={16} style={{ color: WORKOUT_COLORS[activeWorkout.type] }} />
               <div className="text-left leading-none">
-                <span className={cn(TYPOGRAPHY.micro, "text-zinc-500 block mb-1")}>Target Dur</span>
+                <span className={cn(TYPOGRAPHY.micro, "text-zinc-400 block mb-1")}>Target Dur</span>
                 <span className="text-xs font-bold font-mono tracking-tight">{activeWorkout.cardio.duration}</span>
               </div>
             </div>

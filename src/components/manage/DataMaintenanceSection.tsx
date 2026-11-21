@@ -303,7 +303,7 @@ export const DataMaintenanceSection: React.FC = () => {
       <Stack spacing="lg">
         {/* 1. DATA HEALTH READOUT */}
         <div className={cn("p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
-          <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 flex items-center gap-1.5")}>
+          <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 flex items-center gap-1.5")}>
             <Activity size={12} className="text-emerald-500 shrink-0" />
             DATA HEALTH
           </span>
@@ -391,7 +391,7 @@ export const DataMaintenanceSection: React.FC = () => {
           {/* Action 1: Export Backup */}
           <div className={cn("p-4 border flex flex-col justify-between items-start gap-4", SURFACE.subtle, BORDER.subtle, RADIUS.card)}>
             <div className="space-y-1">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Export</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>Export</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Data Backup File</h4>
               <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Compile all training routines, session history, set logs, and body weight logs into a downloadable JSON file.
@@ -426,7 +426,7 @@ export const DataMaintenanceSection: React.FC = () => {
           {/* Action 2: Import / Restore from Backup */}
           <div className={cn("p-4 border flex flex-col justify-between items-start gap-4", SURFACE.subtle, BORDER.subtle, RADIUS.card)}>
             <div className="space-y-1 w-full">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>Import</span>
+              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>Import</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Restore from Backup</h4>
               <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
                 Import saved routines and historical session logs by uploading a JSON backup file or pasting raw JSON text.
@@ -514,7 +514,7 @@ export const DataMaintenanceSection: React.FC = () => {
                 <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200 font-bold")}>
                   Restore Points
                 </h4>
-                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>
+                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                   Up to 8 snapshots
                 </span>
               </div>
@@ -537,7 +537,7 @@ export const DataMaintenanceSection: React.FC = () => {
 
           <div className={cn("max-h-56 overflow-y-auto custom-scrollbar border overflow-hidden", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
             {checkpointHistory.length === 0 ? (
-              <div className={cn("p-4 text-center text-zinc-500", TYPOGRAPHY.micro)}>
+              <div className={cn("p-4 text-center text-zinc-400", TYPOGRAPHY.bodySecondary)}>
                 No restore points available.
               </div>
             ) : (

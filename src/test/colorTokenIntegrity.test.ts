@@ -382,8 +382,22 @@ describe('Color Token Integrity & Palette Contracts', () => {
       expect(futureRest?.color).toBe(WORKOUT_COLORS.rest);
       expect(futureRest?.color).toBe('#22c55e');
       expect(futureRest?.color).not.toBe(SEMANTIC_COLORS.emerald);
+      expect(futureRest?.isRest).toBe(true);
+      expect(futureRest?.isScheduled).toBe(true);
 
-      // 5. Missed scheduled sessions must use semantic Red (#ef4444)
+      // 5. Today unlogged scheduled core workout must resolve as scheduled (not missed)
+      const scheduledToday = resolveCalendarDayStatus({
+        date: new Date('2026-10-15'),
+        dateStr: '2026-10-15',
+        today: new Date('2026-10-15'),
+        expectedWorkout: mockWorkout('push'),
+      });
+      expect(scheduledToday?.color).toBe(WORKOUT_COLORS.push);
+      expect(scheduledToday?.isScheduled).toBe(true);
+      expect(scheduledToday?.isMissed).toBeUndefined();
+      expect(scheduledToday?.label).toBe('scheduled: push protocol');
+
+      // 6. Missed scheduled sessions must use semantic Red (#ef4444)
       const missed = resolveCalendarDayStatus({
         date: new Date('2026-10-10'),
         dateStr: '2026-10-10',

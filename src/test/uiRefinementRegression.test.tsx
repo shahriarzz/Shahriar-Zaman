@@ -134,6 +134,14 @@ function createAnalyticsFixture(overrides: {
   heatmapDays?: Date[];
   logVolMap?: Record<string, number>;
   maxDayVol?: number;
+  monthStart?: Date;
+  heatmapSummary?: {
+    activeDaysCount: number;
+    missedPastCoreDays: number;
+    completedScheduled: number;
+    evaluatedScheduledWorkouts: number;
+    adherencePct: number;
+  };
 } = {}) {
   const idx = buildFitnessIndex({});
   return {
@@ -171,7 +179,14 @@ function createAnalyticsFixture(overrides: {
       logVolMap: overrides.logVolMap ?? {},
       dayDetailMap: {},
       maxDayVol: overrides.maxDayVol ?? 0,
-      monthStart: new Date('2026-10-01T12:00:00Z'),
+      monthStart: overrides.monthStart ?? new Date('2026-10-01T12:00:00Z'),
+      summary: overrides.heatmapSummary ?? {
+        activeDaysCount: 5,
+        missedPastCoreDays: 0,
+        completedScheduled: 5,
+        evaluatedScheduledWorkouts: 5,
+        adherencePct: 100,
+      },
     },
     muscleChartData: overrides.muscleChartData ?? [],
     workoutPieData: overrides.workoutPieData ?? [],
@@ -895,8 +910,93 @@ describe('Targeted UI Refinement Regression Suite', () => {
 
       expect(container.textContent).toContain('Complete 1 scheduled workout');
       expect(container.textContent).toContain('Need 2+ sessions');
+      expect(container.textContent).toContain('01 · Training Activity & Consistency');
+      expect(container.textContent).toContain('Daily Training Volume');
+      expect(container.textContent).toContain('Daily completed training volume by date (kg).');
+
+      // Training Cadence now lives under 04 · Training Patterns & Insights (after section 03)
+      const analyticsText = container.textContent || '';
+      expect(analyticsText.indexOf('04 · Training Patterns & Insights')).toBeGreaterThan(-1);
+      expect(analyticsText.indexOf('Training Cadence')).toBeGreaterThan(
+        analyticsText.indexOf('04 · Training Patterns & Insights')
+      );
+
       const heatmapCell = container.querySelector('[role="region"][aria-label*="Monthly volume intensity heatmap"] [aria-label*="2026-10-01"]');
       expect(heatmapCell).toBeTruthy();
+    });
+
+    it('derives AnalyticsView Monthly Intensity Heatmap summary & aria-label from displayed month rather than global timeRange', () => {
+      const mockFitness = createMockFitnessContext();
+      vi.spyOn(useFitnessDerivedDataModule, 'useFitnessDerivedData').mockReturnValue({
+        trainingStreak: { currentStreak: 2, longestStreak: 4 },
+        adherenceInsight: { percent: 80, completedScheduled: 4, evaluatedScheduledWorkouts: 5, pendingScheduledWorkouts: 0 },
+        performanceScore: { score: 85, status: 'Strong' },
+        currentDate: new Date('2026-10-26T12:00:00Z'),
+        todayStr: '2026-10-26',
+        index: buildFitnessIndex({}),
+      } as any);
+
+      vi.spyOn(useAnalyticsDataModule, 'useAnalyticsData').mockImplementation(({ currentHeatmapMonth }) => {
+        const monthKey = currentHeatmapMonth.getMonth(); // Oct = 9, Nov = 10, Sep = 8
+        const isNovFuture = monthKey === 10;
+        const summary = isNovFuture
+          ? { activeDaysCount: 0, missedPastCoreDays: 0, completedScheduled: 0, evaluatedScheduledWorkouts: 0, adherencePct: 0 }
+          : monthKey === 8
+          ? { activeDaysCount: 9, missedPastCoreDays: 1, completedScheduled: 9, evaluatedScheduledWorkouts: 10, adherencePct: 90 }
+          : { activeDaysCount: 4, missedPastCoreDays: 2, completedScheduled: 4, evaluatedScheduledWorkouts: 6, adherencePct: 67 };
+
+        const fixture = createAnalyticsFixture({
+          monthStart: new Date(currentHeatmapMonth.getFullYear(), currentHeatmapMonth.getMonth(), 1),
+          heatmapSummary: summary,
+        });
+        // Set conflicting global aggregated stats to ensure footer ignores global timeRange
+        fixture.aggregated.activeDaysCount = 99;
+        fixture.aggregated.missedPastCoreDays = 88;
+        fixture.aggregated.adherencePct = 11;
+        return fixture;
+      });
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider value={mockFitness}>
+            <AnalyticsView savedState={{ timeRange: '30d', muscleMetric: 'volume', selected1RMExerciseId: null, currentHeatmapMonth: new Date('2026-10-15T12:00:00Z') }} />
+          </FitnessContext.Provider>
+        );
+      });
+
+      const heatmapSection = Array.from(container.querySelectorAll('h2, h3'))
+        .find((h) => h.textContent?.trim() === 'Monthly Intensity Heatmap')
+        ?.closest('.rounded-2xl') as HTMLElement;
+      expect(heatmapSection).toBeTruthy();
+      expect(heatmapSection.textContent).toContain('4 Active Days · 2 Skipped · 67% Adherence');
+      expect(heatmapSection.textContent).not.toContain('99 Active Days');
+      expect(
+        heatmapSection.querySelector('[role="region"]')?.getAttribute('aria-label')
+      ).toContain('4 active days');
+
+      // Switch global timeRange to ALL -> monthly heatmap footer stays locked to October counts
+      const allBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'ALL')!;
+      act(() => {
+        allBtn.click();
+      });
+      expect(heatmapSection.textContent).toContain('4 Active Days · 2 Skipped · 67% Adherence');
+
+      // Navigate to September (previous month) -> reflects September summary
+      const prevBtn = container.querySelector('button[aria-label="Previous Month"]') as HTMLButtonElement;
+      act(() => {
+        prevBtn.click();
+      });
+      expect(heatmapSection.textContent).toContain('9 Active Days · 1 Skipped · 90% Adherence');
+
+      // Navigate forward twice to November (future month) -> shows unavailable — Adherence
+      const nextBtn = container.querySelector('button[aria-label="Next Month"]') as HTMLButtonElement;
+      act(() => {
+        nextBtn.click();
+      });
+      act(() => {
+        nextBtn.click();
+      });
+      expect(heatmapSection.textContent).toContain('0 Active Days · 0 Skipped · — Adherence');
     });
 
     it('orders HistoryView Training Sessions before collapsed Monthly Reports, distinguishes empty vs search-empty states, and binds verification checkbox label', () => {
@@ -972,8 +1072,9 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(verifyInput?.id).toBeTruthy();
       expect(verifyLabel?.getAttribute('for')).toBe(verifyInput?.id);
 
-      // Filter search to non-existent string to verify empty search state & Clear Filters action
+      // Filter search placeholder uses accessible phrasing and distinguishes empty search state & Clear Filters action
       const searchInput = container.querySelector('input[type="search"]') as HTMLInputElement;
+      expect(searchInput.getAttribute('placeholder')).toBe('Search date, routine or exercise…');
       const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
       act(() => {
         nativeSetter?.call(searchInput, 'zzzznonexistent');
@@ -990,7 +1091,7 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(container.textContent).not.toContain('No Matching Sessions');
     });
 
-    it('renders non-color status glyphs alongside calendar color dots and Status legend', () => {
+    it('renders complete non-color status glyphs across past/today/future cells and separates Status vs Routines legends', () => {
       const calWorkouts: Workout[] = [
         { id: 'wo-push', name: 'Push A', badge: 'PUSH A', type: 'push', isCore: true, cycleDay: 1, exercises: [] },
         { id: 'wo-rest', name: 'Rest Day', badge: 'REST', type: 'rest', isCore: true, cycleDay: 2, exercises: [] },
@@ -1013,7 +1114,13 @@ describe('Targeted UI Refinement Regression Suite', () => {
         } as any,
         workoutMap: calWorkoutMap,
         coreWorkoutByCycleDayMap: calCoreMap,
-        getCycleDayForDate: (d: Date) => (d.getDate() === 12 ? 1 : d.getDate() === 13 ? 2 : 1),
+        getCycleDayForDate: (d: Date) => {
+          const dayNum = d.getDate();
+          // 12: past missed push; 13: past rest; 15: today scheduled push; 16: future rest; 17: future scheduled push
+          if (dayNum === 13 || dayNum === 16) return 2;
+          if (dayNum === 18) return 99; // off-protocol day
+          return 1;
+        },
         resolveExerciseMeta: () => ({ name: 'Bench Press', target: 'Chest' }),
       } as any);
 
@@ -1028,16 +1135,43 @@ describe('Targeted UI Refinement Regression Suite', () => {
       const completedDay = container.querySelector('[data-testid="calendar-day-2026-10-10"]');
       const partialDay = container.querySelector('[data-testid="calendar-day-2026-10-11"]');
       const missedDay = container.querySelector('[data-testid="calendar-day-2026-10-12"]');
-      const restDay = container.querySelector('[data-testid="calendar-day-2026-10-13"]');
+      const pastRestDay = container.querySelector('[data-testid="calendar-day-2026-10-13"]');
+      const todayScheduledDay = container.querySelector('[data-testid="calendar-day-2026-10-15"]');
+      const futureRestDay = container.querySelector('[data-testid="calendar-day-2026-10-16"]');
+      const futureScheduledDay = container.querySelector('[data-testid="calendar-day-2026-10-17"]');
+      const offProtocolDay = container.querySelector('[data-testid="calendar-day-2026-10-18"]');
+
       expect(completedDay?.textContent).toContain('✓');
       expect(partialDay?.textContent).toContain('◐');
       expect(missedDay?.textContent).toContain('!');
-      expect(restDay?.textContent).toContain('—');
-      expect(container.textContent).toContain('Status:');
-      expect(container.textContent).toContain('Missed');
+      expect(pastRestDay?.textContent).toContain('—');
+      expect(todayScheduledDay?.textContent).toContain('·');
+      expect(todayScheduledDay?.textContent).not.toContain('!');
+      expect(futureRestDay?.textContent).toContain('—');
+      expect(futureRestDay?.textContent).not.toContain('·');
+      expect(futureScheduledDay?.textContent).toContain('·');
+      expect(offProtocolDay?.querySelector('span[aria-hidden="true"]')?.textContent?.trim() || '').not.toMatch(/[✓◐!·—]/);
+
+      const text = container.textContent || '';
+      const statusIdx = text.indexOf('Status:');
+      const routinesIdx = text.indexOf('Routines:');
+      expect(statusIdx).toBeGreaterThan(-1);
+      expect(routinesIdx).toBeGreaterThan(statusIdx);
+
+      const statusLegendText = text.slice(statusIdx, routinesIdx);
+      const routinesLegendText = text.slice(routinesIdx);
+
+      expect(statusLegendText).toContain('✓ Completed');
+      expect(statusLegendText).toContain('◐ Incomplete');
+      expect(statusLegendText).toContain('! Missed');
+      expect(statusLegendText).toContain('· Scheduled');
+      expect(statusLegendText).toContain('— Rest');
+
+      expect(routinesLegendText).not.toContain('Missed');
+      expect(routinesLegendText).not.toContain('Incomplete');
     });
 
-    it('shows scope banners, Unsaved Changes badge, and inline validation in ExerciseEditor', () => {
+    it('shows scope banners, Unsaved Changes badge, inline validation, and single bottom Cancel/Save Changes actions in ExerciseEditor', () => {
       act(() => {
         root.render(
           <ExerciseEditor
@@ -1066,6 +1200,17 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(container.textContent).toContain('Workout-Specific Prescription');
       expect(container.textContent).not.toContain('Unsaved Changes');
 
+      // Single Cancel and single primary Save Changes action (no duplicate top actions or "Save Exercise")
+      const cancelButtonsProg = Array.from(container.querySelectorAll('button')).filter(
+        (b) => b.textContent?.trim() === 'Cancel'
+      );
+      const saveButtonsProg = Array.from(container.querySelectorAll('button')).filter(
+        (b) => b.textContent?.trim() === 'Save Changes'
+      );
+      expect(cancelButtonsProg).toHaveLength(1);
+      expect(saveButtonsProg).toHaveLength(1);
+      expect(container.textContent).not.toContain('Save Exercise');
+
       const defTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('Exercise Definition')
       ) as HTMLButtonElement;
@@ -1073,6 +1218,9 @@ describe('Targeted UI Refinement Regression Suite', () => {
         defTabBtn.click();
       });
       expect(container.textContent).toContain('Viewing Global Definition inside Push Protocol Alpha');
+      expect(
+        Array.from(container.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Save Changes')
+      ).toHaveLength(1);
 
       const nameInput = container.querySelector('input[required]') as HTMLInputElement;
       const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;

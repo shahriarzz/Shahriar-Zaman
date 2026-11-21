@@ -4,7 +4,8 @@ import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
 import { WorkoutType } from '../types/fitness';
 import {
-  selectTimeRangeAnalytics
+  selectTimeRangeAnalytics,
+  selectMonthlyHeatmapSummary
 } from '../utils/fitnessDerivedSelectors';
 import {
   MUSCLE_CATEGORIES,
@@ -75,6 +76,16 @@ export function useAnalyticsData({
     weekStartsOn: 1
   });
 
+  const heatmapSummary = useMemo(() => {
+    return selectMonthlyHeatmapSummary(
+      index,
+      coreWorkoutByCycleDayMap,
+      currentHeatmapMonth,
+      appState?.cycleStart,
+      currentDate
+    );
+  }, [index, coreWorkoutByCycleDayMap, currentHeatmapMonth, appState?.cycleStart, currentDate]);
+
   const heatmapData = useMemo(() => {
     const logVolMap: Record<string, number> = index.volumeByDate || {};
     let maxDayVol = 1;
@@ -90,9 +101,10 @@ export function useAnalyticsData({
     return {
       ...heatmapGrid,
       logVolMap,
-      maxDayVol
+      maxDayVol,
+      summary: heatmapSummary,
     };
-  }, [heatmapGrid, index.volumeByDate]);
+  }, [heatmapGrid, index.volumeByDate, heatmapSummary]);
 
   // 3. Muscle chart data formatted for Recharts
   const muscleChartData = useMemo(() => {

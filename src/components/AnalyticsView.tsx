@@ -66,10 +66,10 @@ import {
 
 // Unified heatmap intensity scale used for both matrix cells and legend
 const HEATMAP_INTENSITY_STEPS = [
-  { level: 0, bg: 'bg-zinc-900/60', border: 'border-zinc-800/40', text: 'text-zinc-600', maxRatio: 0 },
+  { level: 0, bg: 'bg-zinc-900/60', border: 'border-zinc-800/40', text: 'text-zinc-400', maxRatio: 0 },
   { level: 1, bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', text: 'text-emerald-400', maxRatio: 0.25 },
   { level: 2, bg: 'bg-emerald-500/45', border: 'border-emerald-500/50', text: 'text-emerald-300', maxRatio: 0.50 },
-  { level: 3, bg: 'bg-emerald-500/75', border: 'border-emerald-500/70', text: 'text-emerald-200', maxRatio: 0.75 },
+  { level: 3, bg: 'bg-emerald-500/75', border: 'border-emerald-500/70', text: 'text-black font-bold', maxRatio: 0.75 },
   { level: 4, bg: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-black font-bold', maxRatio: 1.0 }
 ] as const;
 
@@ -131,6 +131,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
     selected1RMExerciseId,
     currentHeatmapMonth
   });
+
+  const monthlySummary = heatmapData.summary ?? {
+    activeDaysCount: 0,
+    missedPastCoreDays: 0,
+    completedScheduled: 0,
+    evaluatedScheduledWorkouts: 0,
+    adherencePct: 0,
+  };
 
   // Visible records slice
   const visibleRecords = showAllRecords ? aggregated.recordsList : aggregated.recordsList.slice(0, 3);
@@ -372,7 +380,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                               <p className="text-indigo-400 font-black text-sm tabular-nums">
                                 Est. 1RM: {data.epley1RM} kg
                               </p>
-                              <p className={cn(TYPOGRAPHY.caption, "text-zinc-500")}>Best Set: {data.setDetail}</p>
+                              <p className={cn(TYPOGRAPHY.caption)}>Best Set: {data.setDetail}</p>
                             </ChartTooltip>
                           );
                         }
@@ -426,13 +434,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
 
       {/* 4. SECTION 3: TRAINING ACTIVITY & CONSISTENCY */}
       <div className="pt-2 border-t border-zinc-800/60">
-        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>01 · Training Activity & Cadence</p>
+        <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>01 · Training Activity & Consistency</p>
       </div>
       <Section
-        eyebrow="Adherence Matrix"
+        eyebrow="Daily Training Volume"
         eyebrowColor="zinc"
         title="Monthly Intensity Heatmap"
-        description="Daily volume concentration across completed sessions (kg)."
+        description="Daily completed training volume by date (kg)."
         padding="section"
         action={
           <div className={cn("flex items-center", GAP.sm)}>
@@ -466,7 +474,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           {/* Heatmap Grid */}
           <div
             role="region"
-            aria-label={`Monthly volume intensity heatmap for ${format(heatmapData.monthStart, 'MMMM yyyy')}, ${aggregated.activeDaysCount} active days`}
+            aria-label={`Monthly volume intensity heatmap for ${format(heatmapData.monthStart, 'MMMM yyyy')}, ${monthlySummary.activeDaysCount} active days`}
           >
           <Stack spacing="xs">
             {/* Weekday headers */}
@@ -503,6 +511,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                   tooltipText = `${dateStr} • Rest`;
                 }
 
+                if (!isCurrentMonth) {
+                  return (
+                    <div
+                      key={`day-${dateStr}-${dayIdx}`}
+                      aria-hidden="true"
+                      className={cn(
+                        "aspect-square border bg-zinc-950/40 border-zinc-900/50",
+                        RADIUS.badge
+                      )}
+                    />
+                  );
+                }
+
                 return (
                   <div
                     key={`day-${dateStr}-${dayIdx}`}
@@ -512,18 +533,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                       "aspect-square border flex flex-col items-center justify-center p-1 relative group cursor-default",
                       TRANSITION.colors,
                       RADIUS.badge,
-                      isCurrentMonth
-                        ? cn(
-                            intensity.bg,
-                            intensity.border,
-                            intensity.text
-                          )
-                        : "opacity-20 bg-zinc-950 border-zinc-900 text-zinc-700"
+                      intensity.bg,
+                      intensity.border,
+                      intensity.text
                     )}
                   >
-                    <span className={cn(TYPOGRAPHY.label, "leading-none tabular-nums")}>{format(day, 'd')}</span>
-                    {vol > 0 && isCurrentMonth && (
-                      <span className={cn(TYPOGRAPHY.micro, "leading-none mt-1 opacity-80 tabular-nums")}>
+                    <span className={cn(TYPOGRAPHY.label, "text-current leading-none tabular-nums")}>{format(day, 'd')}</span>
+                    {vol > 0 && (
+                      <span className={cn(TYPOGRAPHY.micro, "text-current leading-none mt-1 tabular-nums")}>
                         {(vol / 1000).toFixed(1)}k
                       </span>
                     )}
@@ -550,9 +567,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             </div>
 
             <div className={cn(TYPOGRAPHY.label, "text-zinc-400 flex flex-wrap items-center justify-center tabular-nums", GAP.sm)}>
-              <span className="text-emerald-400 font-bold">{aggregated.activeDaysCount}</span> Active Days ·{' '}
-              <span className="text-zinc-400">{aggregated.missedPastCoreDays} Skipped</span> ·{' '}
-              <span className="text-zinc-300">{aggregated.adherencePct}% Adherence</span>
+              <span className="text-emerald-400 font-bold">{monthlySummary.activeDaysCount}</span> Active Days ·{' '}
+              <span className="text-zinc-400">{monthlySummary.missedPastCoreDays} Skipped</span> ·{' '}
+              <span className="text-zinc-300">
+                {monthlySummary.evaluatedScheduledWorkouts > 0
+                  ? `${monthlySummary.adherencePct}% Adherence`
+                  : '— Adherence'}
+              </span>
             </div>
           </div>
         </Stack>
@@ -756,7 +777,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                   <p className={cn("text-xs font-bold text-white group-hover:text-orange-400 break-words", TRANSITION.colors)}>
                     {rec.exerciseName}
                   </p>
-                  <p className={cn(TYPOGRAPHY.label, "text-zinc-500 tabular-nums")}>
+                  <p className={cn(TYPOGRAPHY.label, "tabular-nums")}>
                     Logged: {rec.date}
                   </p>
                 </div>
@@ -764,7 +785,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                   <div className="text-sm font-black font-mono text-orange-400">
                     {rec.weight}kg × {rec.reps}
                   </div>
-                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
+                  <div className={cn(TYPOGRAPHY.label)}>
                     Est. 1RM ~{index.e1RMPRsMap.get(rec.exerciseDefinitionId)?.maxEpley ?? Math.round((rec.weight || 0) * (1 + (rec.reps || 1) / 30) * 10) / 10}kg
                   </div>
                 </div>
@@ -834,71 +855,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
         </Stack>
       </Section>
 
-      {/* 8. SECTION 7: TRAINING GAP & ACTIVITY */}
-      <Section
-        eyebrow="Spacing & Cadence"
-        eyebrowColor="zinc"
-        title="Training Cadence"
-        padding="section"
-      >
-        <Grid cols={2} gap="md">
-          <StatCard
-            label="Last Session"
-            value={
-              !aggregated.firstLogDate
-                ? '—'
-                : aggregated.daysSinceLast === 0
-                ? 'Today'
-                : aggregated.daysSinceLast
-            }
-            unit={
-              !aggregated.firstLogDate || aggregated.daysSinceLast === 0
-                ? undefined
-                : 'd ago'
-            }
-            isUnavailable={!aggregated.firstLogDate}
-            accent="zinc"
-            disableAnimation
-            sublabel={!aggregated.firstLogDate ? 'No sessions recorded' : 'Last recorded workout'}
-          />
-          <StatCard
-            label="Average Training Gap"
-            value={aggregated.totalLogsCount < 2 ? '—' : aggregated.avgGapDays}
-            unit={aggregated.totalLogsCount < 2 ? undefined : 'days'}
-            isUnavailable={aggregated.totalLogsCount < 2}
-            unavailableLabel="Need 2+ sessions"
-            accent="zinc"
-            disableAnimation
-            sublabel={aggregated.totalLogsCount < 2 ? 'Need 2+ sessions' : 'Spacing between sessions'}
-          />
-          <StatCard
-            label="Active Days in Window"
-            value={aggregated.activeDaysCount}
-            unit="days"
-            accent="zinc"
-            disableAnimation
-            sublabel={`Logged in ${timeRange.toUpperCase()} window`}
-          />
-          <StatCard
-            label="Sessions in Window"
-            value={!aggregated.firstLogDate ? '—' : aggregated.rangeLogsCount}
-            unit={!aggregated.firstLogDate ? undefined : (aggregated.rangeLogsCount === 1 ? 'session' : 'sessions')}
-            accent="zinc"
-            disableAnimation
-            isUnavailable={!aggregated.firstLogDate}
-            unavailableLabel="No sessions recorded"
-            sublabel={
-              !aggregated.firstLogDate
-                ? 'No sessions recorded'
-                : aggregated.rangeLogsCount === 0
-                ? `No sessions in ${timeRange.toUpperCase()} window`
-                : `Logged in ${timeRange.toUpperCase()} window`
-            }
-          />
-        </Grid>
-      </Section>
-
-      {/* 9. SECTION 8: INSIGHTS & ROUTINE DISTRIBUTION */}
+      {/* 8. SECTION 7: INSIGHTS & ROUTINE DISTRIBUTION */}
       <div className="pt-2 border-t border-zinc-800/60">
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>04 · Training Patterns & Insights</p>
       </div>
@@ -1002,6 +959,70 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           </Section>
         </DeferredViewSection>
       </Grid>
+
+      {/* 9. SECTION 8: TRAINING GAP & ACTIVITY */}
+      <Section
+        eyebrow="Spacing & Cadence"
+        eyebrowColor="zinc"
+        title="Training Cadence"
+        padding="section"
+      >
+        <Grid cols={2} gap="md">
+          <StatCard
+            label="Last Session"
+            value={
+              !aggregated.firstLogDate
+                ? '—'
+                : aggregated.daysSinceLast === 0
+                ? 'Today'
+                : aggregated.daysSinceLast
+            }
+            unit={
+              !aggregated.firstLogDate || aggregated.daysSinceLast === 0
+                ? undefined
+                : 'd ago'
+            }
+            isUnavailable={!aggregated.firstLogDate}
+            accent="zinc"
+            disableAnimation
+            sublabel={!aggregated.firstLogDate ? 'No sessions recorded' : 'Last recorded workout'}
+          />
+          <StatCard
+            label="Average Training Gap"
+            value={aggregated.totalLogsCount < 2 ? '—' : aggregated.avgGapDays}
+            unit={aggregated.totalLogsCount < 2 ? undefined : 'days'}
+            isUnavailable={aggregated.totalLogsCount < 2}
+            unavailableLabel="Need 2+ sessions"
+            accent="zinc"
+            disableAnimation
+            sublabel={aggregated.totalLogsCount < 2 ? 'Need 2+ sessions' : 'Spacing between sessions'}
+          />
+          <StatCard
+            label="Active Days in Window"
+            value={aggregated.activeDaysCount}
+            unit="days"
+            accent="zinc"
+            disableAnimation
+            sublabel={`Logged in ${timeRange.toUpperCase()} window`}
+          />
+          <StatCard
+            label="Sessions in Window"
+            value={!aggregated.firstLogDate ? '—' : aggregated.rangeLogsCount}
+            unit={!aggregated.firstLogDate ? undefined : (aggregated.rangeLogsCount === 1 ? 'session' : 'sessions')}
+            accent="zinc"
+            disableAnimation
+            isUnavailable={!aggregated.firstLogDate}
+            unavailableLabel="No sessions recorded"
+            sublabel={
+              !aggregated.firstLogDate
+                ? 'No sessions recorded'
+                : aggregated.rangeLogsCount === 0
+                ? `No sessions in ${timeRange.toUpperCase()} window`
+                : `Logged in ${timeRange.toUpperCase()} window`
+            }
+          />
+        </Grid>
+      </Section>
     </Stack>
   );
 };

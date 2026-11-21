@@ -314,7 +314,7 @@ export const TYPOGRAPHY = {
   
   // Card & Stat Tokens
   label: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider font-bold',
-  unit: 'font-mono text-xs text-zinc-500 font-normal',
+  unit: 'font-mono text-xs text-zinc-400 font-normal',
   cardValue: 'font-mono text-2xl font-bold tracking-tight text-white',
   statValue: 'font-display text-3xl sm:text-[2rem] uppercase tracking-tight text-white leading-none tabular-nums',
   statValueHero: 'font-display text-4xl sm:text-5xl uppercase tracking-tight text-white leading-none tabular-nums',
@@ -322,8 +322,8 @@ export const TYPOGRAPHY = {
   // Text & Body
   body: 'font-sans text-sm text-zinc-400 leading-relaxed',
   bodySecondary: 'font-sans text-xs text-zinc-400 leading-normal',
-  metadata: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wider',
-  caption: 'font-mono text-[10px] text-zinc-500 uppercase tracking-wide',
+  metadata: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wider',
+  caption: 'font-mono text-[10px] text-zinc-400 uppercase tracking-wide',
   micro: 'font-mono text-[9px] uppercase tracking-wider font-bold',
   
   // Controls & States
@@ -333,8 +333,8 @@ export const TYPOGRAPHY = {
   badgeMd: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   segmentedSm: 'font-mono text-[10px] uppercase tracking-wider font-bold',
   segmentedMd: 'font-mono text-xs uppercase tracking-wider font-bold',
-  dialogFooter: 'font-mono text-[10px] text-zinc-500 uppercase tracking-widest',
-  helperText: 'font-mono text-[10px] text-zinc-500 font-normal tracking-normal',
+  dialogFooter: 'font-mono text-[10px] text-zinc-400 uppercase tracking-widest',
+  helperText: 'font-mono text-[10px] text-zinc-400 font-normal tracking-normal',
   errorText: 'font-mono text-[10px] text-red-400 font-normal tracking-normal',
   successText: 'font-mono text-[10px] text-emerald-400 font-normal tracking-normal',
   navLabel: 'font-mono text-[10px] uppercase tracking-wider font-bold',

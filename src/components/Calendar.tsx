@@ -202,7 +202,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
                 <div
                   key={d}
-                  className={cn("text-center pb-2", TYPOGRAPHY.label, "text-zinc-500")}
+                  className={cn("text-center pb-2", TYPOGRAPHY.label)}
                 >
                   {d}
                 </div>
@@ -248,14 +248,14 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         "text-xs font-mono leading-none w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full font-bold",
                         TYPOGRAPHY.listValue,
                         TRANSITION.colors,
-                        status ? (status.isFuture ? 'border-2 border-dashed' : 'border-2') : 'border-2 border-transparent',
+                        status ? ((status.isScheduled || status.isFuture) ? 'border-2 border-dashed' : 'border-2') : 'border-2 border-transparent',
                         isSelected
                           ? (isToday ? "bg-zinc-800 text-orange-400 font-black" : "bg-zinc-800 text-white font-bold")
                           : isToday
                             ? "bg-zinc-800 text-orange-400 font-black"
                             : status
                               ? "text-zinc-200"
-                              : "text-zinc-500"
+                              : "text-zinc-400"
                       )}
                       style={status ? { borderColor: status.color } : undefined}
                     >
@@ -269,7 +269,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                           className={cn(
                             "w-1.5 h-1.5 rounded-full shrink-0",
                             TRANSITION.opacity,
-                            status.isFuture ? "opacity-70" : "opacity-100"
+                            (status.isScheduled || status.isFuture) ? "opacity-70" : "opacity-100"
                           )}
                           style={{ backgroundColor: status.color }}
                         />
@@ -283,7 +283,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                               ? "text-amber-400"
                               : status.isRest
                               ? "text-emerald-400"
-                              : status.isFuture
+                              : (status.isScheduled || status.isFuture)
                               ? "text-zinc-400"
                               : "text-zinc-200"
                           )}
@@ -294,7 +294,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                             ? '◐'
                             : status.isRest
                             ? '—'
-                            : status.isFuture
+                            : (status.isScheduled || status.isFuture)
                             ? '·'
                             : '✓'}
                         </span>
@@ -320,10 +320,10 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 <span aria-hidden="true" className="font-mono text-red-400">!</span> Missed
               </span>
               <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
-                <span aria-hidden="true" className="font-mono text-emerald-400">—</span> Rest
+                <span aria-hidden="true" className="font-mono text-zinc-400">·</span> Scheduled
               </span>
-              <span className={cn(TYPOGRAPHY.label, "text-zinc-400 flex items-center gap-1")}>
-                <span aria-hidden="true" className="w-3 h-3 rounded-full border border-dashed border-zinc-400 inline-block" /> Scheduled
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 flex items-center gap-1")}>
+                <span aria-hidden="true" className="font-mono text-emerald-400">—</span> Rest
               </span>
             </div>
 
@@ -337,8 +337,6 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 { label: 'Hybrid', color: WORKOUT_COLORS.hybrid },
                 { label: 'Custom', color: WORKOUT_COLORS.custom },
                 { label: 'Rest', color: WORKOUT_COLORS.rest },
-                { label: 'Missed', color: SEMANTIC_COLORS.red },
-                { label: 'Incomplete', color: SEMANTIC_COLORS.amber },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5">
                   <div

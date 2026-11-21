@@ -144,11 +144,11 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
 
           {/* Muscle Groups Ranked List */}
           {coverage.totalEligibleSets === 0 ? (
-            <div className="py-8 text-center text-xs text-zinc-500">
+            <div className="py-8 text-center text-xs text-zinc-400">
               No eligible completed sets recorded in this period.
             </div>
           ) : totalAttributedWSE === 0 ? (
-            <div className="py-8 text-center text-xs text-zinc-500">
+            <div className="py-8 text-center text-xs text-zinc-400">
               Completed sets exist, but no muscle attribution could be assigned.
             </div>
           ) : (
@@ -164,7 +164,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         <span className={cn(
                           "w-4 tabular-nums text-right",
                           TYPOGRAPHY.metadata,
-                          isZero ? "text-zinc-500" : "text-zinc-400"
+                          "text-zinc-400"
                         )}>
                           {idx + 1}.
                         </span>
@@ -175,7 +175,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                           {group.label}
                         </span>
                         {isZero && (
-                          <span className={cn(TYPOGRAPHY.metadata, "text-zinc-500 font-mono")}>
+                          <span className={cn(TYPOGRAPHY.metadata, "font-mono")}>
                             (0 exposure)
                           </span>
                         )}
@@ -184,13 +184,13 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                       <div className="flex items-center gap-2 text-right">
                         <span className={cn(
                           "font-mono font-medium tabular-nums",
-                          isZero ? "text-zinc-500" : "text-zinc-200"
+                          isZero ? "text-zinc-400" : "text-zinc-200"
                         )}>
                           {group.wse.toFixed(1)} <span className={cn(TYPOGRAPHY.metadata, "text-zinc-400")}>WSE</span>
                         </span>
                         <span className={cn(
                           "w-12 text-right font-mono text-xs tabular-nums",
-                          isZero ? "text-zinc-500" : "text-emerald-400 font-semibold"
+                          isZero ? "text-zinc-400" : "text-emerald-400 font-semibold"
                         )}>
                           {group.sharePercent.toFixed(1)}%
                         </span>
@@ -272,7 +272,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
 
           {/* Recovery Item List or Empty State */}
           {!hasAnyResidual ? (
-            <div className="py-8 text-center text-xs text-zinc-500">
+            <div className="py-8 text-center text-xs text-zinc-400">
               No recent stimulus recorded in the 14-day window.
             </div>
           ) : (
@@ -297,7 +297,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
                         {/* Recency Context */}
                         <span className={cn(
                           "font-mono text-xs tabular-nums",
-                          hasRecent ? "text-zinc-300" : "text-zinc-500"
+                          hasRecent ? "text-zinc-300" : "text-zinc-400"
                         )}>
                           {item.relativeLabel}
                         </span>

@@ -56,8 +56,8 @@ Before proposing, modifying, or executing any code or architecture change, the A
                                     │
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│ 6. Read DESIGN_SYSTEM.md (If Touching Tokens, UI, or Screen Layouts)   │
-│    Required before touching tokens.ts, components/ui/, or visual code  │
+│ 6. Read DESIGN_SYSTEM.md & DESIGN_QA.md (If Touching Tokens or UI)     │
+│    Verify tokens, primitives, screen contracts, and QA state criteria  │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
@@ -159,6 +159,7 @@ Before editing any file:
 Before declaring any task complete:
 - [ ] **Typecheck**: `npm run lint` (`tsc --noEmit`) passes with 0 errors.
 - [ ] **Unit & Regression Tests**: `npx vitest run` passes with 100% of test files passing (all regression suites must pass cleanly).
+- [ ] **Design Quality & Accessibility Gate**: `npm run design:check:static` passes (and `npm run design:check` when Playwright Chromium is available) in sync with `DESIGN_QA.md`.
 - [ ] **Production Build**: `npm run build` succeeds cleanly (`build:web` and `build:server`).
 - [ ] **Regression Coverage**: Added dedicated test cases in `src/test/` for any new logic, edge case, or bug fix.
 - [ ] **Documentation Sync**: If an approved architectural change occurred, updated `ARCHITECTURE.md` and `DATA_MODEL.md` in the same commit.

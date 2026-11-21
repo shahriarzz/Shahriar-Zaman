@@ -2,8 +2,9 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import {
   SemanticColor,
+  SemanticColorKey,
+  SEMANTIC_PALETTE,
   getAccentColor,
-  SEMANTIC_COLORS,
   TYPOGRAPHY
 } from '../../styles/tokens';
 
@@ -33,7 +34,13 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   headingLevel,
   className
 }) => {
-  const eyebrowHex = colorOverride || getAccentColor(eyebrowColor as SemanticColor) || SEMANTIC_COLORS.zinc;
+  const isCanonicalSemantic = !colorOverride && eyebrowColor && eyebrowColor in SEMANTIC_PALETTE;
+  const semanticTextClass = isCanonicalSemantic
+    ? SEMANTIC_PALETTE[eyebrowColor as SemanticColorKey].textLight
+    : undefined;
+  const eyebrowHex = !isCanonicalSemantic
+    ? colorOverride || getAccentColor(eyebrowColor as SemanticColor)
+    : undefined;
 
   const titleClasses: Record<SectionSize, string> = {
     page: TYPOGRAPHY.titlePage,
@@ -58,8 +65,8 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
       <div className="min-w-0 flex-1">
         {eyebrow && (
           <p
-            className={cn(TYPOGRAPHY.eyebrow, "mb-1.5")}
-            style={{ color: eyebrowHex }}
+            className={cn(TYPOGRAPHY.eyebrow, "mb-1.5", semanticTextClass)}
+            style={eyebrowHex ? { color: eyebrowHex } : undefined}
           >
             {eyebrow}
           </p>

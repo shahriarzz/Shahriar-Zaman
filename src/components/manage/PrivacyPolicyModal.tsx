@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Shield, Lock, Trash2, Database, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Card, Button, Dialog, DialogHeader, DialogBody, DialogFooter, TYPOGRAPHY } from '../ui';
+import { FOCUS } from '../../styles/tokens';
 import { cn } from '../../lib/utils';
 
 interface PrivacyPolicyModalProps {
@@ -29,7 +30,15 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
       />
 
       {/* Scrollable Content */}
-      <DialogBody className="overflow-y-auto p-6 my-0 space-y-6 text-zinc-300 text-sm leading-relaxed">
+      <DialogBody
+        tabIndex={0}
+        role="region"
+        aria-label="Privacy policy content"
+        className={cn(
+          "overflow-y-auto custom-scrollbar p-6 my-0 space-y-6 text-zinc-300 text-sm leading-relaxed",
+          FOCUS.visible
+        )}
+      >
         {/* Summary Banner */}
         <Card variant="standard" surface="elevated" padding="compact" className="border-emerald-500/30 bg-emerald-500/[0.04]">
           <div className="flex items-start gap-3">

@@ -19,6 +19,7 @@ export interface CalendarDayStatus {
   isPartial?: boolean;
   isComplete?: boolean;
   isFuture?: boolean;
+  isScheduled?: boolean;
   isRest?: boolean;
   isMissed?: boolean;
   log?: SessionLog;
@@ -27,7 +28,7 @@ export interface CalendarDayStatus {
 
 /**
  * Pure production resolver for Calendar day indicator colors and status.
- * Evaluates completed, partial, future scheduled, rest, and missed days.
+ * Evaluates completed, partial, scheduled (today & upcoming), rest, and missed days.
  */
 export function resolveCalendarDayStatus({
   date,
@@ -63,12 +64,20 @@ export function resolveCalendarDayStatus({
   if (isFuture) {
     if (expectedWorkout) {
       if (expectedWorkout.type === 'rest') {
-        return { color: WORKOUT_COLORS.rest, label: 'rest', isFuture: true, expectedWo: expectedWorkout };
+        return {
+          color: WORKOUT_COLORS.rest,
+          label: 'rest',
+          isFuture: true,
+          isScheduled: true,
+          isRest: true,
+          expectedWo: expectedWorkout
+        };
       }
       return {
         color: WORKOUT_COLORS[expectedWorkout.type] || UNKNOWN_WORKOUT_COLOR,
-        label: expectedWorkout.name,
+        label: `scheduled: ${expectedWorkout.name}`,
         isFuture: true,
+        isScheduled: true,
         expectedWo: expectedWorkout
       };
     }
@@ -77,11 +86,27 @@ export function resolveCalendarDayStatus({
 
   if (expectedWorkout) {
     if (expectedWorkout.type === 'rest') {
-      return { color: WORKOUT_COLORS.rest, label: 'rest', isRest: true, expectedWo: expectedWorkout };
+      return {
+        color: WORKOUT_COLORS.rest,
+        label: 'rest',
+        isRest: true,
+        expectedWo: expectedWorkout
+      };
     }
-    if (!isSameDay(date, today)) {
-      return { color: SEMANTIC_COLORS.red, label: 'missed', isMissed: true, expectedWo: expectedWorkout };
+    if (isSameDay(date, today)) {
+      return {
+        color: WORKOUT_COLORS[expectedWorkout.type] || UNKNOWN_WORKOUT_COLOR,
+        label: `scheduled: ${expectedWorkout.name}`,
+        isScheduled: true,
+        expectedWo: expectedWorkout
+      };
     }
+    return {
+      color: SEMANTIC_COLORS.red,
+      label: 'missed',
+      isMissed: true,
+      expectedWo: expectedWorkout
+    };
   }
 
   return null;

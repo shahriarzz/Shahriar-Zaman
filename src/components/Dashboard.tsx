@@ -121,18 +121,93 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
-      {/* 1. Page Header + Primary Action Zone (Unfinished Session or Today's Protocol) */}
+      {/* 1. Page Header, 2. Stable 4-KPI Overview Grid, 3. Unfinished Session, 4. Today's Protocol */}
       <Stack spacing="lg">
         <SectionHeader
           eyebrow={heroDateStr}
           eyebrowColor="zinc"
-          title="Dashboard"
+          title="Stay Aggressive"
           size="page"
         />
 
-        {/* Unfinished Session Alert (Highest Priority when present) */}
+        {/* Stable 4-KPI Overview Grid (Locked slot identities) */}
+        <Grid cols={2} colsMd={4} gap="md" data-testid="dashboard-overview-stats">
+          <StatCard
+            label="Streak"
+            value={trainingStreak.currentStreak}
+            unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
+            sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
+            accent="zinc"
+            icon={TrendingUp}
+            disableAnimation
+            size="standard"
+          />
+          <StatCard
+            label="Training Frequency"
+            value={trainingFrequency.sessionsPerWeek}
+            formatValue={(val) => val.toFixed(1)}
+            unit="/ week"
+            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
+            accent="zinc"
+            icon={CalendarIcon}
+            disableAnimation
+            size="standard"
+          />
+          <StatCard
+            label="Strength Progress"
+            value={strengthTrend.percentChange}
+            formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
+            unit="%"
+            sublabel={
+              strengthTrend.percentChange !== null
+                ? `28d vs prev · ${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'lift' : 'lifts'} (${strengthTrend.confidence})`
+                : 'Insufficient 28d baseline'
+            }
+            isUnavailable={strengthTrend.percentChange === null}
+            accent={
+              strengthTrend.percentChange === null
+                ? 'zinc'
+                : strengthTrend.percentChange > 0
+                  ? 'emerald'
+                  : strengthTrend.percentChange < 0
+                    ? 'red'
+                    : 'zinc'
+            }
+            trendDirection={
+              strengthTrend.percentChange === null
+                ? undefined
+                : strengthTrend.percentChange > 0
+                  ? 'positive'
+                  : strengthTrend.percentChange < 0
+                    ? 'negative'
+                    : 'neutral'
+            }
+            icon={Dumbbell}
+            disableAnimation
+            size="standard"
+          />
+          <StatCard
+            label="Adherence"
+            value={adherence && adherence.evaluatedScheduledWorkouts > 0 ? adherence.percent : null}
+            unit="%"
+            isUnavailable={!adherence || adherence.evaluatedScheduledWorkouts === 0}
+            unavailableLabel="Building baseline"
+            sublabel={
+              adherence && adherence.evaluatedScheduledWorkouts > 0
+                ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
+                : 'Complete 1 scheduled workout'
+            }
+            accent="zinc"
+            icon={CheckCircle2}
+            disableAnimation
+            size="standard"
+          />
+        </Grid>
+
+        {/* Unfinished Session Alert (only when present) */}
         {unfinishedSession && (
           <motion.div
+            data-testid="unfinished-session-banner"
             initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={shouldReduceMotion ? { duration: 0 } : undefined}
@@ -182,175 +257,101 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           </motion.div>
         )}
 
-      {/* 2. Today's Workout (Single consolidated section heading) */}
-      <Section
-        title="Today's Protocol"
-        variant="standard"
-        padding="section"
-      >
-        {!hasWorkouts ? (
-          <EmptyState
-            icon={Dumbbell}
-            title="Routines Library Is Empty"
-            description="Reload standard protocols to populate your workout engine."
-            action={{
-              label: 'Reload Engine',
-              onClick: () => {
-                reloadInitialWorkouts();
-              }
-            }}
-          />
-        ) : todayWorkout ? (
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <Stack spacing="xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 border", RADIUS.badge, SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
-                  DAY {currentCycleDay} / 8
-                </span>
-                {todayWorkout.type !== 'rest' && (
-                  <Badge
-                    label={isTodayCompleted ? 'COMPLETED TODAY' : 'TRAINING DAY'}
-                    color={isTodayCompleted ? 'emerald' : 'orange'}
-                    variant="subtle"
-                    size="md"
-                  />
-                )}
-                {todayWorkout.badge && todayWorkout.badge !== 'DAY 8 · REST' && (
-                  <Badge
-                    label={todayWorkout.badge}
-                    colorOverride={WORKOUT_COLORS[todayWorkout.type]}
-                    variant="subtle"
-                  />
-                )}
-              </div>
-              <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-lg md:text-xl text-white")}>
-                {todayWorkout.name}
-              </h3>
-              {isTodayCompleted && todayCompletedSummary ? (
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
-                    <span>{todayCompletedSummary.setsCount} {todayCompletedSummary.setsCount === 1 ? 'set' : 'sets'}</span>
-                    <span className="text-zinc-600">·</span>
-                    <span>{todayCompletedSummary.durationMinutes} min</span>
-                    <span className="text-zinc-600">·</span>
-                    <span>{formatCompactWeight(todayCompletedSummary.totalVolume)} kg</span>
-                  </div>
-                  {nextScheduledWorkout && (
-                    <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
-                      Next Scheduled: {nextScheduledWorkout.cycleDay != null ? `Day ${nextScheduledWorkout.cycleDay} · ` : ''}{nextScheduledWorkout.name}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case")}>
-                  {todayWorkout.type === 'rest' ? 'Scheduled recovery' : `${todayWorkout.exercises.length} Exercises`}
-                </p>
-              )}
-            </Stack>
-
-            <Button
-              variant={isTodayCompleted || todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
-              size="lg"
-              disabled={isTodayCompleted || todayWorkout.type === 'rest'}
-              onPointerDown={() => onPrewarmSession?.()}
-              onMouseEnter={() => onPrewarmSession?.()}
-              onClick={() => {
-                if (!isTodayCompleted && todayWorkout.type !== 'rest') {
-                  onStartWorkout(todayWorkout.id);
+        {/* Today's Workout (Single consolidated section heading) */}
+        <Section
+          title="Today's Protocol"
+          variant="standard"
+          padding="section"
+        >
+          {!hasWorkouts ? (
+            <EmptyState
+              icon={Dumbbell}
+              title="Routines Library Is Empty"
+              description="Reload standard protocols to populate your workout engine."
+              action={{
+                label: 'Reload Engine',
+                onClick: () => {
+                  reloadInitialWorkouts();
                 }
               }}
-              className="w-full md:w-auto"
-            >
-              {isTodayCompleted ? 'Completed' : todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
-            </Button>
-          </div>
-        ) : (
-          <EmptyState
-            icon={Repeat}
-            title="Protocol Out of Sync"
-            description={`No core workout found for Day ${currentCycleDay}.`}
-            action={{
-              label: 'Reset to Cycle Day 1',
-              onClick: () => resetToCycleDay1()
-            }}
-          />
-        )}
-      </Section>
-      </Stack>
+            />
+          ) : todayWorkout ? (
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <Stack spacing="xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 border", RADIUS.badge, SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
+                    DAY {currentCycleDay} / 8
+                  </span>
+                  {todayWorkout.type !== 'rest' && (
+                    <Badge
+                      label={isTodayCompleted ? 'COMPLETED TODAY' : 'TRAINING DAY'}
+                      color={isTodayCompleted ? 'emerald' : 'orange'}
+                      variant="subtle"
+                      size="md"
+                    />
+                  )}
+                  {todayWorkout.badge && todayWorkout.badge !== 'DAY 8 · REST' && (
+                    <Badge
+                      label={todayWorkout.badge}
+                      colorOverride={WORKOUT_COLORS[todayWorkout.type]}
+                      variant="subtle"
+                    />
+                  )}
+                </div>
+                <h3 className={cn(TYPOGRAPHY.titleSubsection, "text-lg md:text-xl text-white")}>
+                  {todayWorkout.name}
+                </h3>
+                {isTodayCompleted && todayCompletedSummary ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
+                      <span>{todayCompletedSummary.setsCount} {todayCompletedSummary.setsCount === 1 ? 'set' : 'sets'}</span>
+                      <span className="text-zinc-600">·</span>
+                      <span>{todayCompletedSummary.durationMinutes} min</span>
+                      <span className="text-zinc-600">·</span>
+                      <span>{formatCompactWeight(todayCompletedSummary.totalVolume)} kg</span>
+                    </div>
+                    {nextScheduledWorkout && (
+                      <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+                        Next Scheduled: {nextScheduledWorkout.cycleDay != null ? `Day ${nextScheduledWorkout.cycleDay} · ` : ''}{nextScheduledWorkout.name}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case")}>
+                    {todayWorkout.type === 'rest' ? 'Scheduled recovery' : `${todayWorkout.exercises.length} Exercises`}
+                  </p>
+                )}
+              </Stack>
 
-      {/* 3. Stable 4-KPI Overview Grid (Locked slot identities) */}
-      <Grid cols={2} colsMd={4} gap="md">
-        <StatCard
-          label="Streak"
-          value={trainingStreak.currentStreak}
-          unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
-          sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
-          accent="zinc"
-          icon={TrendingUp}
-          disableAnimation
-          size="standard"
-        />
-        <StatCard
-          label="Training Frequency"
-          value={trainingFrequency.sessionsPerWeek}
-          formatValue={(val) => val.toFixed(1)}
-          unit="/ week"
-          sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
-          accent="zinc"
-          icon={CalendarIcon}
-          disableAnimation
-          size="standard"
-        />
-        <StatCard
-          label="Strength Progress"
-          value={strengthTrend.percentChange}
-          formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
-          unit="%"
-          sublabel={
-            strengthTrend.percentChange !== null
-              ? `28d vs prev · ${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'lift' : 'lifts'} (${strengthTrend.confidence})`
-              : 'Insufficient 28d baseline'
-          }
-          isUnavailable={strengthTrend.percentChange === null}
-          accent={
-            strengthTrend.percentChange === null
-              ? 'zinc'
-              : strengthTrend.percentChange > 0
-                ? 'emerald'
-                : strengthTrend.percentChange < 0
-                  ? 'red'
-                  : 'zinc'
-          }
-          trendDirection={
-            strengthTrend.percentChange === null
-              ? undefined
-              : strengthTrend.percentChange > 0
-                ? 'positive'
-                : strengthTrend.percentChange < 0
-                  ? 'negative'
-                  : 'neutral'
-          }
-          icon={Dumbbell}
-          disableAnimation
-          size="standard"
-        />
-        <StatCard
-          label="Adherence"
-          value={adherence && adherence.evaluatedScheduledWorkouts > 0 ? adherence.percent : null}
-          unit="%"
-          isUnavailable={!adherence || adherence.evaluatedScheduledWorkouts === 0}
-          unavailableLabel="Building baseline"
-          sublabel={
-            adherence && adherence.evaluatedScheduledWorkouts > 0
-              ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
-              : 'Complete 1 scheduled workout'
-          }
-          accent="zinc"
-          icon={CheckCircle2}
-          disableAnimation
-          size="standard"
-        />
-      </Grid>
+              <Button
+                variant={isTodayCompleted || todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
+                size="lg"
+                disabled={isTodayCompleted || todayWorkout.type === 'rest'}
+                onPointerDown={() => onPrewarmSession?.()}
+                onMouseEnter={() => onPrewarmSession?.()}
+                onClick={() => {
+                  if (!isTodayCompleted && todayWorkout.type !== 'rest') {
+                    onStartWorkout(todayWorkout.id);
+                  }
+                }}
+                className="w-full md:w-auto"
+              >
+                {isTodayCompleted ? 'Completed' : todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
+              </Button>
+            </div>
+          ) : (
+            <EmptyState
+              icon={Repeat}
+              title="Protocol Out of Sync"
+              description={`No core workout found for Day ${currentCycleDay}.`}
+              action={{
+                label: 'Reset to Cycle Day 1',
+                onClick: () => resetToCycleDay1()
+              }}
+            />
+          )}
+        </Section>
+      </Stack>
 
       {/* 4. Recent Milestones */}
       <Section
@@ -392,7 +393,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Personal Records</span>
-              <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono")}>
+              <span className={cn(TYPOGRAPHY.caption, "font-mono")}>
                 {recentMilestones.recentPREvents.length > 0 ? `Latest ${recentMilestones.recentPREvents.length}` : 'All-time verified'}
               </span>
             </div>
@@ -420,7 +421,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                         <span className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white break-words flex-1 min-w-0 leading-snug")}>
                           {pr.exerciseName}
                         </span>
-                        <span className={cn(TYPOGRAPHY.caption, "text-zinc-500 font-mono shrink-0 whitespace-nowrap")}>
+                        <span className={cn(TYPOGRAPHY.caption, "font-mono shrink-0 whitespace-nowrap")}>
                           {formatDateStr(pr.date)}
                         </span>
                       </div>
@@ -588,7 +589,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
 
                 {/* Min/Max labels */}
-                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "text-zinc-500 font-mono")} aria-hidden="true">
+                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "font-mono")} aria-hidden="true">
                   <span>{formatDateStr(firstDate)}</span>
                   <span className="text-zinc-400">
                     {observedMin}kg → {observedMax}kg
@@ -611,7 +612,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
           {/* Recent Entries */}
           {weightSummary.recentWeightLogs.length > 0 && (
             <div className={cn("border-t pt-4 space-y-2", BORDER.subtle)}>
-              <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>Recent Logs</div>
+              <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Recent Logs</div>
               <Stack spacing="xs" className="max-h-36 overflow-y-auto custom-scrollbar pr-1">
                 {weightSummary.recentWeightLogs.map(([date, weight]) => (
                   <ListRow

@@ -650,13 +650,64 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(container.textContent).toContain('Next Scheduled: Hybrid Conditioning');
     });
 
-    it('falls back to Lifetime Total Volume when adherence has 0 evaluated scheduled workouts', () => {
+    it('1. renders exact page heading "Stay Aggressive" as h1 and places the 4 KPI cards immediately after it', () => {
+      currentMockData.unfinishedSession = null;
+      renderDashboard();
+
+      const h1 = container.querySelector('h1');
+      expect(h1?.textContent?.trim()).toBe('Stay Aggressive');
+
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]');
+      expect(kpiGrid).toBeTruthy();
+      expect(kpiGrid?.children.length).toBe(4);
+      expect(
+        Boolean(h1 && kpiGrid && (h1.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING))
+      ).toBe(true);
+    });
+
+    it('2-3. places 4 KPI cards before unfinished-session banner, and unfinished-session banner before Today\'s Protocol', () => {
+      renderDashboard();
+
+      const h1 = container.querySelector('h1')!;
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]')!;
+      const unfinishedBanner = container.querySelector('[data-testid="unfinished-session-banner"]')!;
+      const todaysProtocolHeading = Array.from(container.querySelectorAll('h2, h3')).find(
+        el => el.textContent?.trim() === "Today's Protocol"
+      )!;
+
+      expect(h1).toBeTruthy();
+      expect(kpiGrid).toBeTruthy();
+      expect(unfinishedBanner).toBeTruthy();
+      expect(todaysProtocolHeading).toBeTruthy();
+
+      expect(Boolean(h1.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+      expect(Boolean(kpiGrid.compareDocumentPosition(unfinishedBanner) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+      expect(Boolean(unfinishedBanner.compareDocumentPosition(todaysProtocolHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    });
+
+    it('4. places 4 KPI cards directly before Today\'s Protocol when no unfinished session exists', () => {
+      currentMockData.unfinishedSession = null;
+      renderDashboard();
+
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]')!;
+      const unfinishedBanner = container.querySelector('[data-testid="unfinished-session-banner"]');
+      const todaysProtocolHeading = Array.from(container.querySelectorAll('h2, h3')).find(
+        el => el.textContent?.trim() === "Today's Protocol"
+      )!;
+
+      expect(unfinishedBanner).toBeNull();
+      expect(kpiGrid).toBeTruthy();
+      expect(todaysProtocolHeading).toBeTruthy();
+      expect(Boolean(kpiGrid.compareDocumentPosition(todaysProtocolHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    });
+
+    it('5-8. keeps 4th KPI as Adherence with unavailable state and instruction when 0 evaluated workouts exist, while keeping Total Volume (Lifetime) separate', () => {
       currentMockData.adherence = {
         rate: 0,
         percent: 0,
         completedScheduled: 0,
         scheduledCoreWorkouts: 0,
-        evaluatedScheduledWorkouts: 0, // No workouts evaluated yet in schedule window
+        evaluatedScheduledWorkouts: 0,
         pendingScheduledWorkouts: 1,
         missedPastCoreDays: 0,
         scheduledRestDays: 0,
@@ -667,14 +718,23 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
 
       renderDashboard();
 
-      // Should display Lifetime Total Volume rather than Adherence 0%
-      expect(container.textContent).toContain('Total Volume');
-      expect(container.textContent).toContain('Lifetime');
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]')!;
+      const cards = Array.from(kpiGrid.children);
+      expect(cards).toHaveLength(4);
+
+      const fourthCardText = cards[3].textContent || '';
+      expect(fourthCardText).toContain('Adherence');
+      expect(fourthCardText).toContain('Complete 1 scheduled workout');
+      expect(fourthCardText).toContain('—');
+      expect(fourthCardText).not.toContain('0%');
+      expect(fourthCardText).not.toContain('Total Volume');
+
+      // Lifetime Total Volume remains separately rendered in Recent Achievements
+      expect(container.textContent).toContain('Total Volume (Lifetime)');
       expect(container.textContent).toContain('98k');
-      expect(container.textContent).not.toContain('0 scheduled');
     });
 
-    it('renders Adherence stat card when evaluatedScheduledWorkouts > 0', () => {
+    it('9. displays evaluated Adherence percentage in the 4th KPI slot once scheduled sessions exist', () => {
       currentMockData.adherence = {
         rate: 0.85,
         percent: 85,
@@ -690,10 +750,12 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
 
       renderDashboard();
 
-      expect(container.textContent).toContain('Adherence');
-      expect(container.textContent).toContain('85');
-      expect(container.textContent).toContain('%');
-      expect(container.textContent).toContain('6/7 scheduled');
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]')!;
+      const fourthCardText = kpiGrid.children[3].textContent || '';
+      expect(fourthCardText).toContain('Adherence');
+      expect(fourthCardText).toContain('85');
+      expect(fourthCardText).toContain('%');
+      expect(fourthCardText).toContain('6/7 scheduled');
     });
   });
 });

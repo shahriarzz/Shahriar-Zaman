@@ -1,6 +1,17 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, RADIUS, TYPOGRAPHY, SURFACE, BORDER, SPACING, GAP, TRANSITION } from '../../styles/tokens';
+import {
+  SemanticColor,
+  SEMANTIC_PALETTE,
+  getAccentColor,
+  RADIUS,
+  TYPOGRAPHY,
+  SURFACE,
+  BORDER,
+  SPACING,
+  GAP,
+  TRANSITION,
+} from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export type BadgeTone = 'achievement' | 'success' | 'warning' | 'destructive' | 'info' | 'neutral';
@@ -57,6 +68,18 @@ export const Badge: React.FC<BadgeProps> = ({
   const effectiveVariant = variant || tonePreset?.variant || 'subtle';
 
   const resolvedColor = colorOverride || getAccentColor(effectiveColor);
+  const subtleAccessibleClasses: Record<string, string> = {
+    zinc: SEMANTIC_PALETTE.zinc.textLight,
+    indigo: SEMANTIC_PALETTE.indigo.textLight,
+    red: SEMANTIC_PALETTE.red.textLight,
+    hybrid: 'text-fuchsia-400',
+  };
+  const semanticTextLightClass =
+    !colorOverride &&
+    effectiveColor &&
+    (effectiveVariant === 'subtle' || effectiveVariant === 'outline')
+      ? subtleAccessibleClasses[effectiveColor]
+      : undefined;
 
   let style: React.CSSProperties = {};
 
@@ -64,7 +87,7 @@ export const Badge: React.FC<BadgeProps> = ({
     if (effectiveVariant === 'subtle') {
       style = {
         backgroundColor: `${resolvedColor}22`,
-        color: resolvedColor,
+        ...(semanticTextLightClass ? {} : { color: resolvedColor }),
         borderColor: `${resolvedColor}55`,
       };
     } else if (effectiveVariant === 'solid') {
@@ -76,7 +99,7 @@ export const Badge: React.FC<BadgeProps> = ({
     } else if (effectiveVariant === 'outline') {
       style = {
         backgroundColor: 'transparent',
-        color: resolvedColor,
+        ...(semanticTextLightClass ? {} : { color: resolvedColor }),
         borderColor: `${resolvedColor}66`,
       };
     }
@@ -94,6 +117,7 @@ export const Badge: React.FC<BadgeProps> = ({
         size === 'sm'
           ? cn(GAP.micro, SPACING.badgeSm, TYPOGRAPHY.badgeSm)
           : cn(GAP.xs, SPACING.badgeMd, TYPOGRAPHY.badgeMd),
+        semanticTextLightClass,
         !resolvedColor && effectiveVariant === 'subtle' && cn(SURFACE.subtle, "text-zinc-300", BORDER.subtle),
         !resolvedColor && effectiveVariant === 'outline' && cn("bg-transparent text-zinc-400", BORDER.standard),
         className

@@ -113,7 +113,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               <div className="flex items-center gap-4 min-w-0">
                 {/* Day Indicator Badge / Pill */}
                 <div className={cn("flex flex-col items-center justify-center w-12 h-12 shrink-0 border", RADIUS.button, SURFACE.recessed, BORDER.standard)}>
-                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>DAY</span>
+                  <span className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>DAY</span>
                   <span className="font-display text-lg font-bold text-white leading-none">
                     {day}
                   </span>
@@ -150,9 +150,9 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                     )}
                   </div>
 
-                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-2")}>
+                  <div className={cn(TYPOGRAPHY.label, "flex items-center gap-2")}>
                     {isRest ? (
-                      <span className="text-zinc-500">Recovery Phase · 0 exercises</span>
+                      <span className="text-zinc-400">Recovery Phase · 0 exercises</span>
                     ) : (
                       <span>{exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}</span>
                     )}
@@ -167,7 +167,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
               </div>
 
               {/* Right Tap Affordance */}
-              <div className={cn("flex items-center gap-1.5 text-zinc-500 group-hover:text-white shrink-0 ml-3", TRANSITION.colors)}>
+              <div className={cn("flex items-center gap-1.5 text-zinc-400 group-hover:text-white shrink-0 ml-3", TRANSITION.colors)}>
                 <span className={cn(TYPOGRAPHY.eyebrow, "hidden sm:inline-block")}>
                   Edit
                 </span>
@@ -224,7 +224,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                           size="sm"
                         />
                       </div>
-                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>
                         Tap to repair cycle assignment
                       </div>
                     </div>
@@ -267,7 +267,7 @@ export const CycleEditor: React.FC<CycleEditorProps> = ({
                       <div className={cn("font-bold text-white text-sm break-words group-hover:text-orange-400", TRANSITION.colors)}>
                         {wo.name}
                       </div>
-                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-500")}>
+                      <div className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>
                         {exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}
                       </div>
                     </div>

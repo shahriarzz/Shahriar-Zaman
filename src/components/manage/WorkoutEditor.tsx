@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ChevronLeft,
@@ -61,8 +61,8 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   const { exerciseDefinitions, addExerciseDefinition } = useFitness();
   const shouldReduceMotion = useReducedMotion();
 
-  // Track expanded state for each exercise card (using exercise ID)
-  const [expandedExIds, setExpandedExIds] = useState<Set<string>>(new Set());
+  // Track expanded state for each exercise card (using item key/index)
+  const [expandedExKeys, setExpandedExKeys] = useState<Set<number>>(new Set());
 
   // Adding exercise modal / drawer state
   const [isAddingExercise, setIsAddingExercise] = useState(false);
@@ -81,6 +81,21 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
   // Rest day notes editing
   const [restNotes, setRestNotes] = useState<string[]>(workout.restNotes || []);
   const [newRestNote, setNewRestNote] = useState('');
+
+  useEffect(() => {
+    setExpandedExKeys(new Set());
+    setIsAddingExercise(false);
+    setAddMode('pick');
+    setSearchLibraryQuery('');
+    setIsEditingMeta(false);
+    setNewRestNote('');
+  }, [workout.id]);
+
+  useEffect(() => {
+    setWorkoutName(workout.name);
+    setWorkoutBadge(workout.badge);
+    setRestNotes(workout.restNotes || []);
+  }, [workout.id, workout.name, workout.badge, workout.restNotes]);
 
   // Use persisted exercise definitions from library
   const libraryExercises = React.useMemo(() => {
@@ -107,14 +122,14 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     );
   }, [libraryExercises, searchLibraryQuery]);
 
-  const toggleExpandExercise = (exId: string) => {
+  const toggleExpandExercise = (rowIndex: number) => {
     haptics.selection();
-    setExpandedExIds(prev => {
+    setExpandedExKeys(prev => {
       const next = new Set(prev);
-      if (next.has(exId)) {
-        next.delete(exId);
+      if (next.has(rowIndex)) {
+        next.delete(rowIndex);
       } else {
-        next.add(exId);
+        next.add(rowIndex);
       }
       return next;
     });
@@ -130,13 +145,24 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     updatedExercises[index] = updatedExercises[targetIndex];
     updatedExercises[targetIndex] = temp;
 
+    setExpandedExKeys(prev => {
+      const next = new Set(prev);
+      const hadIndex = prev.has(index);
+      const hadTarget = prev.has(targetIndex);
+      if (hadIndex) next.add(targetIndex);
+      else next.delete(targetIndex);
+      if (hadTarget) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+
     onSaveWorkout({
       ...workout,
       exercises: updatedExercises
     });
   };
 
-  const handleDeleteExercise = async (exId: string, exName: string) => {
+  const handleDeleteExercise = async (rowIndex: number, exName: string) => {
     const proceed = await confirm({
       title: 'Remove Exercise',
       message: `Remove "${exName}" from ${workout.name}?`,
@@ -145,19 +171,27 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     if (!proceed) return;
 
     haptics.warning();
+    setExpandedExKeys(prev => {
+      const next = new Set<number>();
+      prev.forEach(idx => {
+        if (idx < rowIndex) next.add(idx);
+        else if (idx > rowIndex) next.add(idx - 1);
+      });
+      return next;
+    });
     onSaveWorkout({
       ...workout,
-      exercises: workout.exercises.filter(e => e.id !== exId)
+      exercises: workout.exercises.filter((_, i) => i !== rowIndex)
     });
   };
 
   const handleUpdateExerciseField = (
-    exId: string,
-    field: keyof Exercise,
+    rowIndex: number,
+    field: keyof WorkoutExercise,
     value: any
   ) => {
-    const updatedExercises = workout.exercises.map(ex => {
-      if (ex.id === exId) {
+    const updatedExercises = workout.exercises.map((ex, i) => {
+      if (i === rowIndex) {
         return { ...ex, [field]: value };
       }
       return ex;
@@ -169,26 +203,26 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
     });
   };
 
-  const handleTogglePriorityTag = (exId: string) => {
+  const handleTogglePriorityTag = (rowIndex: number) => {
     haptics.selection();
-    const ex = workout.exercises.find(e => e.id === exId);
+    const ex = workout.exercises[rowIndex];
     if (!ex) return;
     const currentTags = ex.tags || [];
     const newTags = currentTags.includes('priority')
       ? currentTags.filter(t => t !== 'priority')
       : [...currentTags, 'priority'];
-    handleUpdateExerciseField(exId, 'tags', newTags);
+    handleUpdateExerciseField(rowIndex, 'tags', newTags);
   };
 
-  const handleToggleDailyTag = (exId: string) => {
+  const handleToggleDailyTag = (rowIndex: number) => {
     haptics.selection();
-    const ex = workout.exercises.find(e => e.id === exId);
+    const ex = workout.exercises[rowIndex];
     if (!ex) return;
     const currentTags = ex.tags || [];
     const newTags = currentTags.includes('daily')
       ? currentTags.filter(t => t !== 'daily')
       : [...currentTags, 'daily'];
-    handleUpdateExerciseField(exId, 'tags', newTags);
+    handleUpdateExerciseField(rowIndex, 'tags', newTags);
   };
 
   const handleAddExerciseFromLibrary = (libEx: Exercise | ExerciseDefinition) => {
@@ -291,7 +325,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
             Back to Program Cycle
           </Button>
           <div className={EDITOR_HEADER.divider} />
-          <span className={cn(TYPOGRAPHY.label, "text-zinc-500")}>
+          <span className={cn(TYPOGRAPHY.label, "text-zinc-400")}>
             {workout.cycleDay ? `Day ${workout.cycleDay}` : 'Auxiliary'}
           </span>
         </div>
@@ -398,7 +432,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
           </div>
 
           <div className="space-y-3 pt-2">
-            <label className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>
+            <label className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>
               Recovery Protocol Checkpoints
             </label>
             <div className="space-y-2">
@@ -468,7 +502,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
             workout.exercises.map((ex, index) => {
               const resolvedEx = resolveWorkoutExercise(ex, exerciseDefinitions);
               const exId = ex.exerciseDefinitionId;
-              const isExpanded = expandedExIds.has(exId);
+              const isExpanded = expandedExKeys.has(index);
               const exPanelId = `workout-ex-panel-${exId}-${index}`;
               const isFirst = index === 0;
               const isLast = index === workout.exercises.length - 1;
@@ -477,7 +511,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
               return (
                 <div
-                  key={exId}
+                  key={`${exId}-${index}`}
                   className={cn(
                     SURFACE.default,
                     BORDER.standard,
@@ -491,7 +525,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                   <div className="p-3 sm:p-4 flex items-center justify-between gap-2 select-none">
                     <button
                       type="button"
-                      onClick={() => toggleExpandExercise(exId)}
+                      onClick={() => toggleExpandExercise(index)}
                       aria-expanded={isExpanded}
                       aria-controls={exPanelId}
                       className={cn(
@@ -574,7 +608,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             className={cn("transition-transform duration-200 motion-reduce:transition-none", isExpanded && "rotate-180")}
                           />
                         }
-                        onClick={() => toggleExpandExercise(exId)}
+                        onClick={() => toggleExpandExercise(index)}
                         aria-label={isExpanded ? "Collapse exercise details" : "Expand exercise details"}
                         aria-expanded={isExpanded}
                         aria-controls={exPanelId}
@@ -604,7 +638,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                                 size="icon"
                                 icon={<Minus size={14} />}
                                 aria-label="Decrease sets"
-                                onClick={() => handleUpdateExerciseField(ex.id, 'sets', Math.max(1, ex.sets - 1))}
+                                onClick={() => handleUpdateExerciseField(index, 'sets', Math.max(1, ex.sets - 1))}
                               />
                               <div className={cn(SURFACE.subtle, BORDER.standard, RADIUS.button, "flex-1 h-11 border flex items-center justify-center font-mono font-bold text-xs text-white")}>
                                 {ex.sets}
@@ -614,7 +648,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                                 size="icon"
                                 icon={<Plus size={14} />}
                                 aria-label="Increase sets"
-                                onClick={() => handleUpdateExerciseField(ex.id, 'sets', ex.sets + 1)}
+                                onClick={() => handleUpdateExerciseField(index, 'sets', ex.sets + 1)}
                               />
                             </div>
                           </div>
@@ -625,7 +659,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             label="Rep Range"
                             value={ex.reps}
                             placeholder="e.g. 8–10"
-                            onChange={(e) => handleUpdateExerciseField(ex.id, 'reps', e.target.value)}
+                            onChange={(e) => handleUpdateExerciseField(index, 'reps', e.target.value)}
                           />
 
                           {/* Rest */}
@@ -634,7 +668,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             label="Rest Target"
                             value={ex.rest || '90s'}
                             placeholder="e.g. 90s, 2 min"
-                            onChange={(e) => handleUpdateExerciseField(ex.id, 'rest', e.target.value)}
+                            onChange={(e) => handleUpdateExerciseField(index, 'rest', e.target.value)}
                           />
                         </Grid>
 
@@ -644,7 +678,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                           label="Execution Cues & Notes"
                           value={ex.note || ''}
                           placeholder="e.g. 45° elbow tuck; focus on the deep stretch."
-                          onChange={(e) => handleUpdateExerciseField(ex.id, 'note', e.target.value)}
+                          onChange={(e) => handleUpdateExerciseField(index, 'note', e.target.value)}
                         />
 
                         {/* Priority / Tag Toggles & Deep Editor Link */}
@@ -653,14 +687,14 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                             <ToggleChip
                               selected={isPriority}
                               color="orange"
-                              onClick={() => handleTogglePriorityTag(ex.id)}
+                              onClick={() => handleTogglePriorityTag(index)}
                             >
                               {isPriority ? '★ Priority Item' : '+ Mark Priority'}
                             </ToggleChip>
                             <ToggleChip
                               selected={isDaily}
                               color="amber"
-                              onClick={() => handleToggleDailyTag(ex.id)}
+                              onClick={() => handleToggleDailyTag(index)}
                             >
                               {isDaily ? 'Daily High-Frequency' : '+ Mark Daily'}
                             </ToggleChip>
@@ -681,7 +715,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                               size="sm"
                               icon={<Trash2 size={13} />}
                               className="text-zinc-500 hover:text-red-400"
-                              onClick={() => handleDeleteExercise(exId, resolvedEx.name)}
+                              onClick={() => handleDeleteExercise(index, resolvedEx.name)}
                             >
                               Remove
                             </Button>
@@ -735,7 +769,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
 
               <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
                 {filteredLibraryExercises.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-zinc-500 font-mono">
+                  <div className="p-4 text-center text-xs text-zinc-400 font-mono">
                     No matching exercises found in library.
                   </div>
                 ) : (
@@ -752,7 +786,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                     >
                       <div className="space-y-0.5 min-w-0 pr-2">
                         <div className="text-xs font-bold text-white">{libEx.name}</div>
-                        <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500")}>
+                        <div className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>
                           {libEx.target} · {libEx.sets} sets × {libEx.reps}
                         </div>
                       </div>

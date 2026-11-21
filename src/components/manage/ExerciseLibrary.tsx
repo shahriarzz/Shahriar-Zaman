@@ -183,7 +183,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                     )}
                   </div>
 
-                  <div className={cn(TYPOGRAPHY.label, "text-zinc-500 flex items-center gap-1.5 flex-wrap break-words")}>
+                  <div className={cn(TYPOGRAPHY.label, "flex items-center gap-1.5 flex-wrap break-words")}>
                     <span className="text-zinc-400 font-bold">{item.target}</span>
                     <span aria-hidden="true">·</span>
                     <span className="min-w-0 break-words">

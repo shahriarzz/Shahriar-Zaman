@@ -153,7 +153,7 @@ GAINLOG is a local-first, offline-capable progressive overload training engine w
 4. **Single Ingestion Gate**:
    All log writes must pass through `sanitizeSessionLog()` and `addLog()` before durable storage or Firestore upload.
 5. **No Cross-Feature Re-implementation**:
-   Screens must not bypass shared hooks (e.g. `useCalendarGrid` for `{ monthStart, days, logsByDateMap, dayDetailMap }`, and `useAnalyticsData` for monthly intensity `logVolMap`/`maxDayVol`) to re-compute date grids or log groupings.
+   Screens must not bypass shared hooks (e.g. `useCalendarGrid` for `{ monthStart, days, logsByDateMap, dayDetailMap }`, and `useAnalyticsData` / `selectMonthlyHeatmapSummary` for monthly intensity `logVolMap`/`maxDayVol`/`summary`) to re-compute date grids or log groupings.
 6. **No Leaking Transient State**:
    Active workout drafts (`gl_active_session`) must never enter `FitnessContext.logs` until durability succeeds.
 
@@ -227,6 +227,7 @@ Downstream Canonical Selectors
     ├─ selectWeightPRs(index), selectE1RMPRs(index): O(1)
     ├─ selectExerciseIndex(index, exId): O(1)
     ├─ selectExercise1RMProgression(index, exId): O(1)
+    ├─ selectMonthlyHeatmapSummary(index, coreWorkoutByCycleDayMap, monthDate, cycleStart, now): Month-scoped O(N_month + D_month)
     └─ selectTimeRangeAnalytics(index, ...): O(L_range + S_range) (Filters index logs within requested date window)
     │
     ▼

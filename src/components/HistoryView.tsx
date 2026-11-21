@@ -278,7 +278,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       {/* Search Bar */}
       <Input
         type="search"
-        placeholder="Search by date, workout routine scope, or exercise name..."
+        placeholder="Search date, routine or exercise…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         leftIcon={<Search size={18} />}
@@ -497,7 +497,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border", SURFACE.subtle, BORDER.standard, RADIUS.card)}>
                             <div>
                               <label className={cn(TYPOGRAPHY.label, "block")}>Session Duration</label>
-                              <span className="text-xs text-zinc-500 font-sans">Total elapsed active protocol duration</span>
+                              <span className="text-xs text-zinc-400 font-sans">Total elapsed active protocol duration</span>
                             </div>
                             <div className="w-32">
                               <Input
@@ -859,7 +859,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                                     {/* Times Done Timeline Logs (with PRs highlighted) */}
                                     <div className="space-y-2">
-                                      <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-500 block")}>History Progression Logs (Latest First)</span>
+                                      <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>History Progression Logs (Latest First)</span>
                                       <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                         {historyLogs.map((h, hIdx) => {
                                           const isPR = prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate;

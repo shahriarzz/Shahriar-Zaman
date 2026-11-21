@@ -122,25 +122,6 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
             <Badge label="Unsaved Changes" color="amber" variant="subtle" size="sm" />
           )}
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            icon={<Save size={14} />}
-            disabled={!name.trim()}
-            onClick={handleSave}
-          >
-            Save Changes
-          </Button>
-        </div>
       </div>
 
       {/* Mode Selector Tabs using SegmentedControl primitive */}
@@ -321,7 +302,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
           disabled={!name.trim()}
           onClick={handleSave}
         >
-          Save Exercise
+          Save Changes
         </Button>
       </div>
     </Stack>

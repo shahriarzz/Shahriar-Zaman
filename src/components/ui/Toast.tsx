@@ -113,6 +113,7 @@ export const ToastContainer: React.FC = () => {
 
   return (
     <div
+      role="region"
       aria-live="polite"
       aria-label="System notifications"
       className="fixed bottom-24 left-4 right-4 md:left-auto md:right-4 md:bottom-auto md:top-4 md:w-full md:max-w-sm z-50 flex flex-col gap-2 pointer-events-none select-none"

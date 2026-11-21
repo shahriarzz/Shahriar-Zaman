@@ -25,7 +25,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return (
       <div
         className={cn(
-          "flex items-center justify-center text-center text-zinc-500 border border-dashed",
+          "flex items-center justify-center text-center text-zinc-400 border border-dashed",
           SPACING.compact,
           GAP.xs,
           BORDER.standard,
@@ -34,9 +34,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           className
         )}
       >
-        {icon && <span className="shrink-0 text-zinc-500 flex items-center">{renderIcon(icon, { size: 14 })}</span>}
-        <span className="text-zinc-400">{title}</span>
-        {description && <span className="text-zinc-600">· {description}</span>}
+        {icon && <span className="shrink-0 text-zinc-400 flex items-center">{renderIcon(icon, { size: 14 })}</span>}
+        <span className="text-zinc-300">{title}</span>
+        {description && <span className="text-zinc-400">· {description}</span>}
       </div>
     );
   }
