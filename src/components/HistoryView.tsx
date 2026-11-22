@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useId } from 'react';
+import React, { useState, useEffect, useRef, useId, Suspense } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search, ChevronRight, ChevronDown, Trophy, Trash2, Clock, Dumbbell, X, Edit2, Plus, Sparkles } from 'lucide-react';
 import { useFitness } from '../context/FitnessContext';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
@@ -22,7 +21,6 @@ import {
   Stack,
   Grid,
   EmptyState,
-  ChartTooltip,
   ProgressBar,
   SEMANTIC_COLORS,
   SEMANTIC_PALETTE,
@@ -33,9 +31,6 @@ import {
   SPACING,
   TYPOGRAPHY,
   GAP,
-  CHART_THEME,
-  CHART_GRID_PROPS,
-  CHART_AXIS_PROPS,
   TRANSITION,
   MOTION_CONFIG,
   CONTROL_HEIGHT,
@@ -43,6 +38,10 @@ import {
 } from './ui';
 import { DeferredViewSection } from './DeferredViewSection';
 import { HistoryTabState } from '../types/tabViewState';
+
+const HistoryProgressionChart = React.lazy(() =>
+  import('./HistoryProgressionChart').then((m) => ({ default: m.HistoryProgressionChart }))
+);
 
 interface HistoryViewProps {
   initialDate?: string | null;
@@ -57,7 +56,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   savedState,
   onSaveState
 }) => {
-  const { workouts, deleteLog, addLog } = useFitness();
+  const { deleteLog, addLog } = useFitness();
   const { sortedLogs, workoutMap, index, prEvents, getStrengthTrendForRange, getVolumeForRange } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
@@ -101,19 +100,27 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     }
   }, [initialDate, onClearInitialDate]);
 
-  // Workouts by ID for workout-level metadata
-  const workoutsById = workoutMap;
-
-  // Get chronological session list from canonical pipeline
-  const sessionsList = sortedLogs;
+  // Group personal records by date once so session rows perform O(1) lookup
+  const weightPRsByDate = React.useMemo(() => {
+    const map = new Map<string, typeof index.weightPRs>();
+    for (const pr of index.weightPRs || []) {
+      const existing = map.get(pr.date);
+      if (existing) {
+        existing.push(pr);
+      } else {
+        map.set(pr.date, [pr]);
+      }
+    }
+    return map;
+  }, [index.weightPRs]);
 
   // Filter day sessions based on search with hoisted lowercase string
   const filteredSessions = React.useMemo(() => {
     const lowercaseSearch = search.trim().toLowerCase();
-    if (!lowercaseSearch) return sessionsList;
+    if (!lowercaseSearch) return sortedLogs;
 
-    return sessionsList.filter(session => {
-      const wo = workoutsById.get(session.workoutId);
+    return sortedLogs.filter(session => {
+      const wo = workoutMap.get(session.workoutId);
       const workoutName = wo?.name || 'Session';
       
       const matchesDate = session.date.includes(lowercaseSearch);
@@ -129,7 +136,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       return matchesDate || matchesWorkout || matchesExercises || matchesId;
     });
-  }, [sessionsList, workoutsById, search, index.exerciseMetaById]);
+  }, [sortedLogs, workoutMap, search, index.exerciseMetaById]);
 
   const clearFilter = () => {
     setSearch('');
@@ -186,7 +193,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       summary.sessionsCount += 1;
       summary.totalDuration += log.durationMinutes || 0;
 
-      const workout = workoutsById.get(log.workoutId);
+      const workout = workoutMap.get(log.workoutId);
       if (workout) {
         const type = workout.type || 'custom';
         summary.workoutsByType[type] = (summary.workoutsByType[type] || 0) + 1;
@@ -219,7 +226,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     });
 
     return Object.values(summaries).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [sortedLogs, workoutsById, index.exerciseMetaById, prEvents, getVolumeForRange]);
+  }, [sortedLogs, workoutMap, index.exerciseMetaById, prEvents, getVolumeForRange]);
 
   const latestMonthlySummary = React.useMemo(() => {
     if (monthlySummaries.length === 0) return null;
@@ -608,7 +615,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                           <div className="space-y-3">
                             <h4 className={cn(TYPOGRAPHY.label, "font-bold")}>Month Peak Lifts Achievements</h4>
-                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                            <div
+                              tabIndex={0}
+                              role="region"
+                              aria-label="Month peak lifts achievements"
+                              className={cn("space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1", RADIUS.button, FOCUS.visible)}
+                            >
                               {Object.keys(selectedReport.peakLifts).length === 0 ? (
                                 <div className="text-xs text-zinc-400 italic font-mono pt-4 text-center">No heavy lifts recorded this month.</div>
                               ) : (
@@ -681,7 +693,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         padding="none"
       >
         {filteredSessions.length === 0 ? (
-          sessionsList.length === 0 ? (
+          sortedLogs.length === 0 ? (
             <EmptyState
               icon={Dumbbell}
               title="No Workouts Logged Yet"
@@ -698,12 +710,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         ) : (
           <div className="space-y-3">
             {filteredSessions.map((session, sIdx) => {
-              const workout = workouts.find(w => w.id === session.workoutId);
-              const totalSets = getCompletedSets(session).length;
-              const vol = calculateSetsVolume(getCompletedSets(session));
+              const workout = workoutMap.get(session.workoutId);
+              const completedSets = getCompletedSets(session);
+              const totalSets = completedSets.length;
+              const vol = calculateSetsVolume(completedSets);
               const color = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
               const isExpanded = expandedDate === session.id;
-              const sessionPRs = (index.weightPRs || []).filter(pr => pr.date === session.date);
+              const sessionPRs = weightPRsByDate.get(session.date) || [];
 
               const detailPanelId = `history-session-panel-${session.id || sIdx}`;
 
@@ -1067,7 +1080,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         {Object.entries(session.sets).map(([exId, sets]) => {
                           const meta = index.exerciseMetaById.get(exId);
                           const exerciseName = meta?.name || 'Deleted or Custom Exercise';
-                          const workout = workoutsById.get(session.workoutId);
                           const doneSets = (sets as SetLog[]).filter(s => s.done);
                           if (doneSets.length === 0) return null;
 
@@ -1080,7 +1092,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           const canonicalPR = index.exerciseIndex.get(exId)?.weightPR;
                           const prWeight = canonicalPR?.weight ?? (index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0));
                           const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);
-                          const isSessionPR = (index.weightPRs || []).some(pr => pr.exerciseDefinitionId === exId && pr.date === session.date);
+                          const isSessionPR = sessionPRs.some(pr => pr.exerciseDefinitionId === exId);
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
                           const exColor = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
 
@@ -1164,64 +1176,31 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                       )}
                                     </div>
 
-                                    {/* Progression Line Chart using Recharts */}
+                                    {/* Progression Line Chart using Recharts (lazy-loaded on panel expand) */}
                                     {prWeight > 0 && historyLogs.length > 1 && (
-                                      <div
-                                        className="h-32 w-full pt-1"
-                                        role="img"
-                                        aria-label={`Weight progression line chart for ${exerciseName} across ${historyLogs.length} sessions`}
+                                      <Suspense
+                                        fallback={
+                                          <div
+                                            className={cn("h-32 w-full pt-1 border flex items-center justify-center", SURFACE.recessed, BORDER.subtle, RADIUS.card)}
+                                            aria-busy="true"
+                                          >
+                                            <div className="w-5 h-5 border-2 border-zinc-800 border-t-orange-500 rounded-full motion-safe:animate-spin [animation-duration:1s]" />
+                                          </div>
+                                        }
                                       >
-                                        <ResponsiveContainer width="100%" height="100%">
-                                          <LineChart data={historyLogs.slice().reverse()} margin={{ top: 8, right: 12, left: -4, bottom: 4 }}>
-                                            <CartesianGrid {...CHART_GRID_PROPS} vertical={false} />
-                                            <XAxis
-                                              dataKey="date"
-                                              {...CHART_AXIS_PROPS}
-                                              interval="preserveStartEnd"
-                                              minTickGap={24}
-                                              tickFormatter={(val) => val.split('-').slice(1).join('/')}
-                                            />
-                                            <YAxis
-                                              {...CHART_AXIS_PROPS}
-                                              width={42}
-                                              tickFormatter={(val) => `${val}kg`}
-                                            />
-                                            <Tooltip
-                                              isAnimationActive={false}
-                                              animationDuration={0}
-                                              content={({ active, payload }) => {
-                                                if (active && payload && payload.length) {
-                                                  const point = payload[0].payload as { date: string; maxW: number };
-                                                  return (
-                                                    <ChartTooltip>
-                                                      <p className="text-zinc-400 font-bold">Date: {point.date}</p>
-                                                      <p className="text-indigo-400 font-bold tabular-nums">
-                                                        Peak Weight: {point.maxW}kg
-                                                      </p>
-                                                    </ChartTooltip>
-                                                  );
-                                                }
-                                                return null;
-                                              }}
-                                            />
-                                            <Line
-                                              isAnimationActive={false}
-                                              type="monotone"
-                                              dataKey="maxW"
-                                              stroke={CHART_THEME.indigo}
-                                              strokeWidth={2}
-                                              dot={{ r: 2.5, fill: CHART_THEME.indigo, strokeWidth: 0 }}
-                                              activeDot={{ r: 4, fill: CHART_THEME.indigo, stroke: CHART_THEME.text, strokeWidth: 1.5 }}
-                                            />
-                                          </LineChart>
-                                        </ResponsiveContainer>
-                                      </div>
+                                        <HistoryProgressionChart exerciseName={exerciseName} historyLogs={historyLogs} />
+                                      </Suspense>
                                     )}
 
                                     {/* Times Done Timeline Logs (with PRs highlighted) */}
                                     <div className="space-y-2">
                                       <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>History Progression Logs (Latest First)</span>
-                                      <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                      <div
+                                        tabIndex={0}
+                                        role="region"
+                                        aria-label="History progression logs"
+                                        className={cn("space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1", RADIUS.button, FOCUS.visible)}
+                                      >
                                         {historyLogs.map((h, hIdx) => {
                                           const isPR = prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate;
 

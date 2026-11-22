@@ -164,6 +164,28 @@ export function calculateSessionPRs({
   return prs;
 }
 
+export function getSessionSetCounts(
+  workout: Workout | null | undefined,
+  sessionSets: Record<string, SetLog[]>
+): { completedSets: number; targetSets: number } {
+  if (!workout || !Array.isArray(workout.exercises) || workout.exercises.length === 0) {
+    return { completedSets: 0, targetSets: 0 };
+  }
+
+  let completedSets = 0;
+  let targetSets = 0;
+
+  workout.exercises.forEach((ex) => {
+    const setsForEx = sessionSets[ex.exerciseDefinitionId] || [];
+    const exCompleted = setsForEx.filter((s) => Boolean(s?.done)).length;
+    const exTarget = Math.max(ex.sets || 0, setsForEx.length);
+    completedSets += exCompleted;
+    targetSets += exTarget;
+  });
+
+  return { completedSets, targetSets };
+}
+
 export function areAllProgrammedSetsDone(
   workout: Workout | null | undefined,
   sessionSets: Record<string, SetLog[]>
@@ -178,7 +200,7 @@ export function areAllProgrammedSetsDone(
     const setsForEx = sessionSets[ex.exerciseDefinitionId] || [];
     return (
       setsForEx.length >= ex.sets &&
-      setsForEx.slice(0, ex.sets).every((s) => Boolean(s.done))
+      setsForEx.every((s) => Boolean(s?.done))
     );
   });
 }
@@ -256,12 +278,16 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
 }) => {
   const exDefId = ex.exerciseDefinitionId || ex.id;
   useEffect(() => {
-    onCardCommit?.(exDefId);
-  });
+    if (!onCardCommit) return;
+    onCardCommit(exDefId);
+  }, [onCardCommit, exDefId, ex, workoutType, ghostData, advice, isLoadingAdvice, sets, isExpanded]);
   const { lastSession, allTimePR } = ghostData || { lastSession: null, allTimePR: null };
   const setsForEx = sets;
-  const targetSets = setsForEx.slice(0, ex.sets);
-  const isDone = targetSets.length > 0 && targetSets.every(s => s.done);
+  const minProgrammedSets = ex.sets || 0;
+  const isDone =
+    setsForEx.length >= minProgrammedSets &&
+    setsForEx.length > 0 &&
+    setsForEx.every((s) => Boolean(s?.done));
 
   const prevIsDoneRef = useRef(false);
   const [justCompleted, setJustCompleted] = useState(false);
@@ -314,8 +340,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
     updateSet(exId, si, 'done', !currentDone);
   };
 
-  const doneCount = setsForEx.slice(0, ex.sets).filter(s => s.done).length;
-  const totalSets = ex.sets;
+  const doneCount = setsForEx.filter((s) => Boolean(s?.done)).length;
+  const totalSets = Math.max(minProgrammedSets, setsForEx.length);
   const shouldReduceMotion = useReducedMotion();
 
   const panelId = `exercise-panel-${exDefId}`;
@@ -681,9 +707,14 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
   // Auto-expand first incomplete exercise on load
   useEffect(() => {
     if (!activeWorkout || expandedExId) return;
-    const firstIncomplete = activeWorkout.exercises.find(ex => 
-      !sessionSets[ex.exerciseDefinitionId]?.slice(0, ex.sets).every(s => s.done)
-    );
+    const firstIncomplete = activeWorkout.exercises.find((ex) => {
+      const setsForEx = sessionSets[ex.exerciseDefinitionId] || [];
+      return !(
+        setsForEx.length >= (ex.sets || 0) &&
+        setsForEx.length > 0 &&
+        setsForEx.every((s) => Boolean(s?.done))
+      );
+    });
     setExpandedExId(firstIncomplete?.exerciseDefinitionId || activeWorkout.exercises[0]?.exerciseDefinitionId || null);
   }, [activeWorkout?.id, sessionSets, expandedExId]);
 
@@ -816,11 +847,19 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       if (isMarkingDone && activeWorkoutRef.current) {
         const ex = activeWorkoutRef.current.exercises.find(e => e.exerciseDefinitionId === exId);
         if (ex) {
-          const isNowDone = updatedExSets.slice(0, ex.sets).every(s => s.done);
+          const isNowDone =
+            updatedExSets.length >= (ex.sets || 0) &&
+            updatedExSets.length > 0 &&
+            updatedExSets.every((s) => Boolean(s?.done));
           if (isNowDone) {
-            const nextIncomplete = activeWorkoutRef.current.exercises.find(e => 
-              !(nextSets[e.exerciseDefinitionId] || []).slice(0, e.sets).every(s => s.done)
-            );
+            const nextIncomplete = activeWorkoutRef.current.exercises.find((e) => {
+              const eSets = nextSets[e.exerciseDefinitionId] || [];
+              return !(
+                eSets.length >= (e.sets || 0) &&
+                eSets.length > 0 &&
+                eSets.every((s) => Boolean(s?.done))
+              );
+            });
             if (nextIncomplete) {
               shouldExpandNextId = nextIncomplete.exerciseDefinitionId;
             }
@@ -1125,10 +1164,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
 
       // Snapshot final summary metrics before clearing active session so completion view stays accurate
+      const summaryCounts = getSessionSetCounts(activeWorkout, summarySetsSource);
       const flatSummarySets = (Object.values(summarySetsSource || {}) as SetLog[][]).flat();
       setFinishedSummary({
-        completedSets: flatSummarySets.filter(s => s.done).length,
-        programmedSets: activeWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0),
+        completedSets: summaryCounts.completedSets,
+        programmedSets: summaryCounts.targetSets,
         totalVolume: calculateSetsVolume(flatSummarySets),
       });
 
@@ -1144,8 +1184,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     }
   };
 
-  const completedLiveSets = (Object.values(sessionSets) as SetLog[][]).reduce((sum, sets) => sum + (sets || []).filter(s => s.done).length, 0);
-  const programmedLiveSets = activeWorkout ? activeWorkout.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0) : 0;
+  const { completedSets: completedLiveSets, targetSets: programmedLiveSets } = getSessionSetCounts(
+    activeWorkout,
+    sessionSets
+  );
   const allExercisesDone = areAllProgrammedSetsDone(activeWorkout, sessionSets);
 
   useEffect(() => {

@@ -266,7 +266,7 @@ export const MuscleBalanceRecovery: React.FC<MuscleBalanceRecoveryProps> = ({
           </div>
 
           {/* Model Disclaimer Notice */}
-          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 mb-4 leading-relaxed")}>
+          <p className={cn(TYPOGRAPHY.bodySecondary, "mb-4 leading-relaxed")}>
             Recency-weighted residual workload estimate (independent of {timeRangeLabel} filter) · Not measured physiological recovery.
           </p>
 

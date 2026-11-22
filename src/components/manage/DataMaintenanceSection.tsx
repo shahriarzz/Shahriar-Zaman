@@ -294,7 +294,7 @@ export const DataMaintenanceSection: React.FC = () => {
 
   return (
     <Section
-      eyebrow="Data & Maintenance"
+      eyebrow="Storage & Backups"
       eyebrowColor="zinc"
       title="Data & Maintenance"
       description="Manage database backups, import/export archives, restore checkpoints, and clear storage."
@@ -393,7 +393,7 @@ export const DataMaintenanceSection: React.FC = () => {
             <div className="space-y-1">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>Export</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Data Backup File</h4>
-              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
+              <p className={TYPOGRAPHY.bodySecondary}>
                 Compile all training routines, session history, set logs, and body weight logs into a downloadable JSON file.
               </p>
             </div>
@@ -428,7 +428,7 @@ export const DataMaintenanceSection: React.FC = () => {
             <div className="space-y-1 w-full">
               <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400 block")}>Import</span>
               <h4 className={cn(TYPOGRAPHY.label, "text-zinc-200")}>Restore from Backup</h4>
-              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
+              <p className={TYPOGRAPHY.bodySecondary}>
                 Import saved routines and historical session logs by uploading a JSON backup file or pasting raw JSON text.
               </p>
             </div>
@@ -518,7 +518,7 @@ export const DataMaintenanceSection: React.FC = () => {
                   Up to 8 snapshots
                 </span>
               </div>
-              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
+              <p className={TYPOGRAPHY.bodySecondary}>
                 GainLog caches local savepoint snapshots before modifications or imports. You can also create manual checkpoints.
               </p>
             </div>
@@ -595,7 +595,7 @@ export const DataMaintenanceSection: React.FC = () => {
               <AlertTriangle size={12} className="text-red-400 shrink-0" />
               Danger Zone
             </h4>
-            <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
+            <p className={TYPOGRAPHY.bodySecondary}>
               Reset your workout catalog back to factory defaults or permanently delete all recorded session history.
             </p>
           </div>

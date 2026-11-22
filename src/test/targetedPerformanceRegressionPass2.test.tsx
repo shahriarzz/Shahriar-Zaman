@@ -1049,6 +1049,48 @@ describe('Targeted Performance & Regression Fixes Suite (Pass 2)', () => {
     setItemSpy.mockRestore();
   });
 
+  // 4c. Optional onCardCommit effect does not execute on unrelated internal flash-timer renders
+  it('4c. ExerciseCard onCardCommit effect skips unrelated internal animation timer re-renders', () => {
+    vi.useFakeTimers();
+    const mockFitness = createMockFitnessContext();
+    const commitCounts: Record<string, number> = {};
+    const onCardCommit = vi.fn((exDefId: string) => {
+      commitCounts[exDefId] = (commitCounts[exDefId] || 0) + 1;
+    });
+
+    act(() => {
+      root.render(
+        <FitnessContext.Provider value={mockFitness}>
+          <FitnessDerivedProvider>
+            <ActiveSessionProvider>
+              <ConfirmProvider>
+                <SessionView workoutId="push-a" onExit={vi.fn()} onCardCommit={onCardCommit} />
+              </ConfirmProvider>
+            </ActiveSessionProvider>
+          </FitnessDerivedProvider>
+        </FitnessContext.Provider>
+      );
+    });
+
+    const markDoneButtons = container.querySelectorAll('button[aria-label="Mark set complete"]');
+    expect(markDoneButtons.length).toBeGreaterThan(0);
+
+    act(() => {
+      (markDoneButtons[0] as HTMLButtonElement).click();
+    });
+    const afterSetDoneE1 = commitCounts['e1'];
+    const baselineE2 = commitCounts['e2'];
+
+    // Advance past 450ms/500ms internal completion flash timers; props did not change
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(commitCounts['e1']).toBe(afterSetDoneE1);
+    expect(commitCounts['e2']).toBe(baselineE2);
+    vi.useRealTimers();
+  });
+
   // 5. Real Layout tab controls scroll restoration test (including tab with asynchronous content height expansion)
   it('5. Tab scroll restoration works accurately between tabs with divergent/async content heights via real Layout controls', () => {
     vi.useFakeTimers();

@@ -16,6 +16,7 @@ import {
 } from '../hooks/useFitnessBackups';
 import { clearDeletedIdsTracker } from '../utils/fitnessSyncHelpers';
 import { DatabaseState } from '../state/persistence/databaseMachine';
+import { isFirebaseEmulatorEnabled } from '../lib/firebase';
 import { FitnessDerivedProvider } from './FitnessDerivedContext';
 import { ActiveSessionProvider, useActiveSessionMeta, registerFitnessContextForFallback } from './ActiveSessionContext';
 
@@ -191,11 +192,30 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     setSyncError: sync.setSyncError
   });
 
+  const e2eUiOverride = useMemo(() => {
+    if (!isFirebaseEmulatorEnabled || typeof window === 'undefined') return null;
+    try {
+      const raw = window.sessionStorage.getItem('__GAINLOG_E2E_UI_STATE__');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const resolvedUser = e2eUiOverride && 'user' in e2eUiOverride ? e2eUiOverride.user : sync.user;
+  const resolvedSyncStatus = e2eUiOverride?.syncStatus ?? sync.syncStatus;
+  const resolvedSyncError = e2eUiOverride && 'syncError' in e2eUiOverride ? e2eUiOverride.syncError : sync.syncError;
+  const resolvedHasPendingCloudSync = e2eUiOverride?.hasPendingCloudSync ?? backups.hasPendingCloudSync;
+  const resolvedPendingCloudSyncError =
+    e2eUiOverride && 'pendingCloudSyncError' in e2eUiOverride
+      ? e2eUiOverride.pendingCloudSyncError
+      : backups.pendingCloudSyncError;
+
   const value = useMemo<FitnessContextType>(() => ({
-    user: sync.user,
+    user: resolvedUser,
     loading: sync.loading,
-    syncStatus: sync.syncStatus,
-    syncError: sync.syncError,
+    syncStatus: resolvedSyncStatus,
+    syncError: resolvedSyncError,
     login: sync.login,
     logout: sync.logout,
     retrySync: sync.retrySync,
@@ -238,13 +258,13 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     importBackup: backups.importBackup,
     retryPendingCloudSync: backups.retryPendingCloudSync,
     isBackupsLoading: backups.isBackupsLoading,
-    hasPendingCloudSync: backups.hasPendingCloudSync,
-    pendingCloudSyncError: backups.pendingCloudSyncError
+    hasPendingCloudSync: resolvedHasPendingCloudSync,
+    pendingCloudSyncError: resolvedPendingCloudSyncError
   }), [
-    sync.user,
+    resolvedUser,
     sync.loading,
-    sync.syncStatus,
-    sync.syncError,
+    resolvedSyncStatus,
+    resolvedSyncError,
     sync.login,
     sync.logout,
     sync.retrySync,

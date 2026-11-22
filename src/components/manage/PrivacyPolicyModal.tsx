@@ -44,8 +44,8 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
           <div className="flex items-start gap-3">
             <CheckCircle2 size={18} className="text-emerald-400 mt-0.5 shrink-0" />
             <div className="space-y-1">
-              <p className={cn(TYPOGRAPHY.caption, "font-bold text-white")}>Offline-First & User-Owned Privacy</p>
-              <p className={cn(TYPOGRAPHY.micro, "text-zinc-400")}>
+              <p className={cn(TYPOGRAPHY.cardTitle, "text-white")}>Offline-First & User-Owned Privacy</p>
+              <p className={TYPOGRAPHY.bodySecondary}>
                 GAINLOG is architected as an offline-first fitness protocol tracker. Your personal workout data is stored locally on your device and only synced to your private cloud storage when you explicitly authenticate with Google.
               </p>
             </div>
@@ -58,7 +58,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             <Database size={15} className="text-emerald-400" />
             1. Data Collected & Processed
           </h4>
-          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
+          <p className={TYPOGRAPHY.bodySecondary}>
             GAINLOG collects only the fitness and account data necessary to provide training logs, cycle progression, and athletic analytics:
           </p>
           <ul className="list-disc pl-5 space-y-1.5 text-zinc-400 text-xs">
@@ -75,7 +75,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             <Sparkles size={15} className="text-emerald-400" />
             2. AI Coaching (Gemini API)
           </h4>
-          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
+          <p className={TYPOGRAPHY.bodySecondary}>
             When you request AI Coaching for an exercise, movement parameters (exercise name, target rep range, and recent set history) are processed by Google Gemini to generate progressive overload suggestions. No account credentials or personal identifying details are transmitted with coaching requests, and data is processed according to Google API Terms of Service.
           </p>
         </section>
@@ -86,7 +86,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             <Lock size={15} className="text-emerald-400" />
             3. Storage, Encryption & Security
           </h4>
-          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
+          <p className={TYPOGRAPHY.bodySecondary}>
             Cloud synchronization is powered by Google Firebase Firestore. Data is encrypted in transit using industry-standard Transport Layer Security (HTTPS/TLS) and encrypted at rest by Google Cloud infrastructure. Database security rules enforce user-level authorization so each user can only read and write their own data. We never sell, rent, or monetize user training logs.
           </p>
         </section>
@@ -97,7 +97,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             <Trash2 size={15} className="text-emerald-400" />
             4. Data Ownership & Deletion Rights
           </h4>
-          <p className={cn(TYPOGRAPHY.caption, "text-zinc-400")}>
+          <p className={TYPOGRAPHY.bodySecondary}>
             You retain complete ownership over your data at all times:
           </p>
           <ul className="list-disc pl-5 space-y-1.5 text-zinc-400 text-xs">

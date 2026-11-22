@@ -184,7 +184,7 @@ export interface ExerciseIndexEntry {
 
 /**
  * High-performance canonical index of fitness data.
- * Constructed in a single O(N) pass over session logs.
+ * Constructed in O(N log N + S + E log E + D log D) over session logs, sets, exercises, and distinct dates.
  *
  * Sets Accounting Semantics:
  * - `completedSetsByDate`: Total performed (done: true) sets from verified completed sessions only.
@@ -227,14 +227,7 @@ export interface FitnessIndex {
   lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null>;
 }
 
-/**
- * Canonical Calendar Days Training Streak:
- * Strictly counts unbroken consecutive calendar dates on which at least one completed session occurred.
- * This measures daily training frequency regardless of split or rest schedule.
- */
-function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
-  const completedLogs = logs.filter(isCompletedSession);
-  const datesSet = new Set(completedLogs.map(l => l?.date).filter(Boolean));
+function computeCalendarTrainingStreakFromDates(datesSet: Set<string>, referenceDate: Date = new Date()): number {
   if (datesSet.size === 0) return 0;
 
   let streak = 0;
@@ -264,23 +257,37 @@ function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date =
   return streak;
 }
 
+/**
+ * Canonical Calendar Days Training Streak:
+ * Strictly counts unbroken consecutive calendar dates on which at least one completed session occurred.
+ * This measures daily training frequency regardless of split or rest schedule.
+ */
+function computeCalendarTrainingStreak(logs: SessionLog[], referenceDate: Date = new Date()): number {
+  const datesSet = new Set<string>();
+  for (let i = 0; i < logs.length; i++) {
+    const l = logs[i];
+    if (l && l.date && isCompletedSession(l)) {
+      datesSet.add(l.date);
+    }
+  }
+  return computeCalendarTrainingStreakFromDates(datesSet, referenceDate);
+}
+
 export const computeConsecutiveDaysStreak = computeCalendarTrainingStreak;
 
 /**
- * Internal helper to calculate longest consecutive workout day streak.
- * Only counts completed workouts (isCompletedSession invariant).
+ * Internal helper to calculate longest consecutive workout day streak
+ * from sorted ascending distinct completed session dates.
  */
-function computeLongestStreak(logs: SessionLog[]): number {
-  const completedLogs = logs.filter(isCompletedSession);
-  const distinctDates = Array.from(new Set(completedLogs.map(l => l?.date).filter(Boolean) as string[])).sort();
-  if (distinctDates.length === 0) return 0;
+function computeLongestStreakFromDates(distinctDatesAscending: string[]): number {
+  if (distinctDatesAscending.length === 0) return 0;
 
   let longestStreak = 0;
   let tempStreak = 0;
   let prevDateObj: Date | null = null;
 
-  distinctDates.forEach(dateStr => {
-    const curDateObj = parseISO(dateStr);
+  for (let i = 0; i < distinctDatesAscending.length; i++) {
+    const curDateObj = parseISO(distinctDatesAscending[i]);
     if (isValid(curDateObj)) {
       if (!prevDateObj) {
         tempStreak = 1;
@@ -297,13 +304,13 @@ function computeLongestStreak(logs: SessionLog[]): number {
       }
       prevDateObj = curDateObj;
     }
-  });
+  }
 
   return longestStreak;
 }
 
 /**
- * Builds the canonical FitnessIndex in a single, high-performance O(N) traversal.
+ * Builds the canonical FitnessIndex with O(N log N + S + E log E + D log D) sorting and traversal cost.
  * Enforces canonical date validation boundary: future-dated logs never qualify
  * as completed or contribute to lifetime volume, PRs, streaks, or completion metrics.
  */
@@ -318,23 +325,16 @@ export function buildFitnessIndex(
 
   const rawLogs = Array.isArray(logs) ? logs : Object.values(logs || {});
   
-  // Validated logs
-  const validLogs = rawLogs.filter(l => {
+  // Validated & sorted logs (avoid extra spread copy before sort)
+  const sortedLogsDescending = rawLogs.filter(l => {
     if (!l || !l.date) return false;
-    const parsed = parseISO(l.date);
-    return isValid(parsed);
-  });
-
-  const sortedLogsDescending = [...validLogs].sort((a, b) => {
+    return isValid(parseISO(l.date));
+  }).sort((a, b) => {
     if (a.date !== b.date) return b.date.localeCompare(a.date);
     return (b.id || '').localeCompare(a.id || '');
   });
 
   const sortedLogsAscending = [...sortedLogsDescending].reverse();
-
-  // Completed non-future logs subset for canonical completion invariants and lifetime stats
-  const completedLogsDescending = sortedLogsDescending.filter(l => isCompletedSession(l) && (!l.date || l.date <= todayStr));
-  const completedLogsAscending = sortedLogsAscending.filter(l => isCompletedSession(l) && (!l.date || l.date <= todayStr));
 
   const logsByDate = new Map<string, SessionLog[]>();
   const historyByExercise = new Map<string, ExerciseSessionHistoryEntry[]>();
@@ -388,16 +388,35 @@ export function buildFitnessIndex(
   let totalLifetimeSets = 0;
   let totalLifetimeMinutes = 0;
   let measuredLifetimeCount = 0;
+  let totalCompletedSessions = 0;
+  let firstCompletedDate: string | null = null;
+  let lastCompletedDate: string | null = null;
+  const completedDatesSet = new Set<string>();
 
   // Single pass over ascending logs (chronological order)
   sortedLogsAscending.forEach(log => {
     let logSessionVol = 0;
     // Canonical boundary: future-dated logs cannot qualify as completed for lifetime/PR metrics
     const isCompleted = isCompletedSession(log) && (!log.date || log.date <= todayStr);
+    let parsedCompletedDate: Date | null = null;
+    let completedDisplayDate = '';
 
-    if (isCompleted && log.durationMinutes && log.durationMinutes > 0) {
-      totalLifetimeMinutes += log.durationMinutes;
-      measuredLifetimeCount++;
+    if (isCompleted) {
+      totalCompletedSessions++;
+      if (log.date) {
+        if (!firstCompletedDate) firstCompletedDate = log.date;
+        lastCompletedDate = log.date;
+        completedDatesSet.add(log.date);
+        const parsed = parseISO(log.date);
+        if (isValid(parsed)) {
+          parsedCompletedDate = parsed;
+          completedDisplayDate = format(parsed, 'MMM dd');
+        }
+      }
+      if (log.durationMinutes && log.durationMinutes > 0) {
+        totalLifetimeMinutes += log.durationMinutes;
+        measuredLifetimeCount++;
+      }
     }
 
     // Index by date (all logs for calendar/session lookup)
@@ -628,7 +647,7 @@ export function buildFitnessIndex(
           }
           e1rmHistoryByExercise.get(normId)!.push({
             date: log.date,
-            displayDate: format(parseISO(log.date), 'MMM dd'),
+            displayDate: completedDisplayDate,
             epley1RM: maxEpleyInSession,
             setDetail: maxSetDetailInSession
           });
@@ -644,13 +663,12 @@ export function buildFitnessIndex(
         volumeByDate[log.date] = (volumeByDate[log.date] || 0) + logSessionVol;
 
         // Weekly volume
-        try {
-          const parsedDate = parseISO(log.date);
-          if (isValid(parsedDate)) {
-            const weekStr = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
+        if (parsedCompletedDate) {
+          try {
+            const weekStr = format(startOfWeek(parsedCompletedDate, { weekStartsOn: 1 }), 'MMM dd, yyyy');
             weeklyVolumeMap[weekStr] = (weeklyVolumeMap[weekStr] || 0) + logSessionVol;
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
 
       if (log.workoutId) {
@@ -686,7 +704,8 @@ export function buildFitnessIndex(
     frequencyByMuscle[cat] = muscleOccurrence[cat]?.size || 0;
   });
 
-  const distinctDates = Array.from(new Set(sortedLogsAscending.map(l => l.date))).sort();
+  // logsByDate keys were inserted in ascending sortedLogsAscending order
+  const distinctDates = Array.from(logsByDate.keys());
 
   // Construct comprehensive exerciseIndex map for O(1) multi-faceted access
   // Uses single-pass maxWeight directly (no 2nd iteration of completedSets!)
@@ -718,11 +737,11 @@ export function buildFitnessIndex(
     });
   });
 
-  const calendarCurrentStreak = computeCalendarTrainingStreak(completedLogsDescending, validNow);
-  const calendarLongestStreak = computeLongestStreak(completedLogsDescending);
+  const calendarCurrentStreak = computeCalendarTrainingStreakFromDates(completedDatesSet, validNow);
+  const calendarLongestStreak = computeLongestStreakFromDates(Array.from(completedDatesSet));
 
   const lifetimeStats: LifetimeStats = {
-    totalSessions: completedLogsDescending.length,
+    totalSessions: totalCompletedSessions,
     totalVolume: totalLifetimeVolume,
     totalSets: totalLifetimeSets,
     totalMinutes: totalLifetimeMinutes,
@@ -733,8 +752,8 @@ export function buildFitnessIndex(
     longestStreak: calendarLongestStreak,
     consecutiveDaysStreak: calendarCurrentStreak,
     consecutiveCalendarStreak: calendarCurrentStreak,
-    firstSessionDate: completedLogsAscending[0]?.date || null,
-    lastSessionDate: completedLogsDescending[0]?.date || null
+    firstSessionDate: firstCompletedDate,
+    lastSessionDate: lastCompletedDate
   };
 
   return {
@@ -1139,29 +1158,42 @@ export function selectTimeRangeAnalytics(
   const isInCurrentRange = (date: string) =>
     (!cutoffDateStr || date >= cutoffDateStr) && date <= todayStr;
 
-  // Single-pass canonical completion filter for current and prior range logs
+  // Single-pass canonical completion filter for current/prior range logs and gap stats
   const rangeLogs: SessionLog[] = [];
-  const priorLogs: SessionLog[] = [];
+  const rangeDates = new Set<string>();
+  const priorDates = new Set<string>();
+  let totalGaps = 0;
+  let validGapsCount = 0;
+  let prevGapDateObj: Date | null = null;
 
   for (let i = 0; i < index.sortedLogsAscending.length; i++) {
     const l = index.sortedLogsAscending[i];
     if (!isCompletedSession(l) || !l.date) continue;
+
+    const curDateObj = parseISO(l.date);
+    if (isValid(curDateObj)) {
+      if (prevGapDateObj) {
+        totalGaps += Math.max(0, differenceInCalendarDays(curDateObj, prevGapDateObj));
+        validGapsCount++;
+      }
+      prevGapDateObj = curDateObj;
+    }
+
     if (isInCurrentRange(l.date)) {
       rangeLogs.push(l);
+      rangeDates.add(l.date);
     }
     if (cutoffDateStr && priorCutoffDateStr && l.date >= priorCutoffDateStr && l.date < cutoffDateStr) {
-      priorLogs.push(l);
+      priorDates.add(l.date);
     }
   }
 
   // Calculate range and prior volumes using indexed volumeByDate
-  const rangeDates = new Set(rangeLogs.map(l => l.date));
   let rangeVolume = 0;
   rangeDates.forEach(d => {
     rangeVolume += (index.volumeByDate[d] || 0);
   });
 
-  const priorDates = new Set(priorLogs.map(l => l.date));
   let priorVolume = 0;
   priorDates.forEach(d => {
     priorVolume += (index.volumeByDate[d] || 0);
@@ -1204,27 +1236,34 @@ export function selectTimeRangeAnalytics(
     workoutTypeDistribution[wType] = (workoutTypeDistribution[wType] || 0) + 1;
   });
 
-  // Aggregate muscle & exercise stats purely from pre-indexed exercise entries (no raw set traversals or recalculations)
+  // Aggregate muscle & exercise stats purely from pre-indexed exercise entries
+  // entry.sessions is ordered newest -> oldest, enabling early break below cutoffDateStr
   index.exerciseIndex.forEach((entry, normId) => {
-    const rangeSessions = entry.sessions.filter(s => Boolean(s.date) && isInCurrentRange(s.date));
-    if (rangeSessions.length === 0) return;
-
     let exRangeVol = 0;
     let exRangeSets = 0;
+    let exRangeCount = 0;
     const category = entry.category;
 
-    rangeSessions.forEach(sess => {
+    for (let i = 0; i < entry.sessions.length; i++) {
+      const sess = entry.sessions[i];
+      if (!sess.date) continue;
+      if (sess.date > todayStr) continue;
+      if (cutoffDateStr && sess.date < cutoffDateStr) break;
+
       exRangeVol += sess.volume;
       exRangeSets += sess.doneSetsCount;
+      exRangeCount++;
       rangeMuscleFrequency[category]?.add(sess.logId);
-    });
+    }
+
+    if (exRangeCount === 0) return;
 
     rangeMuscleVolume[category] = (rangeMuscleVolume[category] || 0) + exRangeVol;
     rangeMuscleSets[category] = (rangeMuscleSets[category] || 0) + exRangeSets;
 
     exerciseSessionCounts[normId] = {
       name: entry.name,
-      count: rangeSessions.length,
+      count: exRangeCount,
       volume: exRangeVol
     };
   });
@@ -1281,25 +1320,8 @@ export function selectTimeRangeAnalytics(
     }
   }
 
-  // Average training gap across completed workouts
-  let avgGapDays = 0;
-  const completedAscending = index.sortedLogsAscending.filter(isCompletedSession);
-  if (completedAscending.length > 1) {
-    let totalGaps = 0;
-    let validGapsCount = 0;
-    for (let i = 1; i < completedAscending.length; i++) {
-      const d1 = parseISO(completedAscending[i - 1].date);
-      const d2 = parseISO(completedAscending[i].date);
-      if (isValid(d1) && isValid(d2)) {
-        const diff = Math.max(0, differenceInCalendarDays(d2, d1));
-        totalGaps += diff;
-        validGapsCount++;
-      }
-    }
-    if (validGapsCount > 0) {
-      avgGapDays = Math.round((totalGaps / validGapsCount) * 10) / 10;
-    }
-  }
+  // Average training gap across completed workouts (computed in single ascending pass above)
+  const avgGapDays = validGapsCount > 0 ? Math.round((totalGaps / validGapsCount) * 10) / 10 : 0;
 
   const calStreak = computeCalendarTrainingStreak(index.sortedLogsDescending, validNow);
 
@@ -1376,10 +1398,12 @@ export function selectMonthlyHeatmapSummary(
   const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
 
   const activeMonthDates = new Set<string>();
+  const upperMonthBound = monthEndStr < todayStr ? monthEndStr : todayStr;
   for (let i = 0; i < index.sortedLogsAscending.length; i++) {
     const l = index.sortedLogsAscending[i];
-    if (!isCompletedSession(l) || !l.date) continue;
-    if (l.date >= monthStartStr && l.date <= monthEndStr && l.date <= todayStr) {
+    if (!l.date) continue;
+    if (l.date > upperMonthBound) break;
+    if (l.date >= monthStartStr && isCompletedSession(l)) {
       activeMonthDates.add(l.date);
     }
   }

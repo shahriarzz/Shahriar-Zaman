@@ -174,7 +174,7 @@ export const AccountSection: React.FC = () => {
               <span className={cn(TYPOGRAPHY.label, "text-zinc-300 shrink-0 mt-0.5")}>
                 Web Preview Notice:
               </span>
-              <p className={cn(TYPOGRAPHY.caption, "text-zinc-400 leading-normal")}>
+              <p className={TYPOGRAPHY.bodySecondary}>
                 Google Sign-In popups are restricted inside embedded iframes. Open the app in a <strong className="text-zinc-200">New Tab</strong> to authenticate and synchronize seamlessly.
               </p>
             </div>

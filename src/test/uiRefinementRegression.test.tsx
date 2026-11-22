@@ -19,7 +19,8 @@ import { Calendar } from '../components/Calendar';
 import { MuscleBalanceRecovery } from '../components/MuscleBalanceRecovery';
 import { Layout } from '../components/Layout';
 import { ExerciseEditor } from '../components/manage/ExerciseEditor';
-import { SessionView, areAllProgrammedSetsDone } from '../components/SessionView';
+import { PrivacyPolicyModal } from '../components/manage/PrivacyPolicyModal';
+import { SessionView, areAllProgrammedSetsDone, getSessionSetCounts } from '../components/SessionView';
 import { ActiveSessionProvider } from '../context/ActiveSessionContext';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { FitnessContext, FitnessContextType } from '../context/FitnessContext';
@@ -689,15 +690,19 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(heatmapRegion?.innerHTML).toContain('bg-emerald-500 ');
     });
 
-    it('renders HistoryView progression LineChart with shared ChartTooltip, indigo trend, 10px axes, and accessible label', () => {
+    it('renders HistoryView progression LineChart via lazy HistoryProgressionChart with shared ChartTooltip, indigo trend, 10px axes, and accessible label', async () => {
       const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
-      expect(historySrc).toContain('<ChartTooltip>');
-      expect(historySrc).not.toContain('contentStyle={{');
-      expect(historySrc).toContain('CHART_GRID_PROPS');
-      expect(historySrc).toContain('CHART_AXIS_PROPS');
-      expect(historySrc).not.toContain('fontSize={9}');
-      expect(historySrc).toContain('interval="preserveStartEnd"');
-      expect(historySrc).toContain('CHART_THEME.indigo');
+      expect(historySrc).not.toContain("from 'recharts'");
+      expect(historySrc).toContain('HistoryProgressionChart');
+
+      const chartSrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryProgressionChart.tsx'), 'utf8');
+      expect(chartSrc).toContain('<ChartTooltip>');
+      expect(chartSrc).not.toContain('contentStyle={{');
+      expect(chartSrc).toContain('CHART_GRID_PROPS');
+      expect(chartSrc).toContain('CHART_AXIS_PROPS');
+      expect(chartSrc).not.toContain('fontSize={9}');
+      expect(chartSrc).toContain('interval="preserveStartEnd"');
+      expect(chartSrc).toContain('CHART_THEME.indigo');
 
       const mockFitness = createMockFitnessContext({
         logs: {
@@ -755,12 +760,17 @@ describe('Targeted UI Refinement Regression Suite', () => {
         sessionToggle!.click();
       });
 
+      // Progression chart is not mounted until the exercise panel is expanded
+      expect(container.querySelector('.recharts-line-curve')).toBeNull();
+
       const exToggle = Array.from(container.querySelectorAll('button')).find((b) =>
         b.getAttribute('aria-controls')?.startsWith('history-ex-panel-')
       );
       expect(exToggle).toBeTruthy();
-      act(() => {
+      await act(async () => {
         exToggle!.click();
+        await import('../components/HistoryProgressionChart');
+        await Promise.resolve();
       });
 
       const lineCurve = container.querySelector('.recharts-line-curve');
@@ -1376,7 +1386,34 @@ describe('Targeted UI Refinement Regression Suite', () => {
       expect(finishBtn.textContent).toContain('Finish');
     });
 
-    it('verifies SessionView Finish readiness states, shorter-than-programmed set validation, one-time animation lifecycle, reduced-motion compliance, and completion persistence', async () => {
+    it('renders PrivacyPolicyModal explanatory paragraphs with legible bodySecondary scale rather than micro/caption uppercase', () => {
+      act(() => {
+        root.render(<PrivacyPolicyModal isOpen={true} onClose={vi.fn()} />);
+      });
+
+      const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog).toBeTruthy();
+
+      const expectedParagraphSnippets = [
+        'GAINLOG is architected as an offline-first fitness protocol tracker.',
+        'GAINLOG collects only the fitness and account data necessary',
+        'When you request AI Coaching for an exercise,',
+        'Cloud synchronization is powered by Google Firebase Firestore.',
+        'You retain complete ownership over your data at all times:',
+      ];
+
+      const paragraphs = Array.from(dialog.querySelectorAll('p'));
+      expectedParagraphSnippets.forEach((snippet) => {
+        const match = paragraphs.find((p) => p.textContent?.includes(snippet));
+        expect(match, `Missing paragraph containing "${snippet}"`).toBeTruthy();
+        expect(match!.className).toContain('text-xs');
+        expect(match!.className).not.toContain('text-[9px]');
+        expect(match!.className).not.toContain('text-[10px]');
+        expect(match!.className).not.toContain('uppercase');
+      });
+    });
+
+    it('verifies SessionView Finish readiness states, manual extra sets, shorter-than-programmed set validation, one-time animation lifecycle, reduced-motion compliance, and completion persistence', async () => {
       vi.useFakeTimers();
       mockReducedMotion = false;
       window.localStorage.clear();
@@ -1393,13 +1430,19 @@ describe('Targeted UI Refinement Regression Suite', () => {
         ],
       };
 
-      // Pure helper invariant check: shorter-than-programmed set arrays MUST NEVER count as complete
+      // Pure helper invariant checks: missing/shorter-than-programmed AND uncompleted manual extra sets must NOT count as complete
       expect(areAllProgrammedSetsDone(customWorkout, {})).toBe(false);
+      expect(getSessionSetCounts(customWorkout, {})).toEqual({ completedSets: 0, targetSets: 2 });
       expect(
         areAllProgrammedSetsDone(customWorkout, {
           e1: [{ id: 'only-one', weight: '100', reps: '8', done: true }],
         })
       ).toBe(false);
+      expect(
+        getSessionSetCounts(customWorkout, {
+          e1: [{ id: 'only-one', weight: '100', reps: '8', done: true }],
+        })
+      ).toEqual({ completedSets: 1, targetSets: 2 });
       expect(
         areAllProgrammedSetsDone(customWorkout, {
           e1: [
@@ -1413,6 +1456,33 @@ describe('Targeted UI Refinement Regression Suite', () => {
           e1: [
             { id: 's1', weight: '100', reps: '8', done: true },
             { id: 's2', weight: '100', reps: '8', done: true },
+          ],
+        })
+      ).toBe(true);
+      expect(
+        getSessionSetCounts(customWorkout, {
+          e1: [
+            { id: 's1', weight: '100', reps: '8', done: true },
+            { id: 's2', weight: '100', reps: '8', done: true },
+            { id: 's3', weight: '100', reps: '8', done: false },
+          ],
+        })
+      ).toEqual({ completedSets: 2, targetSets: 3 });
+      expect(
+        areAllProgrammedSetsDone(customWorkout, {
+          e1: [
+            { id: 's1', weight: '100', reps: '8', done: true },
+            { id: 's2', weight: '100', reps: '8', done: true },
+            { id: 's3', weight: '100', reps: '8', done: false },
+          ],
+        })
+      ).toBe(false);
+      expect(
+        areAllProgrammedSetsDone(customWorkout, {
+          e1: [
+            { id: 's1', weight: '100', reps: '8', done: true },
+            { id: 's2', weight: '100', reps: '8', done: true },
+            { id: 's3', weight: '100', reps: '8', done: true },
           ],
         })
       ).toBe(true);
@@ -1543,6 +1613,73 @@ describe('Targeted UI Refinement Regression Suite', () => {
       act(() => {
         vi.advanceTimersByTime(600);
       });
+
+      // 5b. Adding a manual set updates sticky header & card denominator (2/3) and reverts Finish to incomplete; completing it promotes Finish back
+      const addExtraSetBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Add Additional Set')
+      ) as HTMLButtonElement;
+      expect(addExtraSetBtn).toBeTruthy();
+      act(() => {
+        addExtraSetBtn.click();
+      });
+
+      expect(container.textContent).toContain('2/3 SETS');
+      expect(container.textContent).toContain('2/3 Done');
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.disabled).toBe(false);
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('false');
+      expect(finishBtn.className).not.toContain('bg-orange-500');
+      expect(addLog).not.toHaveBeenCalled();
+
+      // Completing the manually added 3rd set promotes Finish to ready with count 3
+      const thirdSetDoneBtn = container.querySelector('button[aria-label="Mark set complete"]') as HTMLButtonElement;
+      expect(thirdSetDoneBtn).toBeTruthy();
+      act(() => {
+        thirdSetDoneBtn.click();
+      });
+
+      expect(container.textContent).toContain('3/3 SETS');
+      expect(container.textContent).toContain('3/3 Done');
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('true');
+      expect(finishBtn.getAttribute('data-finish-animation-count')).toBe('3');
+      expect(finishBtn.className).toContain('bg-orange-500');
+      expect(addLog).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+
+      // 5c. Deleting sets below ex.sets (from 3 -> 2 -> uncheck 1 -> delete down to 1 done row when ex.sets === 2) keeps Finish incomplete
+      const allUncheckBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set incomplete"]')
+      ) as HTMLButtonElement[];
+      act(() => {
+        allUncheckBtns[2].click();
+      });
+      let deleteBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Delete this set"]')
+      ) as HTMLButtonElement[];
+      await act(async () => {
+        deleteBtns[2].click();
+      });
+      const remainingUncheckBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Mark set incomplete"]')
+      ) as HTMLButtonElement[];
+      act(() => {
+        remainingUncheckBtns[1].click();
+      });
+      deleteBtns = Array.from(
+        container.querySelectorAll('button[aria-label="Delete this set"]')
+      ) as HTMLButtonElement[];
+      await act(async () => {
+        deleteBtns[1].click();
+      });
+      expect(container.textContent).toContain('1/2 SETS');
+      finishBtn = container.querySelector('[data-testid="session-finish-button"]') as HTMLButtonElement;
+      expect(finishBtn.getAttribute('data-finish-ready')).toBe('false');
+      expect(finishBtn.disabled).toBe(false);
+      expect(addLog).not.toHaveBeenCalled();
 
       // 6. Reduced motion skips animation while preserving static ready styling
       mockReducedMotion = true;

@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:firebase": "vitest run --config vitest.integration.config.ts --mode integration",
     "test:e2e": "playwright test --grep-invert @design-quality",
-    "design:check:static": "npm run lint && npm run typecheck:unused && npx vitest run src/test/designSystemRegression.test.ts src/test/uiRefinementRegression.test.tsx src/test/colorTokenIntegrity.test.ts src/test/dashboardRegression.test.tsx src/test/dashboardPolishRegression.test.tsx src/test/tabScrollAndAnalyticsGridRegression.test.tsx src/test/manageRegression.test.tsx",
+    "design:check:static": "npm run lint && npm run typecheck:unused && npx vitest run src/test/designSystemRegression.test.ts src/test/uiRefinementRegression.test.tsx src/test/colorTokenIntegrity.test.ts src/test/dashboardRegression.test.tsx src/test/dashboardPolishRegression.test.tsx src/test/tabScrollAndAnalyticsGridRegression.test.tsx src/test/manageRegression.test.tsx src/test/monthlyHeatmapSummary.test.ts",
     "design:check": "npm run design:check:static && npx playwright test e2e/design-quality.spec.ts",
     "emulators:start": "firebase emulators:start --project demo-gainlog --only auth,firestore",
     "test:integration": "firebase emulators:exec --project demo-gainlog --only auth,firestore \"npm run test:firebase && npm run test:e2e\"",

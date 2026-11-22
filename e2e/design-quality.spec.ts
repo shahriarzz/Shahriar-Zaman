@@ -32,6 +32,86 @@ async function installFrozenClock(page: Page, isoDate = FROZEN_NOW_ISO): Promise
   }, fixedMs);
 }
 
+/**
+ * Waits for finite Web Animations (including Framer Motion entrance/layout transitions)
+ * to finish and flushes paint frames without relying on fixed arbitrary sleeps.
+ */
+async function waitForAnimationsToSettle(page: Page, rootSelector?: string): Promise<void> {
+  await page.evaluate(async (sel) => {
+    const scopeEl = sel ? document.querySelector(sel) : document;
+    const finiteFinishedPromises: Promise<unknown>[] = [];
+
+    if (typeof document.getAnimations === 'function') {
+      const animations = document.getAnimations();
+      for (const anim of animations) {
+        if (scopeEl && scopeEl !== document) {
+          const target = (anim.effect as KeyframeEffect | null)?.target as Node | null;
+          if (target && !scopeEl.contains(target)) {
+            continue;
+          }
+        }
+        const computed = anim.effect?.getComputedTiming();
+        const iterations = computed?.iterations ?? 1;
+        if (Number.isFinite(iterations) && iterations !== Infinity) {
+          finiteFinishedPromises.push(anim.finished.catch(() => {}));
+        }
+      }
+    }
+
+    if (finiteFinishedPromises.length > 0) {
+      await Promise.allSettled(finiteFinishedPromises);
+    }
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }, rootSelector ?? null);
+}
+
+/**
+ * Explicitly waits until modal dialog & backdrop have completed entrance transitions
+ * and both reach computed opacity "1" before accessibility scanning or screenshots.
+ */
+async function waitForDialogReady(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const dlg = document.querySelector('[role="dialog"]') as HTMLElement | null;
+        if (!dlg) return false;
+        const container = dlg.parentElement;
+        const backdrop = container?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+        const dlgStyle = window.getComputedStyle(dlg);
+        const bgStyle = backdrop ? window.getComputedStyle(backdrop) : null;
+        return dlgStyle.opacity === '1' && (!bgStyle || bgStyle.opacity === '1');
+      })
+    )
+    .toBe(true);
+
+  await waitForAnimationsToSettle(page, '[role="dialog"]');
+}
+
+async function scrollElementBelowStickyNav(page: Page, locatorSelector: string, textFilter?: string): Promise<void> {
+  await page.evaluate(
+    ({ sel, text }) => {
+      const candidates = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
+      const target = text
+        ? candidates.find((el) => (el.textContent || '').includes(text))
+        : candidates[0];
+      if (!target) {
+        throw new Error(`Could not find scroll target: ${sel} (${text || 'any'})`);
+      }
+      const rect = target.getBoundingClientRect();
+      const y = Math.max(0, Math.round(rect.top + window.scrollY - 76));
+      window.scrollTo(0, y);
+    },
+    { sel: locatorSelector, text: textFilter ?? null }
+  );
+  await waitForAnimationsToSettle(page);
+}
+
 async function seedDeterministicTrainingHistory(page: Page): Promise<void> {
   await page.evaluate(() => {
     const raw = window.localStorage.getItem('gl_database_snapshot');
@@ -163,9 +243,11 @@ async function seedDeterministicTrainingHistory(page: Page): Promise<void> {
 
   await page.reload();
   await waitForAppReady(page);
+  await waitForAnimationsToSettle(page);
 }
 
 async function assertZeroAxeViolations(page: Page, contextLabel: string): Promise<void> {
+  await waitForAnimationsToSettle(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
@@ -273,6 +355,7 @@ async function completeAllSetsInActiveSession(page: Page): Promise<void> {
     if ((await acc.getAttribute('aria-expanded')) !== 'true') {
       await acc.click();
       await expect(acc).toHaveAttribute('aria-expanded', 'true');
+      await waitForAnimationsToSettle(page);
     }
     while ((await page.getByRole('button', { name: 'Mark set complete' }).count()) > 0) {
       await page.getByRole('button', { name: 'Mark set complete' }).first().click();
@@ -284,20 +367,25 @@ async function clickPrimaryTab(page: Page, tab: 'dashboard' | 'history' | 'analy
   const isMobile = (page.viewportSize()?.width ?? 1280) < 768;
   const selector = isMobile ? `#mobile-nav-item-${tab}` : `#nav-item-${tab}`;
   await page.locator(selector).click();
+  const expectedHeading: Record<'dashboard' | 'history' | 'analytics' | 'manage', string> = {
+    dashboard: 'Stay Aggressive',
+    history: 'History',
+    analytics: 'Analytics',
+    manage: 'Manage',
+  };
+  await expect(page.getByRole('heading', { level: 1, name: expectedHeading[tab] })).toBeVisible();
+  await waitForAnimationsToSettle(page);
 }
 
 test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Gate', () => {
   test.beforeEach(async ({ page }) => {
     await installFrozenClock(page);
     await gotoCleanApp(page);
+    await waitForAnimationsToSettle(page);
   });
 
-  test('passes WCAG 2.1 AA axe-core scans (all impact levels) across Dashboard, Session, History, Analytics, Manage, Editors, and Dialogs with zero console/page errors', async ({
-    page,
-  }) => {
+  test('axe-core WCAG 2.1 AA: Dashboard', async ({ page }) => {
     const diag = ensurePageStartupDiagnostics(page);
-
-    // 1. Dashboard order & KPI verification + full axe scan
     const h1 = page.locator('h1');
     await expect(h1).toHaveText('Stay Aggressive');
     const kpiGrid = page.getByTestId('dashboard-overview-stats');
@@ -305,11 +393,19 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await expect(kpiGrid.getByText('Adherence')).toBeVisible();
     await expect(kpiGrid.getByText('Complete 1 scheduled workout')).toBeVisible();
     await expect(page.getByText('Total Volume (Lifetime)')).toBeVisible();
-    await assertZeroAxeViolations(page, 'Dashboard');
 
-    // 2. SessionView lifecycle: incomplete secondary -> complete all sets -> ready primary + count -> uncheck/recheck -> finish
+    await assertZeroAxeViolations(page, 'Dashboard');
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: Session (incomplete, ready, manual extra set & summary)', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
     await page.getByRole('button', { name: 'Start Session' }).click();
+    await waitForAnimationsToSettle(page);
+
     const finishBtn = page.getByTestId('session-finish-button');
+    const headerControls = page.getByTestId('session-header-controls');
     await expect(finishBtn).toBeVisible();
     await expect(finishBtn).toBeEnabled();
     await expect(finishBtn).toHaveAttribute('data-finish-ready', 'false');
@@ -322,26 +418,49 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await completeAllSetsInActiveSession(page);
     await expect(finishBtn).toHaveAttribute('data-finish-ready', 'true');
     await expect(finishBtn).toHaveAttribute('data-finish-animation-count', '1');
+    await expect(finishBtn).toHaveAttribute('data-finish-animating', 'false', { timeout: 2000 });
     await assertZeroAxeViolations(page, 'SessionView Active (All Sets Complete)');
 
-    // Uncheck one set -> resets ready cleanly; recheck -> triggers animation count 2
+    const initialRatioText = await headerControls.getByText(/\/\d+\s+SETS/).textContent();
+    const initialMatch = initialRatioText?.match(/(\d+)\/(\d+)\s+SETS/);
+    expect(initialMatch, `Expected X/Y SETS badge, got ${initialRatioText}`).toBeTruthy();
+    const programmedCount = Number(initialMatch![2]);
+
+    // Add manual extra set -> updates SETS denominator (N -> N+1) and reverts Finish to incomplete
+    await page.getByRole('button', { name: 'Add Additional Set' }).first().click();
+    await expect(headerControls.getByText(`${programmedCount}/${programmedCount + 1} SETS`)).toBeVisible();
+    await expect(finishBtn).toBeEnabled();
+    await expect(finishBtn).toHaveAttribute('data-finish-ready', 'false');
+
+    // Complete manually added set -> returns Finish to primary ready (count 2)
+    await page.getByRole('button', { name: 'Mark set complete' }).first().click();
+    await expect(headerControls.getByText(`${programmedCount + 1}/${programmedCount + 1} SETS`)).toBeVisible();
+    await expect(finishBtn).toHaveAttribute('data-finish-ready', 'true');
+    await expect(finishBtn).toHaveAttribute('data-finish-animation-count', '2');
+
+    // Uncheck -> resets ready cleanly; recheck -> triggers animation count 3
     await page.getByRole('button', { name: 'Mark set incomplete' }).first().click();
     await expect(finishBtn).toHaveAttribute('data-finish-ready', 'false');
     await page.getByRole('button', { name: 'Mark set complete' }).first().click();
     await expect(finishBtn).toHaveAttribute('data-finish-ready', 'true');
-    await expect(finishBtn).toHaveAttribute('data-finish-animation-count', '2');
+    await expect(finishBtn).toHaveAttribute('data-finish-animation-count', '3');
 
     await finishBtn.click();
     await expect(page.getByText('Session Cleared')).toBeVisible();
     await assertZeroAxeViolations(page, 'SessionView Summary');
     await page.getByRole('button', { name: 'Dismiss Summary' }).click();
 
-    // Verify completed session log was durably saved
     const postFinishSnap = await readCanonicalSnapshot(page);
     expect(Object.keys(postFinishSnap?.data?.logs || {}).length).toBeGreaterThanOrEqual(1);
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
 
-    // 3. History: Monthly Analytics & compact preview ABOVE Training Sessions + axe scans
+  test('axe-core WCAG 2.1 AA: History (preview & expanded Monthly Reports)', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await seedDeterministicTrainingHistory(page);
     await navigateToTab(page, 'history');
+
     const searchInput = page.getByPlaceholder('Search date, routine or exercise…');
     await expect(searchInput).toBeVisible();
     const analyticsHeading = page.getByRole('heading', { name: 'Monthly Training Analytics' });
@@ -355,45 +474,97 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     expect(previewBox!.y).toBeLessThan(sessionsBox!.y);
     await assertZeroAxeViolations(page, 'HistoryView');
 
-    // Open Monthly Reports accordion & select month
     await page.getByRole('button', { name: /Monthly Reports/i }).click();
     await expect(page.getByText(/Completed Runs/i).first()).toBeVisible();
     await page.locator('[aria-pressed]').first().click();
     await expect(page.getByText('Window Volume')).toBeVisible();
     await assertZeroAxeViolations(page, 'HistoryView Monthly Reports Expanded');
 
-    // Search empty vs clear filter
     await searchInput.fill('zzzznonexistent');
     await expect(page.getByText('No Matching Sessions')).toBeVisible();
     await page.getByRole('button', { name: 'Clear Filters' }).click();
     await expect(page.getByText('No Matching Sessions')).toHaveCount(0);
 
-    // 4. Analytics: section 01-04 taxonomy, indigo AreaChart & heatmap month navigation + axe scan
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: Analytics', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await seedDeterministicTrainingHistory(page);
     await navigateToTab(page, 'analytics');
+
     await expect(page.getByText('01 · Training Activity & Consistency')).toBeVisible();
     await expect(page.getByText('Daily Training Volume')).toBeVisible();
     await expect(page.getByText('04 · Training Patterns & Insights')).toBeVisible();
-    await assertZeroAxeViolations(page, 'AnalyticsView');
+    await assertZeroAxeViolations(page, 'AnalyticsView (Top)');
 
+    await scrollElementBelowStickyNav(page, 'h2,h3', 'Monthly Intensity Heatmap');
+    await assertZeroAxeViolations(page, 'AnalyticsView (Heatmap)');
+
+    await scrollElementBelowStickyNav(page, 'p', '02 · Training Distribution & Anatomical Load');
+    await expect(page.getByRole('heading', { name: 'Muscle Group Targeting' })).toBeVisible();
+    await scrollElementBelowStickyNav(page, 'h3', 'Workload & Recency');
+    await assertZeroAxeViolations(page, 'AnalyticsView (Muscle Balance & Recovery)');
+
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.getByRole('button', { name: 'Previous Month' }).click();
     await page.getByRole('button', { name: 'Next Month' }).click();
 
-    // 5. Manage -> ProgramEditor -> CycleEditor -> WorkoutEditor -> ExerciseEditor + Dialog
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: Manage', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
     await navigateToTab(page, 'manage');
     await assertZeroAxeViolations(page, 'ManageView Landing');
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
 
+  test('axe-core WCAG 2.1 AA: PrivacyPolicyModal', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await navigateToTab(page, 'manage');
     await page.getByRole('button', { name: /Privacy Policy & Data Safety/i }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    await waitForDialogReady(page);
+
     await assertZeroAxeViolations(page, 'PrivacyPolicyModal');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: CycleEditor', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await navigateToTab(page, 'manage');
     await page.getByRole('button', { name: 'Edit Program' }).click();
     await expect(page.getByTestId('cycle-list')).toBeVisible();
     await assertZeroAxeViolations(page, 'CycleEditor');
 
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: WorkoutEditor', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await navigateToTab(page, 'manage');
+    await page.getByRole('button', { name: 'Edit Program' }).click();
     await page.getByTestId('cycle-slot-1').click();
+    await expect(page.locator('button[aria-controls^="workout-ex-panel-"]').first()).toBeVisible();
     await assertZeroAxeViolations(page, 'WorkoutEditor');
+
+    expect(diag.pageErrors).toEqual([]);
+    expect(diag.consoleErrors).toEqual([]);
+  });
+
+  test('axe-core WCAG 2.1 AA: ExerciseEditor', async ({ page }) => {
+    const diag = ensurePageStartupDiagnostics(page);
+    await navigateToTab(page, 'manage');
+    await page.getByRole('button', { name: 'Edit Program' }).click();
+    await page.getByTestId('cycle-slot-1').click();
 
     const firstExExpand = page.locator('button[aria-controls^="workout-ex-panel-"]').first();
     await firstExExpand.click();
@@ -401,8 +572,8 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Save Changes' })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Save Exercise' })).toHaveCount(0);
-    await assertZeroAxeViolations(page, 'ExerciseEditor');
 
+    await assertZeroAxeViolations(page, 'ExerciseEditor');
     expect(diag.pageErrors).toEqual([]);
     expect(diag.consoleErrors).toEqual([]);
   });
@@ -475,15 +646,18 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await privacyBtn.focus();
     await privacyBtn.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    await waitForDialogReady(page);
 
-    // Wait for Dialog's initial 50ms focus handoff
-    await expect.poll(async () => page.evaluate(() => {
-      const dlg = document.querySelector('[role="dialog"]');
-      return Boolean(dlg && dlg.contains(document.activeElement));
-    })).toBe(true);
+    // Wait for Dialog's focus handoff
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const dlg = document.querySelector('[role="dialog"]');
+          return Boolean(dlg && dlg.contains(document.activeElement));
+        })
+      )
+      .toBe(true);
 
-    // Cycle Tab across all focusables + wrap cleanly within dialog without escaping
     const focusableLabels: string[] = [];
     for (let step = 0; step < 6; step++) {
       await page.keyboard.press('Tab');
@@ -500,7 +674,6 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     }
     expect(focusableLabels.length).toBeGreaterThanOrEqual(3);
 
-    // Reverse Shift+Tab from wrapped/current position stays contained inside dialog
     for (let step = 0; step < 4; step++) {
       await page.keyboard.press('Shift+Tab');
       const inside = await page.evaluate(() => {
@@ -548,6 +721,7 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
 
     // 1. Clean initial baselines (Desktop 1280x900 & Mobile 390x844)
     await page.setViewportSize({ width: 1280, height: 900 });
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('dashboard-desktop.png', snapOpts);
 
     await clickPrimaryTab(page, 'analytics');
@@ -556,8 +730,35 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await clickPrimaryTab(page, 'manage');
     await expect(page).toHaveScreenshot('manage-desktop.png', snapOpts);
 
+    // Manage signed-out Account & Empty Data Maintenance (0 restore points) — Desktop
+    await scrollElementBelowStickyNav(page, 'h2', 'Cloud Account');
+    await expect(page).toHaveScreenshot('manage-account-signed-out-desktop.png', snapOpts);
+
+    await expect(page.getByText('No restore points available.')).toBeVisible();
+    await scrollElementBelowStickyNav(page, 'h2', 'Data & Maintenance');
+    await expect(page).toHaveScreenshot('manage-data-maintenance-empty-desktop.png', snapOpts);
+
+    // Mobile clean baselines
     await page.setViewportSize({ width: 390, height: 844 });
+    await clickPrimaryTab(page, 'manage');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-mobile.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'h2', 'Cloud Account');
+    await expect(page).toHaveScreenshot('manage-account-signed-out-mobile.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'h2', 'Data & Maintenance');
+    await expect(page).toHaveScreenshot('manage-data-maintenance-empty-mobile.png', snapOpts);
+
+    await clickPrimaryTab(page, 'analytics');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('analytics-mobile.png', snapOpts);
+
     await clickPrimaryTab(page, 'dashboard');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('dashboard-mobile.png', snapOpts);
 
     // 2. Seed rich deterministic logs & 8-day cycle (2026-10-07 start; clock = 2026-10-15)
@@ -565,22 +766,44 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await seedDeterministicTrainingHistory(page);
 
     // Calendar states (completed ✓, incomplete ◐, missed !, scheduled ·, rest —)
-    await page.getByRole('heading', { name: 'Calendar' }).scrollIntoViewIfNeeded();
+    await scrollElementBelowStickyNav(page, 'h2,h3', 'Calendar');
     await expect(page).toHaveScreenshot('calendar-states-desktop.png', snapOpts);
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole('heading', { name: 'Calendar' }).scrollIntoViewIfNeeded();
+    await scrollElementBelowStickyNav(page, 'h2,h3', 'Calendar');
     await expect(page).toHaveScreenshot('calendar-states-mobile.png', snapOpts);
+
+    // Seeded Analytics scrolled sections (Heatmap + Muscle Balance & Recovery)
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await clickPrimaryTab(page, 'analytics');
+    await scrollElementBelowStickyNav(page, 'h2', 'Monthly Intensity Heatmap');
+    await expect(page).toHaveScreenshot('analytics-heatmap-desktop.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'p', '02 · Training Distribution & Anatomical Load');
+    await expect(page.getByRole('heading', { name: 'Muscle Group Targeting' })).toBeVisible();
+    await scrollElementBelowStickyNav(page, 'h2', 'Muscle Balance & Recovery');
+    await expect(page).toHaveScreenshot('analytics-muscle-balance-desktop.png', snapOpts);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await scrollElementBelowStickyNav(page, 'h2', 'Monthly Intensity Heatmap');
+    await expect(page).toHaveScreenshot('analytics-heatmap-mobile.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'p', '02 · Training Distribution & Anatomical Load');
+    await expect(page.getByRole('heading', { name: 'Muscle Group Targeting' })).toBeVisible();
+    await scrollElementBelowStickyNav(page, 'h2', 'Muscle Balance & Recovery');
+    await expect(page).toHaveScreenshot('analytics-muscle-balance-mobile.png', snapOpts);
 
     // History with latest-month preview above sessions
     await page.setViewportSize({ width: 1280, height: 900 });
     await clickPrimaryTab(page, 'history');
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page.getByTestId('latest-month-preview')).toBeVisible();
     await expect(page).toHaveScreenshot('history-desktop.png', snapOpts);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page.getByTestId('latest-month-preview')).toBeVisible();
     await expect(page).toHaveScreenshot('history-mobile.png', snapOpts);
 
@@ -588,38 +811,136 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await page.getByRole('button', { name: /Monthly Reports/i }).click();
     await page.locator('[aria-pressed]').first().click();
     await expect(page.getByText('Window Volume')).toBeVisible();
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('history-reports-expanded-mobile.png', snapOpts);
 
     await page.setViewportSize({ width: 1280, height: 900 });
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('history-reports-expanded-desktop.png', snapOpts);
 
-    // Manage editor state (WorkoutEditor opened from ProgramEditor) & PrivacyPolicyModal
+    // Manage Authenticated + Pending Cloud Sync banner display states (emulator preview override)
+    await page.evaluate(() => {
+      window.sessionStorage.setItem(
+        '__GAINLOG_E2E_UI_STATE__',
+        JSON.stringify({
+          user: { uid: 'e2e-user-1', email: 'athlete@gainlog.app', displayName: 'Alex Lifter', photoURL: null },
+          syncStatus: 'synced',
+          hasPendingCloudSync: true,
+          pendingCloudSyncError: 'Local backup restored; retry cloud reconciliation when online.',
+        })
+      );
+    });
+    await page.reload();
+    await waitForAppReady(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await clickPrimaryTab(page, 'manage');
+    await scrollElementBelowStickyNav(page, 'h2', 'Cloud Account');
+    await expect(page.getByText('athlete@gainlog.app')).toBeVisible();
+    await expect(page).toHaveScreenshot('manage-account-authenticated-desktop.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'h2', 'Data & Maintenance');
+    await expect(page.getByText('Cloud restore reconciliation pending')).toBeVisible();
+    await expect(page).toHaveScreenshot('manage-data-maintenance-pending-sync-desktop.png', snapOpts);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await scrollElementBelowStickyNav(page, 'h2', 'Cloud Account');
+    await expect(page).toHaveScreenshot('manage-account-authenticated-mobile.png', snapOpts);
+
+    await scrollElementBelowStickyNav(page, 'h2', 'Data & Maintenance');
+    await expect(page).toHaveScreenshot('manage-data-maintenance-pending-sync-mobile.png', snapOpts);
+
+    // Clear emulator UI state override before remaining Manage & Session baselines
+    await page.evaluate(() => {
+      window.sessionStorage.removeItem('__GAINLOG_E2E_UI_STATE__');
+    });
+    await page.reload();
+    await waitForAppReady(page);
+
+    // PrivacyPolicyModal (wait for backdrop & dialog opacity === 1 before capture)
+    await page.setViewportSize({ width: 1280, height: 900 });
     await clickPrimaryTab(page, 'manage');
     await page.getByRole('button', { name: /Privacy Policy & Data Safety/i }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    await waitForDialogReady(page);
     await expect(page).toHaveScreenshot('privacy-modal-desktop.png', snapOpts);
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await waitForDialogReady(page);
     await expect(page).toHaveScreenshot('privacy-modal-mobile.png', snapOpts);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
+    // Manage ProgramEditor -> CycleEditor -> ExerciseLibrary -> WorkoutEditor -> ExerciseEditor
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('button', { name: 'Edit Program' }).click();
-    await page.getByTestId('cycle-slot-1').click();
-    await expect(page).toHaveScreenshot('manage-editor-mobile.png', snapOpts);
+    await expect(page.getByTestId('cycle-list')).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-cycle-editor-desktop.png', snapOpts);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-cycle-editor-mobile.png', snapOpts);
+
+    // ExerciseLibrary populated & search-empty states
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('button', { name: 'Exercises', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /Exercise Library/i })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-library-populated-desktop.png', snapOpts);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-library-populated-mobile.png', snapOpts);
+
+    const librarySearch = page.getByPlaceholder('Search exercises by name, muscle group, or tag...');
+    await librarySearch.fill('zzzznonexistent');
+    await expect(page.getByText('No exercises match your search')).toBeVisible();
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-library-empty-mobile.png', snapOpts);
 
     await page.setViewportSize({ width: 1280, height: 900 });
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-library-empty-desktop.png', snapOpts);
+    await librarySearch.fill('');
+
+    // Switch back to Cycle -> WorkoutEditor -> ExerciseEditor
+    await page.getByRole('button', { name: 'Cycle', exact: true }).click();
+    await page.getByTestId('cycle-slot-1').click();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('manage-editor-desktop.png', snapOpts);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-editor-mobile.png', snapOpts);
+
+    await page.locator('button[aria-controls^="workout-ex-panel-"]').first().click();
+    await page.getByRole('button', { name: /Edit Prescription/i }).first().click();
+    await expect(page.getByRole('button', { name: 'Save Changes' })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-editor-mobile.png', snapOpts);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
+    await expect(page).toHaveScreenshot('manage-exercise-editor-desktop.png', snapOpts);
 
     // SessionView incomplete, all-programmed-sets-complete, and completion summary states
     await clickPrimaryTab(page, 'dashboard');
     await page.getByRole('button', { name: 'Start Session' }).click();
     await expect(page.getByTestId('session-finish-button')).toHaveAttribute('data-finish-ready', 'false');
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-incomplete-desktop.png', snapOpts);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-incomplete-mobile.png', snapOpts);
 
     await completeAllSetsInActiveSession(page);
@@ -627,17 +948,21 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await expect(finishBtn).toHaveAttribute('data-finish-ready', 'true');
     await expect(finishBtn).toHaveAttribute('data-finish-animating', 'false', { timeout: 2000 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-ready-mobile.png', snapOpts);
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-ready-desktop.png', snapOpts);
 
     await finishBtn.click();
     await expect(page.getByText('Session Cleared')).toBeVisible();
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-summary-desktop.png', snapOpts);
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await waitForAnimationsToSettle(page);
     await expect(page).toHaveScreenshot('session-summary-mobile.png', snapOpts);
   });
 });
