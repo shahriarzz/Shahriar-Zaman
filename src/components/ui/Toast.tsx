@@ -3,27 +3,11 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { SURFACE, BORDER, RADIUS, SHADOW, TYPOGRAPHY, DURATION } from '../../styles/tokens';
+import { ToastTone, ToastItem, showToast, subscribeToasts } from '../../lib/toastBus';
 import { Button } from './Button';
 
-export type ToastTone = 'error' | 'success' | 'warning' | 'info';
-
-export interface ToastItem {
-  id: string;
-  message: string;
-  tone?: ToastTone;
-  duration?: number;
-}
-
-type ToastListener = (toast: ToastItem) => void;
-const listeners: Set<ToastListener> = new Set();
-
-export function showToast(toast: Omit<ToastItem, 'id'>) {
-  const item: ToastItem = {
-    ...toast,
-    id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-  };
-  listeners.forEach((listener) => listener(item));
-}
+export type { ToastTone, ToastItem };
+export { showToast };
 
 const TONE_CONFIG: Record<ToastTone, {
   borderColor: string;
@@ -94,9 +78,9 @@ export const ToastContainer: React.FC = () => {
       timersRef.current.set(item.id, timer);
     };
 
-    listeners.add(handleToast);
+    const unsubscribe = subscribeToasts(handleToast);
     return () => {
-      listeners.delete(handleToast);
+      unsubscribe();
       // Clean up all active toast timers on unmount
       timersRef.current.forEach((t) => clearTimeout(t));
       timersRef.current.clear();

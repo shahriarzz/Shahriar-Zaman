@@ -139,7 +139,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
             accent="zinc"
             icon={TrendingUp}
-            disableAnimation
             size="standard"
           />
           <StatCard
@@ -150,7 +149,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
             accent="zinc"
             icon={CalendarIcon}
-            disableAnimation
             size="standard"
           />
           <StatCard
@@ -183,7 +181,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     : 'neutral'
             }
             icon={Dumbbell}
-            disableAnimation
             size="standard"
           />
           <StatCard
@@ -199,7 +196,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             }
             accent="zinc"
             icon={CheckCircle2}
-            disableAnimation
             size="standard"
           />
         </Grid>
@@ -435,7 +431,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t border-zinc-800/60 text-xs font-mono min-w-0">
+                    <div className={cn("flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t text-xs font-mono min-w-0", BORDER.subtle)}>
                       <span className="text-zinc-300 break-words sm:whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
                       <span className="text-zinc-400 break-words sm:whitespace-nowrap">e1RM: <strong className="text-white font-bold tabular-nums">{pr.e1rm}</strong> kg</span>
                     </div>

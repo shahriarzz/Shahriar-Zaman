@@ -34,7 +34,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
         >
           <span>{label}</span>
           {typeof error === 'string' && (
-            <span className={cn(TYPOGRAPHY.errorText, "normal-case font-normal")}>
+            <span role="alert" className={cn(TYPOGRAPHY.errorText, "normal-case font-normal")}>
               {error}
             </span>
           )}
@@ -45,6 +45,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
         ref={ref}
         id={textareaId}
         disabled={disabled}
+        aria-invalid={isError || undefined}
         className={cn(
           "w-full font-mono text-xs text-zinc-200 placeholder-zinc-500 outline-none p-3 resize-none",
           TRANSITION.colors,
@@ -75,7 +76,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
         </p>
       )}
       {typeof error === 'string' && !label && (
-        <p className={TYPOGRAPHY.errorText}>
+        <p role="alert" className={TYPOGRAPHY.errorText}>
           {error}
         </p>
       )}

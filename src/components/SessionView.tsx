@@ -222,7 +222,7 @@ export interface GhostDataEntry {
   allTimePR: WeightPRRecord | null;
 }
 
-export const SessionClock: React.FC<{ startTime: number | null }> = React.memo(({ startTime }) => {
+const SessionClock: React.FC<{ startTime: number | null }> = React.memo(({ startTime }) => {
   const [elapsed, setElapsed] = useState(() => {
     return startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
   });
@@ -1305,13 +1305,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             value={Math.floor(finishedDuration / 60)}
             unit="min"
             accent="zinc"
-            disableAnimation
           />
           <StatCard
             label="Sets Done"
             value={`${finishedSummary ? finishedSummary.completedSets : completedLiveSets}/${finishedSummary ? finishedSummary.programmedSets : programmedLiveSets}`}
             accent="zinc"
-            disableAnimation
           />
           <div className="col-span-2">
             <StatCard
@@ -1320,7 +1318,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
               formatValue={formatCompactWeight}
               unit="kg"
               accent="emerald"
-              disableAnimation
+              animateValue
             />
           </div>
 

@@ -276,7 +276,8 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         <span
                           aria-hidden="true"
                           className={cn(
-                            "text-[9px] font-mono font-bold leading-none",
+                            TYPOGRAPHY.micro,
+                            "tracking-normal leading-none",
                             status.isMissed
                               ? "text-red-400"
                               : status.isPartial
@@ -698,7 +699,6 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         unit="kg"
                         accent="zinc"
                         icon={TrendingUp}
-                        disableAnimation
                         size="standard"
                       />
                       <StatCard
@@ -707,7 +707,6 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         unit="min"
                         accent="zinc"
                         icon={Clock}
-                        disableAnimation
                         size="standard"
                       />
                       <StatCard
@@ -715,7 +714,6 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                         value={`${selectedDoneSets}/${selectedPlannedSets || selectedDoneSets}`}
                         accent="zinc"
                         icon={CheckCircle2}
-                        disableAnimation
                         size="standard"
                       />
                     </Grid>

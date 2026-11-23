@@ -517,7 +517,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             label="Sessions"
                             value={currentSessions}
                             accent="zinc"
-                            disableAnimation
                             trend={sessionsTrendText}
                             trendDirection={sessionsTrendDir}
                             sublabel={sessionsSublabel}
@@ -528,7 +527,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             unit="kg"
                             formatValue={formatCompactWeight}
                             accent="zinc"
-                            disableAnimation
                             trend={volumeTrendText}
                             trendDirection={volumeTrendDir}
                           />
@@ -536,7 +534,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             label="PRs"
                             value={currentMonthPRs.length}
                             accent={currentMonthPRs.length > 0 ? "orange" : "zinc"}
-                            disableAnimation
                             icon={Trophy}
                             trend={prTrendText}
                             trendDirection={prTrendDir}
@@ -556,7 +553,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                   : 'zinc'
                                 : 'zinc'
                             }
-                            disableAnimation
                             icon={Sparkles}
                             trend={strengthTrendText}
                             trendDirection={strengthTrendDir}

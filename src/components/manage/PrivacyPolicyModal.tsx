@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Shield, Lock, Trash2, Database, Sparkles, CheckCircle2 } from 'lucide-react';
-import { Card, Button, Dialog, DialogHeader, DialogBody, DialogFooter, TYPOGRAPHY } from '../ui';
+import { Card, Button, Dialog, DialogHeader, DialogBody, DialogFooter, TYPOGRAPHY, BORDER, SURFACE } from '../ui';
 import { FOCUS } from '../../styles/tokens';
 import { cn } from '../../lib/utils';
 
@@ -20,7 +20,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
     >
       {/* Header */}
       <DialogHeader
-        className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/40 items-center shrink-0"
+        className={cn("px-6 py-4 border-b items-center shrink-0", BORDER.standard, SURFACE.subtle)}
         icon={<Shield size={18} className="text-emerald-400" />}
         title="Privacy Policy & Data Safety"
         eyebrow="Effective: October 2026 · GAINLOG Protocol"
@@ -109,7 +109,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
       </DialogBody>
 
       {/* Footer */}
-      <DialogFooter className="px-6 py-3.5 mt-0 border-t border-zinc-800 bg-zinc-900/40 shrink-0">
+      <DialogFooter className={cn("px-6 py-3.5 mt-0 border-t shrink-0", BORDER.standard, SURFACE.subtle)}>
         <Button variant="primary" size="sm" onClick={onClose}>
           Got It
         </Button>

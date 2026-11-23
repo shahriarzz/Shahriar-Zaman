@@ -53,6 +53,7 @@ import {
   Grid,
   ChartTooltip,
   BORDER,
+  SURFACE,
   RADIUS,
   GAP,
   STACK_SPACING,
@@ -66,7 +67,7 @@ import {
 
 // Unified heatmap intensity scale used for both matrix cells and legend
 const HEATMAP_INTENSITY_STEPS = [
-  { level: 0, bg: 'bg-zinc-900/60', border: 'border-zinc-800/40', text: 'text-zinc-400', maxRatio: 0 },
+  { level: 0, bg: SURFACE.default, border: BORDER.subtle, text: 'text-zinc-400', maxRatio: 0 },
   { level: 1, bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', text: 'text-emerald-400', maxRatio: 0.25 },
   { level: 2, bg: 'bg-emerald-500/45', border: 'border-emerald-500/50', text: 'text-emerald-300', maxRatio: 0.50 },
   { level: 3, bg: 'bg-emerald-500/75', border: 'border-emerald-500/70', text: 'text-black font-bold', maxRatio: 0.75 },
@@ -216,7 +217,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           value={trainingStreak.currentStreak}
           unit={trainingStreak.currentStreak === 1 ? 'day' : 'days'}
           accent="zinc"
-          disableAnimation
           sublabel="Respects recovery days"
           trend={<span className={cn(TYPOGRAPHY.label, "text-zinc-400 font-bold tabular-nums")}>Best: {trainingStreak.longestStreak}d</span>}
         />
@@ -237,7 +237,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               ? 'amber'
               : 'red'
           }
-          disableAnimation
           sublabel={
             adherenceInsight.evaluatedScheduledWorkouts === 0
               ? 'Complete 1 scheduled workout'
@@ -262,7 +261,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 : 'zinc'
               : 'zinc'
           }
-          disableAnimation
           sublabel={`${timeRange.toUpperCase()} completed volume`}
           trend={
             aggregated.volumePeriodChangePct !== null ? (
@@ -292,7 +290,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           sublabel={performanceScore.score !== null ? `${performanceScore.status} · Rolling 28D` : 'Building baseline'}
           isUnavailable={performanceScore.score === null}
           unavailableLabel="Building baseline"
-          disableAnimation
           accent={
             performanceScore.score === null
               ? 'zinc'
@@ -417,7 +414,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 unit="min"
                 isUnavailable={aggregated.avgDuration <= 0}
                 accent="zinc"
-                disableAnimation
                 sublabel={aggregated.avgDuration > 0 ? 'Measured duration' : 'No duration recorded'}
               />
 
@@ -433,7 +429,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </DeferredViewSection>
 
       {/* 4. SECTION 3: TRAINING ACTIVITY & CONSISTENCY */}
-      <div className="pt-2 border-t border-zinc-800/60">
+      <div className={cn("pt-2 border-t", BORDER.subtle)}>
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>01 · Training Activity & Consistency</p>
       </div>
       <Section
@@ -580,7 +576,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Section>
 
       {/* 5. SECTION 4: TRAINING DISTRIBUTION (MUSCLES, MOST FREQUENT EXERCISES) */}
-      <div className="pt-2 border-t border-zinc-800/60">
+      <div className={cn("pt-2 border-t", BORDER.subtle)}>
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>02 · Training Distribution & Anatomical Load</p>
       </div>
       <DeferredViewSection minHeight={480}>
@@ -673,7 +669,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                 )}
               </div>
 
-              <div className={cn("p-4 border bg-zinc-950/80 border-zinc-800/50", RADIUS.button)}>
+              <div className={cn("p-4 border", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
                 {visibleExercises.length > 0 ? (
                   <div className={cn("divide-y", BORDER.subtle)}>
                     {visibleExercises.map((ex, idx) => (
@@ -690,7 +686,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
                             RADIUS.badge,
                             idx === 0
                               ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                              : cn(SURFACE.elevated, BORDER.standard, "text-zinc-400")
                           )}>
                             #{idx + 1}
                           </span>
@@ -739,7 +735,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </DeferredViewSection>
 
       {/* 6. SECTION 5: PERSONAL BESTS / RECORDS (COMPACT ACCORDION & TOP 3) */}
-      <div className="pt-2 border-t border-zinc-800/60">
+      <div className={cn("pt-2 border-t", BORDER.subtle)}>
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>03 · Records & Long-Term Progress</p>
       </div>
       <Section
@@ -814,7 +810,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               label="Total Workouts"
               value={aggregated.totalLogsCount}
               accent="zinc"
-              disableAnimation
               sublabel="Completed runs"
             />
             <StatCard
@@ -822,7 +817,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               value={aggregated.lifetimeHours}
               unit="hrs"
               accent="zinc"
-              disableAnimation
               sublabel={aggregated.lifetimeHours > 0 ? "Measured duration" : "Logged sessions"}
             />
             <StatCard
@@ -830,7 +824,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               value={aggregated.lifetimeSets}
               formatValue={(val) => Math.round(val).toLocaleString()}
               accent="zinc"
-              disableAnimation
               sublabel="Executed sets"
             />
             <StatCard
@@ -839,7 +832,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               formatValue={formatCompactWeight}
               unit="kg"
               accent="zinc"
-              disableAnimation
               sublabel="Cumulative tonnage"
             />
           </Grid>
@@ -856,7 +848,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Section>
 
       {/* 8. SECTION 7: INSIGHTS & ROUTINE DISTRIBUTION */}
-      <div className="pt-2 border-t border-zinc-800/60">
+      <div className={cn("pt-2 border-t", BORDER.subtle)}>
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>04 · Training Patterns & Insights</p>
       </div>
       <Grid cols={1} colsLg={3} gap="lg">
@@ -868,7 +860,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           padding="section"
           className="lg:col-span-2"
         >
-          <ul className={cn("border divide-y bg-zinc-950/80 border-zinc-800/50", BORDER.subtle, RADIUS.button)}>
+          <ul className={cn("border divide-y", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
             {insightsList.map((sentence, idx) => (
               <li
                 key={`insight-${idx}`}
@@ -984,7 +976,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             }
             isUnavailable={!aggregated.firstLogDate}
             accent="zinc"
-            disableAnimation
             sublabel={!aggregated.firstLogDate ? 'No sessions recorded' : 'Last recorded workout'}
           />
           <StatCard
@@ -994,7 +985,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             isUnavailable={aggregated.totalLogsCount < 2}
             unavailableLabel="Need 2+ sessions"
             accent="zinc"
-            disableAnimation
             sublabel={aggregated.totalLogsCount < 2 ? 'Need 2+ sessions' : 'Spacing between sessions'}
           />
           <StatCard
@@ -1002,7 +992,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             value={aggregated.activeDaysCount}
             unit="days"
             accent="zinc"
-            disableAnimation
             sublabel={`Logged in ${timeRange.toUpperCase()} window`}
           />
           <StatCard
@@ -1010,7 +999,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
             value={!aggregated.firstLogDate ? '—' : aggregated.rangeLogsCount}
             unit={!aggregated.firstLogDate ? undefined : (aggregated.rangeLogsCount === 1 ? 'session' : 'sessions')}
             accent="zinc"
-            disableAnimation
             isUnavailable={!aggregated.firstLogDate}
             unavailableLabel="No sessions recorded"
             sublabel={

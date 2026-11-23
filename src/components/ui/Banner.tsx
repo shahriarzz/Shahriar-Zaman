@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 import { Card } from './Card';
 import { Badge } from './Badge';
 import { Button } from './Button';
-import { SemanticColor, TYPOGRAPHY } from '../../styles/tokens';
+import { SemanticColor, TYPOGRAPHY, BORDER, SURFACE } from '../../styles/tokens';
 import { renderIcon, IconProp } from './renderIcon';
 
 export type BannerVariant = 'warning' | 'success' | 'destructive' | 'info' | 'achievement';
@@ -44,7 +44,7 @@ const BANNER_CONFIG: Record<BannerVariant, {
   },
   info: {
     accent: 'zinc',
-    containerClass: 'border-zinc-800 bg-zinc-900/60 text-zinc-300',
+    containerClass: cn(BORDER.standard, SURFACE.default, 'text-zinc-300'),
     badgeColor: 'zinc',
   },
   achievement: {

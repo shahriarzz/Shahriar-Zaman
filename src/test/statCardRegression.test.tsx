@@ -394,23 +394,29 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       vi.restoreAllMocks();
     });
 
-    it('numeric value renders final value', () => {
+    it('renders final numeric value immediately by default without scheduling count-up animation', () => {
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+      let renderCount = 0;
       act(() => {
-        root!.render(<StatCard label="Volume" value={100} animationDuration={800} />);
-      });
-      // Advance timers to complete animation
-      act(() => {
-        vi.advanceTimersByTime(800);
+        root!.render(
+          <React.Profiler id="default-stat" onRender={() => { renderCount += 1; }}>
+            <StatCard label="Volume" value={100} animationDuration={800} />
+          </React.Profiler>
+        );
       });
       expect(container!.textContent).toContain('100');
+      expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
+      expect(rafSpy).not.toHaveBeenCalled();
+      expect(renderCount).toBe(1);
     });
 
-    it('numeric value animates', () => {
+    it('numeric value animates when animateValue is enabled', () => {
       act(() => {
-        root!.render(<StatCard label="Volume" value={100} animationDuration={800} />);
+        root!.render(<StatCard label="Volume" value={100} animateValue animationDuration={800} />);
       });
-      // At t=0, starts at 0
+      // At t=0, starts at 0 and flags animation
       expect(container!.textContent).toContain('0');
+      expect(container!.querySelector('[data-countup-animating="true"]')).not.toBeNull();
       // Advance halfway
       act(() => {
         vi.advanceTimersByTime(400);
@@ -422,11 +428,12 @@ describe('StatCard Architecture & Display Regression Suite', () => {
         vi.advanceTimersByTime(400);
       });
       expect(container!.textContent).toContain('100');
+      expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
     });
 
-    it('decimal value animates', () => {
+    it('decimal value animates when animateValue is enabled', () => {
       act(() => {
-        root!.render(<StatCard label="Frequency" value={4.2} animationDuration={800} />);
+        root!.render(<StatCard label="Frequency" value={4.2} animateValue animationDuration={800} />);
       });
       act(() => {
         vi.advanceTimersByTime(800);
@@ -434,9 +441,9 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('4.2');
     });
 
-    it('formatted numeric value animates', () => {
+    it('formatted numeric value animates when animateValue is enabled', () => {
       act(() => {
-        root!.render(<StatCard label="Volume" value="124.6k" unit="kg" animationDuration={800} />);
+        root!.render(<StatCard label="Volume" value="124.6k" unit="kg" animateValue animationDuration={800} />);
       });
       act(() => {
         vi.advanceTimersByTime(800);
@@ -445,13 +452,14 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('kg');
     });
 
-    it('formatValue receives animated numeric value', () => {
+    it('formatValue receives animated numeric value when animateValue is enabled', () => {
       const receivedValues: number[] = [];
       act(() => {
         root!.render(
           <StatCard
             label="Tonnage"
             value={500}
+            animateValue
             animationDuration={800}
             formatValue={(val) => {
               receivedValues.push(val);
@@ -470,12 +478,28 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('500kg');
     });
 
-    it('disabled animation immediately renders target', () => {
+    it('disableAnimation overrides animateValue and immediately renders target', () => {
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
       act(() => {
-        root!.render(<StatCard label="Volume" value={750} disableAnimation={true} />);
+        root!.render(<StatCard label="Volume" value={750} animateValue disableAnimation={true} />);
       });
       // Immediately contains 750 without advancing timers
       expect(container!.textContent).toContain('750');
+      expect(rafSpy).not.toHaveBeenCalled();
+    });
+
+    it('cancels active requestAnimationFrame loop on unmount', () => {
+      const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+      act(() => {
+        root!.render(<StatCard label="Volume" value={500} animateValue animationDuration={800} />);
+      });
+      expect(container!.querySelector('[data-countup-animating="true"]')).not.toBeNull();
+
+      act(() => {
+        root!.unmount();
+      });
+      root = null;
+      expect(cancelSpy).toHaveBeenCalledTimes(1);
     });
 
     it('unavailable value renders —', () => {
@@ -517,7 +541,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
     it('target change updates value', () => {
       act(() => {
-        root!.render(<StatCard label="Streak" value={10} animationDuration={400} />);
+        root!.render(<StatCard label="Streak" value={10} animateValue animationDuration={400} />);
       });
       act(() => {
         vi.advanceTimersByTime(400);
@@ -526,7 +550,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
       // Update target to 15
       act(() => {
-        root!.render(<StatCard label="Streak" value={15} animationDuration={400} />);
+        root!.render(<StatCard label="Streak" value={15} animateValue animationDuration={400} />);
       });
       act(() => {
         vi.advanceTimersByTime(400);
@@ -534,9 +558,9 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('15');
     });
 
-    it('reduced-motion renders target immediately', () => {
+    it('reduced-motion renders target immediately and queries matchMedia once per StatCard render', () => {
       const originalMatchMedia = window.matchMedia;
-      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      const matchMediaSpy = vi.fn().mockImplementation((query: string) => ({
         matches: query.includes('prefers-reduced-motion'),
         media: query,
         onchange: null,
@@ -546,13 +570,17 @@ describe('StatCard Architecture & Display Regression Suite', () => {
         removeEventListener: vi.fn(),
         dispatchEvent: vi.fn(),
       } as any));
+      window.matchMedia = matchMediaSpy;
 
       try {
         act(() => {
-          root!.render(<StatCard label="Reduced" value={99} animationDuration={800} />);
+          root!.render(<StatCard label="Reduced" value={99} animateValue animationDuration={800} />);
         });
         // Renders 99 immediately without timer advancement
         expect(container!.textContent).toContain('99');
+        expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
+        // StatCard checks matchMedia once and forwards reducedMotion to useCountUp
+        expect(matchMediaSpy).toHaveBeenCalledTimes(1);
       } finally {
         window.matchMedia = originalMatchMedia;
       }
@@ -581,7 +609,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       act(() => {
         root!.render(
           <React.StrictMode>
-            <StatCard label="Total Volume" value="12,500" unit="kg" animationDuration={400} />
+            <StatCard label="Total Volume" value="12,500" unit="kg" animateValue animationDuration={400} />
           </React.StrictMode>
         );
       });
@@ -620,6 +648,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
             value={45}
             unit="min"
             isUnavailable={false}
+            animateValue
             animationDuration={400}
           />
         );
@@ -633,7 +662,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
     it('initial render is not dimmed (does not apply opacity-50)', () => {
       act(() => {
-        root!.render(<StatCard label="Streak" value={10} animationDuration={500} />);
+        root!.render(<StatCard label="Streak" value={10} animateValue animationDuration={500} />);
       });
       const dimmedEl = container!.querySelector('.opacity-50');
       expect(dimmedEl).toBeNull();
@@ -641,13 +670,13 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
     it('stable target change triggers subtle effect and clears after duration', () => {
       act(() => {
-        root!.render(<StatCard label="Streak" value={10} animationDuration={800} />);
+        root!.render(<StatCard label="Streak" value={10} animateValue animationDuration={800} />);
       });
       expect(container!.querySelector('.opacity-50')).toBeNull();
 
       // Change target value
       act(() => {
-        root!.render(<StatCard label="Streak" value={20} animationDuration={800} />);
+        root!.render(<StatCard label="Streak" value={20} animateValue animationDuration={800} />);
       });
       expect(container!.querySelector('.opacity-50')).not.toBeNull();
 
@@ -660,12 +689,12 @@ describe('StatCard Architecture & Display Regression Suite', () => {
 
     it('intermediate count-up frames do not retrigger the effect or keep it dim', () => {
       act(() => {
-        root!.render(<StatCard label="Volume" value={100} animationDuration={1000} />);
+        root!.render(<StatCard label="Volume" value={100} animateValue animationDuration={1000} />);
       });
 
       // Update to new target
       act(() => {
-        root!.render(<StatCard label="Volume" value={500} animationDuration={1000} />);
+        root!.render(<StatCard label="Volume" value={500} animateValue animationDuration={1000} />);
       });
       expect(container!.querySelector('.opacity-50')).not.toBeNull();
 

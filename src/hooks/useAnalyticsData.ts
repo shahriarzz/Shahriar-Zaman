@@ -12,7 +12,7 @@ import {
   MuscleCategory
 } from '../utils/exerciseResolver';
 import { WORKOUT_COLORS } from '../utils/fitnessHelpers';
-import { SEMANTIC_COLORS } from '../components/ui';
+import { SEMANTIC_COLORS } from '../styles/tokens';
 import { useCalendarGrid } from './useCalendarGrid';
 
 export type TimeRange = '7d' | '30d' | '90d' | 'all';

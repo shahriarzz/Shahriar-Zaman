@@ -381,7 +381,15 @@ export const DOCUMENTED_SEMANTIC_TOKEN_ALLOWLIST = {
     'Floating slide-over panels and centered modal dialogs share the topmost shadow-2xl elevation tier.',
   'TYPOGRAPHY.titleSubsection === TYPOGRAPHY.cardTitle':
     'Structural section headings and modal/container card titles share the display text-lg scale for visual hierarchy.',
+  'TYPOGRAPHY.micro === TYPOGRAPHY.badgeSm':
+    'Micro metadata tags and compact badge labels share the 9px monospace uppercase floor defined in DESIGN_SYSTEM.md.',
   'TYPOGRAPHY.badgeMd === TYPOGRAPHY.segmentedSm':
     'Metadata badge labels and compact segmented control items share the mono 10px uppercase tracking-wider scale.',
+  'TYPOGRAPHY.badgeMd === TYPOGRAPHY.navLabel':
+    'Metadata badge labels and bottom/top navigation labels share the mono 10px uppercase tracking-wider scale.',
+  'TYPOGRAPHY.navLabel === TYPOGRAPHY.segmentedSm':
+    'Navigation item labels and compact segmented control labels share the mono 10px uppercase tracking-wider scale.',
+  'TYPOGRAPHY.button === TYPOGRAPHY.segmentedMd':
+    'Standard action buttons and medium segmented control buttons share the mono 12px uppercase tracking-wider scale.',
 } as const;
 

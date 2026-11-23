@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
 import { SURFACE, BORDER, RADIUS, SPACING, INTERACTIVE, TRANSITION, FOCUS } from '../../styles/tokens';
+import { useButtonRoleKeyboard } from './useInteractiveKeyboardActivation';
 
 export interface ListRowProps extends React.HTMLAttributes<HTMLDivElement> {
   leading?: React.ReactNode;
@@ -32,47 +33,18 @@ export const ListRow: React.FC<ListRowProps> = ({
   ...props
 }) => {
   const isClickable = Boolean(onClick) && !disabled;
-  const isSpacePressedRef = React.useRef(false);
 
   const resolvedRole = role !== undefined ? role : ((Boolean(onClick) || disabled) ? 'button' : undefined);
-  const resolvedTabIndex = tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined);
+  const resolvedTabIndex = disabled ? undefined : (tabIndex !== undefined ? tabIndex : (isClickable ? 0 : undefined));
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    onKeyDown?.(e);
-
-    // Only apply built-in button keyboard behavior when resolvedRole is 'button' and clickable
-    if (resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
-      if (e.key === 'Enter') {
-        // Native <button> triggers click repeatedly when Enter is held (e.repeat === true).
-        e.preventDefault();
-        onClick?.();
-      } else if (e.key === ' ' || e.key === 'Spacebar') {
-        // Prevent default page scroll on Space keydown; activation occurs on keyup
-        e.preventDefault();
-        if (!e.repeat) {
-          isSpacePressedRef.current = true;
-        }
-      }
-    }
-  };
-
-  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    onKeyUp?.(e);
-
-    if (e.key === ' ' || e.key === 'Spacebar') {
-      const wasPressed = isSpacePressedRef.current;
-      isSpacePressedRef.current = false; // Always clear on Space keyup to prevent stale activation
-      if (wasPressed && resolvedRole === 'button' && isClickable && !e.defaultPrevented) {
-        e.preventDefault();
-        onClick?.();
-      }
-    }
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    onBlur?.(e);
-    isSpacePressedRef.current = false;
-  };
+  const { handleKeyDown, handleKeyUp, handleBlur } = useButtonRoleKeyboard<HTMLDivElement>({
+    isActionable: isClickable,
+    resolvedRole,
+    onActivate: onClick,
+    onKeyDown,
+    onKeyUp,
+    onBlur,
+  });
 
   // Roles supporting aria-selected per WAI-ARIA specification
   const isSelectableRole = resolvedRole && (

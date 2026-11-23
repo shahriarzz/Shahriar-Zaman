@@ -11,6 +11,7 @@ import {
   RADIUS,
   SPACING,
   SURFACE,
+  BORDER,
   SHADOW,
   CONTROL_HEIGHT,
   TYPOGRAPHY,
@@ -18,7 +19,11 @@ import {
   TRANSITION,
   MOTION_CONFIG,
   INTERACTIVE,
+  FOCUS,
+  GAP,
+  STACK_SPACING,
   CANVAS_HEX,
+  DOCUMENTED_SEMANTIC_TOKEN_ALLOWLIST,
   SemanticColorKey,
 } from '../styles/tokens';
 import { cn } from '../lib/utils';
@@ -33,6 +38,8 @@ import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { AchievementCard } from '../components/ui/AchievementCard';
 import { ListRow } from '../components/ui/ListRow';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
 import { Layout } from '../components/Layout';
 import { Calendar } from '../components/Calendar';
 import { SessionView, ExerciseCard } from '../components/SessionView';
@@ -2720,6 +2727,321 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(achCard.innerHTML).not.toContain('blur-3xl');
       expect(achCard.style.boxShadow).toBe('');
       expect(achCard.className).not.toContain(SHADOW.elevation);
+    });
+  });
+
+  describe('17. Semantic Token Allowlist & Arbitrary Utility Enforcement', () => {
+    const tokenScales: Record<string, Record<string, string>> = {
+      SURFACE,
+      BORDER,
+      RADIUS,
+      SPACING,
+      SHADOW,
+      TYPOGRAPHY,
+      CONTROL_HEIGHT,
+      TRANSITION,
+      INTERACTIVE,
+      FOCUS,
+      GAP,
+      STACK_SPACING,
+      SEMANTIC_COLORS,
+    };
+
+    function getProductionSourceFiles(dir: string): string[] {
+      const excluded = new Set(['node_modules', 'dist', 'dist-server', 'test', '__tests__', '__mocks__', 'fixtures']);
+      let results: string[] = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!excluded.has(entry.name)) {
+            results = results.concat(getProductionSourceFiles(fullPath));
+          }
+        } else if ((entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) && !entry.name.includes('.test.') && !entry.name.includes('.spec.')) {
+          results.push(fullPath);
+        }
+      }
+      return results;
+    }
+
+    it('verifies every DOCUMENTED_SEMANTIC_TOKEN_ALLOWLIST entry matches runtime values, has production consumers, and covers all duplicate token values', () => {
+      const prodFiles = getProductionSourceFiles(path.join(rootDir, 'src')).filter(
+        (f) => !f.replace(/\\/g, '/').endsWith('src/styles/tokens.ts')
+      );
+      const prodSources = prodFiles.map((f) => fs.readFileSync(f, 'utf8'));
+
+      const allowlistKeys = Object.keys(DOCUMENTED_SEMANTIC_TOKEN_ALLOWLIST);
+      expect(allowlistKeys.length).toBeGreaterThan(0);
+
+      const allowedPairs = new Set<string>();
+
+      for (const pairKey of allowlistKeys) {
+        const [lhsRaw, rhsRaw] = pairKey.split('===').map((s) => s.trim());
+        expect(lhsRaw).toBeTruthy();
+        expect(rhsRaw).toBeTruthy();
+
+        const [lhsScale, lhsProp] = lhsRaw.split('.');
+        const [rhsScale, rhsProp] = rhsRaw.split('.');
+        expect(tokenScales[lhsScale]?.[lhsProp]).toBeDefined();
+        expect(tokenScales[rhsScale]?.[rhsProp]).toBeDefined();
+        expect(tokenScales[lhsScale][lhsProp]).toBe(tokenScales[rhsScale][rhsProp]);
+
+        // Both tokens must have real production consumers outside tokens.ts
+        expect(prodSources.some((src) => src.includes(lhsRaw)), `No production consumer for ${lhsRaw}`).toBe(true);
+        expect(prodSources.some((src) => src.includes(rhsRaw)), `No production consumer for ${rhsRaw}`).toBe(true);
+
+        allowedPairs.add([lhsRaw, rhsRaw].sort().join(' === '));
+      }
+
+      // Scan every token scale for any un-allowlisted exact value duplicates
+      const unallowlistedDuplicates: string[] = [];
+      for (const [scaleName, scaleObj] of Object.entries(tokenScales)) {
+        const valueToTokens = new Map<string, string[]>();
+        for (const [key, value] of Object.entries(scaleObj)) {
+          const list = valueToTokens.get(value) || [];
+          list.push(`${scaleName}.${key}`);
+          valueToTokens.set(value, list);
+        }
+        for (const [, tokensWithSameValue] of valueToTokens.entries()) {
+          if (tokensWithSameValue.length > 1) {
+            for (let i = 0; i < tokensWithSameValue.length; i++) {
+              for (let j = i + 1; j < tokensWithSameValue.length; j++) {
+                const pairSig = [tokensWithSameValue[i], tokensWithSameValue[j]].sort().join(' === ');
+                if (!allowedPairs.has(pairSig)) {
+                  unallowlistedDuplicates.push(pairSig);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      expect(
+        unallowlistedDuplicates,
+        `Found un-allowlisted duplicate token values: ${unallowlistedDuplicates.join(', ')}`
+      ).toEqual([]);
+    });
+
+    it('rejects unapproved arbitrary radius, spacing, typography, and raw semantic color utilities in UI components', () => {
+      const uiFiles = [
+        ...getProductionSourceFiles(path.join(rootDir, 'src/components')),
+        path.join(rootDir, 'src/App.tsx'),
+      ];
+
+      // Narrow documented safe-area spacing exception only
+      const spacingExceptions: Record<string, string[]> = {
+        'src/components/Layout.tsx': ['pb-[calc(6rem+env(safe-area-inset-bottom,0px))]'],
+      };
+
+      const arbitraryRadiusViolations: string[] = [];
+      const arbitrarySpacingViolations: string[] = [];
+      const arbitraryTypographyViolations: string[] = [];
+      const arbitraryColorViolations: string[] = [];
+
+      const radiusRegex = /\brounded(?:-[tlbr]{1,2})?-\[[^\]]+\]/g;
+      const spacingRegex = /(?:^|[\s"'`])(-?(?:p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-\[[^\]]+\])/g;
+      const typographyRegex = /\btext-\[[^\]]*(?:px|rem|em)[^\]]*\]/g;
+      const arbitraryColorRegex = /\b(?:bg|text|border|ring|stroke|fill)-\[(?:#[0-9a-fA-F]+|rgb[^\]]*|hsl[^\]]*)\]/g;
+
+      for (const file of uiFiles) {
+        const rel = path.relative(rootDir, file).replace(/\\/g, '/');
+        const content = fs.readFileSync(file, 'utf8');
+
+        for (const m of content.match(radiusRegex) || []) {
+          arbitraryRadiusViolations.push(`${rel}: ${m}`);
+        }
+        let spMatch: RegExpExecArray | null;
+        while ((spMatch = spacingRegex.exec(content)) !== null) {
+          const token = spMatch[1];
+          if (!(spacingExceptions[rel] || []).includes(token)) {
+            arbitrarySpacingViolations.push(`${rel}: ${token}`);
+          }
+        }
+        for (const m of content.match(typographyRegex) || []) {
+          arbitraryTypographyViolations.push(`${rel}: ${m}`);
+        }
+        for (const m of content.match(arbitraryColorRegex) || []) {
+          arbitraryColorViolations.push(`${rel}: ${m}`);
+        }
+      }
+
+      expect(arbitraryRadiusViolations).toEqual([]);
+      expect(arbitrarySpacingViolations).toEqual([]);
+      expect(arbitraryTypographyViolations).toEqual([]);
+      expect(arbitraryColorViolations).toEqual([]);
+    });
+  });
+
+  describe('18. Shared Primitive Nested Interactive Guards & Accessibility Audit', () => {
+    let container: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    });
+
+    it('prevents Enter and Space keyboard events on nested interactive descendants from activating clickable Card or ListRow', () => {
+      let cardClicks = 0;
+      let rowClicks = 0;
+
+      act(() => {
+        root.render(
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              Card,
+              { onClick: () => { cardClicks++; } },
+              React.createElement('button', { type: 'button', 'data-testid': 'card-btn' }, 'Nested Btn'),
+              React.createElement('input', { type: 'text', 'data-testid': 'card-input' }),
+              React.createElement('select', { 'data-testid': 'card-select' }, React.createElement('option', { value: 'a' }, 'A')),
+              React.createElement('textarea', { 'data-testid': 'card-textarea' }),
+              React.createElement('a', { href: '#x', 'data-testid': 'card-link' }, 'Link'),
+              React.createElement('div', { role: 'button', tabIndex: 0, 'data-testid': 'card-role-btn' }, 'Role Btn'),
+              React.createElement('span', { role: 'link', tabIndex: 0, 'data-testid': 'card-role-link' }, 'Role Link'),
+              React.createElement('div', { contentEditable: true, suppressContentEditableWarning: true, 'data-testid': 'card-editable' }, 'Editable'),
+              React.createElement('span', { 'data-testid': 'card-plain-child' }, 'Plain label')
+            ),
+            React.createElement(
+              ListRow,
+              { onClick: () => { rowClicks++; } },
+              React.createElement('button', { type: 'button', 'data-testid': 'row-btn' }, 'Row Btn'),
+              React.createElement('input', { type: 'text', 'data-testid': 'row-input' }),
+              React.createElement('a', { href: '#y', 'data-testid': 'row-link' }, 'Row Link'),
+              React.createElement('span', { role: 'button', tabIndex: 0, 'data-testid': 'row-role-btn' }, 'Row Role Btn'),
+              React.createElement('span', { 'data-testid': 'row-plain-child' }, 'Plain row label')
+            )
+          )
+        );
+      });
+
+      const cardNestedIds = [
+        'card-btn',
+        'card-input',
+        'card-select',
+        'card-textarea',
+        'card-link',
+        'card-role-btn',
+        'card-role-link',
+        'card-editable',
+      ];
+      for (const testId of cardNestedIds) {
+        const el = container.querySelector(`[data-testid="${testId}"]`) as HTMLElement;
+        expect(el).toBeTruthy();
+        act(() => {
+          const enterEv = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+          const spaceDown = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+          const spaceUp = new KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true });
+          el.dispatchEvent(enterEv);
+          el.dispatchEvent(spaceDown);
+          el.dispatchEvent(spaceUp);
+          // Must not suppress typing Space inside inputs/textareas/contenteditable
+          expect(spaceDown.defaultPrevented).toBe(false);
+        });
+      }
+      expect(cardClicks).toBe(0);
+
+      // Plain non-interactive child inside Card STILL activates Card normally
+      const plainCardChild = container.querySelector('[data-testid="card-plain-child"]') as HTMLElement;
+      act(() => {
+        plainCardChild.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      expect(cardClicks).toBe(1);
+
+      const rowNestedIds = ['row-btn', 'row-input', 'row-link', 'row-role-btn'];
+      for (const testId of rowNestedIds) {
+        const el = container.querySelector(`[data-testid="${testId}"]`) as HTMLElement;
+        expect(el).toBeTruthy();
+        act(() => {
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true }));
+        });
+      }
+      expect(rowClicks).toBe(0);
+
+      const plainRowChild = container.querySelector('[data-testid="row-plain-child"]') as HTMLElement;
+      act(() => {
+        plainRowChild.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        plainRowChild.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      expect(rowClicks).toBe(1);
+    });
+
+    it('guards disabled ListRow and Button from focus/activation, aligns Textarea/Input error semantics, and scopes SegmentedControl instances', () => {
+      let disabledRowClicks = 0;
+      let disabledBtnClicks = 0;
+
+      act(() => {
+        root.render(
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              ListRow,
+              { disabled: true, tabIndex: 0, onClick: () => { disabledRowClicks++; } },
+              'Disabled Row'
+            ),
+            React.createElement(
+              Button,
+              { disabled: true, onClick: () => { disabledBtnClicks++; } },
+              'Disabled Btn'
+            ),
+            React.createElement(Input, { label: 'Weight', error: 'Invalid weight' }),
+            React.createElement(Textarea, { label: 'Notes', error: 'Notes required' }),
+            React.createElement(SegmentedControl, {
+              options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+              value: 'a',
+              onChange: () => {},
+              label: 'Group One',
+            }),
+            React.createElement(SegmentedControl, {
+              options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+              value: 'b',
+              onChange: () => {},
+              label: 'Group Two',
+            }),
+            React.createElement(Banner, { variant: 'info', title: 'Info Notice' })
+          )
+        );
+      });
+
+      const listRow = container.querySelector('[aria-disabled="true"]') as HTMLElement;
+      expect(listRow).toBeTruthy();
+      expect(listRow.getAttribute('tabindex')).toBeNull();
+      act(() => {
+        listRow.click();
+        listRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        listRow.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        listRow.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      });
+      expect(disabledRowClicks).toBe(0);
+
+      const btn = container.querySelector('button[disabled]') as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      act(() => {
+        btn.click();
+      });
+      expect(disabledBtnClicks).toBe(0);
+
+      const input = container.querySelector('input') as HTMLInputElement;
+      const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(textarea.getAttribute('aria-invalid')).toBe('true');
+      expect(container.querySelectorAll('[role="alert"]').length).toBe(2);
+
+      const groups = container.querySelectorAll('[role="group"]');
+      expect(groups.length).toBe(2);
+      expect(groups[0].getAttribute('aria-label')).toBe('Group One');
+      expect(groups[1].getAttribute('aria-label')).toBe('Group Two');
     });
   });
 });

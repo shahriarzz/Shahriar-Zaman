@@ -62,6 +62,10 @@ async function waitForAnimationsToSettle(page: Page, rootSelector?: string): Pro
       await Promise.allSettled(finiteFinishedPromises);
     }
 
+    while ((scopeEl || document).querySelectorAll('[data-countup-animating="true"]').length > 0) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });

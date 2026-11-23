@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { cn } from '../lib/utils';
+import { BORDER, RADIUS, SURFACE } from '../styles/tokens';
 
 interface DeferredViewSectionProps {
   children: React.ReactNode;
@@ -70,13 +71,15 @@ export const DeferredViewSection: React.FC<DeferredViewSectionProps> = ({
       >
         {placeholder || (
           <div
-            className="w-full h-full rounded-2xl bg-zinc-900/40 border border-zinc-800/40 flex items-center justify-center"
+            className={cn("w-full h-full border flex items-center justify-center", RADIUS.card, SURFACE.subtle, BORDER.subtle)}
             style={{ minHeight: styleMinHeight }}
           >
             <div
               className={cn(
-                "w-5 h-5 border-2 border-zinc-800 border-t-orange-500 rounded-full",
-                shouldReduceMotion ? "opacity-60" : "animate-spin [animation-duration:1s]"
+                "w-5 h-5 border-2 border-t-orange-500",
+                BORDER.standard,
+                RADIUS.pill,
+                shouldReduceMotion ? "opacity-60" : "motion-safe:animate-spin [animation-duration:1s]"
               )}
             />
           </div>

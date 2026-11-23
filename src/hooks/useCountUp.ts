@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { prefersReducedMotion } from '../lib/utils';
 
 export interface UseCountUpOptions {
   duration?: number;
   disabled?: boolean;
+  reducedMotion?: boolean;
 }
 
 const emptySubscribe = () => () => {};
@@ -21,13 +23,11 @@ export const useCountUp = (
     () => true
   );
 
-  // Check prefers-reduced-motion in browser environments
-  const isReducedMotion =
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Use authoritative reduced-motion decision when provided by caller; otherwise check once
+  const isReducedMotion = options?.reducedMotion ?? prefersReducedMotion();
 
   const isInvalidTarget = isNaN(target) || !isFinite(target);
+  const resolvedTarget = isInvalidTarget ? 0 : target;
 
   const shouldSkipAnimation =
     isServerRendering ||
@@ -37,21 +37,22 @@ export const useCountUp = (
     isInvalidTarget;
 
   // Initial state: immediately show target if skipping or if target is 0, otherwise start from 0
-  const [value, setValue] = useState<number>(() => (shouldSkipAnimation ? (isInvalidTarget ? 0 : target) : 0));
+  const [value, setValue] = useState<number>(() => (shouldSkipAnimation ? resolvedTarget : 0));
 
-  const currentValRef = useRef<number>(shouldSkipAnimation ? (isInvalidTarget ? 0 : target) : 0);
+  const currentValRef = useRef<number>(shouldSkipAnimation ? resolvedTarget : 0);
 
   useEffect(() => {
     if (shouldSkipAnimation) {
-      const finalVal = isInvalidTarget ? 0 : target;
-      setValue(finalVal);
-      currentValRef.current = finalVal;
+      if (currentValRef.current !== resolvedTarget) {
+        currentValRef.current = resolvedTarget;
+        setValue(resolvedTarget);
+      }
       return;
     }
 
     const startVal = currentValRef.current;
-    if (startVal === target) {
-      setValue(target);
+    if (startVal === resolvedTarget) {
+      setValue(resolvedTarget);
       return;
     }
 
@@ -60,16 +61,16 @@ export const useCountUp = (
 
     const tick = (now: number) => {
       const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+      const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
       // Smooth ease-out cubic deceleration
       const ease = 1 - Math.pow(1 - progress, 3);
-      const current = startVal + (target - startVal) * ease;
+      const current = startVal + (resolvedTarget - startVal) * ease;
 
       currentValRef.current = current;
 
       if (progress >= 1) {
-        currentValRef.current = target;
-        setValue(target);
+        currentValRef.current = resolvedTarget;
+        setValue(resolvedTarget);
       } else {
         setValue(current);
         animFrameId = requestAnimationFrame(tick);
@@ -83,13 +84,11 @@ export const useCountUp = (
         cancelAnimationFrame(animFrameId);
       }
     };
-  }, [target, duration, disabled, shouldSkipAnimation, isInvalidTarget]);
+  }, [resolvedTarget, duration, shouldSkipAnimation]);
 
   if (shouldSkipAnimation) {
-    return isInvalidTarget ? 0 : target;
+    return resolvedTarget;
   }
 
   return value;
 };
-
-

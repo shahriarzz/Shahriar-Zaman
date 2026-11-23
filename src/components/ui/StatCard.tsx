@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { Card, CardProps } from './Card';
 import { Badge } from './Badge';
-import { cn } from '../../lib/utils';
+import { cn, prefersReducedMotion } from '../../lib/utils';
 import {
   SemanticColor,
   SEMANTIC_COLORS,
@@ -19,6 +19,7 @@ export interface StatCardProps {
   value: string | number | null | undefined;
   unit?: string;
   formatValue?: (val: number) => string;
+  animateValue?: boolean;
   disableAnimation?: boolean;
   animationDuration?: number;
   icon?: IconProp;
@@ -148,6 +149,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   value,
   unit,
   formatValue,
+  animateValue = false,
   disableAnimation = false,
   animationDuration = 800,
   icon,
@@ -176,27 +178,33 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   const parsed = useMemo(() => parseStatValue(value, formatValue), [value, formatValue]);
 
+  const motionReduced = useReducedMotion();
+  const shouldReduceMotion = Boolean(motionReduced || prefersReducedMotion());
+  const shouldAnimate = Boolean(animateValue) && !disableAnimation;
+
   const animatedNumber = useCountUp(parsed.target, {
     duration: animationDuration,
-    disabled: disableAnimation || !parsed.isNumeric || effectiveUnavailable,
+    disabled: !shouldAnimate || !parsed.isNumeric || effectiveUnavailable,
+    reducedMotion: shouldReduceMotion,
   });
+
+  const isCountingUp =
+    shouldAnimate &&
+    !shouldReduceMotion &&
+    parsed.isNumeric &&
+    !effectiveUnavailable &&
+    parsed.target !== 0 &&
+    animatedNumber !== parsed.target;
 
   const displayString = useMemo(() => {
     if (effectiveUnavailable) return '—';
     if (!parsed.isNumeric) return String(value ?? '—');
-    if (disableAnimation) {
-      return parsed.formatFn ? parsed.formatFn(parsed.target) : formatAnimatedValue(parsed.target, parsed);
+    if (!shouldAnimate) {
+      return formatAnimatedValue(parsed.target, parsed);
     }
     return formatAnimatedValue(animatedNumber, parsed);
-  }, [effectiveUnavailable, parsed, animatedNumber, disableAnimation, value]);
+  }, [effectiveUnavailable, parsed, animatedNumber, shouldAnimate, value]);
 
-  const motionReduced = useReducedMotion();
-  const shouldReduceMotion = Boolean(
-    motionReduced ||
-    (typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-  );
   const prevTargetRef = React.useRef<string | number | null | undefined>(null);
   const isFirstMountRef = React.useRef(true);
   const [isValueChanging, setIsValueChanging] = React.useState(false);
@@ -282,6 +290,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         {/* Primary Value + Unit (anchored baseline alignment) */}
         <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1">
           <span
+            data-countup-animating={isCountingUp ? 'true' : undefined}
             className={cn(
               STAT_NUMBER_VARIANTS[size],
               "min-w-0 max-w-full break-words whitespace-normal",

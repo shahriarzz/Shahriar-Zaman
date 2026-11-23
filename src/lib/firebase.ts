@@ -120,8 +120,8 @@ export function computeFirebaseConfigState(config: Record<string, any>): Firebas
   return 'offline_by_default';
 }
 
-export const firebaseConfigState: FirebaseConfigState = computeFirebaseConfigState(actualConfig);
-export const isFirebaseConfigured = firebaseConfigState === 'configured';
+const firebaseConfigState: FirebaseConfigState = computeFirebaseConfigState(actualConfig);
+const isFirebaseConfigured = firebaseConfigState === 'configured';
 
 if (isFirebaseEmulatorEnabled) {
   if (!isFirebaseConfigured) {
@@ -310,7 +310,6 @@ if (isFirebaseConfigured) {
 export {
   dbInstance as db,
   authInstance as auth,
-  googleProviderInstance as googleProvider,
   signInWithGoogleFunc as signInWithGoogle,
   onAuthStateChangedFunc as onAuthStateChanged,
   getRedirectResultFunc as getRedirectResult,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, TYPOGRAPHY, SPACING, GAP, FOCUS, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
+import { SemanticColor, getAccentColor, SEMANTIC_COLORS, RADIUS, SURFACE, BORDER, INTERACTIVE, TYPOGRAPHY, SPACING, GAP, FOCUS, TRANSITION, CONTROL_HEIGHT } from '../../styles/tokens';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -32,6 +32,7 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   const accentHex = colorOverride || getAccentColor(accent) || SEMANTIC_COLORS.emerald;
   const shouldReduceMotion = useReducedMotion();
+  const controlId = React.useId();
 
   return (
     <div
@@ -65,18 +66,18 @@ export function SegmentedControl<T extends string>({
               FOCUS.visible,
               isSelected
                 ? "text-white font-black"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40"
+                : cn("text-zinc-400 hover:text-zinc-200", INTERACTIVE.hover)
             )}
           >
             {isSelected && (
               shouldReduceMotion ? (
                 <div
-                  className={cn("absolute inset-0 bg-zinc-800 border shadow-sm -z-0", BORDER.interactive, RADIUS.button)}
+                  className={cn("absolute inset-0 bg-zinc-800 border -z-0", BORDER.standard, RADIUS.button)}
                 />
               ) : (
                 <motion.div
-                  layoutId={`segmented-active-${options.map(o => o.value).join('-')}`}
-                  className={cn("absolute inset-0 bg-zinc-800 border shadow-sm -z-0", BORDER.interactive, RADIUS.button)}
+                  layoutId={`segmented-active-${controlId}`}
+                  className={cn("absolute inset-0 bg-zinc-800 border -z-0", BORDER.standard, RADIUS.button)}
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )
