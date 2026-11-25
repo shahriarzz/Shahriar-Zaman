@@ -581,7 +581,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         onClick={() => handleMoveExercise(index, 'up')}
                         aria-label="Move exercise up"
                         className={cn(
-                          "text-zinc-500 hover:text-white",
+                          "relative after:content-[''] after:absolute after:-inset-y-0.5 after:inset-x-0 text-zinc-500 hover:text-white",
                           isFirst && "opacity-20 cursor-not-allowed"
                         )}
                       />
@@ -593,7 +593,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         onClick={() => handleMoveExercise(index, 'down')}
                         aria-label="Move exercise down"
                         className={cn(
-                          "text-zinc-500 hover:text-white",
+                          "relative after:content-[''] after:absolute after:-inset-y-0.5 after:inset-x-0 text-zinc-500 hover:text-white",
                           isLast && "opacity-20 cursor-not-allowed"
                         )}
                       />
@@ -612,7 +612,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                         aria-label={isExpanded ? "Collapse exercise details" : "Expand exercise details"}
                         aria-expanded={isExpanded}
                         aria-controls={exPanelId}
-                        className="text-zinc-500 hover:text-zinc-200"
+                        className="relative after:content-[''] after:absolute after:-inset-y-0.5 after:inset-x-0 text-zinc-500 hover:text-zinc-200"
                       />
                     </div>
                   </div>

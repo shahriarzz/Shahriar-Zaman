@@ -133,6 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         {/* Stable 4-KPI Overview Grid (Locked slot identities) */}
         <Grid cols={2} colsMd={4} gap="md" data-testid="dashboard-overview-stats">
           <StatCard
+            animateValue
             label="Streak"
             value={trainingStreak.currentStreak}
             unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
@@ -152,6 +153,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             size="standard"
           />
           <StatCard
+            animateValue
             label="Strength Progress"
             value={strengthTrend.percentChange}
             formatValue={(val) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}`}
@@ -637,7 +639,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                             await weightSummary.deleteWeight(date);
                           }
                         }}
-                        className="text-zinc-600 hover:text-red-400"
+                        className="relative after:content-[''] after:absolute after:-inset-0.5 text-zinc-600 hover:text-red-400"
                         aria-label={`Delete weight entry for ${formatDateStr(date)}`}
                         title="Delete Entry"
                       />

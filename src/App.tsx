@@ -225,44 +225,46 @@ function AppContent() {
             </div>
           }
         >
-          {activeTab === 'dashboard' && (
-            <Dashboard 
-              onStartWorkout={handleStartSession} 
-              onPrewarmSession={() => prewarmTab('session')}
-              onNavigateToHistory={(date) => {
-                setHistorySearchDate(date);
-                dispatchNav({ type: 'NAVIGATE', to: 'history' });
-              }}
-            />
-          )}
-
-          {activeTab === 'session' && (
+          {activeTab === 'session' ? (
             <SessionView
               workoutId={selectedWorkoutId}
               onExit={() => {
                 dispatchNav({ type: 'SESSION_COMPLETED' });
               }}
             />
-          )}
+          ) : (
+            <>
+              {activeTab === 'dashboard' && (
+                <Dashboard 
+                  onStartWorkout={handleStartSession} 
+                  onPrewarmSession={() => prewarmTab('session')}
+                  onNavigateToHistory={(date) => {
+                    setHistorySearchDate(date);
+                    dispatchNav({ type: 'NAVIGATE', to: 'history' });
+                  }}
+                />
+              )}
 
-          {activeTab === 'history' && (
-            <HistoryView 
-              initialDate={historySearchDate} 
-              onClearInitialDate={() => setHistorySearchDate(null)} 
-              savedState={historyTabState}
-              onSaveState={setHistoryTabState}
-            />
-          )}
+              {activeTab === 'history' && (
+                <HistoryView 
+                  initialDate={historySearchDate} 
+                  onClearInitialDate={() => setHistorySearchDate(null)} 
+                  savedState={historyTabState}
+                  onSaveState={setHistoryTabState}
+                />
+              )}
 
-          {activeTab === 'analytics' && (
-            <AnalyticsView 
-              savedState={analyticsTabState}
-              onSaveState={setAnalyticsTabState}
-            />
-          )}
+              {activeTab === 'analytics' && (
+                <AnalyticsView 
+                  savedState={analyticsTabState}
+                  onSaveState={setAnalyticsTabState}
+                />
+              )}
 
-          {activeTab === 'manage' && (
-            <ManageView />
+              {activeTab === 'manage' && (
+                <ManageView />
+              )}
+            </>
           )}
         </Suspense>
       </Layout>

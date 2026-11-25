@@ -182,7 +182,7 @@ Do not add another spacing or radius scale without proving the current system ca
 
 ### 5.4 Touch targets
 
-The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (md), and `min-h-[48px]` (lg), alongside `CONTROL_HEIGHT.touchTarget` (`min-h-[44px] min-w-[44px]`). On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation items, and icon-only controls. Compact visual controls may retain a 32px or 40px visual boundary while expanding their hit region using hit-padding or touchTarget containers. Any deliberate exception to the 44px hit-target policy or raw-color rules requires an explicit architectural reason and automated test coverage. Do not reduce touch targets merely to increase density.
+The canonical `CONTROL_HEIGHT` establishes `min-h-[32px]` (sm), `min-h-[40px]` (md), and `min-h-[48px]` (lg), alongside `CONTROL_HEIGHT.touchTarget` (`min-h-[44px] min-w-[44px]`). On mobile, aim for a **44 × 44 CSS-pixel minimum interactive target where practical**, especially for primary actions, navigation items, and icon-only controls. Compact visual controls may retain a 32px, 40px, or 44px visual boundary while expanding their invisible hit region to at least 48dp (48 × 48 CSS pixels) on Android/mobile controls (such as mobile bottom navigation items, header sync trigger, `SessionView` set/exit/finish controls, and `WorkoutEditor` row actions) via `h-12 w-12` / `h-12` (`w-12` on icon-only mobile nav items) containers or `::after` hit-padding that preserves horizontal clearance between adjacent controls. Any deliberate exception to the 44px hit-target policy or raw-color rules requires an explicit architectural reason and automated test coverage. Do not reduce touch targets merely to increase density.
 
 ---
 
@@ -204,6 +204,9 @@ The token module exports `DURATION` (`fast`, `standard`, `relaxed`, `slow`), `TR
 - Chart animation should be deliberate and restrained. Disable it where it delays reading, causes repeated visual noise, or harms performance.
 - Use the established `MOTION_CONFIG` presets where appropriate rather than adding inline variants with slightly different timings.
 - Interaction states must remain clear without motion: hover, pressed, selected, disabled, loading, success, and error should have visible non-animated cues.
+
+- Selective `StatCard` count-up (`animateValue`, ~440ms via `DEFAULT_COUNT_UP_DURATION_MS`) is strictly opt-in (`false` by default) and enabled only on Dashboard `Streak` and `Strength Progress`, plus `SessionView` completion summary `Total Volume`; other Dashboard KPIs, History, and Analytics cards render final numeric values immediately. Reduced-motion resolution uses `useReducedMotion() ?? prefersReducedMotion()` to avoid redundant media queries when the hook returns a boolean.
+- Main-tab switches in `App.tsx` render directly without an opacity route-fade wrapper inside `<main>`, avoiding CSS `opacity < 1` stacking contexts that would trap inline `<Dialog>` overlays behind `z-50` sticky headers and bottom navigation during transitions.
 
 **Current implementation caveat:** The existing token set contains more motion presets than every screen necessarily needs. Their existence is not a requirement to animate every component.
 

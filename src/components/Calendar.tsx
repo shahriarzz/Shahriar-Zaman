@@ -180,6 +180,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 }}
                 aria-label="Previous Month"
                 title="Previous Month"
+                className="relative after:content-[''] after:absolute after:-inset-1"
               />
               <Button
                 variant="outline"
@@ -193,6 +194,7 @@ export const Calendar: React.FC<CalendarProps> = ({ onNavigateToHistory, onStart
                 disabled={isCurrentOrFutureMonth}
                 aria-label={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
                 title={isCurrentOrFutureMonth ? 'Cannot browse future months' : 'Next Month'}
+                className="relative after:content-[''] after:absolute after:-inset-1"
               />
             </div>
           </div>

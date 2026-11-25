@@ -452,6 +452,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               }}
               icon={<ChevronLeft size={16} />}
               aria-label="Previous Month"
+              className="relative after:content-[''] after:absolute after:-inset-1"
             />
             <Button
               variant="secondary"
@@ -462,6 +463,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
               }}
               icon={<ChevronRight size={16} />}
               aria-label="Next Month"
+              className="relative after:content-[''] after:absolute after:-inset-1"
             />
           </div>
         }

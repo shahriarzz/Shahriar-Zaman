@@ -4,6 +4,15 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+let mockForceReducedMotion: boolean | null = null;
+vi.mock('motion/react', async () => {
+  const actual = await vi.importActual<typeof import('motion/react')>('motion/react');
+  return {
+    ...actual,
+    useReducedMotion: () => mockForceReducedMotion ?? actual.useReducedMotion(),
+  };
+});
 import { Workout, ExerciseDefinition, CURRENT_SCHEMA_VERSION } from '../types/fitness';
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import {
@@ -1074,6 +1083,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
     it('Scenario 9: Completion summary preserves non-zero Sets Done and Total Volume after clearActiveSession() runs', async () => {
       const origMatchMedia = window.matchMedia;
+      mockForceReducedMotion = true;
       window.matchMedia = vi.fn().mockImplementation((query: string) => ({
         matches: query.includes('prefers-reduced-motion'),
         media: query,
@@ -1149,6 +1159,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         expect(container.textContent).toContain('1.4k');
         expect(localStorage.getItem('gl_active_session')).toBeNull();
       } finally {
+        mockForceReducedMotion = null;
         window.matchMedia = origMatchMedia;
       }
     });

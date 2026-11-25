@@ -413,7 +413,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
             onClick={() => getAiAdvice(ex)}
             disabled={isLoadingAdvice}
             aria-label="Get Coach tip"
-            className="text-zinc-500 hover:text-zinc-300"
+            className="relative after:content-[''] after:absolute after:-inset-0.5 text-zinc-500 hover:text-zinc-300"
             icon={
               <Zap 
                 size={18} 
@@ -539,7 +539,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                             size="icon"
                             onClick={() => handleSetDone(ex.id, si, s.done)}
                             className={cn(
-                              "border",
+                              "relative after:content-[''] after:absolute after:-inset-y-1 after:-left-1 after:-right-0.5 border",
                               TRANSITION.interactive,
                               RADIUS.button,
                               s.done ? "bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400" : cn(SURFACE.recessed, BORDER.standard, "text-zinc-600 hover:text-zinc-400")
@@ -559,7 +559,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
                             }}
                             disabled={setsForEx.length <= 1}
                             className={cn(
-                              "border border-transparent bg-transparent text-zinc-500 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/10 disabled:opacity-15",
+                              "relative after:content-[''] after:absolute after:-inset-y-1 after:-left-0.5 after:-right-1 border border-transparent bg-transparent text-zinc-500 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/10 disabled:opacity-15",
                               RADIUS.button
                             )}
                             title="Delete this set"
@@ -1402,7 +1402,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
             icon={<ChevronLeft size={20} />}
             aria-label="Exit session"
             title="Exit session"
-            className="shrink-0"
+            className="relative after:content-[''] after:absolute after:-inset-0.5 shrink-0"
           />
           <div className="space-y-1 min-w-0">
             <Badge
@@ -1473,7 +1473,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
                 aria-label={isSubmitting ? 'Syncing session' : 'Finish Session'}
                 className={cn(
                   CONTROL_HEIGHT.touchTarget,
-                  "h-11 px-3 sm:px-4 whitespace-nowrap shrink-0"
+                  "relative after:content-[''] after:absolute after:-inset-y-1 after:inset-x-0 h-11 px-3 sm:px-4 whitespace-nowrap shrink-0"
                 )}
               >
                 {isSubmitting ? 'Syncing...' : 'Finish'}

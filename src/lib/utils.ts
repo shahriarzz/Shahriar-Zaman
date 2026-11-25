@@ -5,6 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const DEFAULT_COUNT_UP_DURATION_MS = 440;
+
 export function prefersReducedMotion(): boolean {
   return (
     typeof window !== 'undefined' &&

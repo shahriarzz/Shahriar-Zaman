@@ -305,7 +305,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             variant="ghost"
             size="icon"
             onClick={clearFilter}
-            className="text-zinc-400 hover:text-white"
+            className="relative after:content-[''] after:absolute after:-inset-0.5 text-zinc-400 hover:text-white"
             aria-label="Clear filter"
             icon={<X size={14} />}
           />
@@ -804,6 +804,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           setEditVerified(false);
                           setExpandedDate(session.id);
                         }}
+                        className="relative after:content-[''] after:absolute after:-inset-1"
                         title="Edit session logs"
                         aria-label="Edit session logs"
                       />
@@ -825,7 +826,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         }}
                         title="Purge session"
                         aria-label="Purge session"
-                        className="hover:text-red-400"
+                        className="relative after:content-[''] after:absolute after:-inset-0.5 hover:text-red-400"
                       />
                     </div>
                   </div>
@@ -858,6 +859,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                 setEditSessionState(null);
                                 setEditVerified(false);
                               }}
+                              className="relative after:content-[''] after:absolute after:-inset-0.5"
                               aria-label="Close session editor"
                               title="Close session editor"
                             />
@@ -984,7 +986,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                                     return { ...prev, sets: newSets };
                                                   });
                                                 }}
-                                                className="hover:text-red-400"
+                                                className="relative after:content-[''] after:absolute after:-inset-0.5 hover:text-red-400"
                                                 aria-label="Remove set"
                                                 title="Remove set"
                                               />

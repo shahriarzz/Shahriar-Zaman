@@ -3044,4 +3044,52 @@ describe('Design System Consolidation & Token Contracts', () => {
       expect(groups[1].getAttribute('aria-label')).toBe('Group Two');
     });
   });
+
+  // =========================================================================
+  // 19. Intentional Motion, Selective Count-Up & Android 48dp Hit Targets
+  // =========================================================================
+  describe('19. Intentional Motion, Selective Count-Up & Android 48dp Hit Targets', () => {
+    it('enables animateValue on Dashboard exclusively for Streak and Strength Progress, keeping other KPIs, History, and Analytics static', () => {
+      const dashboardSrc = fs.readFileSync(path.join(rootDir, 'src/components/Dashboard.tsx'), 'utf8');
+      const historySrc = fs.readFileSync(path.join(rootDir, 'src/components/HistoryView.tsx'), 'utf8');
+      const analyticsSrc = fs.readFileSync(path.join(rootDir, 'src/components/AnalyticsView.tsx'), 'utf8');
+      const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
+
+      const dashboardAnimatedMatches = dashboardSrc.match(/<StatCard[\s\S]*?\/>/g) || [];
+      const animatedLabels = dashboardAnimatedMatches
+        .filter((block) => /\banimateValue\b/.test(block))
+        .map((block) => block.match(/label="([^"]+)"/)?.[1]);
+      expect(animatedLabels).toEqual(['Streak', 'Strength Progress']);
+
+      expect(historySrc).not.toMatch(/\banimateValue\b/);
+      expect(analyticsSrc).not.toMatch(/\banimateValue\b/);
+      // Session completion hero Total Volume remains animated
+      const sessionCards = sessionSrc.match(/<StatCard[\s\S]*?\/>/g) || [];
+      const sessionAnimated = sessionCards
+        .filter((b) => /\banimateValue\b/.test(b))
+        .map((b) => b.match(/label="([^"]+)"/)?.[1]);
+      expect(sessionAnimated).toEqual(['Total Volume']);
+    });
+
+    it('keeps App.tsx main tabs free of opacity route-fade wrappers so inline Dialogs stay layered above z-50 navigation', () => {
+      const appSrc = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
+      expect(appSrc).not.toContain('data-testid="tab-content-transition"');
+      expect(appSrc).not.toContain('opacity: 0.92');
+      expect(appSrc).not.toContain('mode="wait"');
+      expect(appSrc).not.toContain('pointer-events-none');
+      expect(appSrc).toContain("activeTab === 'session' ?");
+    });
+
+    it('verifies Layout mobile bottom nav & header sync button and SessionView controls include 48dp touch hit areas', () => {
+      const layoutSrc = fs.readFileSync(path.join(rootDir, 'src/components/Layout.tsx'), 'utf8');
+      const sessionSrc = fs.readFileSync(path.join(rootDir, 'src/components/SessionView.tsx'), 'utf8');
+      const workoutEditorSrc = fs.readFileSync(path.join(rootDir, 'src/components/manage/WorkoutEditor.tsx'), 'utf8');
+
+      expect(layoutSrc).toContain('"flex items-center justify-center relative select-none rounded-full h-12"');
+      expect(layoutSrc).toContain('h-12 w-12');
+      expect(sessionSrc).toContain('after:-inset-0.5');
+      expect(sessionSrc).toContain('after:-inset-y-1');
+      expect(workoutEditorSrc).toContain('after:-inset-y-0.5');
+    });
+  });
 });

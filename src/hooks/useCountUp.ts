@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
-import { prefersReducedMotion } from '../lib/utils';
+import { prefersReducedMotion, DEFAULT_COUNT_UP_DURATION_MS } from '../lib/utils';
 
 export interface UseCountUpOptions {
   duration?: number;
@@ -13,7 +13,7 @@ export const useCountUp = (
   target: number,
   options?: UseCountUpOptions
 ): number => {
-  const duration = options?.duration ?? 800;
+  const duration = options?.duration ?? DEFAULT_COUNT_UP_DURATION_MS;
   const disabled = options?.disabled ?? false;
 
   // Detect SSR / static string rendering (e.g. renderToString)

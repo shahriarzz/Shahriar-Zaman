@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { Card, CardProps } from './Card';
 import { Badge } from './Badge';
-import { cn, prefersReducedMotion } from '../../lib/utils';
+import { cn, prefersReducedMotion, DEFAULT_COUNT_UP_DURATION_MS } from '../../lib/utils';
 import {
   SemanticColor,
   SEMANTIC_COLORS,
@@ -151,7 +151,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   formatValue,
   animateValue = false,
   disableAnimation = false,
-  animationDuration = 800,
+  animationDuration = DEFAULT_COUNT_UP_DURATION_MS,
   icon,
   accent = 'zinc',
   colorOverride,
@@ -179,7 +179,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   const parsed = useMemo(() => parseStatValue(value, formatValue), [value, formatValue]);
 
   const motionReduced = useReducedMotion();
-  const shouldReduceMotion = Boolean(motionReduced || prefersReducedMotion());
+  const shouldReduceMotion = motionReduced ?? prefersReducedMotion();
   const shouldAnimate = Boolean(animateValue) && !disableAnimation;
 
   const animatedNumber = useCountUp(parsed.target, {

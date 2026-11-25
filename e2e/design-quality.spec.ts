@@ -62,7 +62,22 @@ async function waitForAnimationsToSettle(page: Page, rootSelector?: string): Pro
       await Promise.allSettled(finiteFinishedPromises);
     }
 
-    while ((scopeEl || document).querySelectorAll('[data-countup-animating="true"]').length > 0) {
+    const countUpTimeoutMs = 3000;
+    const countUpStart = performance.now();
+    while (true) {
+      const pendingCountUps = Array.from(
+        (scopeEl || document).querySelectorAll('[data-countup-animating="true"]')
+      );
+      if (pendingCountUps.length === 0) break;
+      if (performance.now() - countUpStart > countUpTimeoutMs) {
+        const sample = pendingCountUps
+          .slice(0, 3)
+          .map((el) => (el.textContent || '').trim())
+          .join(', ');
+        throw new Error(
+          `Timed out after ${countUpTimeoutMs}ms waiting for ${pendingCountUps.length} StatCard count-up animation(s) to settle (${sample || 'unknown'}).`
+        );
+      }
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
 
@@ -614,6 +629,7 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await clickPrimaryTab(page, 'dashboard');
     await page.getByRole('button', { name: 'Start Session' }).click();
     await expect(page.getByTestId('session-finish-button')).toBeVisible();
+    await waitForAnimationsToSettle(page);
 
     for (const width of VIEWPORT_WIDTHS) {
       const height = width < 768 ? 844 : 900;
@@ -712,6 +728,198 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await waitForAppReady(page);
     const repairedSnap = await readCanonicalSnapshot(page);
     expect(repairedSnap?.schemaVersion).toBeGreaterThanOrEqual(2);
+  });
+
+  test('verifies selective StatCard count-up, rapid tab responsiveness, overlay/dialog layering, reduced-motion, and 48dp mobile hit targets', async ({
+    page,
+  }) => {
+    // 1. Seed deterministic training history and reload on Dashboard to inspect initial count-up behavior
+    await seedDeterministicTrainingHistory(page);
+
+    // Wait for count-up to settle and inspect which Dashboard StatCards support count-up vs stay static
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Stay Aggressive' })).toBeVisible();
+
+    const kpiLabelsAfterLoad = await page.evaluate(async () => {
+      const seenAnimating = new Set<string>();
+      for (let frame = 0; frame < 35; frame++) {
+        document.querySelectorAll('[data-countup-animating="true"]').forEach((el) => {
+          const cardText = el.closest('[class*="border"]')?.textContent || el.parentElement?.textContent || '';
+          for (const lbl of ['Streak', 'Training Frequency', 'Adherence', 'Strength Progress']) {
+            if (cardText.includes(lbl)) seenAnimating.add(lbl);
+          }
+        });
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+      return Array.from(seenAnimating);
+    });
+
+    // Streak and Strength Progress may finish rapidly if target unchanged/cached or animate briefly;
+    // Training Frequency and Adherence MUST NEVER animate
+    expect(kpiLabelsAfterLoad).not.toContain('Training Frequency');
+    expect(kpiLabelsAfterLoad).not.toContain('Adherence');
+    await waitForAnimationsToSettle(page);
+
+    // 2 & 3. Sequential + rapid tab transitions stay responsive with zero blank frames and static History/Analytics StatCards
+    for (const tab of ['history', 'analytics', 'manage', 'dashboard'] as const) {
+      await clickPrimaryTab(page, tab);
+      expect(await page.locator('[data-countup-animating="true"]').count()).toBe(0);
+    }
+
+    // Rapid repeated clicks without settling between tabs
+    await page.locator('#nav-item-history').click();
+    await page.locator('#nav-item-analytics').click();
+    await page.locator('#nav-item-manage').click();
+    await page.locator('#nav-item-dashboard').click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Stay Aggressive' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start Session' })).toBeEnabled();
+
+    // 4 & 5 & 6. Mobile viewport (360x844): Dialog stacking, Confirm Dialog, Session flow & 48dp hit targets
+    await page.setViewportSize({ width: 360, height: 844 });
+    await clickPrimaryTab(page, 'manage');
+
+    // Immediately click Privacy Policy upon tab switch and verify Dialog layers ABOVE sticky nav and mobile bottom bar from frame 0
+    await page.getByRole('button', { name: /Privacy Policy & Data Safety/i }).click();
+    const layeringCheck = await page.evaluate(async () => {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      const topEl = document.elementFromPoint(180, 20);
+      const botEl = document.elementFromPoint(180, 815);
+      return {
+        hasDialog: Boolean(document.querySelector('[role="dialog"]')),
+        topHitNav: Boolean(topEl?.closest('nav')),
+        botHitMobileBar: Boolean(botEl?.closest('.fixed.bottom-0')),
+      };
+    });
+    expect(layeringCheck.hasDialog).toBe(true);
+    expect(layeringCheck.topHitNav, 'Dialog backdrop must cover sticky top nav').toBe(false);
+    expect(layeringCheck.botHitMobileBar, 'Dialog backdrop must cover mobile bottom bar').toBe(false);
+    await waitForDialogReady(page);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // Header cloud popover layering
+    await page.locator('button.group\\/sync').click();
+    await expect(page.locator('#cloud-status-popover')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#cloud-status-popover')).toHaveCount(0);
+
+    // Mobile bottom nav & header sync 48dp container verification
+    for (const tab of ['dashboard', 'history', 'analytics', 'manage'] as const) {
+      await assertMinTouchTarget(page, `#mobile-nav-item-${tab}`, `Mobile bottom nav ${tab} (48dp)`, 48);
+    }
+    await assertMinTouchTarget(page, 'button.group\\/sync', 'Header sync trigger (48dp)', 48);
+
+    // WorkoutEditor 48dp hit expansion check
+    await page.getByRole('button', { name: 'Edit Program' }).click();
+    await expect(page.getByTestId('cycle-list')).toBeVisible();
+    await waitForAnimationsToSettle(page);
+    await page.getByTestId('cycle-slot-1').click();
+    await expect(page.locator('button[aria-controls^="workout-ex-panel-"]').first()).toBeVisible();
+    await waitForAnimationsToSettle(page);
+    const editorHits = await page.evaluate(() => {
+      const selectors = [
+        'button[aria-label^="Move "][aria-label$=" up"]',
+        'button[aria-label^="Move "][aria-label$=" down"]',
+        'button[aria-controls^="workout-ex-panel-"]',
+      ];
+      return selectors.map((sel) => {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const afterStyle = window.getComputedStyle(el, '::after');
+        const extraTop = parseFloat(afterStyle.top) || 0;
+        const extraBottom = parseFloat(afterStyle.bottom) || 0;
+        const effectiveHeight = r.height - extraTop - extraBottom;
+        return { sel, rectHeight: r.height, effectiveHeight, width: r.width };
+      });
+    });
+    for (const item of editorHits) {
+      expect(item).toBeTruthy();
+      expect(item!.effectiveHeight, `${item!.sel} effective hit height`).toBeGreaterThanOrEqual(48);
+    }
+
+    // Enter SessionView on mobile (360x844), check 48dp hit boxes & elementFromPoint separation
+    await clickPrimaryTab(page, 'dashboard');
+    await page.getByRole('button', { name: 'Start Session' }).click();
+    await expect(page.getByTestId('session-finish-button')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mark set complete' }).first()).toBeVisible();
+    await waitForAnimationsToSettle(page);
+
+    const sessionHits = await page.evaluate(() => {
+      const doneBtn = document.querySelector('button[aria-label="Mark set complete"]') as HTMLElement | null;
+      const delBtn = document.querySelector('button[aria-label="Delete this set"]') as HTMLElement | null;
+      const exitBtn = document.querySelector('button[aria-label="Exit session"]') as HTMLElement | null;
+      const finishBtn = document.querySelector('[data-testid="session-finish-button"]') as HTMLElement | null;
+      const measure = (el: HTMLElement | null) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const elCs = window.getComputedStyle(el);
+        const bl = parseFloat(elCs.borderLeftWidth) || 0;
+        const br = parseFloat(elCs.borderRightWidth) || 0;
+        const bt = parseFloat(elCs.borderTopWidth) || 0;
+        const bb = parseFloat(elCs.borderBottomWidth) || 0;
+        const cs = window.getComputedStyle(el, '::after');
+        const top = parseFloat(cs.top) || 0;
+        const bottom = parseFloat(cs.bottom) || 0;
+        const left = parseFloat(cs.left) || 0;
+        const right = parseFloat(cs.right) || 0;
+        const hitLeft = Math.min(r.left, r.left + bl + left);
+        const hitRight = Math.max(r.right, r.right - br - right);
+        const hitTop = Math.min(r.top, r.top + bt + top);
+        const hitBottom = Math.max(r.bottom, r.bottom - bb - bottom);
+        return {
+          rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height },
+          hitWidth: hitRight - hitLeft,
+          hitHeight: hitBottom - hitTop,
+          hitLeft,
+          hitRight,
+          hitTop,
+          hitBottom,
+        };
+      };
+      const done = measure(doneBtn);
+      const del = measure(delBtn);
+      const exit = measure(exitBtn);
+      const finish = measure(finishBtn);
+      const doneEdgeHit = done ? document.elementFromPoint(done.hitLeft + 1, (done.hitTop + done.hitBottom) / 2) : null;
+      const delEdgeHit = del ? document.elementFromPoint(del.hitRight - 1, (del.hitTop + del.hitBottom) / 2) : null;
+      return {
+        done,
+        del,
+        exit,
+        finish,
+        doneEdgeTag: doneEdgeHit?.outerHTML?.slice(0, 120) || null,
+        delEdgeTag: delEdgeHit?.outerHTML?.slice(0, 120) || null,
+        doneEdgeBelongsToDone: Boolean(doneBtn && doneEdgeHit && doneBtn.contains(doneEdgeHit)),
+        delEdgeBelongsToDel: Boolean(delBtn && delEdgeHit && delBtn.contains(delEdgeHit)),
+      };
+    });
+
+    expect(sessionHits.exit?.hitHeight).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.exit?.hitWidth).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.finish?.hitHeight).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.done?.hitHeight).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.done?.hitWidth).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.del?.hitHeight).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.del?.hitWidth).toBeGreaterThanOrEqual(48);
+    expect(sessionHits.done!.hitRight).toBeLessThanOrEqual(sessionHits.del!.hitLeft);
+    expect(sessionHits.doneEdgeBelongsToDone, JSON.stringify({ done: sessionHits.done, doneEdgeTag: sessionHits.doneEdgeTag })).toBe(true);
+    expect(sessionHits.delEdgeBelongsToDel, JSON.stringify({ del: sessionHits.del, delEdgeTag: sessionHits.delEdgeTag })).toBe(true);
+
+    // Complete session, observe summary, and return to Dashboard
+    await completeAllSetsInActiveSession(page);
+    await page.getByTestId('session-finish-button').click();
+    await expect(page.getByText('Session Cleared')).toBeVisible();
+    await waitForAnimationsToSettle(page);
+    await expect(page.getByText('Total Volume')).toBeVisible();
+    await page.getByRole('button', { name: /Dismiss Summary/i }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Stay Aggressive' })).toBeVisible();
+
+    // 8. Reduced-motion verification: reload with reducedMotion and ensure zero count-up animation frames
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Stay Aggressive' })).toBeVisible();
+    expect(await page.locator('[data-countup-animating="true"]').count()).toBe(0);
   });
 
   test('captures deterministic visual regression baselines across desktop (1280x900) and mobile (390x844)', async ({

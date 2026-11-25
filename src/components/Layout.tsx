@@ -74,8 +74,9 @@ const NavigationItem: React.FC<NavItemProps> = ({ id, label, icon, active, onCli
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        "flex items-center justify-center relative select-none rounded-full",
         CONTROL_HEIGHT.touchTarget,
+        "flex items-center justify-center relative select-none rounded-full h-12",
+        !active && "w-12",
         FOCUS.visible,
         INTERACTIVE.active
       )}
@@ -267,8 +268,8 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
               ref={syncTriggerRef}
               type="button"
               className={cn(
-                "group/sync cursor-pointer select-none flex items-center justify-center relative",
                 CONTROL_HEIGHT.touchTarget,
+                "group/sync cursor-pointer select-none flex items-center justify-center relative h-12 w-12",
                 FOCUS.visible,
                 RADIUS.button
               )} 

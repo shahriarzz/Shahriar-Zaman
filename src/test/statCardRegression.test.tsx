@@ -10,6 +10,15 @@ import { formatCompactWeight } from '../utils/fitnessHelpers';
 import { useCountUp, UseCountUpOptions } from '../hooks/useCountUp';
 import { Banner } from '../components/ui/Banner';
 
+let mockUseReducedMotionValue: boolean | null = null;
+vi.mock('motion/react', async () => {
+  const actual = await vi.importActual<typeof import('motion/react')>('motion/react');
+  return {
+    ...actual,
+    useReducedMotion: () => mockUseReducedMotionValue,
+  };
+});
+
 describe('StatCard Architecture & Display Regression Suite', () => {
   describe('formatCompactWeight helper', () => {
     it('formats numbers below 1,000 as standard integers without suffix', () => {
@@ -375,6 +384,7 @@ describe('StatCard Architecture & Display Regression Suite', () => {
     let root: ReturnType<typeof createRoot> | null = null;
 
     beforeEach(() => {
+      mockUseReducedMotionValue = null;
       vi.useFakeTimers();
       container = document.createElement('div');
       document.body.appendChild(container);
@@ -558,7 +568,51 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(container!.textContent).toContain('15');
     });
 
-    it('reduced-motion renders target immediately and queries matchMedia once per StatCard render', () => {
+    it('uses ~440ms default count-up duration when animateValue is enabled', () => {
+      act(() => {
+        root!.render(<StatCard label="Streak" value={100} animateValue />);
+      });
+      expect(container!.querySelector('[data-countup-animating="true"]')).not.toBeNull();
+      // Midway through ~440ms count-up, still animating
+      act(() => {
+        vi.advanceTimersByTime(220);
+      });
+      expect(container!.querySelector('[data-countup-animating="true"]')).not.toBeNull();
+      // Completes cleanly well before legacy 800ms duration
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(container!.textContent).toContain('100');
+      expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
+    });
+
+    it('uses useReducedMotion() directly when boolean without calling matchMedia fallback', () => {
+      const originalMatchMedia = window.matchMedia;
+      const matchMediaSpy = vi.fn();
+      window.matchMedia = matchMediaSpy;
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+
+      try {
+        mockUseReducedMotionValue = true;
+        act(() => {
+          root!.render(<StatCard label="Reduced Hook" value={88} animateValue />);
+        });
+        expect(container!.textContent).toContain('88');
+        expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
+        expect(rafSpy).not.toHaveBeenCalled();
+        expect(matchMediaSpy).not.toHaveBeenCalled();
+
+        mockUseReducedMotionValue = false;
+        act(() => {
+          root!.render(<StatCard label="Normal Hook" value={77} animateValue />);
+        });
+        expect(matchMediaSpy).not.toHaveBeenCalled();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('falls back to matchMedia once when useReducedMotion() returns null and renders target immediately', () => {
       const originalMatchMedia = window.matchMedia;
       const matchMediaSpy = vi.fn().mockImplementation((query: string) => ({
         matches: query.includes('prefers-reduced-motion'),
@@ -571,15 +625,16 @@ describe('StatCard Architecture & Display Regression Suite', () => {
         dispatchEvent: vi.fn(),
       } as any));
       window.matchMedia = matchMediaSpy;
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
 
       try {
+        mockUseReducedMotionValue = null;
         act(() => {
-          root!.render(<StatCard label="Reduced" value={99} animateValue animationDuration={800} />);
+          root!.render(<StatCard label="Reduced" value={99} animateValue />);
         });
-        // Renders 99 immediately without timer advancement
         expect(container!.textContent).toContain('99');
         expect(container!.querySelector('[data-countup-animating="true"]')).toBeNull();
-        // StatCard checks matchMedia once and forwards reducedMotion to useCountUp
+        expect(rafSpy).not.toHaveBeenCalled();
         expect(matchMediaSpy).toHaveBeenCalledTimes(1);
       } finally {
         window.matchMedia = originalMatchMedia;
