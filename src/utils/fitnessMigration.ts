@@ -2,6 +2,13 @@ import { Workout, SessionLog, AppState, WorkoutExercise, ExerciseDefinition, CUR
 import { INITIAL_WORKOUTS, INITIAL_EXERCISE_DEFINITIONS } from '../types/initialData';
 import { dk, generateId } from './fitnessHelpers';
 import { sanitizeSessionLog, isValidCalendarDate } from './fitnessCalculations';
+import {
+  SafeStorageError,
+  probeLocalStorageWritable,
+  safeGetItem,
+  safeRemoveItem,
+  safeSetItem,
+} from '../lib/safeStorage';
 
 // Extract exercise definitions from workouts if migrating legacy data
 export function canonicalizeWorkoutExercise(
@@ -361,6 +368,7 @@ export function validateSnapshotStructure(candidate: unknown): ValidatedSnapshot
 }
 
 export type CanonicalSnapshotEnvelope =
+  | { status: 'storage_unavailable'; error: string }
   | { status: 'missing' }
   | { status: 'corrupt' }
   | {
@@ -370,12 +378,118 @@ export type CanonicalSnapshotEnvelope =
       resetOrigin: boolean;
     };
 
+export type LocalFitnessStorageState =
+  | 'storage_unavailable'
+  | 'missing'
+  | 'valid'
+  | 'corrupt'
+  | 'staging_recoverable';
+
+export interface LocalFitnessStorageInspection {
+  state: LocalFitnessStorageState;
+  error?: SafeStorageError;
+}
+
+/**
+ * Inspects local browser storage initialization state without modifying user data.
+ * Distinguishes inaccessible storage from an empty first-install database,
+ * valid canonical data, recoverable staged data, and corrupt payloads.
+ */
+export function inspectLocalFitnessStorage(): LocalFitnessStorageInspection {
+  const snapshotRes = safeGetItem('gl_database_snapshot');
+  if (!snapshotRes.ok) {
+    return { state: 'storage_unavailable', error: snapshotRes.error };
+  }
+
+  if (snapshotRes.value !== null) {
+    try {
+      const parsedSnapshot = JSON.parse(snapshotRes.value);
+      if (validateSnapshotStructure(parsedSnapshot)) {
+        return { state: 'valid' };
+      }
+    } catch {
+      // Fall through to check staging recovery before classifying as corrupt
+    }
+  }
+
+  const stagingRes = safeGetItem('gl_snapshot_staging');
+  if (!stagingRes.ok) {
+    return { state: 'storage_unavailable', error: stagingRes.error };
+  }
+
+  if (stagingRes.value !== null) {
+    try {
+      const parsedStaging = JSON.parse(stagingRes.value);
+      if (validateSnapshotStructure(parsedStaging)) {
+        return { state: 'staging_recoverable' };
+      }
+    } catch {
+      // Staging is corrupt as well
+    }
+  }
+
+  if (snapshotRes.value !== null || stagingRes.value !== null) {
+    return { state: 'corrupt' };
+  }
+
+  const defsRes = safeGetItem('gl_exercise_definitions');
+  if (!defsRes.ok) return { state: 'storage_unavailable', error: defsRes.error };
+  const workoutsRes = safeGetItem('gl_workouts');
+  if (!workoutsRes.ok) return { state: 'storage_unavailable', error: workoutsRes.error };
+  const logsRes = safeGetItem('gl_logs');
+  if (!logsRes.ok) return { state: 'storage_unavailable', error: logsRes.error };
+  const stateRes = safeGetItem('gl_state');
+  if (!stateRes.ok) return { state: 'storage_unavailable', error: stateRes.error };
+
+  const allMissing =
+    defsRes.value === null &&
+    workoutsRes.value === null &&
+    logsRes.value === null &&
+    stateRes.value === null;
+
+  if (allMissing) {
+    const probe = probeLocalStorageWritable();
+    if (!probe.ok) {
+      return { state: 'storage_unavailable', error: probe.error };
+    }
+    return { state: 'missing' };
+  }
+
+  try {
+    if (defsRes.value !== null && !Array.isArray(JSON.parse(defsRes.value))) {
+      return { state: 'corrupt' };
+    }
+    if (workoutsRes.value !== null && !Array.isArray(JSON.parse(workoutsRes.value))) {
+      return { state: 'corrupt' };
+    }
+    if (logsRes.value !== null) {
+      const parsedLogs = JSON.parse(logsRes.value);
+      if (!parsedLogs || typeof parsedLogs !== 'object' || Array.isArray(parsedLogs)) {
+        return { state: 'corrupt' };
+      }
+    }
+    if (stateRes.value !== null) {
+      const parsedState = JSON.parse(stateRes.value);
+      if (!parsedState || typeof parsedState !== 'object' || Array.isArray(parsedState)) {
+        return { state: 'corrupt' };
+      }
+    }
+    return { state: 'valid' };
+  } catch {
+    return { state: 'corrupt' };
+  }
+}
+
 /**
  * Reads and validates the canonical local snapshot envelope (`gl_database_snapshot`)
  * including its durable reconciliation metadata (`lastReconciliationOperationId`, `resetOrigin`).
  */
 export function readCanonicalSnapshotEnvelope(): CanonicalSnapshotEnvelope {
-  const snapshotKey = localStorage.getItem('gl_database_snapshot');
+  const readRes = safeGetItem('gl_database_snapshot');
+  if (!readRes.ok) {
+    return { status: 'storage_unavailable', error: readRes.error.message };
+  }
+  const snapshotKey = readRes.value;
   if (snapshotKey === null) {
     return { status: 'missing' };
   }
@@ -404,8 +518,12 @@ export function loadInitialFitnessData(): {
   logs: Record<string, SessionLog>;
   appState: AppState;
 } {
-  // 1. Check canonical database snapshot
-  const snapshotKey = localStorage.getItem('gl_database_snapshot');
+  // 1. Check canonical database snapshot via SafeStorage (never swallow access errors)
+  const snapshotRead = safeGetItem('gl_database_snapshot');
+  if (!snapshotRead.ok) {
+    throw snapshotRead.error;
+  }
+  const snapshotKey = snapshotRead.value;
   let hasValidSnapshot = false;
 
   if (snapshotKey !== null) {
@@ -423,65 +541,55 @@ export function loadInitialFitnessData(): {
 
         // If the stored anchor was invalid or missing, persist the repaired state once through persistence boundary
         if (!isValidCalendarDate(validated.appState?.cycleStart)) {
-          try {
-            const rawOpId = (parsedSnapshot as Record<string, unknown>).lastReconciliationOperationId;
-            const rawResetOrigin = (parsedSnapshot as Record<string, unknown>).resetOrigin;
-            const versionedPayload: Record<string, unknown> = {
-              schemaVersion: CURRENT_SCHEMA_VERSION,
-              timestamp: Date.now(),
-              data: {
-                exerciseDefinitions: migrated.defs,
-                workouts: migrated.workouts,
-                logs: migrated.logs,
-                appState: migrated.appState
-              }
-            };
-            if (typeof rawOpId === 'string' || rawOpId === null) {
-              versionedPayload.lastReconciliationOperationId = rawOpId;
+          const rawOpId = (parsedSnapshot as Record<string, unknown>).lastReconciliationOperationId;
+          const rawResetOrigin = (parsedSnapshot as Record<string, unknown>).resetOrigin;
+          const versionedPayload: Record<string, unknown> = {
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            timestamp: Date.now(),
+            data: {
+              exerciseDefinitions: migrated.defs,
+              workouts: migrated.workouts,
+              logs: migrated.logs,
+              appState: migrated.appState
             }
-            if (typeof rawResetOrigin === 'boolean') {
-              versionedPayload.resetOrigin = rawResetOrigin;
-            }
-            localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
-            localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
-          } catch {
-            // Best effort persistence
+          };
+          if (typeof rawOpId === 'string' || rawOpId === null) {
+            versionedPayload.lastReconciliationOperationId = rawOpId;
           }
+          if (typeof rawResetOrigin === 'boolean') {
+            versionedPayload.resetOrigin = rawResetOrigin;
+          }
+          safeSetItem('gl_database_snapshot', JSON.stringify(versionedPayload));
+          safeSetItem('gl_state', JSON.stringify(migrated.appState));
         }
 
         return migrated;
       } else {
         // Snapshot failed structure or schema validation; preserve as recoverable backup
         console.warn("Invalid snapshot structure in gl_database_snapshot; backing up and attempting recovery.");
-        try {
-          localStorage.setItem('gl_corrupt_snapshot_backup', snapshotKey);
-        } catch {
-          // Best effort backup
-        }
+        safeSetItem('gl_corrupt_snapshot_backup', snapshotKey);
       }
     } catch (e) {
       console.error("Corrupted gl_database_snapshot JSON, backing up and checking staging / discrete keys:", e);
-      try {
-        localStorage.setItem('gl_corrupt_snapshot_backup', snapshotKey);
-      } catch {
-        // Best effort backup
-      }
+      safeSetItem('gl_corrupt_snapshot_backup', snapshotKey);
     }
   }
 
   // 2. Check staging snapshot for crash recovery
-  const stagingKey = localStorage.getItem('gl_snapshot_staging');
+  const stagingRead = safeGetItem('gl_snapshot_staging');
+  if (!stagingRead.ok) {
+    throw stagingRead.error;
+  }
+  const stagingKey = stagingRead.value;
   if (stagingKey !== null && !hasValidSnapshot) {
     try {
       const parsedStaging = JSON.parse(stagingKey);
       const validatedStaging = validateSnapshotStructure(parsedStaging);
       if (validatedStaging) {
         console.info("Recovered state from valid gl_snapshot_staging; promoting to canonical snapshot.");
-        try {
-          localStorage.setItem('gl_database_snapshot', stagingKey);
-          localStorage.removeItem('gl_snapshot_staging');
-        } catch {
-          // Proceed with recovered data
+        const promoted = safeSetItem('gl_database_snapshot', stagingKey);
+        if (promoted.ok) {
+          safeRemoveItem('gl_snapshot_staging');
         }
         const migrated = migrateV1ToV2({
           rawDefs: validatedStaging.exerciseDefinitions,
@@ -491,30 +599,26 @@ export function loadInitialFitnessData(): {
         });
 
         if (!isValidCalendarDate(validatedStaging.appState?.cycleStart)) {
-          try {
-            const rawOpId = (parsedStaging as Record<string, unknown>).lastReconciliationOperationId;
-            const rawResetOrigin = (parsedStaging as Record<string, unknown>).resetOrigin;
-            const versionedPayload: Record<string, unknown> = {
-              schemaVersion: CURRENT_SCHEMA_VERSION,
-              timestamp: Date.now(),
-              data: {
-                exerciseDefinitions: migrated.defs,
-                workouts: migrated.workouts,
-                logs: migrated.logs,
-                appState: migrated.appState
-              }
-            };
-            if (typeof rawOpId === 'string' || rawOpId === null) {
-              versionedPayload.lastReconciliationOperationId = rawOpId;
+          const rawOpId = (parsedStaging as Record<string, unknown>).lastReconciliationOperationId;
+          const rawResetOrigin = (parsedStaging as Record<string, unknown>).resetOrigin;
+          const versionedPayload: Record<string, unknown> = {
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            timestamp: Date.now(),
+            data: {
+              exerciseDefinitions: migrated.defs,
+              workouts: migrated.workouts,
+              logs: migrated.logs,
+              appState: migrated.appState
             }
-            if (typeof rawResetOrigin === 'boolean') {
-              versionedPayload.resetOrigin = rawResetOrigin;
-            }
-            localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
-            localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
-          } catch {
-            // Best effort persistence
+          };
+          if (typeof rawOpId === 'string' || rawOpId === null) {
+            versionedPayload.lastReconciliationOperationId = rawOpId;
           }
+          if (typeof rawResetOrigin === 'boolean') {
+            versionedPayload.resetOrigin = rawResetOrigin;
+          }
+          safeSetItem('gl_database_snapshot', JSON.stringify(versionedPayload));
+          safeSetItem('gl_state', JSON.stringify(migrated.appState));
         }
 
         return migrated;
@@ -524,13 +628,28 @@ export function loadInitialFitnessData(): {
     }
   }
 
-  const defsKey = localStorage.getItem('gl_exercise_definitions');
-  const workoutsKey = localStorage.getItem('gl_workouts');
-  const logsKey = localStorage.getItem('gl_logs');
-  const stateKey = localStorage.getItem('gl_state');
+  const defsRead = safeGetItem('gl_exercise_definitions');
+  if (!defsRead.ok) throw defsRead.error;
+  const workoutsRead = safeGetItem('gl_workouts');
+  if (!workoutsRead.ok) throw workoutsRead.error;
+  const logsRead = safeGetItem('gl_logs');
+  if (!logsRead.ok) throw logsRead.error;
+  const stateRead = safeGetItem('gl_state');
+  if (!stateRead.ok) throw stateRead.error;
 
-  // Check if first-time launch (none of the core keys exist in localStorage)
-  const isFirstInstall = defsKey === null && workoutsKey === null && logsKey === null && stateKey === null && snapshotKey === null && stagingKey === null;
+  const defsKey = defsRead.value;
+  const workoutsKey = workoutsRead.value;
+  const logsKey = logsRead.value;
+  const stateKey = stateRead.value;
+
+  // Check if first-time launch (none of the core keys exist in readable localStorage)
+  const isFirstInstall =
+    defsKey === null &&
+    workoutsKey === null &&
+    logsKey === null &&
+    stateKey === null &&
+    snapshotKey === null &&
+    stagingKey === null;
 
   if (isFirstInstall) {
     const seedDefs = [...INITIAL_EXERCISE_DEFINITIONS];
@@ -538,26 +657,39 @@ export function loadInitialFitnessData(): {
     const seedLogs: Record<string, SessionLog> = {};
     const seedState: AppState = { cycleStart: dk() };
 
-    try {
-      const versionedPayload = {
-        schemaVersion: CURRENT_SCHEMA_VERSION,
-        timestamp: Date.now(),
-        data: {
-          exerciseDefinitions: seedDefs,
-          workouts: seedWorkouts,
-          logs: seedLogs,
-          appState: seedState
-        }
-      };
-      localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
-      localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-      localStorage.setItem('gl_exercise_definitions', JSON.stringify(seedDefs));
-      localStorage.setItem('gl_workouts', JSON.stringify(seedWorkouts));
-      localStorage.setItem('gl_logs', JSON.stringify(seedLogs));
-      localStorage.setItem('gl_state', JSON.stringify(seedState));
-    } catch (e) {
-      console.warn("Failed to persist initial installation data", e);
+    const versionedPayload = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      timestamp: Date.now(),
+      data: {
+        exerciseDefinitions: seedDefs,
+        workouts: seedWorkouts,
+        logs: seedLogs,
+        appState: seedState
+      }
+    };
+    const serializedSnapshot = JSON.stringify(versionedPayload);
+    const snapWrite = safeSetItem('gl_database_snapshot', serializedSnapshot);
+    if (!snapWrite.ok) {
+      throw snapWrite.error;
     }
+    const readBack = safeGetItem('gl_database_snapshot');
+    if (!readBack.ok) {
+      throw readBack.error;
+    }
+    if (readBack.value !== serializedSnapshot) {
+      throw new SafeStorageError(
+        'storage_unavailable',
+        'probe',
+        'Initial installation snapshot write could not be verified in localStorage.',
+        'gl_database_snapshot'
+      );
+    }
+
+    safeSetItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
+    safeSetItem('gl_exercise_definitions', JSON.stringify(seedDefs));
+    safeSetItem('gl_workouts', JSON.stringify(seedWorkouts));
+    safeSetItem('gl_logs', JSON.stringify(seedLogs));
+    safeSetItem('gl_state', JSON.stringify(seedState));
 
     return {
       defs: seedDefs,
@@ -633,25 +765,25 @@ export function loadInitialFitnessData(): {
   });
 
   // Sequentially persist migrated data: canonical snapshot payload first, followed by the schema version tag and legacy discrete keys
-  try {
-    const versionedPayload = {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      timestamp: Date.now(),
-      data: {
-        exerciseDefinitions: migrated.defs,
-        workouts: migrated.workouts,
-        logs: migrated.logs,
-        appState: migrated.appState
-      }
-    };
-    localStorage.setItem('gl_database_snapshot', JSON.stringify(versionedPayload));
-    localStorage.setItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
-    localStorage.setItem('gl_exercise_definitions', JSON.stringify(migrated.defs));
-    localStorage.setItem('gl_workouts', JSON.stringify(migrated.workouts));
-    localStorage.setItem('gl_logs', JSON.stringify(migrated.logs));
-    localStorage.setItem('gl_state', JSON.stringify(migrated.appState));
-  } catch (e) {
-    console.warn("Failed to update localStorage with migrated data", e);
+  const versionedPayload = {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    timestamp: Date.now(),
+    data: {
+      exerciseDefinitions: migrated.defs,
+      workouts: migrated.workouts,
+      logs: migrated.logs,
+      appState: migrated.appState
+    }
+  };
+  const migratedSnapWrite = safeSetItem('gl_database_snapshot', JSON.stringify(versionedPayload));
+  if (!migratedSnapWrite.ok) {
+    console.warn("Failed to update localStorage with migrated data", migratedSnapWrite.error);
+  } else {
+    safeSetItem('gl_schema_version', String(CURRENT_SCHEMA_VERSION));
+    safeSetItem('gl_exercise_definitions', JSON.stringify(migrated.defs));
+    safeSetItem('gl_workouts', JSON.stringify(migrated.workouts));
+    safeSetItem('gl_logs', JSON.stringify(migrated.logs));
+    safeSetItem('gl_state', JSON.stringify(migrated.appState));
   }
 
   return migrated;

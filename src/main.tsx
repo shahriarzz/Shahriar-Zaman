@@ -1,4 +1,4 @@
-import {StrictMode, Component, ErrorInfo, ReactNode} from 'react';
+import {StrictMode, Component, ErrorInfo, ReactNode, useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import '@fontsource/dm-sans/400.css';
@@ -9,6 +9,14 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/600.css';
 import './index.css';
 import { ErrorFallback } from './components/ui';
+import {
+  classifyStartupFailure,
+  installStartupDiagnostics,
+  markStartupMounted,
+  recordStartupFailure,
+} from './lib/startupDiagnostics';
+
+installStartupDiagnostics();
 
 interface Props {
   children?: ReactNode;
@@ -32,7 +40,9 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    const category = classifyStartupFailure(error, 'react');
+    const entry = recordStartupFailure(category, error, 'ErrorBoundary');
+    console.error(`[StartupDiagnostics:${entry.category}] Uncaught error:`, error, errorInfo);
   }
 
   public render() {
@@ -49,11 +59,33 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
-);
+function StartupMountMarker({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    markStartupMounted();
+  }, []);
+  return <>{children}</>;
+}
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  const missingRootErr = new Error('Application mount root "#root" not found in document.');
+  recordStartupFailure('react_mount_error', missingRootErr, 'main.tsx');
+  throw missingRootErr;
+}
+
+try {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <StartupMountMarker>
+          <App />
+        </StartupMountMarker>
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+} catch (err) {
+  const category = classifyStartupFailure(err, 'react');
+  recordStartupFailure(category, err, 'createRoot');
+  throw err;
+}
 

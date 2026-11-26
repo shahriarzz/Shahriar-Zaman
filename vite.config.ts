@@ -46,6 +46,7 @@ export default defineConfig(() => {
         '**/node_modules/**',
         '**/dist/**',
         'e2e/**',
+        'e2e-runtime/**',
         'src/test/integration/**'
       ],
     },

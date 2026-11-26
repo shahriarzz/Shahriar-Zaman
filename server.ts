@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
@@ -47,6 +48,88 @@ interface CleanHistorySession {
 }
 
 dotenv.config();
+
+export type AppMode = 'development' | 'production';
+export type ServerServingMode = 'vite-middleware' | 'compiled-static';
+
+export interface ServerRuntimeConfig {
+  appMode: AppMode;
+  nodeEnv: string;
+  webDir: string;
+  servingMode: ServerServingMode;
+  port: number;
+}
+
+export function resolveAppMode(rawAppMode: string | undefined): AppMode {
+  const normalized = rawAppMode?.trim();
+  if (normalized === 'development' || normalized === 'production') {
+    return normalized;
+  }
+  throw new Error(
+    `[Server Startup Error] Invalid or missing APP_MODE="${rawAppMode ?? ''}". ` +
+    'APP_MODE must be explicitly set to "development" or "production".'
+  );
+}
+
+export function resolveProductionDistDir(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd()
+): string {
+  const overrideDir = env.WEB_DIST_DIR?.trim();
+  return path.resolve(cwd, overrideDir || 'dist');
+}
+
+export function validateProductionAssets(distDir: string): string {
+  if (!fs.existsSync(distDir) || !fs.statSync(distDir).isDirectory()) {
+    throw new Error(
+      `[Server Startup Error] Production web directory does not exist: "${distDir}". ` +
+      'Run "npm run build" before starting in production mode.'
+    );
+  }
+
+  const indexPath = path.join(distDir, 'index.html');
+  if (!fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
+    throw new Error(
+      `[Server Startup Error] Missing compiled production entry HTML at "${indexPath}". ` +
+      'Run "npm run build" before starting in production mode.'
+    );
+  }
+
+  const indexHtml = fs.readFileSync(indexPath, 'utf8');
+  if (/\/src\/main\.tsx/i.test(indexHtml) || /<script[^>]+src=["'][^"']*\/src\/[^"']*\.tsx?["']/i.test(indexHtml)) {
+    throw new Error(
+      `[Server Startup Error] Production entry "${indexPath}" references untransformed source files (/src/main.tsx). ` +
+      'Refusing to serve uncompiled source HTML in production mode.'
+    );
+  }
+
+  if (!/\/assets\//.test(indexHtml)) {
+    throw new Error(
+      `[Server Startup Error] Production entry "${indexPath}" does not reference compiled "/assets/..." resources.`
+    );
+  }
+
+  return indexPath;
+}
+
+export function resolveServerRuntimeConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd()
+): ServerRuntimeConfig {
+  const appMode = resolveAppMode(env.APP_MODE);
+  const nodeEnv = env.NODE_ENV ?? 'unset';
+  const port = Number(env.PORT) || 3000;
+  const webDir = appMode === 'development' ? path.resolve(cwd) : resolveProductionDistDir(env, cwd);
+  const servingMode: ServerServingMode = appMode === 'development' ? 'vite-middleware' : 'compiled-static';
+
+  return {
+    appMode,
+    nodeEnv,
+    webDir,
+    servingMode,
+    port,
+  };
+}
 
 const CANDIDATE_MODELS = ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-flash-latest'];
 
@@ -102,8 +185,15 @@ function isAbortError(error: unknown): boolean {
   return false;
 }
 
-async function startServer() {
+export async function startServer() {
+  const runtimeConfig = resolveServerRuntimeConfig(process.env, process.cwd());
+  let productionIndexPath: string | null = null;
+  if (runtimeConfig.appMode === 'production') {
+    productionIndexPath = validateProductionAssets(runtimeConfig.webDir);
+  }
+
   const app = express();
+  const httpServer = http.createServer(app);
   
   // Enable trusting proxy headers to prevent express-rate-limit validation warnings/errors
   app.set('trust proxy', 1);
@@ -351,32 +441,29 @@ async function startServer() {
     res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
   });
 
-  // Vite middleware setup
-  if (process.env.NODE_ENV !== 'production') {
+  // Runtime asset serving based strictly on explicit APP_MODE
+  if (runtimeConfig.appMode === 'development') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    // In production, resolve the directory containing index.html
-    const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
-    const possibleDistPaths = [
-      path.join(process.cwd(), 'dist'),
-      process.cwd(),
-      currentDir,
-      path.join(currentDir, '..', 'dist'),
-    ];
-    const distPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html'))) || path.join(process.cwd(), 'dist');
+    const distPath = runtimeConfig.webDir;
+    const indexPath = productionIndexPath!;
     app.use(express.static(distPath));
+
+    // Never fall back to index.html for missing compiled assets or source entrypoints
+    app.get(['/assets/*', '/src/*', /\.tsx$/i], (_req, res) => {
+      res.status(404).json({ error: 'Compiled asset not found.' });
+    });
+
     app.get('*', (_req, res) => {
-      const indexPath = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).send('Application index.html not found.');
-      }
+      res.sendFile(indexPath);
     });
   }
 
@@ -392,17 +479,25 @@ async function startServer() {
     });
   });
 
-  const PORT = Number(process.env.PORT) || 3000;
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  const PORT = runtimeConfig.port;
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(
+      `[GAINLOG Server] APP_MODE=${runtimeConfig.appMode} NODE_ENV=${runtimeConfig.nodeEnv} ` +
+      `serving=${runtimeConfig.servingMode} webDir=${runtimeConfig.webDir} port=${PORT}`
+    );
   });
 
   server.on('error', (err: Error) => {
     console.error('HTTP server startup error:', err);
     process.exit(1);
   });
+
+  return server;
 }
-startServer().catch((err) => {
-  console.error('Fatal error starting server:', err);
-  process.exit(1);
-});
+
+if (process.env.VITEST !== 'true') {
+  startServer().catch((err) => {
+    console.error('Fatal error starting server:', err);
+    process.exit(1);
+  });
+}

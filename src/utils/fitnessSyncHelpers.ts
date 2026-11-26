@@ -1,6 +1,7 @@
 import { db, doc, writeBatch, collection, getDocs } from '../lib/firebase';
 import { ExerciseDefinition, Workout, SessionLog, AppState, WeightLogEntry } from '../types/fitness';
 import { normalizeWeightEntry } from './fitnessCalculations';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safeStorage';
 
 // Chunked batch operations helper to prevent Firestore 500-operation limits
 export async function commitBatchOperations<T>(
@@ -35,7 +36,12 @@ function getTombstoneStorageKey(uid?: string | null): string {
 export function getDeletedIdsTracker(uid?: string | null): DeletedIdsTracker {
   try {
     const key = getTombstoneStorageKey(uid);
-    const saved = localStorage.getItem(key) || (uid ? null : localStorage.getItem('gl_deleted_ids'));
+    const primaryRead = safeGetItem(key);
+    let saved = primaryRead.ok ? primaryRead.value : null;
+    if (!saved && !uid) {
+      const fallbackRead = safeGetItem('gl_deleted_ids');
+      saved = fallbackRead.ok ? fallbackRead.value : null;
+    }
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
@@ -49,14 +55,14 @@ export function getDeletedIdsTracker(uid?: string | null): DeletedIdsTracker {
 }
 
 export function saveDeletedIdsTracker(tracker: DeletedIdsTracker, uid?: string | null): void {
-  try {
-    const key = getTombstoneStorageKey(uid);
-    localStorage.setItem(key, JSON.stringify(tracker));
-    if (!uid) {
-      localStorage.setItem('gl_deleted_ids', JSON.stringify(tracker));
-    }
-  } catch (e) {
-    console.warn("Failed to save deleted ids tracker", e);
+  const key = getTombstoneStorageKey(uid);
+  const serialized = JSON.stringify(tracker);
+  const primaryWrite = safeSetItem(key, serialized);
+  if (!primaryWrite.ok) {
+    console.warn("Failed to save deleted ids tracker", primaryWrite.error);
+  }
+  if (!uid) {
+    safeSetItem('gl_deleted_ids', serialized);
   }
 }
 
@@ -77,15 +83,13 @@ export function removeDeletedId(type: 'defs' | 'workouts' | 'logs', id: string, 
 }
 
 export function clearDeletedIdsTracker(uid?: string | null): void {
-  try {
-    if (uid) {
-      localStorage.removeItem(getTombstoneStorageKey(uid));
-    } else {
-      // Clear anonymous and fallback keys
-      localStorage.removeItem('gl_deleted_ids_anon');
-      localStorage.removeItem('gl_deleted_ids');
-    }
-  } catch {}
+  if (uid) {
+    safeRemoveItem(getTombstoneStorageKey(uid));
+  } else {
+    // Clear anonymous and fallback keys
+    safeRemoveItem('gl_deleted_ids_anon');
+    safeRemoveItem('gl_deleted_ids');
+  }
 }
 
 /**

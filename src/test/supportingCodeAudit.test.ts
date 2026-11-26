@@ -544,7 +544,7 @@ describe('GAINLOG Supporting-Code Audit Test Suite', () => {
       const serverSource = fs.readFileSync(path.join(process.cwd(), 'server.ts'), 'utf8');
 
       // Verifies server instance capture
-      expect(serverSource).toMatch(/const\s+server\s*=\s*app\.listen\(/);
+      expect(serverSource).toMatch(/const\s+server\s*=\s*(?:app|httpServer)\.listen\(/);
 
       // Verifies asynchronous error event listener on server instance
       expect(serverSource).toMatch(/server\.on\(\s*['"]error['"]\s*,\s*\(err/);

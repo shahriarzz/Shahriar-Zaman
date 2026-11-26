@@ -5,12 +5,16 @@ import { Button } from './Button';
 import { TYPOGRAPHY, SURFACE, BORDER, RADIUS } from '../../styles/tokens';
 import { cn } from '../../lib/utils';
 
+import { isStorageUnavailableError } from '../../lib/safeStorage';
+
 export interface ErrorFallbackProps {
   error: Error | null;
   onReset?: () => void;
 }
 
 export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) => {
+  const isStorageBlocked = isStorageUnavailableError(error);
+
   return (
     <div className={cn("min-h-screen flex items-center justify-center p-6 text-zinc-200", SURFACE.canvas)}>
       <Card
@@ -23,13 +27,35 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) 
             <TriangleAlert size={24} />
           </div>
           <div className="space-y-1">
-            <span className={cn(TYPOGRAPHY.eyebrow, "text-red-400")}>Protocol Halt</span>
-            <h2 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>Runtime Exception Caught</h2>
+            <span className={cn(TYPOGRAPHY.eyebrow, "text-red-400")}>
+              {isStorageBlocked ? 'Storage Access Blocked' : 'Protocol Halt'}
+            </span>
+            <h2 className={cn(TYPOGRAPHY.titleSubsection, "text-white")}>
+              {isStorageBlocked ? 'Browser Storage Unavailable' : 'Runtime Exception Caught'}
+            </h2>
             <p className={cn(TYPOGRAPHY.body, "text-zinc-400 text-xs")}>
-              GainLog encountered an unexpected error while executing the current application state.
+              {isStorageBlocked
+                ? 'GainLog cannot read or persist local browser storage in this browser context. Your existing data (if any) was not overwritten.'
+                : 'GainLog encountered an unexpected error while executing the current application state.'}
             </p>
           </div>
         </div>
+
+        {isStorageBlocked && (
+          <div
+            className={cn(
+              SURFACE.recessed,
+              BORDER.standard,
+              RADIUS.card,
+              "p-4 border space-y-1.5 text-xs text-zinc-300"
+            )}
+          >
+            <p className="font-medium text-white">How to restore access</p>
+            <p className="text-zinc-400">
+              Enable site storage and cookies for this origin, exit restricted private or sandboxed browser modes, and reload GainLog.
+            </p>
+          </div>
+        )}
 
         {error && (() => {
           const isDev = Boolean((import.meta as any).env?.DEV);
@@ -63,7 +89,9 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) 
                 <span className="text-red-400 font-bold">{errorRefId}</span>
               </div>
               <p className="text-zinc-300">
-                A system error occurred. Your training logs and saved protocols remain safely preserved.
+                {isStorageBlocked
+                  ? 'Local storage initialization was halted safely to prevent creating an empty overwrite.'
+                  : 'A system error occurred. Your training logs and saved protocols remain safely preserved.'}
               </p>
             </div>
           );

@@ -1,5 +1,6 @@
 import type { AutoBackupEntry } from '../hooks/useFitnessBackups';
 import type { FitnessDatabaseSnapshot } from '../hooks/useFitnessData';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safeStorage';
 export type { AutoBackupEntry };
 
 const DB_NAME = 'gainlog_vault';
@@ -483,7 +484,8 @@ export async function clearPendingCloudReconciliationFromDb(uid: string): Promis
  */
 export async function migrateLegacyLocalStorageBackups(): Promise<AutoBackupEntry[]> {
   try {
-    const legacy = localStorage.getItem('gl_auto_backups');
+    const legacyRead = safeGetItem('gl_auto_backups');
+    const legacy = legacyRead.ok ? legacyRead.value : null;
     if (!legacy) return [];
     let parsed: any;
     try {
@@ -560,12 +562,10 @@ export async function migrateLegacyLocalStorageBackups(): Promise<AutoBackupEntr
     });
 
     // Remove gl_auto_backups ONLY after every retained backup has committed successfully
-    localStorage.removeItem('gl_auto_backups');
+    safeRemoveItem('gl_auto_backups');
 
-    try {
-      const meta = retained.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
-      localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
-    } catch {}
+    const meta = retained.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
+    safeSetItem('gl_auto_backups_meta', JSON.stringify(meta));
 
     return retained;
   } catch (err) {

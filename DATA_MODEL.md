@@ -337,12 +337,13 @@ All local persistence in GAINLOG is managed across browser `localStorage` and In
 6. Best-effort mirror data to discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`, `gl_schema_version`). Discrete key mirroring failure is caught and non-fatal.
 7. If an error occurs (e.g. storage quota exceeded during canonical write), `gl_snapshot_staging` is **not deleted**, preserving the staged data for boot recovery.
 
-### B. Startup Recovery Protocol (`loadInitialFitnessData`)
-1. **Canonical Check**: Inspect `gl_database_snapshot`. If JSON parses and `validateSnapshotStructure()` passes, migrate/return data.
-2. **Quarantine on Failure**: If parsing or validation fails, copy the corrupted raw value to `gl_corrupt_snapshot_backup`.
-3. **Staging Recovery**: If canonical snapshot is missing or corrupted, inspect `gl_snapshot_staging`. If valid, promote it to `gl_database_snapshot`, delete staging, and return recovered data.
-4. **Discrete Key Fallback**: If neither snapshot nor staging is valid, attempt recovery by parsing discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`).
-5. **Fresh Install Seed**: If all storage keys are empty (first install), initialize initial seed data from `src/types/initialData.ts` and commit both canonical snapshot and discrete mirrors.
+### B. Startup Recovery Protocol (`loadInitialFitnessData`, `inspectLocalFitnessStorage`)
+1. **Safe Storage Access Guard**: All `localStorage` host access, reads, writes, and removals route through `src/lib/safeStorage.ts`. `inspectLocalFitnessStorage()` distinguishes `'storage_unavailable' | 'missing' | 'valid' | 'corrupt' | 'staging_recoverable'`, and `readCanonicalSnapshotEnvelope()` reports `{ status: 'storage_unavailable', error }` if reading fails. Inaccessible storage (`SecurityError` on `window.localStorage` getter, `getItem`, or unverified first-install write) throws `SafeStorageError` immediately to `ErrorBoundary` / `ErrorFallback` instead of treating storage as an empty first install, overwriting existing keys, or entering a silent memory-only mode.
+2. **Canonical Check**: Inspect `gl_database_snapshot`. If JSON parses and `validateSnapshotStructure()` passes, migrate/return data.
+3. **Quarantine on Failure**: If parsing or validation fails, copy the corrupted raw value to `gl_corrupt_snapshot_backup`.
+4. **Staging Recovery**: If canonical snapshot is missing or corrupted, inspect `gl_snapshot_staging`. If valid, promote it to `gl_database_snapshot`, delete staging, and return recovered data.
+5. **Discrete Key Fallback**: If neither snapshot nor staging is valid, attempt recovery by parsing discrete keys (`gl_exercise_definitions`, `gl_workouts`, `gl_logs`, `gl_state`).
+6. **Fresh Install Seed**: Only when all storage reads succeed and all core keys are absent (`missing`), initialize initial seed data from `src/types/initialData.ts`, write and verify `gl_database_snapshot`, and commit discrete mirrors.
 
 ### C. Atomicity Reality
 Browser `localStorage` does **not** provide multi-key atomic transactions. The two-phase staging ensures that the single canonical snapshot (`gl_database_snapshot`) is verified before clearing staging. Discrete mirror keys are maintained sequentially on a best-effort basis and must never be treated as the authoritative primary store.

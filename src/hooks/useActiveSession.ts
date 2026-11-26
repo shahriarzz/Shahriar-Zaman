@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { SetLog } from '../types/fitness';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safeStorage';
 
 export interface ActiveSession {
   workoutId: string;
@@ -96,9 +97,9 @@ export interface ActiveSessionMeta {
 export function useActiveSession() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(() => {
     try {
-      const saved = localStorage.getItem('gl_active_session');
-      if (!saved) return null;
-      return normalizeActiveSession(JSON.parse(saved));
+      const readRes = safeGetItem('gl_active_session');
+      if (!readRes.ok || !readRes.value) return null;
+      return normalizeActiveSession(JSON.parse(readRes.value));
     } catch {
       return null;
     }
@@ -115,17 +116,14 @@ export function useActiveSession() {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    try {
-      if (latestSessionRef.current) {
-        localStorage.setItem('gl_active_session', JSON.stringify(latestSessionRef.current));
-      } else {
-        localStorage.removeItem('gl_active_session');
-      }
+    const writeRes = latestSessionRef.current
+      ? safeSetItem('gl_active_session', JSON.stringify(latestSessionRef.current))
+      : safeRemoveItem('gl_active_session');
+    if (writeRes.ok) {
       setPersistenceError(null);
-    } catch (e: any) {
-      const errMsg = e?.message || String(e);
-      console.warn("Failed to flush gl_active_session to localStorage", errMsg);
-      setPersistenceError(errMsg);
+    } else {
+      console.warn("Failed to flush gl_active_session to localStorage", writeRes.error.message);
+      setPersistenceError(writeRes.error.message);
     }
   }, []);
 
@@ -137,17 +135,14 @@ export function useActiveSession() {
       debounceTimerRef.current = null;
       // Stale revision protection: ignore if session has advanced or cleared
       if (sessionRevisionRef.current !== expectedRevision) return;
-      try {
-        if (latestSessionRef.current) {
-          localStorage.setItem('gl_active_session', JSON.stringify(latestSessionRef.current));
-        } else {
-          localStorage.removeItem('gl_active_session');
-        }
+      const writeRes = latestSessionRef.current
+        ? safeSetItem('gl_active_session', JSON.stringify(latestSessionRef.current))
+        : safeRemoveItem('gl_active_session');
+      if (writeRes.ok) {
         setPersistenceError(null);
-      } catch (e: any) {
-        const errMsg = e?.message || String(e);
-        console.warn("Failed to save debounced gl_active_session", errMsg);
-        setPersistenceError(errMsg);
+      } else {
+        console.warn("Failed to save debounced gl_active_session", writeRes.error.message);
+        setPersistenceError(writeRes.error.message);
       }
     }, 250);
   }, []);
@@ -187,13 +182,12 @@ export function useActiveSession() {
     const session: ActiveSession = { workoutId, startTime, sessionSets: sets };
     latestSessionRef.current = session;
     setActiveSession(session);
-    try {
-      localStorage.setItem('gl_active_session', JSON.stringify(session));
+    const writeRes = safeSetItem('gl_active_session', JSON.stringify(session));
+    if (writeRes.ok) {
       setPersistenceError(null);
-    } catch (e: any) {
-      const errMsg = e?.message || String(e);
-      console.warn("Failed to synchronously initialize gl_active_session", errMsg);
-      setPersistenceError(errMsg);
+    } else {
+      console.warn("Failed to synchronously initialize gl_active_session", writeRes.error.message);
+      setPersistenceError(writeRes.error.message);
     }
   }, []);
 
@@ -233,13 +227,12 @@ export function useActiveSession() {
     };
     latestSessionRef.current = nextSession;
     setActiveSession(nextSession);
-    try {
-      localStorage.setItem('gl_active_session', JSON.stringify(nextSession));
+    const writeRes = safeSetItem('gl_active_session', JSON.stringify(nextSession));
+    if (writeRes.ok) {
       setPersistenceError(null);
-    } catch (e: any) {
-      const errMsg = e?.message || String(e);
-      console.warn("Failed to persist completionLogId to gl_active_session", errMsg);
-      setPersistenceError(errMsg);
+    } else {
+      console.warn("Failed to persist completionLogId to gl_active_session", writeRes.error.message);
+      setPersistenceError(writeRes.error.message);
     }
   }, []);
 
@@ -251,12 +244,11 @@ export function useActiveSession() {
     sessionRevisionRef.current += 1;
     latestSessionRef.current = null;
     setActiveSession(null);
-    try {
-      localStorage.removeItem('gl_active_session');
+    const removeRes = safeRemoveItem('gl_active_session');
+    if (removeRes.ok) {
       setPersistenceError(null);
-    } catch (e: any) {
-      const errMsg = e?.message || String(e);
-      setPersistenceError(errMsg);
+    } else {
+      setPersistenceError(removeRes.error.message);
     }
   }, []);
 

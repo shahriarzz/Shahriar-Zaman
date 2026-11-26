@@ -5,6 +5,7 @@ import { validateAndSanitizeFitnessData, readCanonicalSnapshotEnvelope } from '.
 import { clearDeletedIdsTracker, syncCloudDataWithRestored } from '../utils/fitnessSyncHelpers';
 import { saveAppState } from '../services/fitnessFirestore';
 import { FitnessDatabaseSnapshot, CommitFitnessSnapshotOptions } from './useFitnessData';
+import { safeRemoveItem, safeSetItem } from '../lib/safeStorage';
 import {
   backupTransition,
   initialBackupPhase,
@@ -301,10 +302,8 @@ export function useFitnessBackups({
       backupsCacheRef.current = updated;
 
       // Keep lightweight metadata in localStorage
-      try {
-        const meta = updated.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
-        localStorage.setItem('gl_auto_backups_meta', JSON.stringify(meta));
-      } catch {}
+      const meta = updated.map(u => ({ timestamp: u.timestamp, desc: u.desc, changeType: u.changeType }));
+      safeSetItem('gl_auto_backups_meta', JSON.stringify(meta));
 
       if (!isInternalCheckpoint) {
         transitionBackupPhase({ type: 'BACKUP_SUCCEEDED', newCount: updated.length });
@@ -372,10 +371,8 @@ export function useFitnessBackups({
         backupsCacheRef.current = [];
         hasHydratedRef.current = true;
         initializationPromiseRef.current = Promise.resolve();
-        try {
-          localStorage.removeItem('gl_auto_backups');
-          localStorage.removeItem('gl_auto_backups_meta');
-        } catch {}
+        safeRemoveItem('gl_auto_backups');
+        safeRemoveItem('gl_auto_backups_meta');
 
         transitionBackupPhase({ type: 'CLEAR_SUCCEEDED' });
         setBackupsVersion(v => v + 1);
@@ -429,10 +426,8 @@ export function useFitnessBackups({
         setPendingCloudSync(null);
         hasHydratedRef.current = true;
         initializationPromiseRef.current = Promise.resolve();
-        try {
-          localStorage.removeItem('gl_auto_backups');
-          localStorage.removeItem('gl_auto_backups_meta');
-        } catch {}
+        safeRemoveItem('gl_auto_backups');
+        safeRemoveItem('gl_auto_backups_meta');
 
         transitionBackupPhase({ type: 'CLEAR_SUCCEEDED' });
         setBackupsVersion(v => v + 1);
@@ -1077,8 +1072,11 @@ export function useFitnessBackups({
       const pendingOpId = pending.operationId;
       let needsLocalCommit = false;
 
-      if (canonicalEnv.status === 'corrupt') {
-        const corruptMsg = 'Cannot recover pending cloud restore: local canonical snapshot is corrupted. Resolve local snapshot corruption before retrying.';
+      if (canonicalEnv.status === 'corrupt' || canonicalEnv.status === 'storage_unavailable') {
+        const corruptMsg =
+          canonicalEnv.status === 'storage_unavailable'
+            ? 'Cannot recover pending cloud restore: browser local storage is unavailable. Enable site storage and retry.'
+            : 'Cannot recover pending cloud restore: local canonical snapshot is corrupted. Resolve local snapshot corruption before retrying.';
         const conflictRecord: PendingCloudReconciliation = {
           ...pending,
           status: 'failed',
