@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   getSortedWeightEntries,
   getWeightSparklineData,
+  computeBodyWeightSparklinePoints,
+  parseCalendarDateDayNumber,
   formatDateStr,
   getRelativeTimeString
 } from '../utils/dashboardSelectors';
@@ -161,6 +163,61 @@ describe('Dashboard Architecture & Selectors Suite', () => {
 
       expect(getRelativeTimeString(twentyMinAgo, now)).toBe('20 min ago');
       expect(getRelativeTimeString(twoHoursAgo, now)).toBe('2h ago');
+    });
+  });
+
+  describe('parseCalendarDateDayNumber & computeBodyWeightSparklinePoints', () => {
+    it('computes exact calendar day numbers across DST transitions without drift', () => {
+      const spring1 = parseCalendarDateDayNumber('2026-03-08');
+      const spring2 = parseCalendarDateDayNumber('2026-03-09');
+      const fall1 = parseCalendarDateDayNumber('2026-11-01');
+      const fall2 = parseCalendarDateDayNumber('2026-11-02');
+      const fall3 = parseCalendarDateDayNumber('2026-11-03');
+
+      expect(spring1).not.toBeNull();
+      expect(spring2! - spring1!).toBe(1);
+      expect(fall2! - fall1!).toBe(1);
+      expect(fall3! - fall2!).toBe(1);
+      expect(parseCalendarDateDayNumber('bad-date')).toBeNull();
+    });
+
+    it('positions sparkline points proportionally by elapsed calendar days rather than uniform index', () => {
+      const entries: [string, number][] = [
+        ['2026-10-01', 80.0],
+        ['2026-10-03', 81.0],
+        ['2026-10-11', 82.0]
+      ];
+      const pts = computeBodyWeightSparklinePoints(entries, 79.5, 3);
+      expect(pts).toHaveLength(3);
+      expect(pts[0].x).toBe(0);
+      expect(pts[1].x).toBeCloseTo(20, 5); // 2 days out of 10-day span
+      expect(pts[2].x).toBe(100);
+      for (const pt of pts) {
+        expect(Number.isFinite(pt.x)).toBe(true);
+        expect(Number.isFinite(pt.y)).toBe(true);
+      }
+    });
+
+    it('centers a single weight measurement at x=50, y=16 without NaN', () => {
+      const pts = computeBodyWeightSparklinePoints([['2026-10-15', 78.5]], 78.0, 1);
+      expect(pts).toEqual([{ date: '2026-10-15', weight: 78.5, x: 50, y: 16 }]);
+    });
+
+    it('handles same-day entries and zero range without division-by-zero or NaN', () => {
+      const pts = computeBodyWeightSparklinePoints(
+        [
+          ['2026-10-15', 80.0],
+          ['2026-10-15', 80.0]
+        ],
+        80.0,
+        0
+      );
+      expect(pts).toHaveLength(2);
+      expect(pts[0].x).toBe(0);
+      expect(pts[1].x).toBe(100);
+      expect(Number.isFinite(pts[0].y)).toBe(true);
+      expect(Number.isFinite(pts[1].y)).toBe(true);
+      expect(computeBodyWeightSparklinePoints([], 0, 1)).toEqual([]);
     });
   });
 });

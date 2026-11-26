@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useId } from 'react';
+import React, { useState, useMemo, useId, useEffect } from 'react';
+import { useReducedMotion } from 'motion/react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -33,7 +34,7 @@ import {
 } from 'date-fns';
 import { MuscleBalanceRecovery } from './MuscleBalanceRecovery';
 import { DeferredViewSection } from './DeferredViewSection';
-import { AnalyticsTabState } from '../types/tabViewState';
+import { AnalyticsTabState, AnalyticsFocusSection } from '../types/tabViewState';
 import { formatCompactWeight } from '../utils/fitnessHelpers';
 import { useAnalyticsData, TimeRange, MuscleMetric } from '../hooks/useAnalyticsData';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
@@ -86,9 +87,16 @@ function getHeatmapIntensity(vol: number, maxVol: number) {
 export interface AnalyticsViewProps {
   savedState?: AnalyticsTabState;
   onSaveState?: (state: AnalyticsTabState) => void;
+  focusSection?: AnalyticsFocusSection | null;
+  onClearFocusSection?: () => void;
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSaveState }) => {
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
+  savedState,
+  onSaveState,
+  focusSection,
+  onClearFocusSection
+}) => {
   const [timeRange, setTimeRange] = useState<TimeRange>(savedState?.timeRange ?? '30d');
   const [muscleMetric, setMuscleMetric] = useState<MuscleMetric>(savedState?.muscleMetric ?? 'volume');
   const [selected1RMExerciseId, setSelected1RMExerciseId] = useState<string | null>(savedState?.selected1RMExerciseId ?? null);
@@ -97,8 +105,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
   const [showAllExercises, setShowAllExercises] = useState<boolean>(false);
   const rawE1rmGradientId = useId();
   const e1rmGradientId = `e1rmAreaFill-${rawE1rmGradientId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const shouldReduceMotion = useReducedMotion();
 
-  React.useEffect(() => {
+  useEffect(() => {
     onSaveState?.({
       timeRange,
       muscleMetric,
@@ -106,6 +115,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       currentHeatmapMonth
     });
   }, [timeRange, muscleMetric, selected1RMExerciseId, currentHeatmapMonth, onSaveState]);
+
+  useEffect(() => {
+    if (!focusSection || typeof window === 'undefined') return;
+    const rafId = requestAnimationFrame(() => {
+      const targetEl = document.querySelector(`[data-analytics-section="${focusSection}"]`) as HTMLElement | null;
+      if (targetEl && typeof targetEl.getBoundingClientRect === 'function') {
+        const rect = targetEl.getBoundingClientRect();
+        const y = Math.max(0, Math.round(rect.top + window.scrollY - 76));
+        window.scrollTo({ top: y, behavior: shouldReduceMotion ? 'auto' : 'smooth' });
+      }
+      onClearFocusSection?.();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [focusSection, onClearFocusSection, shouldReduceMotion]);
 
   const {
     trainingStreak,
@@ -303,7 +326,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Grid>
 
       {/* 3. SECTION 2: PRIMARY ANALYTICAL FOCUS — STRENGTH PROGRESSION (1RM TREND) */}
-      <DeferredViewSection minHeight={420}>
+      <div id="analytics-section-strength" data-analytics-section="strength">
+        <DeferredViewSection minHeight={420}>
         <Section
           eyebrow="Strength & Long-Term Progress"
           eyebrowColor="indigo"
@@ -427,9 +451,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           </Stack>
         </Section>
       </DeferredViewSection>
+      </div>
 
       {/* 4. SECTION 3: TRAINING ACTIVITY & CONSISTENCY */}
-      <div className={cn("pt-2 border-t", BORDER.subtle)}>
+      <div id="analytics-section-consistency" data-analytics-section="consistency" className={cn("pt-2 border-t", BORDER.subtle)}>
         <p className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>01 · Training Activity & Consistency</p>
       </div>
       <Section
@@ -955,12 +980,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
       </Grid>
 
       {/* 9. SECTION 8: TRAINING GAP & ACTIVITY */}
-      <Section
-        eyebrow="Spacing & Cadence"
-        eyebrowColor="zinc"
-        title="Training Cadence"
-        padding="section"
-      >
+      <div id="analytics-section-frequency" data-analytics-section="frequency">
+        <Section
+          eyebrow="Spacing & Cadence"
+          eyebrowColor="zinc"
+          title="Training Cadence"
+          padding="section"
+        >
         <Grid cols={2} gap="md">
           <StatCard
             label="Last Session"
@@ -1013,6 +1039,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ savedState, onSave
           />
         </Grid>
       </Section>
+      </div>
     </Stack>
   );
 };

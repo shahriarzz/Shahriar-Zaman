@@ -1327,8 +1327,9 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      // Verify Dashboard reflects Day 4 Rest Protocol
-      expect(container.textContent).toContain('DAY 4 · REST');
+      // Verify Dashboard reflects Day 4 Rest Protocol (no duplicated DAY 4 · REST badge)
+      expect(container.textContent).toContain('DAY 4 / 8');
+      expect(container.textContent).not.toContain('DAY 4 · REST');
       expect(container.textContent).toContain('Recovery Day');
       expect(container.textContent).toContain('Rest Day');
 
@@ -1392,7 +1393,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       });
 
       // Day 5 Push B automatically appears on Dashboard
-      expect(container.textContent).toContain('DAY 5 · PUSH B');
+      expect(container.textContent).toContain('DAY 5 / 8');
+      expect(container.textContent).toContain('PUSH B');
       expect(container.textContent).toContain('Push Day B');
       expect(container.textContent).toContain('Start Session');
 
@@ -1456,7 +1458,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('DAY 1 / 8');
+      expect(container.textContent).toContain('PUSH A');
       expect(container.textContent).toContain('Push Day A');
 
       // Render Calendar on Day 9 (Day 1 of next cycle)
@@ -1511,7 +1514,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('DAY 1 / 8');
+      expect(container.textContent).toContain('PUSH A');
       expect(container.textContent).toContain('Push Day A');
 
       // Calendar verifies 2026-10-03 TODAY is Push Day A and past 2026-10-01 was MISSED Push Day A
@@ -1583,7 +1587,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       });
 
       // Deterministic fallback resolves to canonical Push Day A on Dashboard
-      expect(container.textContent).toContain('DAY 1 · PUSH A');
+      expect(container.textContent).toContain('DAY 1 / 8');
+      expect(container.textContent).toContain('PUSH A');
       expect(container.textContent).toContain('Push Day A');
       expect(container.textContent).not.toContain('Competing Push Day');
 
@@ -1646,7 +1651,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       });
 
       // Dashboard shows canonical Hybrid Day A fallback
-      expect(container.textContent).toContain('DAY 3 · HYBRID A');
+      expect(container.textContent).toContain('DAY 3 / 8');
+      expect(container.textContent).toContain('HYBRID A');
       expect(container.textContent).toContain('Hybrid Day A');
 
       // Calendar shows identical fallback
@@ -1796,7 +1802,8 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         );
       });
 
-      expect(container.textContent).toContain('DAY 6 · PULL B');
+      expect(container.textContent).toContain('DAY 6 / 8');
+      expect(container.textContent).toContain('PULL B');
       expect(container.textContent).toContain('Pull Day B');
 
       act(() => {

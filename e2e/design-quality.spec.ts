@@ -409,9 +409,19 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     await expect(h1).toHaveText('Stay Aggressive');
     const kpiGrid = page.getByTestId('dashboard-overview-stats');
     await expect(kpiGrid).toBeVisible();
+    await expect(kpiGrid.getByText('Scheduled Streak')).toBeVisible();
     await expect(kpiGrid.getByText('Adherence')).toBeVisible();
     await expect(kpiGrid.getByText('Complete 1 scheduled workout')).toBeVisible();
-    await expect(page.getByText('Total Volume (Lifetime)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Training Volume' })).toBeVisible();
+    await expect(page.getByText('Total Volume (Lifetime)')).toHaveCount(0);
+
+    // Open KPI Metric Definition dialog and verify Escape closes cleanly
+    const strengthInfoBtn = page.getByRole('button', { name: 'Explain Strength Progress' });
+    await strengthInfoBtn.click();
+    await waitForDialogReady(page);
+    await expect(page.getByRole('dialog')).toContainText('Estimated 1RM');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await assertZeroAxeViolations(page, 'Dashboard');
     expect(diag.pageErrors).toEqual([]);
@@ -745,7 +755,7 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
       for (let frame = 0; frame < 35; frame++) {
         document.querySelectorAll('[data-countup-animating="true"]').forEach((el) => {
           const cardText = el.closest('[class*="border"]')?.textContent || el.parentElement?.textContent || '';
-          for (const lbl of ['Streak', 'Training Frequency', 'Adherence', 'Strength Progress']) {
+          for (const lbl of ['Scheduled Streak', 'Training Frequency', 'Adherence', 'Strength Progress']) {
             if (cardText.includes(lbl)) seenAnimating.add(lbl);
           }
         });

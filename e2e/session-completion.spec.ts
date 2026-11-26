@@ -60,10 +60,13 @@ test.describe('Workout Session Completion E2E Flow (Real UI + Firestore Emulator
     expect(cloudUserDoc.exists).toBe(true);
     expect(decodeFirestoreStringField(cloudUserDoc.fields?.cycleStart)).toBe(localSnap.data.appState.cycleStart);
 
-    // 6. Dismiss summary -> Dashboard shows Completed Today & Streak >= 1
+    // 6. Dismiss summary -> Dashboard shows Completed Today & Review Session action
     await page.getByRole('button', { name: 'Dismiss Summary' }).click();
     await expect(page.getByText('COMPLETED TODAY')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Completed' })).toBeDisabled();
+    const reviewBtn = page.getByRole('button', { name: 'Review Session' });
+    await expect(reviewBtn).toBeEnabled();
+    await reviewBtn.click();
+    await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
 
     // 7. Navigate to History and verify the completed session appears
     await navigateToTab(page, 'history');

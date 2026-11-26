@@ -1,3 +1,12 @@
+export interface HistoryNavigationTarget {
+  date?: string;
+  logId?: string;
+  exerciseDefinitionId?: string;
+  searchQuery?: string;
+}
+
+export type AnalyticsFocusSection = 'consistency' | 'frequency' | 'strength';
+
 export interface HistoryTabState {
   search: string;
   expandedDate: string | null;

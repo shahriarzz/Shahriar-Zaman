@@ -857,4 +857,112 @@ describe('StatCard Architecture & Display Regression Suite', () => {
       expect(html).toContain('New All-Time High');
     });
   });
+
+  describe('StatCard Info Dialog & Sibling Detail Action Regression', () => {
+    let container: HTMLDivElement | null = null;
+    let root: ReturnType<typeof createRoot> | null = null;
+
+    beforeEach(() => {
+      mockUseReducedMotionValue = true;
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+    });
+
+    afterEach(() => {
+      if (root) {
+        act(() => {
+          root?.unmount();
+        });
+      }
+      if (container) {
+        container.remove();
+      }
+      vi.restoreAllMocks();
+    });
+
+    it('opens accessible metric info dialog with formula breakdown and restores focus on Escape', () => {
+      const detailClickSpy = vi.fn();
+
+      act(() => {
+        root!.render(
+          <StatCard
+            label="Strength Progress"
+            value="+3.5"
+            unit="%"
+            info={{
+              title: 'Strength Progress',
+              measures: 'Median e1RM change.',
+              calculation: 'Epley e1RM delta.',
+              period: 'Last 28 days vs preceding 28 days.',
+              excludes: 'Unpaired lifts.',
+              limitations: 'Reflects paired lift count only.'
+            }}
+            detailAction={{
+              label: 'View Strength Progress chart in Analytics',
+              onClick: detailClickSpy
+            }}
+          />
+        );
+      });
+
+      const infoBtn = container!.querySelector('button[aria-label="Explain Strength Progress"]') as HTMLButtonElement;
+      const detailBtn = container!.querySelector('button[aria-label="View Strength Progress chart in Analytics"]') as HTMLButtonElement;
+
+      expect(infoBtn).toBeTruthy();
+      expect(detailBtn).toBeTruthy();
+      expect(infoBtn.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(infoBtn.getAttribute('aria-expanded')).toBe('false');
+      // Never nest interactive buttons inside each other
+      expect(infoBtn.contains(detailBtn)).toBe(false);
+      expect(detailBtn.contains(infoBtn)).toBe(false);
+
+      // Clicking sibling detail button triggers Analytics callback without opening dialog
+      act(() => {
+        detailBtn.click();
+      });
+      expect(detailClickSpy).toHaveBeenCalledTimes(1);
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+      // Focusing and opening info button launches dialog cleanly
+      act(() => {
+        infoBtn.focus();
+        infoBtn.click();
+      });
+      expect(infoBtn.getAttribute('aria-expanded')).toBe('true');
+
+      const dialog = document.body.querySelector('[role="dialog"]');
+      expect(dialog).toBeTruthy();
+      expect(dialog!.textContent).toContain('Median e1RM change.');
+      expect(dialog!.textContent).toContain('Epley e1RM delta.');
+      expect(dialog!.textContent).toContain('Last 28 days vs preceding 28 days.');
+      expect(dialog!.textContent).toContain('Unpaired lifts.');
+      expect(dialog!.textContent).toContain('Reflects paired lift count only.');
+
+      // Clicking Open Analytics inside dialog closes dialog and navigates
+      const openAnalyticsBtn = Array.from(dialog!.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Open Analytics'
+      ) as HTMLButtonElement;
+      expect(openAnalyticsBtn).toBeTruthy();
+      act(() => {
+        openAnalyticsBtn.click();
+      });
+      expect(detailClickSpy).toHaveBeenCalledTimes(2);
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+      // Re-open and close with Escape -> restores focus to trigger button
+      act(() => {
+        infoBtn.focus();
+        infoBtn.click();
+      });
+      expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+      expect(infoBtn.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(infoBtn);
+    });
+  });
 });

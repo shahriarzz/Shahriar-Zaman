@@ -3059,7 +3059,7 @@ describe('Design System Consolidation & Token Contracts', () => {
       const animatedLabels = dashboardAnimatedMatches
         .filter((block) => /\banimateValue\b/.test(block))
         .map((block) => block.match(/label="([^"]+)"/)?.[1]);
-      expect(animatedLabels).toEqual(['Streak', 'Strength Progress']);
+      expect(animatedLabels).toEqual(['Scheduled Streak', 'Strength Progress']);
 
       expect(historySrc).not.toMatch(/\banimateValue\b/);
       expect(analyticsSrc).not.toMatch(/\banimateValue\b/);

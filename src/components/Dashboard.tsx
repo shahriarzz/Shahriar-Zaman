@@ -1,12 +1,13 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { TrendingUp, Calendar as CalendarIcon, Repeat, ChevronRight, Trash2, Dumbbell, Weight, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Calendar as CalendarIcon, Repeat, ChevronRight, Trash2, Dumbbell, CheckCircle2 } from 'lucide-react';
 import { WORKOUT_COLORS, formatCompactWeight } from '../utils/fitnessHelpers';
-import { formatDateStr } from '../utils/dashboardSelectors';
+import { formatDateStr, computeBodyWeightSparklinePoints } from '../utils/dashboardSelectors';
 import { Calendar } from './Calendar';
 import { haptics } from '../utils/haptics';
 import { useConfirm } from '../context/ConfirmContext';
-import { useDashboardData, parseStrictBodyWeight } from '../hooks/useDashboardData';
+import { useDashboardData, parseStrictBodyWeight, DashboardPREvent } from '../hooks/useDashboardData';
+import { HistoryNavigationTarget, AnalyticsFocusSection } from '../types/tabViewState';
 import {
   Section,
   SectionHeader,
@@ -27,19 +28,26 @@ import {
   SHADOW,
   TYPOGRAPHY,
   CONTROL_HEIGHT,
+  TRANSITION,
+  FOCUS,
 } from './ui';
 import { cn } from '../lib/utils';
 
 interface DashboardProps {
   onStartWorkout: (id: string) => void;
-  onNavigateToHistory: (dateStr?: string) => void;
+  onNavigateToHistory: (target?: string | HistoryNavigationTarget) => void;
+  onNavigateToAnalytics?: (section: AnalyticsFocusSection) => void;
   onPrewarmSession?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigateToHistory, onPrewarmSession }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+  onStartWorkout,
+  onNavigateToHistory,
+  onNavigateToAnalytics,
+  onPrewarmSession
+}) => {
   const {
     heroDateStr,
-    stats,
     trainingStreak,
     trainingFrequency,
     strengthTrend,
@@ -55,6 +63,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     reloadInitialWorkouts,
     isTodayCompleted,
     todayCompletedSummary,
+    previousProtocolSummary,
     nextScheduledWorkout,
     adherence
   } = useDashboardData();
@@ -119,6 +128,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
     }
   };
 
+  const strengthSampleLabel =
+    strengthTrend.comparableExercises >= 3
+      ? '3+ lift sample'
+      : `${strengthTrend.comparableExercises}-lift sample`;
+
+  const latestWeightDate =
+    weightSummary.latestWeightDate !== undefined
+      ? weightSummary.latestWeightDate
+      : weightSummary.weightEntries.length > 0
+        ? weightSummary.weightEntries.reduce((latest, [d]) => (d > latest ? d : latest), weightSummary.weightEntries[0][0])
+        : null;
+
+  const focusBadgeLabel =
+    todayWorkout && todayWorkout.type !== 'rest' && todayWorkout.badge
+      ? todayWorkout.badge.replace(/^DAY\s+\d+\s*·\s*/i, '').trim()
+      : '';
+
   return (
     <Stack spacing="2xl" className="pt-4 pb-16">
       {/* 1. Page Header, 2. Stable 4-KPI Overview Grid, 3. Unfinished Session, 4. Today's Protocol */}
@@ -134,23 +160,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         <Grid cols={2} colsMd={4} gap="md" data-testid="dashboard-overview-stats">
           <StatCard
             animateValue
-            label="Streak"
+            label="Scheduled Streak"
             value={trainingStreak.currentStreak}
             unit={trainingStreak.currentStreak === 1 ? 'session' : 'sessions'}
-            sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'}`}
+            sublabel={`Best: ${trainingStreak.longestStreak} ${trainingStreak.longestStreak === 1 ? 'session' : 'sessions'} · Recovery days neutral`}
             accent="zinc"
             icon={TrendingUp}
             size="standard"
+            info={{
+              title: 'Scheduled Streak',
+              measures: 'Consecutive scheduled core cycle workouts completed in sequence.',
+              calculation: 'Increments by 1 for each expected core workout completed on its scheduled day.',
+              period: 'Active 8-day cycle history through today.',
+              excludes: "Scheduled rest days, bonus workouts, and today's uncompleted workout do not break or inflate the streak.",
+              limitations: 'Skipping a past scheduled training day resets the current streak to 0.'
+            }}
+            detailAction={onNavigateToAnalytics ? {
+              label: 'View Scheduled Streak consistency in Analytics',
+              onClick: () => onNavigateToAnalytics('consistency')
+            } : undefined}
           />
           <StatCard
             label="Training Frequency"
             value={trainingFrequency.sessionsPerWeek}
             formatValue={(val) => val.toFixed(1)}
             unit="/ week"
-            sublabel={`${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)} vs previous 28d`}
+            sublabel={`Last 28d (${trainingFrequency.completedSessions} ${trainingFrequency.completedSessions === 1 ? 'session' : 'sessions'}) · ${trainingFrequency.change >= 0 ? '+' : ''}${trainingFrequency.change.toFixed(1)}/wk vs prior 28d`}
             accent="zinc"
             icon={CalendarIcon}
             size="standard"
+            info={{
+              title: 'Training Frequency',
+              measures: 'Average completed workouts per week over the latest 28-day window.',
+              calculation: 'Completed sessions in the last 28 days divided by 4 weeks, compared with the prior 28 days in sessions/wk.',
+              period: 'Latest 28 days compared against days 29–56 ago.',
+              excludes: 'Incomplete sessions, skipped scheduled workouts, and rest days.',
+              limitations: 'Counts both scheduled core sessions and completed bonus workouts.'
+            }}
+            detailAction={onNavigateToAnalytics ? {
+              label: 'View Training Frequency cadence in Analytics',
+              onClick: () => onNavigateToAnalytics('frequency')
+            } : undefined}
           />
           <StatCard
             animateValue
@@ -160,8 +210,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             unit="%"
             sublabel={
               strengthTrend.percentChange !== null
-                ? `28d vs prev · ${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'lift' : 'lifts'} (${strengthTrend.confidence})`
-                : 'Insufficient 28d baseline'
+                ? `Last 28d vs prior 28d · ${strengthTrend.comparableExercises} ${strengthTrend.comparableExercises === 1 ? 'paired lift' : 'paired lifts'} (${strengthSampleLabel})`
+                : 'Need paired lifts across two 28d windows'
             }
             isUnavailable={strengthTrend.percentChange === null}
             accent={
@@ -184,6 +234,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             }
             icon={Dumbbell}
             size="standard"
+            info={{
+              title: 'Strength Progress',
+              measures: 'Median percentage change in estimated 1RM across exercises performed in both windows.',
+              calculation: 'Finds each matched exercise’s best Epley e1RM in the last 28 days vs the prior 28 days and takes the median % delta.',
+              period: 'Latest 28 days compared against the preceding 28 days.',
+              excludes: 'Exercises missing completed weighted sets in either 28-day window, plus incomplete sessions.',
+              limitations: 'The sample indicator (1, 2, or 3+ lifts) only reflects how many matched exercises were paired — not statistical confidence.'
+            }}
+            detailAction={onNavigateToAnalytics ? {
+              label: 'View Strength Progress chart in Analytics',
+              onClick: () => onNavigateToAnalytics('strength')
+            } : undefined}
           />
           <StatCard
             label="Adherence"
@@ -193,12 +255,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             unavailableLabel="Building baseline"
             sublabel={
               adherence && adherence.evaluatedScheduledWorkouts > 0
-                ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled`
+                ? `${adherence.completedScheduled}/${adherence.evaluatedScheduledWorkouts} scheduled due (28d)`
                 : 'Complete 1 scheduled workout'
             }
             accent="zinc"
             icon={CheckCircle2}
             size="standard"
+            info={{
+              title: 'Adherence',
+              measures: 'Completion rate for due scheduled core workouts.',
+              calculation: 'Completed scheduled workouts divided by evaluated scheduled workouts due (completed + missed past core days).',
+              period: 'Last 28 days within your active 8-day cycle.',
+              excludes: "Scheduled rest days, bonus workouts, and today's uncompleted workout.",
+              limitations: 'Requires at least 1 evaluated scheduled training day before a score is displayed.'
+            }}
+            detailAction={onNavigateToAnalytics ? {
+              label: 'View Adherence consistency in Analytics',
+              onClick: () => onNavigateToAnalytics('consistency')
+            } : undefined}
           />
         </Grid>
 
@@ -277,7 +351,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <Stack spacing="xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 border", RADIUS.badge, SURFACE.recessed, BORDER.subtle, "text-zinc-300")}>
+                  <span className={cn(TYPOGRAPHY.badgeMd, "font-mono font-bold text-xs tracking-wider px-2 py-0.5 border", RADIUS.badge, SURFACE.recessed, BORDER.subtle, "text-zinc-300 tabular-nums")}>
                     DAY {currentCycleDay} / 8
                   </span>
                   {todayWorkout.type !== 'rest' && (
@@ -288,9 +362,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       size="md"
                     />
                   )}
-                  {todayWorkout.badge && todayWorkout.badge !== 'DAY 8 · REST' && (
+                  {focusBadgeLabel && (
                     <Badge
-                      label={todayWorkout.badge}
+                      label={focusBadgeLabel}
                       colorOverride={WORKOUT_COLORS[todayWorkout.type]}
                       variant="subtle"
                     />
@@ -301,11 +375,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </h3>
                 {isTodayCompleted && todayCompletedSummary ? (
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-3 text-xs font-mono text-zinc-300">
+                    <div className="flex items-center gap-3 text-xs font-mono text-zinc-300 tabular-nums">
                       <span>{todayCompletedSummary.setsCount} {todayCompletedSummary.setsCount === 1 ? 'set' : 'sets'}</span>
-                      <span className="text-zinc-600">·</span>
+                      <span className="text-zinc-600" aria-hidden="true">·</span>
                       <span>{todayCompletedSummary.durationMinutes} min</span>
-                      <span className="text-zinc-600">·</span>
+                      <span className="text-zinc-600" aria-hidden="true">·</span>
                       <span>{formatCompactWeight(todayCompletedSummary.totalVolume)} kg</span>
                     </div>
                     {nextScheduledWorkout && (
@@ -314,28 +388,78 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                       </span>
                     )}
                   </div>
+                ) : todayWorkout.type === 'rest' ? (
+                  <div className="flex flex-col gap-1">
+                    <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case")}>
+                      Scheduled recovery
+                    </p>
+                    {nextScheduledWorkout && (
+                      <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+                        Next Scheduled: {nextScheduledWorkout.cycleDay != null ? `Day ${nextScheduledWorkout.cycleDay} · ` : ''}{nextScheduledWorkout.name}
+                      </span>
+                    )}
+                  </div>
                 ) : (
-                  <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case")}>
-                    {todayWorkout.type === 'rest' ? 'Scheduled recovery' : `${todayWorkout.exercises.length} Exercises`}
-                  </p>
+                  <div className="flex flex-col gap-1">
+                    <p className={cn(TYPOGRAPHY.metadata, "text-zinc-400 normal-case tabular-nums")}>
+                      {todayWorkout.exercises.length} Exercises
+                    </p>
+                    {previousProtocolSummary ? (
+                      <div
+                        data-testid="previous-protocol-summary"
+                        className={cn(TYPOGRAPHY.caption, "text-zinc-300 font-mono tabular-nums flex flex-wrap items-center gap-x-2 gap-y-0.5")}
+                      >
+                        <span className="text-zinc-400">Previous ({formatDateStr(previousProtocolSummary.date)}):</span>
+                        <span>{previousProtocolSummary.setsCount} {previousProtocolSummary.setsCount === 1 ? 'set' : 'sets'}</span>
+                        <span className="text-zinc-600" aria-hidden="true">·</span>
+                        <span>{formatCompactWeight(previousProtocolSummary.totalVolume)} kg</span>
+                        {previousProtocolSummary.durationMinutes > 0 && (
+                          <>
+                            <span className="text-zinc-600" aria-hidden="true">·</span>
+                            <span>{previousProtocolSummary.durationMinutes} min</span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <p data-testid="previous-protocol-empty" className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
+                        First scheduled run
+                      </p>
+                    )}
+                  </div>
                 )}
               </Stack>
 
-              <Button
-                variant={isTodayCompleted || todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
-                size="lg"
-                disabled={isTodayCompleted || todayWorkout.type === 'rest'}
-                onPointerDown={() => onPrewarmSession?.()}
-                onMouseEnter={() => onPrewarmSession?.()}
-                onClick={() => {
-                  if (!isTodayCompleted && todayWorkout.type !== 'rest') {
-                    onStartWorkout(todayWorkout.id);
-                  }
-                }}
-                className="w-full md:w-auto"
-              >
-                {isTodayCompleted ? 'Completed' : todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
-              </Button>
+              {isTodayCompleted ? (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => {
+                    onNavigateToHistory({
+                      date: todayCompletedSummary?.date,
+                      logId: todayCompletedSummary?.logId
+                    });
+                  }}
+                  className="w-full md:w-auto"
+                >
+                  Review Session
+                </Button>
+              ) : (
+                <Button
+                  variant={todayWorkout.type === 'rest' ? 'secondary' : 'primary'}
+                  size="lg"
+                  disabled={todayWorkout.type === 'rest'}
+                  onPointerDown={() => onPrewarmSession?.()}
+                  onMouseEnter={() => onPrewarmSession?.()}
+                  onClick={() => {
+                    if (todayWorkout.type !== 'rest') {
+                      onStartWorkout(todayWorkout.id);
+                    }
+                  }}
+                  className="w-full md:w-auto"
+                >
+                  {todayWorkout.type === 'rest' ? 'Rest Day' : 'Start Session'}
+                </Button>
+              )}
             </div>
           ) : (
             <EmptyState
@@ -351,98 +475,95 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
         </Section>
       </Stack>
 
-      {/* 4. Recent Milestones */}
+      {/* 4. Training Volume (Rolling 7-Day Load) */}
+      <Section
+        eyebrow="7-Day Load"
+        eyebrowColor="zinc"
+        title="Training Volume"
+        padding="section"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className={cn(TYPOGRAPHY.statValue, "text-white tabular-nums")}>
+              {formatCompactWeight(recentMilestones.recentVolume.volume)}
+            </span>
+            <span className={TYPOGRAPHY.unit}>kg</span>
+          </div>
+          <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono tabular-nums")}>
+            {recentMilestones.recentVolume.dateRangeLabel}
+          </span>
+        </div>
+      </Section>
+
+      {/* 5. Recent Achievements (Personal Records Only) */}
       <Section
         eyebrow="Milestones"
         eyebrowColor="zinc"
         title="Recent Achievements"
+        action={
+          <span className={cn(TYPOGRAPHY.caption, "font-mono text-zinc-400 tabular-nums")}>
+            {recentMilestones.recentPREvents.length > 0 ? `Latest ${recentMilestones.recentPREvents.length}` : 'All-time verified'}
+          </span>
+        }
         padding="section"
       >
-        <Stack spacing="lg">
-          {/* Rolling 7-Day & Lifetime Training Volume Summary */}
-          <div className={cn("p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4", RADIUS.card, SURFACE.recessed, BORDER.subtle)}>
-            <div>
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Rolling 7-Day Volume</span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className={cn(TYPOGRAPHY.statValue, "text-white")}>
-                  {formatCompactWeight(recentMilestones.recentVolume.volume)}
-                </span>
-                <span className={TYPOGRAPHY.unit}>kg</span>
-              </div>
-              <span className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono block mt-1")}>
-                {recentMilestones.recentVolume.dateRangeLabel}
-              </span>
-            </div>
-            <div className="sm:text-right border-t sm:border-t-0 sm:border-l border-zinc-800/70 pt-3 sm:pt-0 sm:pl-6 shrink-0">
-              <div className="flex items-center sm:justify-end gap-1.5">
-                <Weight size={12} className="text-zinc-400 shrink-0" />
-                <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Total Volume (Lifetime)</span>
-              </div>
-              <div className="flex items-baseline sm:justify-end gap-1.5 mt-0.5">
-                <span className={cn(TYPOGRAPHY.statValue, "text-zinc-200")}>
-                  {formatCompactWeight(stats.totalWeight)}
-                </span>
-                <span className={TYPOGRAPHY.unit}>kg</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Personal Records Sub-block */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className={cn(TYPOGRAPHY.eyebrow, "text-zinc-400")}>Personal Records</span>
-              <span className={cn(TYPOGRAPHY.caption, "font-mono")}>
-                {recentMilestones.recentPREvents.length > 0 ? `Latest ${recentMilestones.recentPREvents.length}` : 'All-time verified'}
-              </span>
-            </div>
-
-            {recentMilestones.recentPREvents.length === 0 ? (
-              <EmptyState
-                size="compact"
-                title="No Recent Personal Records"
-                description="Personal records appear automatically as you log qualifying lifts."
-              />
-            ) : (
-              <Grid cols={2} gap="sm">
-                {recentMilestones.recentPREvents.map((pr) => (
-                  <div
-                    key={pr.id}
-                    className={cn(
-                      "flex flex-col justify-between p-3 sm:p-3.5 border gap-2 min-w-0",
-                      RADIUS.card,
-                      SURFACE.recessed,
-                      BORDER.subtle
-                    )}
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2 min-w-0">
-                        <span className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white break-words flex-1 min-w-0 leading-snug")}>
-                          {pr.exerciseName}
-                        </span>
-                        <span className={cn(TYPOGRAPHY.caption, "font-mono shrink-0 whitespace-nowrap")}>
-                          {formatDateStr(pr.date)}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                        {pr.isWeightPR && (
-                          <Badge label="WEIGHT PR" color="orange" variant="subtle" />
-                        )}
-                        {pr.isE1RMPR && (
-                          <Badge label="E1RM PR" color="emerald" variant="subtle" />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className={cn("flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t text-xs font-mono min-w-0", BORDER.subtle)}>
-                      <span className="text-zinc-300 break-words sm:whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
-                      <span className="text-zinc-400 break-words sm:whitespace-nowrap">e1RM: <strong className="text-white font-bold tabular-nums">{pr.e1rm}</strong> kg</span>
-                    </div>
+        {recentMilestones.recentPREvents.length === 0 ? (
+          <EmptyState
+            size="compact"
+            title="No Recent Personal Records"
+            description="Personal records appear automatically as you log qualifying lifts."
+          />
+        ) : (
+          <Grid cols={2} gap="sm">
+            {recentMilestones.recentPREvents.map((pr: DashboardPREvent) => (
+              <button
+                key={pr.id}
+                type="button"
+                onClick={() => {
+                  haptics.selection();
+                  onNavigateToHistory({
+                    date: pr.date,
+                    logId: pr.logId,
+                    exerciseDefinitionId: pr.exerciseDefinitionId
+                  });
+                }}
+                aria-label={`Inspect ${pr.exerciseName} PR from ${formatDateStr(pr.date)} in History`}
+                className={cn(
+                  "flex flex-col justify-between p-3 sm:p-3.5 border gap-2 min-w-0 w-full text-left cursor-pointer hover:border-zinc-700 hover:bg-zinc-900/80",
+                  RADIUS.card,
+                  SURFACE.recessed,
+                  BORDER.subtle,
+                  TRANSITION.colors,
+                  FOCUS.visible
+                )}
+              >
+                <div className="space-y-1 min-w-0 w-full">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2 min-w-0">
+                    <span className={cn(TYPOGRAPHY.titleSubsection, "text-xs sm:text-sm text-white break-words flex-1 min-w-0 leading-snug")}>
+                      {pr.exerciseName}
+                    </span>
+                    <span className={cn(TYPOGRAPHY.caption, "font-mono shrink-0 whitespace-nowrap tabular-nums")}>
+                      {formatDateStr(pr.date)}
+                    </span>
                   </div>
-                ))}
-              </Grid>
-            )}
-          </div>
-        </Stack>
+                  <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                    {pr.isWeightPR && (
+                      <Badge label="WEIGHT PR" color="orange" variant="subtle" />
+                    )}
+                    {pr.isE1RMPR && (
+                      <Badge label="E1RM PR" color="emerald" variant="subtle" />
+                    )}
+                  </div>
+                </div>
+
+                <div className={cn("flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t text-xs font-mono min-w-0 w-full tabular-nums", BORDER.subtle)}>
+                  <span className="text-zinc-300 break-words sm:whitespace-nowrap">{pr.weight} kg × {pr.reps} reps</span>
+                  <span className="text-zinc-400 break-words sm:whitespace-nowrap">e1RM: <strong className="text-white font-bold tabular-nums">{pr.e1rm}</strong> kg</span>
+                </div>
+              </button>
+            ))}
+          </Grid>
+        )}
       </Section>
 
       {/* Body Weight Log */}
@@ -463,6 +584,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </span>
                 <span className={TYPOGRAPHY.unit}>kg</span>
               </div>
+              <span
+                data-testid="bodyweight-freshness"
+                className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono block tabular-nums")}
+              >
+                {latestWeightDate ? `Last recorded · ${formatDateStr(latestWeightDate)}` : 'No measurements yet'}
+              </span>
             </div>
 
             {/* Quick log input */}
@@ -514,10 +641,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
             </div>
           </div>
 
-          {/* Sparkline */}
-          {weightSummary.sparklineData && (() => {
-            const { sorted, min, observedMin, observedMax, range, w } = weightSummary.sparklineData;
+          {/* Sparkline (>=2 measurements: proportional by calendar days; 1 measurement: centered dot) */}
+          {weightSummary.sparklineData ? (() => {
+            const { sorted, min, observedMin, observedMax, range } = weightSummary.sparklineData;
             const safeRange = range > 0 ? range : 1;
+            const points = computeBodyWeightSparklinePoints(sorted, min, safeRange);
             const firstDate = sorted[0][0];
             const lastDate = sorted[sorted.length - 1][0];
             const sparklineAriaLabel = `Body weight trend for last ${sorted.length} entries from ${formatDateStr(firstDate)} to ${formatDateStr(lastDate)}, ranging from ${observedMin} kg to ${observedMax} kg`;
@@ -550,9 +678,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                     aria-hidden="true"
                   >
                     <polyline
-                      points={sorted.map((e, i) =>
-                        `${i * w},${32 - ((e[1] - min) / safeRange) * 28}`
-                      ).join(' ')}
+                      points={points.map(pt => `${pt.x},${pt.y}`).join(' ')}
                       fill="none"
                       stroke={SEMANTIC_COLORS.zinc}
                       strokeWidth="1.5"
@@ -564,15 +690,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
 
                   {/* Overlaid circular point markers: neutral zinc series with orange latest marker */}
                   <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-                    {sorted.map((e, i) => {
+                    {points.map((pt, i) => {
                       if (!visibleMarkerIndices.has(i)) return null;
-                      const isLatest = i === sorted.length - 1;
-                      const leftPct = i * w;
-                      const yCoord = 32 - ((e[1] - min) / safeRange) * 28;
-                      const topPct = (yCoord / 32) * 100;
+                      const isLatest = i === points.length - 1;
+                      const leftPct = pt.x;
+                      const topPct = (pt.y / 32) * 100;
                       return (
                         <div
-                          key={`spark-dot-${e[0]}-${i}`}
+                          key={`spark-dot-${pt.date}-${i}`}
                           data-testid="bodyweight-marker"
                           data-latest={isLatest ? 'true' : undefined}
                           className={cn(
@@ -587,7 +712,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
 
                 {/* Min/Max labels */}
-                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "font-mono")} aria-hidden="true">
+                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "font-mono tabular-nums")} aria-hidden="true">
                   <span>{formatDateStr(firstDate)}</span>
                   <span className="text-zinc-400">
                     {observedMin}kg → {observedMax}kg
@@ -596,7 +721,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, onNavigate
                 </div>
               </Stack>
             );
-          })()}
+          })() : weightSummary.weightEntries.length === 1 ? (() => {
+            const [singleDate, singleWeight] = weightSummary.weightEntries[0];
+            const singlePoint = computeBodyWeightSparklinePoints(weightSummary.weightEntries, singleWeight - 0.5, 1)[0];
+            return (
+              <Stack spacing="xs">
+                <div
+                  className="relative h-12 w-full"
+                  role="img"
+                  aria-label={`Single body weight measurement on ${formatDateStr(singleDate)}: ${singleWeight} kg`}
+                >
+                  <svg viewBox="0 0 100 32" className="w-full h-full" preserveAspectRatio="none" aria-hidden="true" />
+                  <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                    <div
+                      data-testid="bodyweight-marker"
+                      data-latest="true"
+                      className="absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-zinc-950 bg-orange-500"
+                      style={{ left: `${singlePoint.x}%`, top: `${(singlePoint.y / 32) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <div className={cn("flex justify-between uppercase", TYPOGRAPHY.caption, "font-mono tabular-nums")} aria-hidden="true">
+                  <span>{formatDateStr(singleDate)}</span>
+                  <span className="text-zinc-400">{singleWeight}kg</span>
+                </div>
+              </Stack>
+            );
+          })() : null}
 
           {/* Empty state */}
           {weightSummary.weightEntries.length === 0 && (

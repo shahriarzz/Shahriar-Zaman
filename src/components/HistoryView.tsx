@@ -37,7 +37,7 @@ import {
   FOCUS
 } from './ui';
 import { DeferredViewSection } from './DeferredViewSection';
-import { HistoryTabState } from '../types/tabViewState';
+import { HistoryTabState, HistoryNavigationTarget } from '../types/tabViewState';
 
 const HistoryProgressionChart = React.lazy(() =>
   import('./HistoryProgressionChart').then((m) => ({ default: m.HistoryProgressionChart }))
@@ -45,13 +45,15 @@ const HistoryProgressionChart = React.lazy(() =>
 
 interface HistoryViewProps {
   initialDate?: string | null;
+  initialTarget?: HistoryNavigationTarget | null;
   onClearInitialDate?: () => void;
   savedState?: HistoryTabState;
   onSaveState?: (state: HistoryTabState) => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ 
-  initialDate, 
+  initialDate,
+  initialTarget,
   onClearInitialDate,
   savedState,
   onSaveState
@@ -83,22 +85,72 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     });
   }, [search, expandedDate, selectedExKey, activeMonthTab, onSaveState]);
 
-  const consumedInitialDateRef = useRef<string | null>(null);
+  const consumedInitialTargetRef = useRef<string | null>(null);
+  const pendingScrollSelectorRef = useRef<string | null>(null);
 
-  // Sync initialDate search and auto-expand it once on arrival, then explicitly consume it
+  const effectiveTarget: HistoryNavigationTarget | null = initialTarget ?? (initialDate ? { date: initialDate } : null);
+
+  // Sync initial navigation target (date, logId, optional exerciseDefinitionId) once on arrival
   useEffect(() => {
-    if (initialDate && consumedInitialDateRef.current !== initialDate) {
-      consumedInitialDateRef.current = initialDate;
-      setSearch(initialDate);
-      const matched = sortedLogs.find(log => log.date === initialDate);
-      if (matched) {
-        setExpandedDate(matched.id);
-      } else {
-        setExpandedDate(initialDate);
-      }
-      onClearInitialDate?.();
+    if (!effectiveTarget) {
+      consumedInitialTargetRef.current = null;
+      return;
     }
-  }, [initialDate, onClearInitialDate]);
+
+    const signature = [
+      effectiveTarget.date ?? '',
+      effectiveTarget.logId ?? '',
+      effectiveTarget.exerciseDefinitionId ?? '',
+      effectiveTarget.searchQuery ?? ''
+    ].join('|');
+
+    if (consumedInitialTargetRef.current === signature) {
+      return;
+    }
+    consumedInitialTargetRef.current = signature;
+
+    const matched =
+      (effectiveTarget.logId ? sortedLogs.find(log => log.id === effectiveTarget.logId) : undefined) ||
+      (effectiveTarget.date && effectiveTarget.exerciseDefinitionId
+        ? sortedLogs.find(log => log.date === effectiveTarget.date && Boolean(log.sets?.[effectiveTarget.exerciseDefinitionId!]))
+        : undefined) ||
+      (effectiveTarget.date ? sortedLogs.find(log => log.date === effectiveTarget.date) : undefined);
+
+    const resolvedSearch = effectiveTarget.searchQuery ?? matched?.date ?? effectiveTarget.date ?? effectiveTarget.logId ?? '';
+    setSearch(resolvedSearch);
+
+    const resolvedExpandedId = matched ? matched.id : (effectiveTarget.logId ?? effectiveTarget.date ?? null);
+    setExpandedDate(resolvedExpandedId);
+
+    const resolvedExKey =
+      matched && effectiveTarget.exerciseDefinitionId
+        ? `${matched.date}_${effectiveTarget.exerciseDefinitionId}`
+        : null;
+    setSelectedExKey(resolvedExKey);
+
+    if (resolvedExKey) {
+      pendingScrollSelectorRef.current = `[data-history-ex-key="${resolvedExKey}"]`;
+    } else if (resolvedExpandedId) {
+      pendingScrollSelectorRef.current = `[data-history-log-id="${resolvedExpandedId}"]`;
+    }
+
+    onClearInitialDate?.();
+  }, [effectiveTarget, sortedLogs, onClearInitialDate]);
+
+  useEffect(() => {
+    const selector = pendingScrollSelectorRef.current;
+    if (!selector || typeof window === 'undefined') return;
+    const rafId = requestAnimationFrame(() => {
+      const targetEl = document.querySelector(selector) as HTMLElement | null;
+      if (targetEl && typeof targetEl.getBoundingClientRect === 'function') {
+        const rect = targetEl.getBoundingClientRect();
+        const y = Math.max(0, Math.round(rect.top + window.scrollY - 76));
+        window.scrollTo({ top: y, behavior: shouldReduceMotion ? 'auto' : 'smooth' });
+      }
+      pendingScrollSelectorRef.current = null;
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [expandedDate, selectedExKey, shouldReduceMotion]);
 
   // Group personal records by date once so session rows perform O(1) lookup
   const weightPRsByDate = React.useMemo(() => {
@@ -719,6 +771,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               return (
                 <Card
                   key={session.id ? `session-${session.id}-${sIdx}` : `session-${sIdx}`}
+                  data-history-log-id={session.id}
                   variant="standard"
                   surface={isExpanded ? "subtle" : undefined}
                   accent={isExpanded ? "orange" : undefined}
@@ -1095,7 +1148,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           const exColor = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
 
                           return (
-                            <div key={exId} className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}>
+                            <div
+                              key={exId}
+                              data-history-ex-key={exKey}
+                              className={cn("border overflow-hidden", BORDER.standard, RADIUS.card, SURFACE.subtle)}
+                            >
                               <button
                                 type="button"
                                 aria-expanded={isSelected}

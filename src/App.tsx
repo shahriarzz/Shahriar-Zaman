@@ -13,6 +13,8 @@ import { CANVAS_HEX } from './styles/tokens';
 import {
   HistoryTabState,
   AnalyticsTabState,
+  HistoryNavigationTarget,
+  AnalyticsFocusSection,
   DEFAULT_HISTORY_TAB_STATE,
   DEFAULT_ANALYTICS_TAB_STATE
 } from './types/tabViewState';
@@ -36,7 +38,8 @@ function AppContent() {
   const [navState, dispatchNav] = React.useReducer(navigationTransition, initialNavigationState);
   const activeTab = getActiveTabFromRoute(navState);
   const selectedWorkoutId = getSelectedWorkoutId(navState);
-  const [historySearchDate, setHistorySearchDate] = useState<string | null>(null);
+  const [historyNavTarget, setHistoryNavTarget] = useState<HistoryNavigationTarget | null>(null);
+  const [analyticsFocusSection, setAnalyticsFocusSection] = useState<AnalyticsFocusSection | null>(null);
 
   // Tab view state preservation across unmounts
   const [historyTabState, setHistoryTabState] = useState<HistoryTabState>(DEFAULT_HISTORY_TAB_STATE);
@@ -238,17 +241,24 @@ function AppContent() {
                 <Dashboard 
                   onStartWorkout={handleStartSession} 
                   onPrewarmSession={() => prewarmTab('session')}
-                  onNavigateToHistory={(date) => {
-                    setHistorySearchDate(date);
+                  onNavigateToHistory={(target) => {
+                    prewarmTab('history');
+                    const normalized = typeof target === 'string' ? { date: target } : (target ?? null);
+                    setHistoryNavTarget(normalized);
                     dispatchNav({ type: 'NAVIGATE', to: 'history' });
+                  }}
+                  onNavigateToAnalytics={(section) => {
+                    prewarmTab('analytics');
+                    setAnalyticsFocusSection(section);
+                    dispatchNav({ type: 'NAVIGATE', to: 'analytics' });
                   }}
                 />
               )}
 
               {activeTab === 'history' && (
                 <HistoryView 
-                  initialDate={historySearchDate} 
-                  onClearInitialDate={() => setHistorySearchDate(null)} 
+                  initialTarget={historyNavTarget}
+                  onClearInitialDate={() => setHistoryNavTarget(null)} 
                   savedState={historyTabState}
                   onSaveState={setHistoryTabState}
                 />
@@ -258,6 +268,8 @@ function AppContent() {
                 <AnalyticsView 
                   savedState={analyticsTabState}
                   onSaveState={setAnalyticsTabState}
+                  focusSection={analyticsFocusSection}
+                  onClearFocusSection={() => setAnalyticsFocusSection(null)}
                 />
               )}
 

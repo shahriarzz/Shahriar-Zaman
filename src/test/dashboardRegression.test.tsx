@@ -12,9 +12,11 @@ import { Workout } from '../types/fitness';
 import { ActiveSession } from '../hooks/useActiveSession';
 import { parseStrictBodyWeight } from '../hooks/useDashboardData';
 import { BODY_WEIGHT_LIMITS } from '../utils/fitnessCalculations';
+import { MotionConfig } from 'motion/react';
 import { FitnessContext } from '../context/FitnessContext';
 import { FitnessDerivedContext } from '../context/FitnessDerivedContext';
-import { buildFitnessIndex } from '../utils/fitnessDerivedSelectors';
+import { HistoryView } from '../components/HistoryView';
+import { buildFitnessIndex, selectSortedLogs } from '../utils/fitnessDerivedSelectors';
 
 vi.mock('../utils/haptics', () => ({
   haptics: {
@@ -115,6 +117,7 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
   const mockDeleteWeight = vi.fn().mockImplementation(() => Promise.resolve());
   const mockOnStartWorkout = vi.fn();
   const mockOnNavigateToHistory = vi.fn();
+  const mockOnNavigateToAnalytics = vi.fn();
 
   function getDefaultMockData(): useDashboardDataModule.DashboardData {
     return {
@@ -243,12 +246,15 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
   function renderDashboard() {
     act(() => {
       root.render(
-        <ConfirmProvider>
-          <Dashboard
-            onStartWorkout={mockOnStartWorkout}
-            onNavigateToHistory={mockOnNavigateToHistory}
-          />
-        </ConfirmProvider>
+        <MotionConfig reducedMotion="always">
+          <ConfirmProvider>
+            <Dashboard
+              onStartWorkout={mockOnStartWorkout}
+              onNavigateToHistory={mockOnNavigateToHistory}
+              onNavigateToAnalytics={mockOnNavigateToAnalytics}
+            />
+          </ConfirmProvider>
+        </MotionConfig>
       );
     });
   }
@@ -701,7 +707,7 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(Boolean(kpiGrid.compareDocumentPosition(todaysProtocolHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     });
 
-    it('5-8. keeps 4th KPI as Adherence with unavailable state and instruction when 0 evaluated workouts exist, while keeping Total Volume (Lifetime) separate', () => {
+    it('5-8. keeps 4th KPI as Adherence with unavailable state and instruction when 0 evaluated workouts exist, removes Total Volume (Lifetime) from Dashboard, and shows separate Training Volume', () => {
       currentMockData.adherence = {
         rate: 0,
         percent: 0,
@@ -729,9 +735,10 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(fourthCardText).not.toContain('0%');
       expect(fourthCardText).not.toContain('Total Volume');
 
-      // Lifetime Total Volume remains separately rendered in Recent Achievements
-      expect(container.textContent).toContain('Total Volume (Lifetime)');
-      expect(container.textContent).toContain('98k');
+      // Lifetime Total Volume is removed from Dashboard in favor of Training Volume (7-Day Load)
+      expect(container.textContent).not.toContain('Total Volume (Lifetime)');
+      expect(container.textContent).toContain('Training Volume');
+      expect(container.textContent).toContain('18.5k');
     });
 
     it('9. displays evaluated Adherence percentage in the 4th KPI slot once scheduled sessions exist', () => {
@@ -755,7 +762,379 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(fourthCardText).toContain('Adherence');
       expect(fourthCardText).toContain('85');
       expect(fourthCardText).toContain('%');
-      expect(fourthCardText).toContain('6/7 scheduled');
+      expect(fourthCardText).toContain('6/7 scheduled due (28d)');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // P3: Approved Dashboard Refinements (A1-E2)
+  // --------------------------------------------------------------------------
+  describe('P3: Approved Dashboard Refinements (A1-E2)', () => {
+    it('A1-A3: renders clarified KPI units, 28d comparisons without confidence claims, info dialogs, and Analytics drill-downs', async () => {
+      renderDashboard();
+
+      const kpiGrid = container.querySelector('[data-testid="dashboard-overview-stats"]')!;
+      const cards = Array.from(kpiGrid.children);
+      expect(cards[0].textContent).toContain('Scheduled Streak');
+      expect(cards[0].textContent).toContain('sessions');
+      expect(cards[0].textContent).toContain('Best: 12 sessions · Recovery days neutral');
+
+      expect(cards[1].textContent).toContain('Training Frequency');
+      expect(cards[1].textContent).toContain('Last 28d (17 sessions) · +0.5/wk vs prior 28d');
+
+      expect(cards[2].textContent).toContain('Strength Progress');
+      expect(cards[2].textContent).toContain('Last 28d vs prior 28d · 4 paired lifts (3+ lift sample)');
+      expect(cards[2].textContent?.toLowerCase()).not.toContain('confidence');
+
+      expect(cards[3].textContent).toContain('Adherence');
+      expect(cards[3].textContent).toContain('6/7 scheduled due (28d)');
+
+      // Open KPI info dialog and close with Escape
+      const strengthInfoBtn = container.querySelector('button[aria-label="Explain Strength Progress"]') as HTMLButtonElement;
+      expect(strengthInfoBtn).toBeTruthy();
+      await act(async () => {
+        strengthInfoBtn.focus();
+        strengthInfoBtn.click();
+      });
+      const dialog = document.body.querySelector('[role="dialog"]');
+      expect(dialog).toBeTruthy();
+      expect(dialog!.textContent).toContain('not statistical confidence');
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(strengthInfoBtn.getAttribute('aria-expanded')).toBe('false');
+      await vi.waitFor(() => {
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+      });
+
+      // KPI drill-down triggers Analytics sections
+      (container.querySelector('button[aria-label="View Scheduled Streak consistency in Analytics"]') as HTMLButtonElement).click();
+      expect(mockOnNavigateToAnalytics).toHaveBeenCalledWith('consistency');
+
+      (container.querySelector('button[aria-label="View Training Frequency cadence in Analytics"]') as HTMLButtonElement).click();
+      expect(mockOnNavigateToAnalytics).toHaveBeenCalledWith('frequency');
+
+      (container.querySelector('button[aria-label="View Strength Progress chart in Analytics"]') as HTMLButtonElement).click();
+      expect(mockOnNavigateToAnalytics).toHaveBeenCalledWith('strength');
+    });
+
+    it('B1-B4: displays previous protocol summary or restrained fallback, Review Session CTA on completion, and deduplicated focus badge', async () => {
+      currentMockData.todayWorkout = {
+        ...mockWorkouts[0],
+        badge: 'DAY 1 · PUSH A'
+      };
+      currentMockData.previousProtocolSummary = {
+        logId: 'log-prev-1',
+        date: '2026-10-22',
+        setsCount: 10,
+        totalVolume: 8400,
+        durationMinutes: 52
+      };
+
+      renderDashboard();
+      expect(container.querySelector('[data-testid="previous-protocol-summary"]')?.textContent).toContain('Previous (Oct 22):10 sets·8.4k kg·52 min');
+      expect(container.textContent).toContain('PUSH A');
+      expect(container.textContent).not.toContain('DAY 1 · PUSH A');
+
+      // Null fallback -> restrained text
+      currentMockData.previousProtocolSummary = null;
+      renderDashboard();
+      expect(container.querySelector('[data-testid="previous-protocol-empty"]')?.textContent?.trim()).toBe('First scheduled run');
+
+      // Completed today -> Review Session navigates to History and never starts workout
+      currentMockData.isTodayCompleted = true;
+      currentMockData.todayCompletedSummary = {
+        logId: 'log-today-1',
+        date: '2026-10-30',
+        setsCount: 10,
+        totalVolume: 8600,
+        durationMinutes: 48
+      };
+      renderDashboard();
+
+      const reviewBtn = Array.from(container.querySelectorAll('button')).find(
+        b => b.textContent?.trim() === 'Review Session'
+      ) as HTMLButtonElement;
+      expect(reviewBtn).toBeTruthy();
+      expect(reviewBtn.disabled).toBe(false);
+
+      await act(async () => {
+        reviewBtn.click();
+      });
+      expect(mockOnStartWorkout).not.toHaveBeenCalled();
+      expect(mockOnNavigateToHistory).toHaveBeenCalledWith({
+        date: '2026-10-30',
+        logId: 'log-today-1'
+      });
+
+      // Rest Day 4 & Day 8 suppress duplicate rest badges
+      currentMockData.isTodayCompleted = false;
+      currentMockData.todayCompletedSummary = null;
+      currentMockData.currentCycleDay = 8;
+      currentMockData.todayWorkout = {
+        id: 'wo-rest-8',
+        name: 'Active Recovery',
+        type: 'rest',
+        badge: 'DAY 8 · REST',
+        cycleDay: 8,
+        isCore: true,
+        exercises: []
+      };
+      renderDashboard();
+      expect(container.textContent).toContain('DAY 8 / 8');
+      expect(container.textContent).not.toContain('DAY 8 · REST');
+    });
+
+    it('C1-E2: separates Training Volume & PR cards (clickable), enforces Body Weight freshness label, single dot, and proportional sparkline', async () => {
+      currentMockData.weightSummary.latestWeightDate = '2026-10-30';
+      currentMockData.weightSummary.sparklineData = {
+        weights: [80, 81, 82],
+        min: 79.5,
+        max: 82.5,
+        observedMin: 80,
+        observedMax: 82,
+        range: 3,
+        w: 50,
+        sorted: [
+          ['2026-10-01', 80],
+          ['2026-10-03', 81],
+          ['2026-10-11', 82]
+        ]
+      };
+      currentMockData.recentMilestones.recentPREvents = [
+        {
+          id: 'log-pr-1_bench-press_w',
+          logId: 'log-pr-1',
+          exerciseDefinitionId: 'bench-press',
+          exerciseName: 'Barbell Bench Press',
+          date: '2026-10-29',
+          monthKey: '2026-10',
+          weight: 120,
+          reps: 5,
+          e1rm: 139.5,
+          isWeightPR: true,
+          isE1RMPR: true
+        }
+      ];
+
+      renderDashboard();
+
+      // Freshness label reflects entry date
+      expect(container.querySelector('[data-testid="bodyweight-freshness"]')?.textContent?.trim()).toBe(
+        'Last recorded · Oct 30'
+      );
+
+      // Proportional sparkline positions middle dot at 20% left instead of 50%
+      const markers = Array.from(container.querySelectorAll('[data-testid="bodyweight-marker"]')) as HTMLElement[];
+      expect(markers).toHaveLength(3);
+      expect(markers[0].style.left).toBe('0%');
+      expect(parseFloat(markers[1].style.left)).toBeCloseTo(20, 4);
+      expect(markers[2].style.left).toBe('100%');
+
+      const polylinePoints = container.querySelector('svg polyline')?.getAttribute('points') || '';
+      const coords = polylinePoints.split(' ').map(pair => parseFloat(pair.split(',')[0]));
+      expect(coords[0]).toBe(0);
+      expect(coords[1]).toBeCloseTo(20, 4);
+      expect(coords[2]).toBe(100);
+
+      // Clicking PR card navigates cleanly to exact History log + exercise
+      const prBtn = container.querySelector('button[aria-label="Inspect Barbell Bench Press PR from Oct 29 in History"]') as HTMLButtonElement;
+      expect(prBtn).toBeTruthy();
+      await act(async () => {
+        prBtn.click();
+      });
+      expect(mockOnNavigateToHistory).toHaveBeenCalledWith({
+        date: '2026-10-29',
+        logId: 'log-pr-1',
+        exerciseDefinitionId: 'bench-press'
+      });
+
+      // Single body weight measurement renders centered orange dot; 0 measurements show empty freshness
+      currentMockData.weightSummary.weightEntries = [['2026-10-30', 78.5]];
+      currentMockData.weightSummary.sparklineData = null;
+      renderDashboard();
+      const singleMarkers = container.querySelectorAll('[data-testid="bodyweight-marker"]');
+      expect(singleMarkers).toHaveLength(1);
+      expect((singleMarkers[0] as HTMLElement).style.left).toBe('50%');
+      expect((singleMarkers[0] as HTMLElement).style.top).toBe('50%');
+
+      currentMockData.weightSummary.weightEntries = [];
+      currentMockData.weightSummary.latestWeightDate = null;
+      currentMockData.weightSummary.recentWeightLogs = [];
+      renderDashboard();
+      expect(container.querySelector('[data-testid="bodyweight-freshness"]')?.textContent?.trim()).toBe('No measurements yet');
+    });
+
+    it('B1 hook exclusion check & History target resolution: strictly excludes incomplete/today/future logs for previousProtocolSummary and expands exact logId + exercise', async () => {
+      vi.restoreAllMocks();
+
+      const defsMap = new Map([
+        ['bench-press', { id: 'bench-press', name: 'Barbell Bench Press', target: 'Chest', equipment: 'Barbell' }]
+      ]);
+      const logs: Record<string, any> = {
+        'log-old-push': {
+          id: 'log-old-push',
+          workoutId: 'wo-push',
+          date: '2026-10-20',
+          complete: true,
+          durationMinutes: 41,
+          sets: { 'bench-press': [{ id: 's1', weight: '90', reps: '8', done: true }] }
+        },
+        'log-other-pull': {
+          id: 'log-other-pull',
+          workoutId: 'wo-pull',
+          date: '2026-10-29',
+          complete: true,
+          durationMinutes: 55,
+          sets: { 'pull-ups': [{ id: 's2', weight: '20', reps: '10', done: true }] }
+        },
+        'log-incomplete-push': {
+          id: 'log-incomplete-push',
+          workoutId: 'wo-push',
+          date: '2026-10-28',
+          complete: false,
+          durationMinutes: 15,
+          sets: { 'bench-press': [{ id: 's3', weight: '100', reps: '5', done: true }] }
+        },
+        'log-today-push': {
+          id: 'log-today-push',
+          workoutId: 'wo-push',
+          date: '2026-10-30',
+          complete: true,
+          durationMinutes: 50,
+          sets: { 'bench-press': [{ id: 's4', weight: '105', reps: '5', done: true }] }
+        },
+        'log-future-push': {
+          id: 'log-future-push',
+          workoutId: 'wo-push',
+          date: '2026-11-05',
+          complete: true,
+          durationMinutes: 60,
+          sets: { 'bench-press': [{ id: 's5', weight: '110', reps: '5', done: true }] }
+        }
+      };
+
+      const index = buildFitnessIndex(logs, defsMap);
+      const hookResultRef: { current: useDashboardDataModule.DashboardData | null } = { current: null };
+      const HookProbe: React.FC = () => {
+        hookResultRef.current = useDashboardDataModule.useDashboardData();
+        return null;
+      };
+
+      const noopAsync = async () => {};
+      const workoutMap = new Map(mockWorkouts.map(w => [w.id, w]));
+      const coreMap = new Map<number, Workout>([[1, mockWorkouts[0]], [2, mockWorkouts[1]]]);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider
+            value={{
+              workouts: mockWorkouts,
+              updateCycleStart: vi.fn(),
+              logBodyWeight: noopAsync,
+              deleteBodyWeight: noopAsync,
+              setWorkouts: vi.fn(),
+              deleteLog: vi.fn(),
+              addLog: vi.fn()
+            } as any}
+          >
+            <FitnessDerivedContext.Provider
+              value={{
+                currentDate: new Date(2026, 9, 30, 12, 0, 0),
+                todayStr: '2026-10-30',
+                index,
+                sortedLogs: selectSortedLogs(index),
+                workoutMap,
+                lifetimeStats: index.lifetimeStats,
+                weightSummary: {
+                  currentWeight: 78.5,
+                  weightEntries: [['2026-10-25', 78.5]],
+                  recentWeightLogs: [['2026-10-25', 78.5]],
+                  sparklineData: null
+                },
+                nextCycleDay: 1,
+                coreWorkoutByCycleDayMap: coreMap,
+                trainingStreak: { currentStreak: 1, longestStreak: 1, streakStartDate: null, streakEndDate: null },
+                trainingFrequency: { sessionsPerWeek: 1, completedSessions: 4, previousSessions: 2, change: 0.5, sessionsChange: 2 },
+                strengthTrend: { percentChange: null, currentValue: null, previousValue: null, comparableExercises: 0, confidence: 'low', exerciseBreakdown: [] },
+                adherenceInsight: {
+                  rate: 1, percent: 100, completedScheduled: 1, scheduledCoreWorkouts: 1,
+                  evaluatedScheduledWorkouts: 1, pendingScheduledWorkouts: 0,
+                  missedPastCoreDays: 0, scheduledRestDays: 0, bonusCompletedSessions: 0, isTodayPending: false
+                },
+                prEvents: [],
+                getVolumeForRange: () => 0,
+                getStrengthTrendForRange: () => ({ percentChange: null, currentValue: null, previousValue: null, comparableExercises: 0, confidence: 'low', exerciseBreakdown: [] })
+              } as any}
+            >
+              <HookProbe />
+            </FitnessDerivedContext.Provider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      expect(hookResultRef.current?.previousProtocolSummary).toEqual({
+        logId: 'log-old-push',
+        date: '2026-10-20',
+        setsCount: 1,
+        totalVolume: 720,
+        durationMinutes: 41
+      });
+      expect(hookResultRef.current?.weightSummary.latestWeightDate).toBe('2026-10-25');
+
+      // Also verify HistoryView expands exact logId + exercise when two logs share the same date
+      const sameDayLogs: Record<string, any> = {
+        'log-same-day-1': {
+          id: 'log-same-day-1',
+          workoutId: 'wo-push',
+          date: '2026-10-30',
+          complete: true,
+          durationMinutes: 30,
+          sets: { 'bench-press': [{ id: 'a1', weight: '80', reps: '8', done: true }] }
+        },
+        'log-same-day-2': {
+          id: 'log-same-day-2',
+          workoutId: 'wo-pull',
+          date: '2026-10-30',
+          complete: true,
+          durationMinutes: 40,
+          sets: { 'bench-press': [{ id: 'a2', weight: '100', reps: '5', done: true }] }
+        }
+      };
+      const sameDayIndex = buildFitnessIndex(sameDayLogs, defsMap);
+      const onClearTarget = vi.fn();
+
+      act(() => {
+        root.render(
+          <ConfirmProvider>
+            <FitnessContext.Provider value={{ deleteLog: vi.fn(), addLog: vi.fn() } as any}>
+              <FitnessDerivedContext.Provider
+                value={{
+                  sortedLogs: selectSortedLogs(sameDayIndex),
+                  workoutMap,
+                  index: sameDayIndex,
+                  prEvents: [],
+                  getStrengthTrendForRange: () => ({ percentChange: null, currentValue: null, previousValue: null, comparableExercises: 0, confidence: 'low', exerciseBreakdown: [] }),
+                  getVolumeForRange: () => 0
+                } as any}
+              >
+                <HistoryView
+                  initialTarget={{ date: '2026-10-30', logId: 'log-same-day-2', exerciseDefinitionId: 'bench-press' }}
+                  onClearInitialDate={onClearTarget}
+                />
+              </FitnessDerivedContext.Provider>
+            </FitnessContext.Provider>
+          </ConfirmProvider>
+        );
+      });
+
+      expect(onClearTarget).toHaveBeenCalled();
+      const secondLogCard = container.querySelector('[data-history-log-id="log-same-day-2"]');
+      expect(secondLogCard).toBeTruthy();
+      expect(secondLogCard!.querySelector('[data-history-ex-key="2026-10-30_bench-press"]')).toBeTruthy();
+      // Exact log-same-day-2 expanded rather than log-same-day-1
+      expect(container.querySelector('[data-history-log-id="log-same-day-1"] [data-history-ex-key]')).toBeNull();
     });
   });
 });

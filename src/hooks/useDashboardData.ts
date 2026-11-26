@@ -2,7 +2,16 @@ import React from 'react';
 import { useFitness } from '../context/FitnessContext';
 import { useActiveSessionMeta } from '../context/ActiveSessionContext';
 import { useFitnessDerivedData } from './useFitnessDerivedData';
-import { dk, getRollingDateRange, formatDateStr, isCompletedSession, BODY_WEIGHT_LIMITS, CYCLE_LENGTH } from '../utils/fitnessCalculations';
+import {
+  dk,
+  getRollingDateRange,
+  formatDateStr,
+  isCompletedSession,
+  getCompletedSets,
+  calculateSetsVolume,
+  BODY_WEIGHT_LIMITS,
+  CYCLE_LENGTH
+} from '../utils/fitnessCalculations';
 import { INITIAL_WORKOUTS } from '../types/initialData';
 import { Workout } from '../types/fitness';
 import { getRelativeTimeString } from '../utils/dashboardSelectors';
@@ -32,20 +41,34 @@ export interface RecentVolumeInfo {
   dateRangeLabel: string;
 }
 
+export interface DashboardPREvent extends PREvent {
+  logId?: string;
+}
+
 export interface DashboardMilestones {
-  recentPREvents: PREvent[];
+  recentPREvents: DashboardPREvent[];
   recentVolume: RecentVolumeInfo;
 }
 
 export interface CompletedWorkoutSummary {
   logId: string;
+  date?: string;
   durationMinutes: number;
   setsCount: number;
   totalVolume: number;
 }
 
+export interface PreviousProtocolSummary {
+  logId: string;
+  date: string;
+  setsCount: number;
+  totalVolume: number;
+  durationMinutes: number;
+}
+
 export interface WeightSummary {
   currentWeight: string | number;
+  latestWeightDate?: string | null;
   weightEntries: [string, number][];
   recentWeightLogs: [string, number][];
   sparklineData: SparklineData | null;
@@ -64,6 +87,7 @@ export interface DashboardData {
   todayWorkout: Workout | undefined;
   isTodayCompleted: boolean;
   todayCompletedSummary: CompletedWorkoutSummary | null;
+  previousProtocolSummary?: PreviousProtocolSummary | null;
   nextScheduledWorkout: Workout | null;
   currentCycleDay: number;
   hasWorkouts: boolean;
@@ -152,32 +176,55 @@ export function useDashboardData(): DashboardData {
       return { isCompleted: false, summary: null };
     }
     const todayLogs = index.logsByDate.get(todayStr) || [];
-    const completedLog = todayLogs.find(l => isCompletedSession(l) && l.workoutId === todayWorkout.id);
+    const matchingTodayLogs = todayLogs.filter(l => isCompletedSession(l) && l.workoutId === todayWorkout.id);
+    const completedLog = matchingTodayLogs[matchingTodayLogs.length - 1];
     if (!completedLog) {
       return { isCompleted: false, summary: null };
     }
-    let totalSets = 0;
-    let totalVolume = 0;
-    Object.values(completedLog.sets || {}).forEach(sets => {
-      sets.forEach(s => {
-        if (s.done) {
-          totalSets++;
-          const w = Number(s.weight) || 0;
-          const r = Number(s.reps) || 0;
-          totalVolume += (w * r);
-        }
-      });
-    });
+    const completedSets = getCompletedSets(completedLog);
+    const totalVolume = calculateSetsVolume(completedSets);
     return {
       isCompleted: true,
       summary: {
         logId: completedLog.id,
+        date: completedLog.date,
         durationMinutes: completedLog.durationMinutes,
-        setsCount: totalSets,
+        setsCount: completedSets.length,
         totalVolume
       }
     };
   }, [todayWorkout, index.logsByDate, todayStr]);
+
+  // Last completed instance of the same scheduled workout (strictly workoutId match, excludes incomplete, today, and future logs)
+  const previousProtocolSummary = React.useMemo<PreviousProtocolSummary | null>(() => {
+    if (!todayWorkout || todayWorkout.type === 'rest') {
+      return null;
+    }
+    const sameWorkoutLogs = index.logsByWorkout[todayWorkout.id] || [];
+    let latestLog: (typeof sameWorkoutLogs)[number] | null = null;
+    for (const log of sameWorkoutLogs) {
+      if (!isCompletedSession(log)) continue;
+      if (log.date >= todayStr) continue;
+      if (
+        !latestLog ||
+        log.date > latestLog.date ||
+        (log.date === latestLog.date && (log.id || '').localeCompare(latestLog.id || '') > 0)
+      ) {
+        latestLog = log;
+      }
+    }
+    if (!latestLog) {
+      return null;
+    }
+    const completedSets = getCompletedSets(latestLog);
+    return {
+      logId: latestLog.id,
+      date: latestLog.date,
+      setsCount: completedSets.length,
+      totalVolume: calculateSetsVolume(completedSets),
+      durationMinutes: latestLog.durationMinutes || 0
+    };
+  }, [todayWorkout, index.logsByWorkout, todayStr]);
 
   // Derive next scheduled core workout in the 8-day cycle
   const nextScheduledWorkout = React.useMemo<Workout | null>(() => {
@@ -192,7 +239,7 @@ export function useDashboardData(): DashboardData {
     totalWeight
   };
 
-  // 4. Recent Milestones (canonical PR events and rolling 7-day training volume)
+  // 4. Recent Milestones (canonical PR events with resolved logId and rolling 7-day training volume)
   const recentMilestones = React.useMemo<DashboardMilestones>(() => {
     const range = getRollingDateRange(currentDate, 7);
     const volume = getVolumeForRange(range.start, range.end);
@@ -207,13 +254,22 @@ export function useDashboardData(): DashboardData {
 
     // Sort PR events newest-first by date before taking the latest four for 2x2 grid
     const sortedPREvents = [...prEvents].sort((a, b) => b.date.localeCompare(a.date));
-    const recentPREvents = sortedPREvents.slice(0, 4);
+    const recentPREvents: DashboardPREvent[] = sortedPREvents.slice(0, 4).map(pr => {
+      const exerciseSessions = index.exerciseIndex.get(pr.exerciseDefinitionId)?.sessions || [];
+      const exactSession =
+        exerciseSessions.find(s => pr.id.startsWith(`${s.logId}_${pr.exerciseDefinitionId}_`)) ||
+        exerciseSessions.find(s => s.date === pr.date);
+      return {
+        ...pr,
+        logId: exactSession?.logId
+      };
+    });
 
     return {
       recentPREvents,
       recentVolume
     };
-  }, [currentDate, getVolumeForRange, prEvents]);
+  }, [currentDate, getVolumeForRange, prEvents, index.exerciseIndex]);
 
   // 5. Unfinished Session
   const unfinishedSession = React.useMemo<UnfinishedSessionInfo | null>(() => {
@@ -246,6 +302,7 @@ export function useDashboardData(): DashboardData {
 
   const weightSummary: WeightSummary = React.useMemo(() => ({
     currentWeight: derivedWeightSummary.currentWeight,
+    latestWeightDate: derivedWeightSummary.weightEntries[0]?.[0] ?? null,
     weightEntries: derivedWeightSummary.weightEntries,
     recentWeightLogs: derivedWeightSummary.recentWeightLogs,
     sparklineData: derivedWeightSummary.sparklineData,
@@ -273,6 +330,7 @@ export function useDashboardData(): DashboardData {
     todayWorkout,
     isTodayCompleted: todayCompletedInfo.isCompleted,
     todayCompletedSummary: todayCompletedInfo.summary,
+    previousProtocolSummary,
     nextScheduledWorkout,
     currentCycleDay,
     hasWorkouts: (workouts || []).length > 0,
