@@ -840,7 +840,7 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       // Null fallback -> restrained text
       currentMockData.previousProtocolSummary = null;
       renderDashboard();
-      expect(container.querySelector('[data-testid="previous-protocol-empty"]')?.textContent?.trim()).toBe('First scheduled run');
+      expect(container.querySelector('[data-testid="previous-protocol-empty"]')?.textContent?.trim()).toBe('No previous completed session');
 
       // Completed today -> Review Session navigates to History and never starts workout
       currentMockData.isTodayCompleted = true;
@@ -1135,6 +1135,123 @@ describe('GAINLOG Dashboard Audit & Regression Test Suite', () => {
       expect(secondLogCard!.querySelector('[data-history-ex-key="2026-10-30_bench-press"]')).toBeTruthy();
       // Exact log-same-day-2 expanded rather than log-same-day-1
       expect(container.querySelector('[data-history-log-id="log-same-day-1"] [data-history-ex-key]')).toBeNull();
+    });
+
+    it('Hardened PR navigation: resolves exact logId across multiple same-day sessions and omits arbitrary date fallback', () => {
+      vi.restoreAllMocks();
+
+      const defsMap = new Map([
+        ['bench-press', { id: 'bench-press', name: 'Barbell Bench Press', target: 'Chest', equipment: 'Barbell' }]
+      ]);
+      const sameDateLogs: Record<string, any> = {
+        'log-day-am': {
+          id: 'log-day-am',
+          workoutId: 'wo-push',
+          date: '2026-10-29',
+          complete: true,
+          durationMinutes: 35,
+          sets: { 'bench-press': [{ id: 's1', weight: '95', reps: '5', done: true }] }
+        },
+        'log-day-pm': {
+          id: 'log-day-pm',
+          workoutId: 'wo-push',
+          date: '2026-10-29',
+          complete: true,
+          durationMinutes: 40,
+          sets: { 'bench-press': [{ id: 's2', weight: '105', reps: '5', done: true }] }
+        }
+      };
+
+      const index = buildFitnessIndex(sameDateLogs, defsMap);
+      const hookResultRef: { current: useDashboardDataModule.DashboardData | null } = { current: null };
+      const HookProbe: React.FC = () => {
+        hookResultRef.current = useDashboardDataModule.useDashboardData();
+        return null;
+      };
+
+      const noopAsync = async () => {};
+      const workoutMap = new Map(mockWorkouts.map(w => [w.id, w]));
+      const coreMap = new Map<number, Workout>([[1, mockWorkouts[0]]]);
+
+      act(() => {
+        root.render(
+          <FitnessContext.Provider
+            value={{
+              workouts: mockWorkouts,
+              updateCycleStart: vi.fn(),
+              logBodyWeight: noopAsync,
+              deleteBodyWeight: noopAsync,
+              setWorkouts: vi.fn(),
+              deleteLog: vi.fn(),
+              addLog: vi.fn()
+            } as any}
+          >
+            <FitnessDerivedContext.Provider
+              value={{
+                currentDate: new Date(2026, 9, 30, 12, 0, 0),
+                todayStr: '2026-10-30',
+                index,
+                sortedLogs: selectSortedLogs(index),
+                workoutMap,
+                lifetimeStats: index.lifetimeStats,
+                weightSummary: {
+                  currentWeight: '--',
+                  weightEntries: [],
+                  recentWeightLogs: [],
+                  sparklineData: null
+                },
+                nextCycleDay: 1,
+                coreWorkoutByCycleDayMap: coreMap,
+                trainingStreak: { currentStreak: 0, longestStreak: 0, streakStartDate: null, streakEndDate: null },
+                trainingFrequency: { sessionsPerWeek: 0, completedSessions: 0, previousSessions: 0, change: 0, sessionsChange: 0 },
+                strengthTrend: { percentChange: null, currentValue: null, previousValue: null, comparableExercises: 0, confidence: 'low', exerciseBreakdown: [] },
+                adherenceInsight: {
+                  rate: 0, percent: 0, completedScheduled: 0, scheduledCoreWorkouts: 0,
+                  evaluatedScheduledWorkouts: 0, pendingScheduledWorkouts: 0,
+                  missedPastCoreDays: 0, scheduledRestDays: 0, bonusCompletedSessions: 0, isTodayPending: false
+                },
+                prEvents: [
+                  {
+                    id: 'log-day-pm_bench-press_0',
+                    exerciseDefinitionId: 'bench-press',
+                    exerciseName: 'Barbell Bench Press',
+                    date: '2026-10-29',
+                    monthKey: '2026-10',
+                    weight: 105,
+                    reps: 5,
+                    e1rm: 122.5,
+                    isWeightPR: true,
+                    isE1RMPR: true
+                  },
+                  {
+                    id: 'legacy-unstructured-pr-id',
+                    exerciseDefinitionId: 'bench-press',
+                    exerciseName: 'Barbell Bench Press',
+                    date: '2026-10-29',
+                    monthKey: '2026-10',
+                    weight: 95,
+                    reps: 5,
+                    e1rm: 110.8,
+                    isWeightPR: true,
+                    isE1RMPR: true
+                  }
+                ],
+                getVolumeForRange: () => 0,
+                getStrengthTrendForRange: () => ({ percentChange: null, currentValue: null, previousValue: null, comparableExercises: 0, confidence: 'low', exerciseBreakdown: [] })
+              } as any}
+            >
+              <HookProbe />
+            </FitnessDerivedContext.Provider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const resolvedEvents = hookResultRef.current?.recentMilestones.recentPREvents || [];
+      expect(resolvedEvents).toHaveLength(2);
+      // Exact PR ID resolves log-day-pm even though log-day-am is on the exact same date
+      expect(resolvedEvents.find(e => e.id === 'log-day-pm_bench-press_0')?.logId).toBe('log-day-pm');
+      // Unresolvable ID does NOT arbitrarily pick log-day-am solely by date match
+      expect(resolvedEvents.find(e => e.id === 'legacy-unstructured-pr-id')?.logId).toBeUndefined();
     });
   });
 });

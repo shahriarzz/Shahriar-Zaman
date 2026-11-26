@@ -419,7 +419,7 @@ test.describe('@design-quality GAINLOG Design Quality, Accessibility & Visual Ga
     const strengthInfoBtn = page.getByRole('button', { name: 'Explain Strength Progress' });
     await strengthInfoBtn.click();
     await waitForDialogReady(page);
-    await expect(page.getByRole('dialog')).toContainText('Estimated 1RM');
+    await expect(page.getByRole('dialog')).toContainText('estimated 1RM');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 

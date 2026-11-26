@@ -256,12 +256,20 @@ export function useDashboardData(): DashboardData {
     const sortedPREvents = [...prEvents].sort((a, b) => b.date.localeCompare(a.date));
     const recentPREvents: DashboardPREvent[] = sortedPREvents.slice(0, 4).map(pr => {
       const exerciseSessions = index.exerciseIndex.get(pr.exerciseDefinitionId)?.sessions || [];
-      const exactSession =
-        exerciseSessions.find(s => pr.id.startsWith(`${s.logId}_${pr.exerciseDefinitionId}_`)) ||
-        exerciseSessions.find(s => s.date === pr.date);
+      const marker = `_${pr.exerciseDefinitionId}_`;
+      const markerIdx = pr.id.lastIndexOf(marker);
+      let resolvedLogId: string | undefined;
+
+      if (markerIdx > 0 && /^\d+$/.test(pr.id.slice(markerIdx + marker.length))) {
+        const candidateLogId = pr.id.slice(0, markerIdx);
+        if (exerciseSessions.some(s => s.logId === candidateLogId)) {
+          resolvedLogId = candidateLogId;
+        }
+      }
+
       return {
         ...pr,
-        logId: exactSession?.logId
+        logId: resolvedLogId
       };
     });
 

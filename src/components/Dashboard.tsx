@@ -422,7 +422,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     ) : (
                       <p data-testid="previous-protocol-empty" className={cn(TYPOGRAPHY.caption, "text-zinc-400 font-mono")}>
-                        First scheduled run
+                        No previous completed session
                       </p>
                     )}
                   </div>
