@@ -883,19 +883,33 @@ export function calculatePerformanceScore({
  * Invariant: A single completed set that simultaneously establishes a Weight PR and e1RM PR
  * counts as ONE user-visible PR event.
  */
-export function calculatePREvents(index: FitnessIndex): PREvent[] {
+export function calculatePREvents(
+  index: FitnessIndex,
+  referenceToday?: Date | string
+): PREvent[] {
   const prEvents: PREvent[] = [];
   const runningMaxWeight = new Map<string, number>();
   const runningMaxWeightReps = new Map<string, number>();
   const runningMaxE1RM = new Map<string, number>();
 
-  // Process chronologically across verified completed sessions
-  const chronologicalLogs = index.sortedLogsAscending.filter(isCompletedSession);
+  let cutoffTodayStr = index.referenceTodayStr;
+  if (referenceToday !== undefined) {
+    const parsedRef = typeof referenceToday === 'string' ? parseISO(referenceToday) : referenceToday;
+    cutoffTodayStr = isValid(parsedRef) ? format(parsedRef, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+  } else if (!cutoffTodayStr) {
+    cutoffTodayStr = format(new Date(), 'yyyy-MM-dd');
+  }
+
+  // Process chronologically across verified non-future completed sessions
+  const chronologicalLogs = index.sortedLogsAscending.filter(
+    log => isCompletedSession(log) && (!log.date || log.date <= cutoffTodayStr!)
+  );
 
   chronologicalLogs.forEach(log => {
     const monthKey = log.date.substring(0, 7);
     Object.entries(log.sets).forEach(([exId, sets]) => {
       const meta = index.exerciseMetaById.get(exId);
+      const normId = meta?.id || exId;
       const exName = meta?.name || 'Exercise';
 
       (sets as SetLog[]).forEach((set, sIdx) => {
@@ -906,17 +920,17 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
 
         const e1rm = calculateE1RM(w, r);
 
-        const prevMaxW = runningMaxWeight.get(exId) || 0;
-        const prevMaxWReps = runningMaxWeightReps.get(exId) || 0;
-        const prevMaxE1 = runningMaxE1RM.get(exId) || 0;
+        const prevMaxW = runningMaxWeight.get(normId) || 0;
+        const prevMaxWReps = runningMaxWeightReps.get(normId) || 0;
+        const prevMaxE1 = runningMaxE1RM.get(normId) || 0;
 
         const isWeightPR = w > prevMaxW || (w === prevMaxW && r > prevMaxWReps);
         const isE1RMPR = e1rm > prevMaxE1;
 
         if (isWeightPR || isE1RMPR) {
           prEvents.push({
-            id: `${log.id}_${exId}_${sIdx}`,
-            exerciseDefinitionId: exId,
+            id: `${log.id}_${normId}_${sIdx}`,
+            exerciseDefinitionId: normId,
             exerciseName: exName,
             date: log.date,
             monthKey,
@@ -928,10 +942,10 @@ export function calculatePREvents(index: FitnessIndex): PREvent[] {
           });
 
           if (isWeightPR) {
-            runningMaxWeight.set(exId, w);
-            runningMaxWeightReps.set(exId, r);
+            runningMaxWeight.set(normId, w);
+            runningMaxWeightReps.set(normId, r);
           }
-          if (isE1RMPR) runningMaxE1RM.set(exId, e1rm);
+          if (isE1RMPR) runningMaxE1RM.set(normId, e1rm);
         }
       });
     });

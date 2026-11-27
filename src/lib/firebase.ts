@@ -6,7 +6,6 @@ import {
   connectAuthEmulator,
   GoogleAuthProvider, 
   signInWithPopup, 
-  signInWithRedirect,
   onAuthStateChanged as fbOnAuthStateChanged,
   getRedirectResult as fbGetRedirectResult,
   User as FirebaseUser,
@@ -255,8 +254,11 @@ if (isFirebaseConfigured) {
     signInWithGoogleFunc = async () => {
       try {
         if (Capacitor.isNativePlatform()) {
-          await signInWithRedirect(authInstance, googleProviderInstance);
-          return null;
+          const nativeErr = new Error(
+            'Google Sign-In inside the Android WebView requires a native OAuth plugin not bundled in this release. Your training logs remain safely stored locally.'
+          );
+          (nativeErr as any).code = 'auth/operation-not-supported-in-this-environment';
+          throw nativeErr;
         }
         const result = await signInWithPopup(authInstance, googleProviderInstance);
         return result.user;

@@ -775,7 +775,7 @@ export const WorkoutEditor: React.FC<WorkoutEditorProps> = ({
                 ) : (
                   filteredLibraryExercises.map((libEx) => (
                     <div
-                      key={libEx.name}
+                      key={libEx.id}
                       className={cn(
                         SURFACE.subtle,
                         BORDER.standard,

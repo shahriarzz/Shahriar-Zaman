@@ -78,6 +78,7 @@ export interface WeightPRRecord {
   weight: number;
   reps: number;
   date: string;
+  logId?: string;
   category: MuscleCategory;
 }
 
@@ -92,6 +93,7 @@ export interface E1RMPRRecord {
   weight: number;
   reps: number;
   date: string;
+  logId?: string;
   setDetail: string;
   category: MuscleCategory;
 }
@@ -225,6 +227,7 @@ export interface FitnessIndex {
   muscleStimulusByDate: Record<string, Record<MuscleGroup, number>>;
   muscleAttributionCoverageByDate: Record<string, AttributionCoverageCounts>;
   lifetimeLastTrainedDateByMuscle: Record<MuscleGroup, string | null>;
+  referenceTodayStr?: string;
 }
 
 function computeCalendarTrainingStreakFromDates(datesSet: Set<string>, referenceDate: Date = new Date()): number {
@@ -562,6 +565,7 @@ export function buildFitnessIndex(
                 weight: w,
                 reps: r,
                 date: log.date,
+                logId: log.id,
                 category
               });
             }
@@ -585,6 +589,7 @@ export function buildFitnessIndex(
                 weight: w,
                 reps: r,
                 date: log.date,
+                logId: log.id,
                 setDetail: `${w}kg × ${r} reps`,
                 category
               });
@@ -788,7 +793,8 @@ export function buildFitnessIndex(
     biggestWeek,
     muscleStimulusByDate,
     muscleAttributionCoverageByDate,
-    lifetimeLastTrainedDateByMuscle
+    lifetimeLastTrainedDateByMuscle,
+    referenceTodayStr: todayStr
   };
 }
 
@@ -1316,7 +1322,7 @@ export function selectTimeRangeAnalytics(
   if (index.lifetimeStats.lastSessionDate) {
     const parsedLast = parseISO(index.lifetimeStats.lastSessionDate);
     if (isValid(parsedLast)) {
-      daysSinceLast = Math.max(0, differenceInCalendarDays(now, parsedLast));
+      daysSinceLast = Math.max(0, differenceInCalendarDays(validNow, parsedLast));
     }
   }
 

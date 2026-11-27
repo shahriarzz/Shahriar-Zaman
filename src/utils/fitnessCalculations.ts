@@ -6,7 +6,9 @@ import {
   ExerciseDefinition, 
   WorkoutExercise, 
   CardioFinisher, 
-  WorkoutType 
+  WorkoutType,
+  AppState,
+  WeightLogEntry
 } from '../types/fitness';
 
 export const CYCLE_LENGTH = 8;
@@ -15,6 +17,16 @@ export const BODY_WEIGHT_LIMITS = {
   min: 20,
   max: 300,
 } as const;
+
+/**
+ * Sanitizes a millisecond timestamp into a non-negative finite integer.
+ */
+export function sanitizeTimestamp(raw: any, fallback: number = 0): number {
+  if (raw === null || raw === undefined || raw === false) return fallback;
+  if (typeof raw === 'string' && raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
 
 /**
  * Standard date key formatter: YYYY-MM-DD
@@ -244,7 +256,7 @@ export function sanitizeSessionLog(rawLog: RawSessionLogInput): SessionLog {
     sets: sanitizedSets,
     complete: isComplete,
     durationMinutes: Number.isFinite(durationMin) && durationMin >= 0 ? Math.floor(durationMin) : 0,
-    ...(rawLog?.updatedAt ? { updatedAt: Number(rawLog.updatedAt) || 0 } : {})
+    ...(rawLog?.updatedAt !== undefined ? { updatedAt: sanitizeTimestamp(rawLog.updatedAt, 0) } : {})
   };
 }
 
@@ -260,7 +272,7 @@ export function sanitizeExerciseDefinition(raw: any, fallbackId: string = ''): E
     equipment: String(raw?.equipment || '').trim(),
     instructions: String(raw?.instructions || '').trim(),
     tags: Array.isArray(raw?.tags) ? raw.tags.map(String) : [],
-    updatedAt: Number(raw?.updatedAt) || 0
+    updatedAt: sanitizeTimestamp(raw?.updatedAt, 0)
   };
 }
 
@@ -313,7 +325,7 @@ export function sanitizeWorkout(raw: any, fallbackId: string = ''): Workout {
     cycleDay,
     isCore: Boolean(raw?.isCore),
     restNotes: Array.isArray(raw?.restNotes) ? raw.restNotes.map(String) : [],
-    updatedAt: Number(raw?.updatedAt) || 0
+    updatedAt: sanitizeTimestamp(raw?.updatedAt, 0)
   };
 }
 
@@ -749,13 +761,52 @@ export function normalizeWeightEntry(
   defaultTimestamp = 0
 ): { weight: number; updatedAt: number } | null {
   if (entry === undefined || entry === null) return null;
+  const safeDefault = sanitizeTimestamp(defaultTimestamp, 0);
   if (typeof entry === 'number') {
-    return { weight: entry, updatedAt: defaultTimestamp };
+    return Number.isFinite(entry) ? { weight: entry, updatedAt: safeDefault } : null;
   }
-  if (typeof entry === 'object' && typeof entry.weight === 'number') {
-    return { weight: entry.weight, updatedAt: Number(entry.updatedAt) || defaultTimestamp };
+  if (typeof entry === 'object' && typeof entry.weight === 'number' && Number.isFinite(entry.weight)) {
+    return {
+      weight: entry.weight,
+      updatedAt: entry.updatedAt !== undefined ? sanitizeTimestamp(entry.updatedAt, safeDefault) : safeDefault
+    };
   }
   return null;
+}
+
+/**
+ * Sanitizes and validates AppState loaded from remote sync or external imports.
+ */
+export function sanitizeAppState(raw: any): AppState {
+  const rawCycleStart = typeof raw?.cycleStart === 'string' ? raw.cycleStart.trim() : '';
+  const cycleStart = isValidCalendarDate(rawCycleStart) ? rawCycleStart : '';
+
+  const rawWeightLog = raw?.weightLog;
+  const hasWeightLog = Boolean(rawWeightLog && typeof rawWeightLog === 'object' && !Array.isArray(rawWeightLog));
+  const sanitizedWeightLog: Record<string, number | WeightLogEntry> = {};
+
+  if (hasWeightLog) {
+    Object.entries(rawWeightLog).forEach(([date, entry]) => {
+      if (!isValidCalendarDate(date)) return;
+      const norm = normalizeWeightEntry(entry as any, 0);
+      if (!norm || !Number.isFinite(norm.weight)) return;
+      if (norm.weight < BODY_WEIGHT_LIMITS.min || norm.weight > BODY_WEIGHT_LIMITS.max) return;
+      if (typeof entry === 'number') {
+        sanitizedWeightLog[date] = norm.weight;
+      } else {
+        sanitizedWeightLog[date] = {
+          weight: norm.weight,
+          updatedAt: norm.updatedAt
+        };
+      }
+    });
+  }
+
+  return {
+    cycleStart,
+    ...(hasWeightLog ? { weightLog: sanitizedWeightLog } : {}),
+    ...(raw?.updatedAt !== undefined ? { updatedAt: sanitizeTimestamp(raw.updatedAt, 0) } : {})
+  };
 }
 
 export function getSortedWeightEntries(

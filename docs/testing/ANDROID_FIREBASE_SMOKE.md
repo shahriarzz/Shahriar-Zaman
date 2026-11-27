@@ -18,12 +18,12 @@
   - Install clean APK on device/emulator (clear app data if reinstalling).
   - Verify app boots past native SplashScreen into Dashboard with default 8-day routines initialized and StatusBar styling applied cleanly.
 
-- [ ] **2. Google Sign-In via Native Redirect Flow**
-  - Navigate to **Manage -> Cloud Account -> Sync with Google**.
-  - Verify `Capacitor.isNativePlatform()` triggers Google Sign-In redirect cleanly without blocked popups or uncaught WebView errors.
+- [ ] **2. Android WebView Google Sign-In Boundary Notice**
+  - Navigate to **Manage -> Cloud Account**.
+  - Verify the inline `Android Sign-In Notice` informs users that embedded WebView sessions block Google OAuth unless a native Google Sign-In plugin is bundled, and tapping **Sync with Google** produces a clean `role="alert"` error message without launching a failing `403 disallowed_useragent` redirect or crashing.
 
-- [ ] **3. Return from Authentication Without Losing Application State**
-  - Prior to completing sign-in (or after logging a body weight / creating a custom edit locally), complete redirect authentication and confirm return to the WebView preserves/merges local state seamlessly and reaches `syncStatus === 'synced'`.
+- [ ] **3. Local-First Continuity & Redirect Return State**
+  - Prior to and after attempting sign-in on Android (or after completing OAuth in a supported web browser / native OAuth build), confirm local logs, body-weight entries, and custom routines remain completely intact and unaffected.
 
 - [ ] **4. Close & Relaunch App (Auth Persistence)**
   - Swipe the app closed from Android Recents (not force-stop) and relaunch.

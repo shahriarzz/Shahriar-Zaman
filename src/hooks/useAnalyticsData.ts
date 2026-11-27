@@ -161,8 +161,11 @@ export function useAnalyticsData({
     }
 
     // Scheduled adherence
-    if (aggregated.scheduledCoreWorkouts > 0) {
-      list.push(`Core scheduled adherence stands at ${aggregated.adherencePct}% (${aggregated.completedScheduledCore}/${aggregated.scheduledCoreWorkouts} core workouts completed).`);
+    if (aggregated.adherence.evaluatedScheduledWorkouts > 0) {
+      const pendingSuffix = aggregated.isTodayCorePending ? '; today pending' : '';
+      list.push(
+        `Core scheduled adherence stands at ${aggregated.adherencePct}% (${aggregated.completedScheduledCore}/${aggregated.adherence.evaluatedScheduledWorkouts} scheduled workouts completed${pendingSuffix}).`
+      );
     }
 
     // Most frequent movement
@@ -181,9 +184,10 @@ export function useAnalyticsData({
     aggregated.rangeLogsCount,
     aggregated.rangeMuscleVolume,
     aggregated.rangeVolume,
-    aggregated.scheduledCoreWorkouts,
+    aggregated.adherence.evaluatedScheduledWorkouts,
     aggregated.adherencePct,
     aggregated.completedScheduledCore,
+    aggregated.isTodayCorePending,
     aggregated.mostFrequentExercises,
     aggregated.avgDuration,
     workoutPieData

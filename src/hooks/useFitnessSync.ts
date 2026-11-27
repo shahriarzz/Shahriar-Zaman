@@ -74,7 +74,10 @@ export function useFitnessSync({
   const [user, setUser] = useState<User | null>(null);
   const [accountResetStatus, setAccountResetStatus] = useState<AccountResetStatus>('idle');
   const [accountResetError, setAccountResetError] = useState<string | null>(null);
+  const [redirectAuthError, setRedirectAuthError] = useState<string | null>(null);
   const [domainSyncOverride, setDomainSyncOverride] = useState<{ status: 'failed' | 'offline'; error: string | null } | null>(null);
+
+  const authError = redirectAuthError ?? (authState.status === 'error' ? authState.error : null);
 
   const loading = authState.status === 'initializing';
   const baseSyncStatus = selectSyncStatus(syncPhase);
@@ -143,6 +146,7 @@ export function useFitnessSync({
     setAccountResetStatus('idle');
     setAccountResetError(null);
     if (u) {
+      setRedirectAuthError(null);
       dispatchAuth({ type: 'AUTH_RESOLVED', user: { uid: u.uid, email: u.email } });
     } else {
       dispatchAuth({ type: 'AUTH_RESOLVED', user: null });
@@ -152,8 +156,12 @@ export function useFitnessSync({
 
   // Auth listener with strict sequence tokens and fenced error handling
   useEffect(() => {
+    let isMounted = true;
     getRedirectResult(auth).catch((err) => {
-      console.warn("Auth redirect notice:", err?.message || err);
+      if (!isMounted) return;
+      const message = err?.message || 'Google Sign-In redirect failed. Please try signing in again.';
+      setRedirectAuthError(message);
+      console.warn("Auth redirect notice:", message);
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
@@ -211,7 +219,10 @@ export function useFitnessSync({
 
       publishResolvedAuthUser(u);
     });
-    return unsubscribeAuth;
+    return () => {
+      isMounted = false;
+      unsubscribeAuth();
+    };
   }, [publishResolvedAuthUser]);
 
   const retryAccountReset = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
@@ -223,6 +234,7 @@ export function useFitnessSync({
     pendingReconciliationRef.current = null;
     setAccountResetStatus('resetting');
     setAccountResetError(null);
+    setRedirectAuthError(null);
 
     try {
       if (resetToDefaultDataRef.current) {
@@ -248,6 +260,7 @@ export function useFitnessSync({
   }, [publishResolvedAuthUser]);
 
   const login = useCallback(async () => {
+    setRedirectAuthError(null);
     dispatchAuth({ type: 'LOGIN_REQUESTED' });
     try {
       await signInWithGoogle();
@@ -262,6 +275,7 @@ export function useFitnessSync({
 
   const logout = useCallback(async () => {
     try {
+      setRedirectAuthError(null);
       dispatchAuth({ type: 'LOGOUT_REQUESTED' });
       authGenerationRef.current += 1;
       isSyncingRef.current = false;
@@ -824,6 +838,7 @@ export function useFitnessSync({
     loading,
     syncStatus,
     syncError,
+    authError,
     setSyncStatus: setDomainSyncStatus,
     setSyncError: setDomainSyncError,
     login,
@@ -839,6 +854,7 @@ export function useFitnessSync({
     loading,
     syncStatus,
     syncError,
+    authError,
     setDomainSyncStatus,
     setDomainSyncError,
     login,

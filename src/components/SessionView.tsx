@@ -6,9 +6,9 @@ import { useActiveSessionContext } from '../context/ActiveSessionContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Workout, Exercise, SetLog, WorkoutType, ExerciseDefinition } from '../types/fitness';
 import { WORKOUT_COLORS, dk, generateId, getAdjustedCycleStart, resolveWorkoutExercise, formatCompactWeight } from '../utils/fitnessHelpers';
-import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, parseStrictWeight, parseStrictReps, CYCLE_LENGTH } from '../utils/fitnessCalculations';
+import { sanitizeSessionLog, calculateSetsVolume, calculateE1RM, parseStrictWeight, parseStrictReps, CYCLE_LENGTH, isValidCalendarDate } from '../utils/fitnessCalculations';
 import { useFitnessDerivedData } from '../hooks/useFitnessDerivedData';
-import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest, selectNextCycleDay, buildValidatedCoreWorkoutMap } from '../utils/fitnessDerivedSelectors';
+import { ExerciseSessionHistoryEntry, WeightPRRecord, E1RMPRRecord, isNewPersonalBest } from '../utils/fitnessDerivedSelectors';
 import { cn } from '../lib/utils';
 import { haptics } from '../utils/haptics';
 import { buildApiUrl } from '../utils/apiConfig';
@@ -635,7 +635,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
     clearActiveSession,
     recordCompletionLogId
   } = useActiveSessionContext();
-  const { index, coreWorkoutByCycleDayMap, getLatestForExercise, getWeightPRForExercise, getE1RMPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
+  const { getLatestForExercise, getWeightPRForExercise, getE1RMPRForExercise, getHistoryForExercise } = useFitnessDerivedData();
   const { confirm } = useConfirm();
 
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -1143,24 +1143,15 @@ export const SessionView: React.FC<SessionViewProps> = ({ onExit, workoutId, onC
       }
 
       if (
+        !isValidCalendarDate(appState?.cycleStart) &&
         activeWorkout.isCore === true &&
         typeof activeWorkout.cycleDay === 'number' &&
         Number.isInteger(activeWorkout.cycleDay) &&
         activeWorkout.cycleDay >= 1 &&
         activeWorkout.cycleDay <= CYCLE_LENGTH
       ) {
-        const resolvedCoreMap = coreWorkoutByCycleDayMap || buildValidatedCoreWorkoutMap(workouts).coreWorkoutByCycleDayMap;
-        const currentScheduledDay = selectNextCycleDay(
-          appState?.cycleStart,
-          new Date(),
-          index,
-          resolvedCoreMap,
-          logId
-        );
-        if (!appState?.cycleStart || currentScheduledDay !== activeWorkout.cycleDay) {
-          const newCycleStart = getAdjustedCycleStart(activeWorkout.cycleDay);
-          await updateCycleStart(newCycleStart);
-        }
+        const newCycleStart = getAdjustedCycleStart(activeWorkout.cycleDay);
+        await updateCycleStart(newCycleStart);
       }
 
       // Snapshot final summary metrics before clearing active session so completion view stays accurate

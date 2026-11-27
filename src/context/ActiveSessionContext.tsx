@@ -78,6 +78,8 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
+const DummyFallbackContext = createContext<any>(null);
+
 /**
  * Lightweight hook for components that only need session metadata (workoutId, startTime)
  * or session lifecycle actions (clear, start, flush).
@@ -85,24 +87,20 @@ export const ActiveSessionProvider: React.FC<{ children: React.ReactNode }> = ({
  */
 export const useActiveSessionMeta = (): ActiveSessionMetaContextType => {
   const meta = useContext(ActiveSessionMetaContext);
+  const fitness = useContext(fallbackFitnessContextRef ?? DummyFallbackContext);
   if (meta) return meta;
 
-  if (fallbackFitnessContextRef) {
-    try {
-      const fitness = useContext(fallbackFitnessContextRef);
-      if (fitness && (fitness.activeSession !== undefined || fitness.startActiveSession !== undefined)) {
-        const metaObj: ActiveSessionMeta | null = fitness.activeSession
-          ? { workoutId: fitness.activeSession.workoutId, startTime: fitness.activeSession.startTime }
-          : null;
-        return {
-          activeSession: metaObj,
-          activeSessionMeta: metaObj,
-          startActiveSession: fitness.startActiveSession ?? (() => {}),
-          clearActiveSession: fitness.clearActiveSession ?? (() => {}),
-          flushActiveSession: () => {}
-        };
-      }
-    } catch {}
+  if (fallbackFitnessContextRef && fitness && (fitness.activeSession !== undefined || fitness.startActiveSession !== undefined)) {
+    const metaObj: ActiveSessionMeta | null = fitness.activeSession
+      ? { workoutId: fitness.activeSession.workoutId, startTime: fitness.activeSession.startTime }
+      : null;
+    return {
+      activeSession: metaObj,
+      activeSessionMeta: metaObj,
+      startActiveSession: fitness.startActiveSession ?? (() => {}),
+      clearActiveSession: fitness.clearActiveSession ?? (() => {}),
+      flushActiveSession: () => {}
+    };
   }
 
   return {
@@ -119,7 +117,8 @@ export const useActiveSessionMeta = (): ActiveSessionMetaContextType => {
  */
 export const useActiveSessionContext = (): ActiveSessionContextType => {
   const context = useContext(ActiveSessionContext);
-  const fallbackFitness = fallbackFitnessContextRef ? useContext(fallbackFitnessContextRef) : null;
+  const rawFallbackFitness = useContext(fallbackFitnessContextRef ?? DummyFallbackContext);
+  const fallbackFitness = fallbackFitnessContextRef ? rawFallbackFitness : null;
   const [localFallbackSession, setLocalFallbackSession] = useState<ActiveSession | null>(
     () => fallbackFitness?.activeSession ?? null
   );

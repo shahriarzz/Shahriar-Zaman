@@ -119,23 +119,32 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     const resolvedSearch = effectiveTarget.searchQuery ?? matched?.date ?? effectiveTarget.date ?? effectiveTarget.logId ?? '';
     setSearch(resolvedSearch);
 
+    const matchingSetKey =
+      matched && effectiveTarget.exerciseDefinitionId
+        ? Object.keys(matched.sets || {}).find(
+            k =>
+              k === effectiveTarget.exerciseDefinitionId ||
+              index.exerciseMetaById.get(k)?.id === effectiveTarget.exerciseDefinitionId
+          ) || effectiveTarget.exerciseDefinitionId
+        : null;
+
     const resolvedExpandedId = matched ? matched.id : (effectiveTarget.logId ?? effectiveTarget.date ?? null);
     setExpandedDate(resolvedExpandedId);
 
     const resolvedExKey =
-      matched && effectiveTarget.exerciseDefinitionId
-        ? `${matched.date}_${effectiveTarget.exerciseDefinitionId}`
+      matched && matchingSetKey
+        ? `${matched.id}_${matchingSetKey}`
         : null;
     setSelectedExKey(resolvedExKey);
 
-    if (resolvedExKey) {
-      pendingScrollSelectorRef.current = `[data-history-ex-key="${resolvedExKey}"]`;
+    if (matched && matchingSetKey) {
+      pendingScrollSelectorRef.current = `[data-history-log-id="${matched.id}"] [data-history-ex-key="${matched.date}_${matchingSetKey}"]`;
     } else if (resolvedExpandedId) {
       pendingScrollSelectorRef.current = `[data-history-log-id="${resolvedExpandedId}"]`;
     }
 
     onClearInitialDate?.();
-  }, [effectiveTarget, sortedLogs, onClearInitialDate]);
+  }, [effectiveTarget, sortedLogs, index.exerciseMetaById, onClearInitialDate]);
 
   useEffect(() => {
     const selector = pendingScrollSelectorRef.current;
@@ -152,18 +161,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [expandedDate, selectedExKey, shouldReduceMotion]);
 
-  // Group personal records by date once so session rows perform O(1) lookup
-  const weightPRsByDate = React.useMemo(() => {
-    const map = new Map<string, typeof index.weightPRs>();
+  // Group personal records by logId (and date fallback for legacy records without logId) so same-date sessions remain isolated
+  const { weightPRsByLogId, weightPRsWithoutLogIdByDate } = React.useMemo(() => {
+    const byLog = new Map<string, typeof index.weightPRs>();
+    const byDate = new Map<string, typeof index.weightPRs>();
     for (const pr of index.weightPRs || []) {
-      const existing = map.get(pr.date);
-      if (existing) {
-        existing.push(pr);
+      if (pr.logId) {
+        const existing = byLog.get(pr.logId);
+        if (existing) existing.push(pr);
+        else byLog.set(pr.logId, [pr]);
       } else {
-        map.set(pr.date, [pr]);
+        const existing = byDate.get(pr.date);
+        if (existing) existing.push(pr);
+        else byDate.set(pr.date, [pr]);
       }
     }
-    return map;
+    return { weightPRsByLogId: byLog, weightPRsWithoutLogIdByDate: byDate };
   }, [index.weightPRs]);
 
   // Filter day sessions based on search with hoisted lowercase string
@@ -237,7 +250,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           totalVolume: 0,
           prCount: prCountsByMonth.get(monthKey) || 0,
           peakLifts: {},
-          workoutsByType: { push: 0, pull: 0, legs: 0, custom: 0 }
+          workoutsByType: {}
         };
       }
 
@@ -614,7 +627,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               monthlyStrengthTrend.percentChange !== null
                                 ? 'vs previous month'
                                 : (monthlyStrengthTrend.comparableExercises > 0
-                                  ? `Confidence: ${monthlyStrengthTrend.confidence}`
+                                  ? `${monthlyStrengthTrend.comparableExercises} comparable ${monthlyStrengthTrend.comparableExercises === 1 ? 'exercise' : 'exercises'}`
                                   : hasEarlierHistory
                                   ? 'No matching lifts vs prev'
                                   : 'First recorded month')
@@ -764,7 +777,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               const vol = calculateSetsVolume(completedSets);
               const color = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
               const isExpanded = expandedDate === session.id;
-              const sessionPRs = weightPRsByDate.get(session.date) || [];
+              const sessionPRs = [
+                ...(session.id ? (weightPRsByLogId.get(session.id) || []) : []),
+                ...(weightPRsWithoutLogIdByDate.get(session.date) || [])
+              ];
 
               const detailPanelId = `history-session-panel-${session.id || sIdx}`;
 
@@ -1130,20 +1146,25 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           <div className="space-y-3">
                         {Object.entries(session.sets).map(([exId, sets]) => {
                           const meta = index.exerciseMetaById.get(exId);
+                          const normId = meta?.id || exId;
                           const exerciseName = meta?.name || 'Deleted or Custom Exercise';
                           const doneSets = (sets as SetLog[]).filter(s => s.done);
                           if (doneSets.length === 0) return null;
 
                           const exKey = `${session.date}_${exId}`;
-                          const isSelected = selectedExKey === exKey;
+                          const sessionExKey = `${session.id}_${exId}`;
+                          const isSelected = selectedExKey === sessionExKey;
                           const exPanelId = `history-ex-panel-${session.id || sIdx}-${exId}`;
 
-                          // Canonical PR calculation directly from canonical index
-                          const historyLogs = index.exerciseIndex.get(exId)?.sessions || [];
-                          const canonicalPR = index.exerciseIndex.get(exId)?.weightPR;
-                          const prWeight = canonicalPR?.weight ?? (index.exerciseIndex.get(exId)?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0));
+                          // Canonical PR calculation directly from canonical index (normalized alias lookup)
+                          const exEntry = index.exerciseIndex.get(normId) || index.exerciseIndex.get(exId);
+                          const historyLogs = exEntry?.sessions || [];
+                          const canonicalPR = exEntry?.weightPR;
+                          const prWeight = canonicalPR?.weight ?? (exEntry?.maxWeight ?? (historyLogs.length > 0 ? Math.max(...historyLogs.map(h => h.maxW)) : 0));
                           const oldestPrDate = canonicalPR?.date ?? (prWeight > 0 ? historyLogs.slice().reverse().find(h => h.maxW === prWeight)?.date : null);
-                          const isSessionPR = sessionPRs.some(pr => pr.exerciseDefinitionId === exId);
+                          const isSessionPR = sessionPRs.some(
+                            pr => pr.exerciseDefinitionId === normId || pr.exerciseDefinitionId === exId
+                          );
                           const currentMaxWeight = Math.max(...doneSets.map(s => parseFloat(s.weight) || 0));
                           const exColor = (workout?.type && getAccentColor(workout.type as WorkoutType)) || getAccentColor('zinc') || SEMANTIC_COLORS.zinc;
 
@@ -1159,7 +1180,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                 aria-controls={exPanelId}
                                 onClick={() => {
                                   haptics.selection();
-                                  setSelectedExKey(isSelected ? null : exKey);
+                                  setSelectedExKey(isSelected ? null : sessionExKey);
                                 }}
                                 className={cn(
                                   "w-full text-left p-4 pr-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-800/40 cursor-pointer relative",
@@ -1257,7 +1278,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                                         className={cn("space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1", RADIUS.button, FOCUS.visible)}
                                       >
                                         {historyLogs.map((h, hIdx) => {
-                                          const isPR = prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate;
+                                          const isPR = canonicalPR?.logId
+                                            ? h.logId === canonicalPR.logId
+                                            : (prWeight > 0 && h.maxW === prWeight && h.date === oldestPrDate);
 
                                           return (
                                             <div 

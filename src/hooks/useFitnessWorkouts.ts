@@ -58,6 +58,43 @@ export function useFitnessWorkouts({
     }
   }, [user, workoutsRef, commitFitnessSnapshot, pushAutoBackup, setSyncStatus, setSyncError, logsRef, appStateRef]);
 
+  const updateWorkout = useCallback(async (
+    workout: Workout,
+    options: { syncCloud?: boolean; recordBackup?: boolean } = {}
+  ): Promise<void> => {
+    const { syncCloud = true, recordBackup = true } = options;
+    const now = Date.now();
+    const updatedWorkout: Workout = {
+      ...workout,
+      updatedAt: now
+    };
+    const currentWorkouts = workoutsRef.current;
+    const exists = currentWorkouts.some(w => w.id === updatedWorkout.id);
+    const nextWorkouts = exists
+      ? currentWorkouts.map(w => w.id === updatedWorkout.id ? updatedWorkout : w)
+      : [...currentWorkouts, updatedWorkout];
+
+    const commitRes = commitFitnessSnapshot({ workouts: nextWorkouts });
+    if (!commitRes || commitRes.success !== true) {
+      throw new Error("Local snapshot commit did not report success when updating workout.");
+    }
+
+    if (recordBackup) {
+      void pushAutoBackup(nextWorkouts, logsRef.current, appStateRef.current, 'auto-edit', `Updated routine: ${updatedWorkout.name || updatedWorkout.id}`);
+    }
+
+    if (syncCloud && user) {
+      try {
+        await saveWorkout(user.uid, updatedWorkout);
+      } catch (error) {
+        console.error("Failed to sync updated workout to cloud", error);
+        handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts/${updatedWorkout.id}`);
+        setSyncStatus('failed');
+        setSyncError("Saved workout locally, but cloud sync failed.");
+      }
+    }
+  }, [user, workoutsRef, commitFitnessSnapshot, pushAutoBackup, setSyncStatus, setSyncError, logsRef, appStateRef]);
+
   const assignExerciseToWorkout = useCallback(async (
     workoutId: string,
     exerciseDefId: string,
@@ -219,12 +256,14 @@ export function useFitnessWorkouts({
 
   return useMemo(() => ({
     setWorkouts,
+    updateWorkout,
     assignExerciseToWorkout,
     removeExerciseFromWorkout,
     updateWorkoutExerciseProgramming,
     deleteWorkout
   }), [
     setWorkouts,
+    updateWorkout,
     assignExerciseToWorkout,
     removeExerciseFromWorkout,
     updateWorkoutExerciseProgramming,

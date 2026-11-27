@@ -103,14 +103,25 @@ export function useFitnessExercises({
   }, [user, exerciseDefsRef, commitFitnessSnapshot, setSyncStatus, setSyncError]);
 
   const deleteExerciseDefinition = useCallback(async (id: string): Promise<void> => {
+    const now = Date.now();
     const currentDefs = exerciseDefsRef.current;
     const nextDefs = currentDefs.filter(d => d.id !== id);
 
     const currentWorkouts = workoutsRef.current;
-    const nextWorkouts = currentWorkouts.map(w => ({
-      ...w,
-      exercises: (w.exercises || []).filter(e => e.exerciseDefinitionId !== id)
-    }));
+    const modifiedWorkouts: Workout[] = [];
+    const nextWorkouts = currentWorkouts.map(w => {
+      const currentExercises = w.exercises || [];
+      if (!currentExercises.some(e => e.exerciseDefinitionId === id)) {
+        return w;
+      }
+      const updatedWorkout: Workout = {
+        ...w,
+        exercises: currentExercises.filter(e => e.exerciseDefinitionId !== id),
+        updatedAt: now
+      };
+      modifiedWorkouts.push(updatedWorkout);
+      return updatedWorkout;
+    });
 
     const commitRes = commitFitnessSnapshot({
       exerciseDefinitions: nextDefs,
@@ -125,7 +136,7 @@ export function useFitnessExercises({
 
     if (user) {
       try {
-        await deleteExerciseDefinitionWithWorkouts(user.uid, id, nextWorkouts);
+        await deleteExerciseDefinitionWithWorkouts(user.uid, id, modifiedWorkouts);
         removeDeletedId('defs', id, user.uid);
       } catch (e) {
         console.error("Failed to sync deletions to cloud", e);

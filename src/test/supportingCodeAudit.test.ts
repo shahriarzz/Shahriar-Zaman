@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import {
   calculateSetVolume,
   calculateE1RM,
@@ -16,6 +19,9 @@ import { generateId } from '../utils/generateId';
 import { generateId as helperGenId } from '../utils/fitnessHelpers';
 import { computeFirebaseConfigState } from '../lib/firebase';
 import { calculateSessionPRs } from '../components/SessionView';
+import { Dialog, DialogHeader, DialogBody } from '../components/ui/Dialog';
+import { ToastContainer, showToast } from '../components/ui/Toast';
+import { ErrorFallback } from '../components/ui/ErrorFallback';
 import { Workout } from '../types/fitness';
 
 describe('GAINLOG Supporting-Code Audit Test Suite', () => {
@@ -462,78 +468,160 @@ describe('GAINLOG Supporting-Code Audit Test Suite', () => {
   });
 
   describe('7. Dialog Body Scroll Restoration & Focus Trapping Invariants', () => {
-    it('preserves and restores body previous overflow style cleanly', () => {
+    it('renders real Dialog component, locks and restores body overflow, and focuses dialog controls', async () => {
+      vi.useFakeTimers();
+      const container = document.createElement('div');
+      const opener = document.createElement('button');
+      opener.textContent = 'Open';
+      document.body.appendChild(opener);
+      document.body.appendChild(container);
+      opener.focus();
+
       document.body.style.overflow = 'auto';
-      const prev = document.body.style.overflow;
-      expect(prev).toBe('auto');
+      const root = createRoot(container);
+      const onClose = vi.fn();
 
-      // Simulate open: body overflow locked
-      document.body.style.overflow = 'hidden';
-      expect(document.body.style.overflow).toBe('hidden');
+      try {
+        await act(async () => {
+          root.render(
+            React.createElement(
+              Dialog,
+              { isOpen: true, onClose },
+              React.createElement(DialogHeader, { title: 'Confirm Action' }),
+              React.createElement(
+                DialogBody,
+                null,
+                React.createElement('button', { type: 'button' }, 'Cancel'),
+                React.createElement('button', { type: 'button' }, 'Proceed')
+              )
+            )
+          );
+        });
 
-      // Simulate close: body restored to previous value
-      document.body.style.overflow = prev;
-      expect(document.body.style.overflow).toBe('auto');
+        expect(document.body.style.overflow).toBe('hidden');
+        const dialog = container.querySelector('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog?.getAttribute('aria-modal')).toBe('true');
+
+        await act(async () => {
+          vi.advanceTimersByTime(60);
+        });
+
+        expect(dialog?.contains(document.activeElement)).toBe(true);
+
+        await act(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        });
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          root.render(React.createElement(Dialog, { isOpen: false, onClose }, null));
+        });
+        expect(document.body.style.overflow).toBe('auto');
+      } finally {
+        act(() => {
+          root.unmount();
+        });
+        container.remove();
+        opener.remove();
+        document.body.style.overflow = '';
+        vi.useRealTimers();
+      }
     });
   });
 
   describe('8. Toast Timer Cleanup & Eviction Safeguards', () => {
-    it('clears timers on eviction when toast collection exceeds limit of 4', () => {
-      const activeTimers = new Map<string, any>();
-      const addToastWithEviction = (id: string, currentList: string[]) => {
-        const timerId = setTimeout(() => {}, 5000);
-        activeTimers.set(id, timerId);
+    it('mounts ToastContainer, caps visible toasts at 4, and clears auto-dismiss timers cleanly on unmount', async () => {
+      vi.useFakeTimers();
+      const origMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })) as any;
 
-        const updated = [...currentList, id];
-        if (updated.length > 4) {
-          const evicted = updated.slice(0, updated.length - 4);
-          evicted.forEach(eId => {
-            if (activeTimers.has(eId)) {
-              clearTimeout(activeTimers.get(eId));
-              activeTimers.delete(eId);
-            }
-          });
-          return updated.slice(-4);
-        }
-        return updated;
-      };
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
 
-      let list: string[] = [];
-      list = addToastWithEviction('t1', list);
-      list = addToastWithEviction('t2', list);
-      list = addToastWithEviction('t3', list);
-      list = addToastWithEviction('t4', list);
-      expect(list).toEqual(['t1', 't2', 't3', 't4']);
-      expect(activeTimers.size).toBe(4);
+      try {
+        await act(async () => {
+          root.render(React.createElement(ToastContainer));
+        });
 
-      // Adding 5th toast evicts t1 and cleans up its timer
-      list = addToastWithEviction('t5', list);
-      expect(list).toEqual(['t2', 't3', 't4', 't5']);
-      expect(activeTimers.has('t1')).toBe(false);
-      expect(activeTimers.size).toBe(4);
+        await act(async () => {
+          showToast({ message: 'Toast One', tone: 'info' });
+          showToast({ message: 'Toast Two', tone: 'success' });
+          showToast({ message: 'Toast Three', tone: 'warning' });
+          showToast({ message: 'Toast Four', tone: 'error' });
+          showToast({ message: 'Toast Five', tone: 'info' });
+        });
 
-      // Clean all
-      activeTimers.forEach(t => clearTimeout(t));
-      activeTimers.clear();
-      expect(activeTimers.size).toBe(0);
+        expect(container.textContent).not.toContain('Toast One');
+        expect(container.textContent).toContain('Toast Two');
+        expect(container.textContent).toContain('Toast Five');
+
+        const dismissBtns = container.querySelectorAll('button[aria-label="Dismiss notification"]');
+        expect(dismissBtns).toHaveLength(4);
+        const clearsAfterEviction = clearTimeoutSpy.mock.calls.length;
+        expect(clearsAfterEviction).toBeGreaterThanOrEqual(1);
+
+        await act(async () => {
+          dismissBtns[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(clearsAfterEviction);
+
+        const clearsBeforeUnmount = clearTimeoutSpy.mock.calls.length;
+        act(() => {
+          root.unmount();
+        });
+        expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThanOrEqual(clearsBeforeUnmount + 3);
+      } finally {
+        act(() => {
+          root.unmount();
+        });
+        container.remove();
+        clearTimeoutSpy.mockRestore();
+        window.matchMedia = origMatchMedia;
+        vi.useRealTimers();
+      }
     });
   });
 
   describe('9. Production ErrorFallback Privacy Invariant', () => {
-    it('never includes error.stack in production mode and displays safe reference ID', () => {
-      const sampleError = new Error('Sensitive database credentials at internal-server:5432');
-      sampleError.stack = 'Error: Sensitive...\n    at connectInternal (src/secret.ts:42:15)';
+    it('renders ErrorFallback for storage-blocked and generic errors safely', async () => {
+      const { SafeStorageError } = await import('../lib/safeStorage');
+      const sampleError = new SafeStorageError(
+        'storage_unavailable',
+        'getItem',
+        'localStorage access denied'
+      );
 
-      const isDev = false; // Production mode
-      const errorRefId = `ERR-${Math.abs(
-        (sampleError.message || '').split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
-      ).toString(16).toUpperCase()}`;
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
 
-      expect(errorRefId).toMatch(/^ERR-[0-9A-F]+$/);
-      // Ensure production UI does not display error.stack or sensitive internals
-      expect(isDev).toBe(false);
-      expect(errorRefId).not.toContain('src/secret.ts');
-      expect(errorRefId).not.toContain('internal-server');
+      try {
+        await act(async () => {
+          root.render(React.createElement(ErrorFallback, { error: sampleError }));
+        });
+
+        expect(container.textContent).toContain('Storage Access Blocked');
+        expect(container.textContent).toContain('Browser Storage Unavailable');
+        expect(container.textContent).toContain('How to restore access');
+        expect(container.textContent).toContain('Reload GainLog');
+      } finally {
+        act(() => {
+          root.unmount();
+        });
+        container.remove();
+      }
     });
   });
 

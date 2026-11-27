@@ -156,6 +156,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
   const tabScrollPositionsRef = React.useRef<Partial<Record<ActiveTab, number>>>({});
   const currentScrollRef = React.useRef<number>(0);
   const prevTabRef = React.useRef<ActiveTab>(activeTab);
+  const pendingNavScrollSavedTabRef = React.useRef<ActiveTab | null>(null);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -170,6 +171,7 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
     if (typeof window !== 'undefined') {
       const scrollPos = window.scrollY || currentScrollRef.current;
       tabScrollPositionsRef.current[activeTab] = scrollPos;
+      pendingNavScrollSavedTabRef.current = activeTab;
     }
     onTabChange(id);
   };
@@ -179,8 +181,10 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, onPrewar
     const prevTab = prevTabRef.current;
 
     if (prevTab !== currentTab) {
-      if (typeof window !== 'undefined') {
-        const scrollPos = window.scrollY || currentScrollRef.current;
+      if (pendingNavScrollSavedTabRef.current === prevTab) {
+        pendingNavScrollSavedTabRef.current = null;
+      } else if (typeof window !== 'undefined') {
+        const scrollPos = currentScrollRef.current || window.scrollY;
         if (tabScrollPositionsRef.current[prevTab] === undefined || scrollPos > 0) {
           tabScrollPositionsRef.current[prevTab] = scrollPos;
         }

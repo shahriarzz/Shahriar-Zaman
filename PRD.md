@@ -157,7 +157,7 @@ GAINLOG implements an evidence-based 8-day training cycle:
 ### Protocol Advancement Rules
 1. **Missed Core Workout Carry-Forward**: If a scheduled core training day is missed (no completed core workout logged), that incomplete core workout carries forward and reappears on the following calendar day rather than being skipped. Historical missed dates remain intact.
 2. **Natural Rest Day Advancement**: Recovery days (Day 4 and Day 8) are naturally scheduled recovery phases that advance automatically with calendar days. The athlete does not need to record a dummy log to progress through rest days.
-3. **Anchor Realignment for Out-of-Order Workouts**: If an athlete completes a different core workout (e.g. Day 5 Push B instead of the carried-forward or expected core workout), completing it automatically realigns `appState.cycleStart` via `getAdjustedCycleStart()` so subsequent scheduled workouts follow from the newly executed day.
+3. **Out-of-Order Core Progression Without Rewriting History**: If an athlete completes a different core workout (e.g. Day 5 Push B instead of the carried-forward or expected core workout), `buildCycleScheduleResolver()` automatically schedules `(completedCycleDay % 8) + 1` on the next day while keeping an already valid `appState.cycleStart` unchanged so historical Adherence, Scheduled Streak, and past calendar assignments stay accurate. An uninitialized or invalid `cycleStart` is anchored once on first completion via `getAdjustedCycleStart()`.
 4. **Bonus / Custom & Incomplete Sessions Isolation**: Workouts designated as non-core (`isCore: false`) and incomplete sessions (`complete: false`) can be logged without advancing, delaying, or disturbing the 8-day cycle anchor.
 
 ---

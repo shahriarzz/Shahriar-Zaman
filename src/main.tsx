@@ -1,5 +1,7 @@
 import {StrictMode, Component, ErrorInfo, ReactNode, useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
+import { Capacitor } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
 import App from './App.tsx';
 import '@fontsource/dm-sans/400.css';
 import '@fontsource/dm-sans/500.css';
@@ -15,6 +17,16 @@ import {
   markStartupMounted,
   recordStartupFailure,
 } from './lib/startupDiagnostics';
+
+function hideNativeSplashSafely() {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      void SplashScreen.hide().catch(() => {});
+    }
+  } catch {
+    // Ignore native plugin errors during crash recovery
+  }
+}
 
 installStartupDiagnostics();
 
@@ -40,6 +52,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    hideNativeSplashSafely();
     const category = classifyStartupFailure(error, 'react');
     const entry = recordStartupFailure(category, error, 'ErrorBoundary');
     console.error(`[StartupDiagnostics:${entry.category}] Uncaught error:`, error, errorInfo);
@@ -84,6 +97,7 @@ try {
     </StrictMode>,
   );
 } catch (err) {
+  hideNativeSplashSafely();
   const category = classifyStartupFailure(err, 'react');
   recordStartupFailure(category, err, 'createRoot');
   throw err;

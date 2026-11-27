@@ -186,8 +186,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
 
   // 7. Body Weight Biometrics summary
   const weightSummary = useMemo(() => {
-    return selectWeightSummary(appState?.weightLog);
-  }, [appState?.weightLog]);
+    return selectWeightSummary(appState?.weightLog, currentDate);
+  }, [appState?.weightLog, currentDate]);
 
   // 8. Muscle Distribution summary
   const muscleDistribution = useMemo(() => {
@@ -325,8 +325,8 @@ export const FitnessDerivedProvider: React.FC<{ children: React.ReactNode }> = (
   }, [index]);
 
   const prEvents = useMemo(() => {
-    return calculatePREvents(index);
-  }, [index]);
+    return calculatePREvents(index, currentDate);
+  }, [index, currentDate]);
 
   const value: FitnessDerivedData = useMemo(() => ({
     index,

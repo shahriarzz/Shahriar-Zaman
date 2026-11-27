@@ -7,15 +7,15 @@ import {
   getDocs, 
   collection, 
   deleteDoc, 
-  onSnapshot,
-  writeBatch
+  onSnapshot
 } from '../lib/firebase';
 import { ExerciseDefinition, Workout, SessionLog, AppState } from '../types/fitness';
 import { commitBatchOperations } from '../utils/fitnessSyncHelpers';
 import { 
   sanitizeExerciseDefinition, 
   sanitizeWorkout, 
-  sanitizeSessionLog 
+  sanitizeSessionLog,
+  sanitizeAppState
 } from '../utils/fitnessCalculations';
 
 // ==========================================
@@ -40,26 +40,37 @@ export async function deleteExerciseDefinition(uid: string, id: string): Promise
 }
 
 /**
- * Atomically deletes an exercise definition and updates affected workouts in a single batch operation.
+ * Atomically deletes an exercise definition and updates affected workouts when <= 400 operations,
+ * or chunks safely via commitBatchOperations (updating workouts before deleting the definition)
+ * so Firestore's 500-write batch limit is never exceeded.
  */
 export async function deleteExerciseDefinitionWithWorkouts(
   uid: string, 
   defId: string, 
   updatedWorkouts: Workout[]
 ): Promise<void> {
-  const batch = writeBatch(db);
   const defRef = doc(db, 'users', uid, 'exerciseDefinitions', defId);
-  batch.delete(defRef);
-
   const workoutsCol = collection(db, 'users', uid, 'workouts');
-  updatedWorkouts.forEach(wo => {
-    batch.set(doc(workoutsCol, wo.id), {
-      ...wo,
-      exercises: wo.exercises || []
-    });
-  });
 
-  await batch.commit();
+  type BatchOp =
+    | { kind: 'setWorkout'; workout: Workout }
+    | { kind: 'deleteDef' };
+
+  const ops: BatchOp[] = [
+    ...updatedWorkouts.map((workout): BatchOp => ({ kind: 'setWorkout', workout })),
+    { kind: 'deleteDef' }
+  ];
+
+  await commitBatchOperations<BatchOp>(ops, (batch, op) => {
+    if (op.kind === 'setWorkout') {
+      batch.set(doc(workoutsCol, op.workout.id), {
+        ...op.workout,
+        exercises: op.workout.exercises || []
+      });
+    } else {
+      batch.delete(defRef);
+    }
+  });
 }
 
 export async function getExerciseDefinitions(uid: string): Promise<ExerciseDefinition[]> {
@@ -188,7 +199,7 @@ export async function getAppState(uid: string): Promise<AppState | null> {
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
-  return snap.data() as AppState;
+  return sanitizeAppState(snap.data());
 }
 
 export function subscribeAppState(
@@ -199,7 +210,7 @@ export function subscribeAppState(
   const ref = doc(db, 'users', uid);
   return onSnapshot(ref, (snap) => {
     if (snap.exists()) {
-      onNext(snap.data() as AppState, snap.metadata.hasPendingWrites);
+      onNext(sanitizeAppState(snap.data()), snap.metadata.hasPendingWrites);
     }
   }, onError);
 }

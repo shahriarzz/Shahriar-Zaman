@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { ArrowRight, Layers } from 'lucide-react';
 import { Workout } from '../../types/fitness';
+import { buildValidatedCoreWorkoutMap } from '../../utils/fitnessDerivedSelectors';
+import { CYCLE_LENGTH } from '../../utils/fitnessCalculations';
 import { Card, Button, EmptyState, TYPOGRAPHY, CONTROL_HEIGHT } from '../ui';
 import { cn } from '../../lib/utils';
 
@@ -13,12 +15,19 @@ export const ProgramIdentityCard: React.FC<ProgramIdentityCardProps> = ({
   workouts = [],
   onEditProgram
 }) => {
+  const hasCandidateCoreWorkouts = useMemo(() => {
+    return (workouts || []).some(
+      w => w?.isCore === true && typeof w.cycleDay === 'number' && Number.isInteger(w.cycleDay) && w.cycleDay >= 1 && w.cycleDay <= CYCLE_LENGTH
+    );
+  }, [workouts]);
+
   // Authoritative cycle workouts definition (matching CycleEditor / ProgramEditor)
   const cycleWorkouts = useMemo(() => {
-    return (workouts || [])
-      .filter(w => typeof w.cycleDay === 'number' && w.cycleDay > 0)
+    if (!hasCandidateCoreWorkouts) return [];
+    const { coreWorkoutByCycleDayMap } = buildValidatedCoreWorkoutMap(workouts);
+    return Array.from(coreWorkoutByCycleDayMap.values())
       .sort((a, b) => (a.cycleDay || 0) - (b.cycleDay || 0));
-  }, [workouts]);
+  }, [workouts, hasCandidateCoreWorkouts]);
 
   const totalDays = cycleWorkouts.length;
 

@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
       showSpinner: false
     },
     StatusBar: {
-      style: "light",
+      style: "DARK",
       backgroundColor: "#09090e"
     },
     Keyboard: {

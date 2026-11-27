@@ -143,7 +143,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
 
             return (
               <Card
-                key={item.name}
+                key={item.id}
                 variant="standard"
                 surface="base"
                 padding="standard"

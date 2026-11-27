@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { TriangleAlert, RotateCcw } from 'lucide-react';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -14,6 +16,12 @@ export interface ErrorFallbackProps {
 
 export const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) => {
   const isStorageBlocked = isStorageUnavailableError(error);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      SplashScreen.hide().catch(() => {});
+    }
+  }, []);
 
   return (
     <div className={cn("min-h-screen flex items-center justify-center p-6 text-zinc-200", SURFACE.canvas)}>

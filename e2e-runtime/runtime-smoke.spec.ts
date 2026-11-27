@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import fs from 'fs';
 import os from 'os';
@@ -183,6 +184,12 @@ test.describe('Real Server Runtime Browser Smoke Suite', () => {
       expect(telemetry.assetResponses.length).toBeGreaterThan(0);
       expect(telemetry.assetResponses.some((r) => r.url.includes('/assets/') && r.status === 200)).toBe(true);
       expect(telemetry.assetResponses.every((r) => r.status >= 200 && r.status < 400)).toBe(true);
+
+      // Verify real index.html passes WCAG 2.1 AA accessibility checks including meta-viewport
+      const axeResults = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze();
+      expect(axeResults.violations).toEqual([]);
     } finally {
       await stopServer(proc);
     }

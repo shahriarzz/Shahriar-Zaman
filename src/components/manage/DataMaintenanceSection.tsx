@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Download,
@@ -61,6 +61,7 @@ export const DataMaintenanceSection: React.FC = () => {
   const shouldReduceMotion = useReducedMotion();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [restoringTimestamp, setRestoringTimestamp] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<BannerMessage | null>(null);
@@ -68,6 +69,21 @@ export const DataMaintenanceSection: React.FC = () => {
   const [pastedJson, setPastedJson] = useState('');
   const [copied, setCopied] = useState(false);
   const [autoBackupsTick, setAutoBackupsTick] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(id => clearTimeout(id));
+      timersRef.current.clear();
+    };
+  }, []);
+
+  const scheduleTimer = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timersRef.current.delete(id);
+      fn();
+    }, ms);
+    timersRef.current.add(id);
+  }, []);
 
   // Compute authoritative data-health metric string
   const dataHealthInfo = useMemo(() => {
@@ -97,7 +113,7 @@ export const DataMaintenanceSection: React.FC = () => {
 
       haptics.success();
       setBannerMessage({ type: 'success', text: "Backup File downloaded successfully." });
-      setTimeout(() => setBannerMessage(null), 4000);
+      scheduleTimer(() => setBannerMessage(null), 4000);
     } catch (e: any) {
       haptics.warning();
       setBannerMessage({ type: 'destructive', text: "Failed to export backup: " + (e?.message || e) });
@@ -114,7 +130,7 @@ export const DataMaintenanceSection: React.FC = () => {
       await navigator.clipboard.writeText(backupStr);
       haptics.success();
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      scheduleTimer(() => setCopied(false), 2000);
     } catch {
       haptics.warning();
       setBannerMessage({ type: 'warning', text: "Failed to copy JSON. Try downloading the backup file instead." });
@@ -147,7 +163,7 @@ export const DataMaintenanceSection: React.FC = () => {
           haptics.success();
           setBannerMessage({ type: 'success', text: res.message });
           setAutoBackupsTick(prev => prev + 1);
-          setTimeout(() => setBannerMessage(null), 5000);
+          scheduleTimer(() => setBannerMessage(null), 5000);
         } else {
           haptics.warning();
           setBannerMessage({ type: 'destructive', text: res.message });
@@ -179,7 +195,7 @@ export const DataMaintenanceSection: React.FC = () => {
         setPastedJson('');
         setShowPasteBox(false);
         setAutoBackupsTick(prev => prev + 1);
-        setTimeout(() => setBannerMessage(null), 5000);
+        scheduleTimer(() => setBannerMessage(null), 5000);
       } else {
         haptics.warning();
         setBannerMessage({ type: 'destructive', text: res.message });
@@ -201,7 +217,7 @@ export const DataMaintenanceSection: React.FC = () => {
         haptics.success();
         setBannerMessage({ type: 'success', text: res.message });
         setAutoBackupsTick(prev => prev + 1);
-        setTimeout(() => setBannerMessage(null), 4000);
+        scheduleTimer(() => setBannerMessage(null), 4000);
       } else {
         haptics.warning();
         setBannerMessage({ type: 'destructive', text: res.message });
@@ -231,7 +247,7 @@ export const DataMaintenanceSection: React.FC = () => {
         haptics.success();
         setBannerMessage({ type: 'success', text: res.message });
         setAutoBackupsTick(prev => prev + 1);
-        setTimeout(() => setBannerMessage(null), 5000);
+        scheduleTimer(() => setBannerMessage(null), 5000);
       } else {
         haptics.warning();
         setBannerMessage({ type: 'destructive', text: res.message });
@@ -258,7 +274,7 @@ export const DataMaintenanceSection: React.FC = () => {
         await setWorkouts(INITIAL_WORKOUTS);
         haptics.success();
         setBannerMessage({ type: 'success', text: "Training routines reset to factory defaults." });
-        setTimeout(() => setBannerMessage(null), 4000);
+        scheduleTimer(() => setBannerMessage(null), 4000);
       } catch {
         haptics.warning();
         setBannerMessage({ type: 'destructive', text: "Failed to reset routines." });
@@ -282,7 +298,7 @@ export const DataMaintenanceSection: React.FC = () => {
         await resetLogs();
         haptics.success();
         setBannerMessage({ type: 'success', text: "All session histories have been deleted." });
-        setTimeout(() => setBannerMessage(null), 4000);
+        scheduleTimer(() => setBannerMessage(null), 4000);
       } catch {
         haptics.warning();
         setBannerMessage({ type: 'destructive', text: "Failed to delete training history." });

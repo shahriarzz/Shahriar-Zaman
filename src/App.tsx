@@ -68,7 +68,7 @@ function AppContent() {
   // Set up native status bar style and background color on launch
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      StatusBar.setStyle({ style: Style.Light }).catch(err => {
+      StatusBar.setStyle({ style: Style.Dark }).catch(err => {
         console.warn('Error setting StatusBar style:', err);
       });
       StatusBar.setBackgroundColor({ color: CANVAS_HEX }).catch(err => {

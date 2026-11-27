@@ -750,7 +750,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(container.textContent).toContain('Session Cleared');
     });
 
-    it('Scenario 2: Complete different core workout: operations execute in strict sequence (addLog -> updateCycleStart -> clearActiveSession)', async () => {
+    it('Scenario 2: Establish initial cycleStart when missing: operations execute in strict sequence (addLog -> updateCycleStart -> clearActiveSession)', async () => {
       const today = dk();
       const callOrder: string[] = [];
       const mockAddLog = vi.fn().mockImplementation(async () => {
@@ -764,9 +764,9 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
         callOrder.push('clearActiveSession');
       });
 
-      // Scheduled Day 1, but user completes Day 5
+      // Missing/empty cycleStart when user completes Day 5
       const contextValue = createMockFitnessContext({
-        appState: { cycleStart: today },
+        appState: { cycleStart: '' },
         addLog: mockAddLog,
         updateCycleStart: mockUpdateCycleStart,
         clearActiveSession: mockClearActiveSession
@@ -812,6 +812,57 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       // Verify exact sequence: addLog -> updateCycleStart -> clearActiveSession
       expect(callOrder).toEqual(['addLog', 'updateCycleStart', 'clearActiveSession']);
+    });
+
+    it('Scenario 2b: Completing out-of-order core workout when valid cycleStart exists preserves historical cycleStart', async () => {
+      const today = dk();
+      const mockAddLog = vi.fn().mockResolvedValue({ success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false });
+      const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
+      const mockClearActiveSession = vi.fn();
+
+      // Scheduled Day 1, user completes Day 5 while a valid cycleStart is already anchored
+      const contextValue = createMockFitnessContext({
+        appState: { cycleStart: today },
+        addLog: mockAddLog,
+        updateCycleStart: mockUpdateCycleStart,
+        clearActiveSession: mockClearActiveSession
+      });
+
+      const derivedIndex = buildFitnessIndex([], defsMap, today);
+
+      await act(async () => {
+        root.render(
+          <FitnessContext.Provider value={contextValue}>
+            <FitnessDerivedContext.Provider
+              value={
+                {
+                  index: derivedIndex,
+                  getLatestForExercise: () => null,
+                  getWeightPRForExercise: () => null,
+                  getE1RMPRForExercise: () => null,
+                  getHistoryForExercise: () => []
+                } as any
+              }
+            >
+              <ConfirmContext.Provider value={{ confirm: vi.fn().mockResolvedValue(true) }}>
+                <SessionView workoutId="push-b" onExit={vi.fn()} />
+              </ConfirmContext.Provider>
+            </FitnessDerivedContext.Provider>
+          </FitnessContext.Provider>
+        );
+      });
+
+      const buttons = Array.from(container.querySelectorAll('button'));
+      const finishBtn = buttons.find(b => b.textContent?.includes('Finish') || b.textContent?.includes('✓'));
+      expect(finishBtn).toBeDefined();
+
+      await act(async () => {
+        finishBtn!.click();
+      });
+
+      expect(mockAddLog).toHaveBeenCalledTimes(1);
+      expect(mockUpdateCycleStart).not.toHaveBeenCalled();
+      expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
     });
 
     it('Scenario 3: Complete bonus workout: cycleStart is unchanged', async () => {
@@ -945,7 +996,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       const mockClearActiveSession = vi.fn();
 
       const contextValue = createMockFitnessContext({
-        appState: { cycleStart: today },
+        appState: { cycleStart: '' },
         addLog: mockAddLog,
         updateCycleStart: mockUpdateCycleStart,
         clearActiveSession: mockClearActiveSession
@@ -1016,7 +1067,7 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
 
       const renderSession = async () => {
         const contextValue = createMockFitnessContext({
-          appState: { cycleStart: today },
+          appState: { cycleStart: '' },
           logs: { ...recordedLogs },
           activeSession: currentActiveSession,
           addLog: mockAddLog,
@@ -1728,20 +1779,17 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       expect(mockClearActiveSession).toHaveBeenCalledTimes(1);
     });
 
-    it('8. Completing out-of-order Push B via SessionView realigns cycleStart and advances tomorrow to Pull B across Dashboard & Calendar', async () => {
+    it('8. Completing out-of-order Push B via SessionView preserves valid cycleStart and advances tomorrow to Pull B across Dashboard & Calendar', async () => {
       const initialCycleStart = '2026-10-01';
       vi.setSystemTime(new Date(2026, 9, 2, 10, 0, 0)); // 2026-10-02 after missing Day 1
 
-      let persistedCycleStart = initialCycleStart;
       const recordedLogs: Record<string, any> = {};
 
       const mockAddLog = vi.fn().mockImplementation(async (id: string, log: any) => {
         recordedLogs[id] = log;
         return { success: true, localPersisted: true, cloudPersisted: false, cloudAttempted: false };
       });
-      const mockUpdateCycleStart = vi.fn().mockImplementation(async (nextAnchor: string) => {
-        persistedCycleStart = nextAnchor;
-      });
+      const mockUpdateCycleStart = vi.fn().mockResolvedValue(undefined);
 
       const sessionContext = createMockFitnessContext({
         appState: { cycleStart: initialCycleStart },
@@ -1773,13 +1821,13 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
       });
 
       expect(mockAddLog).toHaveBeenCalledTimes(1);
-      expect(mockUpdateCycleStart).toHaveBeenCalledWith('2026-09-28');
-      expect(persistedCycleStart).toBe('2026-09-28');
+      // Valid cycleStart must NOT be rewritten so historical Adherence / Calendar days stay intact
+      expect(mockUpdateCycleStart).not.toHaveBeenCalled();
 
-      // Advance to next calendar day (2026-10-03): both Dashboard & Calendar resolve Day 6 (Pull B)
+      // Advance to next calendar day (2026-10-03): both Dashboard & Calendar resolve Day 6 (Pull B) while preserving original cycleStart
       vi.setSystemTime(new Date(2026, 9, 3, 10, 0, 0));
       const nextDayContext = createMockFitnessContext({
-        appState: { cycleStart: persistedCycleStart },
+        appState: { cycleStart: initialCycleStart },
         logs: { ...recordedLogs }
       });
 
@@ -1822,6 +1870,15 @@ describe('Routine Cycle Verification and Regression Hardening', () => {
           </FitnessContext.Provider>
         );
       });
+
+      // Historical Day 1 (2026-10-01) stays preserved as Day 1 (Push Day A) rather than overwritten
+      const day1Btn = container.querySelector('[data-testid="calendar-day-2026-10-01"]') as HTMLElement;
+      expect(day1Btn).not.toBeNull();
+      await act(async () => {
+        day1Btn.click();
+        vi.advanceTimersByTime(50);
+      });
+      expect(container.textContent).toContain('Push Day A');
 
       const day3Btn = container.querySelector('[data-testid="calendar-day-2026-10-03"]') as HTMLElement;
       expect(day3Btn).not.toBeNull();

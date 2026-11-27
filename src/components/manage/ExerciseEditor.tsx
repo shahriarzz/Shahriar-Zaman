@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, Save, Layers, Minus, Plus } from 'lucide-react';
+import { ChevronLeft, Save, Layers, Minus, Plus, Trash2 } from 'lucide-react';
 import { Exercise, Workout } from '../../types/fitness';
 import {
   Card,
@@ -26,6 +26,7 @@ export interface ExerciseEditorProps {
   exercise: Exercise;
   workout?: Workout | null;
   onSave: (updatedExercise: Exercise, isDefinitionOnly?: boolean) => void;
+  onDelete?: () => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -33,6 +34,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
   exercise,
   workout,
   onSave,
+  onDelete,
   onCancel
 }) => {
   // 1. Global Exercise Definition State
@@ -169,6 +171,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
               }}
               onBlur={() => setNameTouched(true)}
               error={nameTouched && !name.trim() ? 'Exercise name is required.' : undefined}
+              disabled={Boolean(workout)}
               required
             />
 
@@ -177,6 +180,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
               placeholder="e.g. Upper Chest, Side Delts, Lats"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
+              disabled={Boolean(workout)}
             />
 
             <Input
@@ -184,6 +188,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
               placeholder="e.g. Dumbbell, Barbell, Cable, Machine"
               value={equipment}
               onChange={(e) => setEquipment(e.target.value)}
+              disabled={Boolean(workout)}
             />
 
             <div className="space-y-1.5">
@@ -211,6 +216,7 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="e.g. 45° elbow tuck; pause 1s at bottom stretch; focus on clavicular fiber recruitment."
+            disabled={Boolean(workout)}
             rows={3}
           />
         </Card>
@@ -286,24 +292,40 @@ export const ExerciseEditor: React.FC<ExerciseEditorProps> = ({
         </Card>
       )}
 
-      {/* Bottom Save Action */}
-      <div className="flex justify-end gap-3 pt-2">
-        <Button
-          variant="outline"
-          size="md"
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          size="md"
-          icon={<Save size={14} />}
-          disabled={!name.trim()}
-          onClick={handleSave}
-        >
-          Save Changes
-        </Button>
+      {/* Bottom Save & Delete Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div>
+          {onDelete && !workout && (
+            <Button
+              variant="destructive"
+              size="md"
+              icon={<Trash2 size={14} />}
+              onClick={() => {
+                void onDelete();
+              }}
+            >
+              Delete Exercise
+            </Button>
+          )}
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="outline"
+            size="md"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            icon={<Save size={14} />}
+            disabled={!name.trim()}
+            onClick={handleSave}
+          >
+            Save Changes
+          </Button>
+        </div>
       </div>
     </Stack>
   );

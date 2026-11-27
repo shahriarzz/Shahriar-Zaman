@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, Dumbbell, Repeat } from 'lucide-react';
 import { Workout, Exercise } from '../../types/fitness';
 import { useFitness } from '../../context/FitnessContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { haptics } from '../../utils/haptics';
 import { CycleEditor } from './CycleEditor';
 import { WorkoutEditor } from './WorkoutEditor';
@@ -24,10 +25,14 @@ export interface ProgramEditorProps {
 export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) => {
   const {
     workouts,
+    exerciseDefinitions,
     setWorkouts,
+    updateWorkout,
     addExerciseDefinition,
+    deleteExerciseDefinition,
     updateWorkoutExerciseProgramming
   } = useFitness();
+  const { confirm } = useConfirm();
 
   // Mode: 'cycle' | 'exercises'
   const [activeMode, setActiveMode] = useState<'cycle' | 'exercises'>('cycle');
@@ -44,8 +49,42 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     return workouts.find(w => w.id === selectedWorkoutId) || null;
   }, [workouts, selectedWorkoutId]);
 
+  const pendingSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingWorkoutRef = useRef<Workout | null>(null);
+  const updateWorkoutRef = useRef(updateWorkout);
+  updateWorkoutRef.current = updateWorkout;
+
+  const flushPendingWorkoutSync = useCallback(() => {
+    if (pendingSyncTimerRef.current !== null) {
+      clearTimeout(pendingSyncTimerRef.current);
+      pendingSyncTimerRef.current = null;
+    }
+    const pending = pendingWorkoutRef.current;
+    pendingWorkoutRef.current = null;
+    if (pending && updateWorkoutRef.current) {
+      void updateWorkoutRef.current(pending, { syncCloud: true, recordBackup: true });
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      flushPendingWorkoutSync();
+    };
+  }, [flushPendingWorkoutSync, selectedWorkoutId]);
+
   const handleSaveWorkout = (updatedWorkout: Workout) => {
-    setWorkouts(prev => prev.map(w => w.id === updatedWorkout.id ? updatedWorkout : w));
+    if (updateWorkout) {
+      void updateWorkout(updatedWorkout, { syncCloud: false, recordBackup: false });
+      pendingWorkoutRef.current = updatedWorkout;
+      if (pendingSyncTimerRef.current !== null) {
+        clearTimeout(pendingSyncTimerRef.current);
+      }
+      pendingSyncTimerRef.current = setTimeout(() => {
+        flushPendingWorkoutSync();
+      }, 350);
+    } else {
+      void setWorkouts(prev => prev.map(w => w.id === updatedWorkout.id ? updatedWorkout : w));
+    }
   };
 
   const handleSaveExercise = async (updatedExercise: Exercise) => {
@@ -75,10 +114,34 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     setEditingExerciseContext(null);
   };
 
+  const handleDeleteExercise = async () => {
+    if (!editingExerciseContext || editingExerciseContext.workoutId) return;
+    const ex = editingExerciseContext.exercise;
+    const exDefId = ex.exerciseDefinitionId || ex.id;
+    const referencingWorkouts = workouts.filter(w =>
+      (w.exercises || []).some(e => e.exerciseDefinitionId === exDefId)
+    );
+    const usageNote = referencingWorkouts.length > 0
+      ? ` It will also be removed from ${referencingWorkouts.length} scheduled ${referencingWorkouts.length === 1 ? 'routine' : 'routines'}.`
+      : '';
+
+    const proceed = await confirm({
+      title: 'Delete Exercise Definition',
+      message: `Permanently delete "${ex.name || 'this exercise'}" from your Exercise Library?${usageNote} Historical logs will remain preserved.`,
+      isDanger: true
+    });
+    if (!proceed) return;
+
+    haptics.warning();
+    await deleteExerciseDefinition(exDefId);
+    setEditingExerciseContext(null);
+  };
+
   const handleCreateNewLibraryExercise = () => {
+    const newId = `ex-${crypto.randomUUID()}`;
     const newBlankExercise: Exercise = {
-      id: `ex-${crypto.randomUUID()}`,
-      exerciseDefinitionId: `ex-${crypto.randomUUID()}`,
+      id: newId,
+      exerciseDefinitionId: newId,
       name: '',
       target: '',
       sets: 3,
@@ -97,12 +160,16 @@ export const ProgramEditor: React.FC<ProgramEditorProps> = ({ onBackToManage }) 
     const parentWorkout = editingExerciseContext.workoutId
       ? workouts.find(w => w.id === editingExerciseContext.workoutId) || null
       : null;
+    const editingDefId = editingExerciseContext.exercise.exerciseDefinitionId || editingExerciseContext.exercise.id;
+    const isExistingGlobalDef = !editingExerciseContext.workoutId &&
+      (exerciseDefinitions || []).some(d => d.id === editingDefId);
 
     return (
       <ExerciseEditor
         exercise={editingExerciseContext.exercise}
         workout={parentWorkout}
         onSave={handleSaveExercise}
+        onDelete={isExistingGlobalDef ? handleDeleteExercise : undefined}
         onCancel={() => {
           setEditingExerciseContext(null);
         }}

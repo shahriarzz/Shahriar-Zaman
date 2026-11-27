@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Cloud, LogOut, LogIn } from 'lucide-react';
 import { useFitness } from '../../context/FitnessContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -20,12 +21,14 @@ export const AccountSection: React.FC = () => {
     login,
     logout,
     syncStatus,
-    syncError
+    syncError,
+    authError: ctxAuthError
   } = useFitness();
   const { confirm } = useConfirm();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const authInFlightRef = useRef(false);
+  const displayedAuthError = authError || ctxAuthError || null;
 
   const handleLogin = async () => {
     if (authInFlightRef.current || loadingAction === 'auth') return;
@@ -156,16 +159,30 @@ export const AccountSection: React.FC = () => {
               </Button>
             )}
 
-            {authError && (
+            {displayedAuthError && (
               <span
                 role="alert"
                 className={cn(TYPOGRAPHY.errorText, "text-left md:text-right max-w-xs break-words")}
               >
-                {authError}
+                {displayedAuthError}
               </span>
             )}
           </div>
         </div>
+
+        {/* Native Android WebView OAuth notice */}
+        {Capacitor.isNativePlatform() && !user && (
+          <div className={cn("p-3 border", SURFACE.recessed, BORDER.subtle, RADIUS.button)}>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-2.5">
+              <span className={cn(TYPOGRAPHY.label, "text-zinc-300 shrink-0 mt-0.5")}>
+                Android Sign-In Notice:
+              </span>
+              <p className={TYPOGRAPHY.bodySecondary}>
+                Google Sign-In is unavailable inside the standalone Android WebView build. All workouts, cycles, and backups operate offline locally.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Embedded preview disclaimer */}
         {typeof window !== 'undefined' && window.self !== window.top && (

@@ -26,6 +26,7 @@ export interface FitnessContextType {
   loading: boolean;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'failed' | 'offline';
   syncError: string | null;
+  authError?: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retrySync: () => void;
@@ -48,6 +49,7 @@ export interface FitnessContextType {
 
   // Workout Actions
   setWorkouts: (workouts: Workout[] | ((prev: Workout[]) => Workout[])) => Promise<void>;
+  updateWorkout?: (workout: Workout, options?: { syncCloud?: boolean; recordBackup?: boolean }) => Promise<void>;
   assignExerciseToWorkout: (workoutId: string, exerciseDefId: string, programming?: Partial<Omit<WorkoutExercise, 'exerciseDefinitionId'>>) => Promise<void>;
   removeExerciseFromWorkout: (workoutId: string, exerciseDefId: string) => Promise<void>;
   updateWorkoutExerciseProgramming: (
@@ -216,6 +218,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     loading: sync.loading,
     syncStatus: resolvedSyncStatus,
     syncError: resolvedSyncError,
+    authError: sync.authError,
     login: sync.login,
     logout: sync.logout,
     retrySync: sync.retrySync,
@@ -235,6 +238,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     deleteExerciseDefinition: exercises.deleteExerciseDefinition,
 
     setWorkouts: workouts.setWorkouts,
+    updateWorkout: workouts.updateWorkout,
     assignExerciseToWorkout: workouts.assignExerciseToWorkout,
     removeExerciseFromWorkout: workouts.removeExerciseFromWorkout,
     updateWorkoutExerciseProgramming: workouts.updateWorkoutExerciseProgramming,
@@ -265,6 +269,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     sync.loading,
     resolvedSyncStatus,
     resolvedSyncError,
+    sync.authError,
     sync.login,
     sync.logout,
     sync.retrySync,
@@ -282,6 +287,7 @@ const FitnessProviderInner: React.FC<{ children: React.ReactNode }> = ({ childre
     exercises.updateExerciseDefinition,
     exercises.deleteExerciseDefinition,
     workouts.setWorkouts,
+    workouts.updateWorkout,
     workouts.assignExerciseToWorkout,
     workouts.removeExerciseFromWorkout,
     workouts.updateWorkoutExerciseProgramming,
